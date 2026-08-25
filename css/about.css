@@ -1,0 +1,79 @@
+/* About page external CSS
+   Uses the same theme variables from css/style.css
+*/
+
+/* HERO (About) */
+.about-hero {
+  margin-top: 0;
+  padding-top: 110px;
+  padding-bottom: 70px;
+  color: #fff;
+  /* Match the gradient shown inline in about.php */
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--secondary) 100%);
+}
+
+.about-hero .about-hero-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 40px;
+}
+
+.about-hero .about-hero-content {
+  flex: 1 1 350px;
+  min-width: 300px;
+}
+
+.about-hero .about-hero-title {
+  font-size: 2.8rem;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.about-hero .about-hero-desc {
+  font-size: 1.2rem;
+  color: #D0D3E8;
+  margin-bottom: 32px;
+  max-width: 600px;
+}
+
+.about-hero .about-hero-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.about-hero .about-hero-visual {
+  flex: 1 1 300px;
+  min-width: 260px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Responsive tweaks */
+@media (max-width: 900px) {
+  .about-hero {
+    padding-top: 90px;
+    padding-bottom: 50px;
+  }
+
+  .about-hero .about-hero-container {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .about-hero .about-hero-visual {
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 600px) {
+  .about-hero .about-hero-title {
+    font-size: 2rem;
+  }
+}
+
