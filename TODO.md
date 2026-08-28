@@ -28,5 +28,10 @@
 ## Pages built (continued)
 - [x] pages/submit-research.php (create new research, draft/submit statuses, optional proposal upload)
 - [x] uploads/proposals, chapters, defense, manuscripts directories created
+- [x] Add Research Manual 2015 reference doc
+- [x] Add schema support for MOU/NDA, progress reports, terminal reports, colloquium, and publication tracking
 - [ ] pages/submit-research.php: add co-researcher/team member UI
 - [ ] pages/submit-research.php: createNotification() for admin on new submission
+- [ ] Build UI for required manual documents and report milestones
+- [x] Add read-only Research Manual milestone panel to student research detail page
+- [ ] Add upload/update forms for required manual documents and reports

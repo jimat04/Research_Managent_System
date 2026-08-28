@@ -5,13 +5,15 @@ include '../includes/auth.php';
 requireRole('faculty');
 
 $user = getCurrentUser();
-$user_id = getCurrentUser()['user_id'];
+$user_id = (int) $user['user_id'];
 
 // Get assigned research projects
 $assigned_stmt = $conn->prepare("
-    SELECT rp.* FROM research_projects rp
+    SELECT rp.*, student.first_name AS student_first_name, student.last_name AS student_last_name
+    FROM research_projects rp
     JOIN project_advisers pa ON rp.project_id = pa.project_id
-  WHERE pa.adviser_id = ?
+    JOIN users student ON student.user_id = rp.created_by
+    WHERE pa.adviser_id = ?
     ORDER BY rp.created_at DESC
 ");
 $assigned_stmt->bind_param('i', $user_id);
@@ -24,47 +26,46 @@ $pending_stmt = $conn->prepare("
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-    WHERE pa.adviser_id = ?
+        WHERE pa.adviser_id = ?
     ) AND c.status = 'under_review'
- ");
+");
 $pending_stmt->bind_param('i', $user_id);
 $pending_stmt->execute();
-$stat_pending = $pending_stmt->get_result()->fetch_assoc()['count'];
+$stat_pending = (int) ($pending_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 $approved_stmt = $conn->prepare("
     SELECT COUNT(*) as count FROM chapters c
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-    WHERE pa.adviser_id = ?
+        WHERE pa.adviser_id = ?
     ) AND c.status = 'approved'
 ");
 $approved_stmt->bind_param('i', $user_id);
 $approved_stmt->execute();
-$stat_approved = $approved_stmt->get_result()->fetch_assoc()['count'];
+$stat_approved = (int) ($approved_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 $revision_stmt = $conn->prepare("
     SELECT COUNT(*) as count FROM chapters c
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-    WHERE pa.adviser_id = ?
+        WHERE pa.adviser_id = ?
     ) AND c.status = 'revision_required'
 ");
 $revision_stmt->bind_param('i', $user_id);
 $revision_stmt->execute();
-$stat_revision = $revision_stmt->get_result()->fetch_assoc()['count'];
+$stat_revision = (int) ($revision_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 $students_stmt = $conn->prepare("
     SELECT COUNT(DISTINCT rp.created_by) as count FROM research_projects rp
     JOIN project_advisers pa ON rp.project_id = pa.project_id
-  WHERE pa.adviser_id = ?
+    WHERE pa.adviser_id = ?
 ");
 $students_stmt->bind_param('i', $user_id);
 $students_stmt->execute();
-$stat_students = $students_stmt->get_result()->fetch_assoc()['count'];
+$stat_students = (int) ($students_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
-// @rms-db: project-level activity feed requires project_id in activity_log.
 $activity_stmt = $conn->prepare("SELECT action, module, created_at
   FROM activity_log
   WHERE user_id = ?
@@ -107,7 +108,7 @@ $activities = $activity_stmt->get_result();
       <div class="nav-item" onclick="location.href='faculty-review.php'">
         <span class="icon">🔍</span>
         <span>Review Queue</span>
-        <span class="badge"><?php echo $stat_pending; ?></span>
+        <span class="badge"><?php echo htmlspecialchars((string) $stat_pending, ENT_QUOTES, 'UTF-8'); ?></span>
       </div>
       <div class="nav-item" onclick="location.href='faculty-students.php'">
         <span class="icon">👨‍🎓</span>
@@ -148,9 +149,9 @@ $activities = $activity_stmt->get_result();
 
     <div class="sidebar-footer">
       <div class="user-card">
-        <div class="user-avatar" style="background: linear-gradient(135deg, var(--secondary), var(--accent));"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
+        <div class="user-avatar" style="background: linear-gradient(135deg, var(--secondary), var(--accent));"><?php echo htmlspecialchars(strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)), ENT_QUOTES, 'UTF-8'); ?></div>
         <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
+          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="user-role">👨‍🏫 Faculty</div>
         </div>
       </div>
@@ -163,7 +164,7 @@ $activities = $activity_stmt->get_result();
     <header class="topbar">
       <div class="topbar-left">
         <h2>Faculty Dashboard</h2>
-        <p>Good morning, Prof. <?php echo htmlspecialchars($user['last_name']); ?>! You have <?php echo $stat_pending; ?> submissions awaiting review.</p>
+        <p>Good day, Prof. <?php echo htmlspecialchars($user['last_name'], ENT_QUOTES, 'UTF-8'); ?>! You have <?php echo htmlspecialchars((string) $stat_pending, ENT_QUOTES, 'UTF-8'); ?> submissions awaiting review.</p>
       </div>
 
       <div class="topbar-right">
@@ -177,9 +178,9 @@ $activities = $activity_stmt->get_result();
         </div>
 
         <div class="user-profile-btn" onclick="alert('Profile menu')">
-          <div class="profile-avatar" style="background: linear-gradient(135deg, var(--secondary), var(--accent));"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
+          <div class="profile-avatar" style="background: linear-gradient(135deg, var(--secondary), var(--accent));"><?php echo htmlspecialchars(strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)), ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="profile-text">
-            <div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div>
+            <div class="profile-name"><?php echo htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8'); ?></div>
             <div class="profile-role" style="color: var(--secondary);">Faculty</div>
           </div>
         </div>
@@ -193,7 +194,7 @@ $activities = $activity_stmt->get_result();
         <div class="stat-card blue">
           <div class="stat-header">
             <div style="flex: 1;">
-              <div class="stat-number"><?php echo $stat_pending; ?></div>
+              <div class="stat-number"><?php echo htmlspecialchars((string) $stat_pending, ENT_QUOTES, 'UTF-8'); ?></div>
               <div class="stat-label">Pending Reviews</div>
             </div>
             <div class="stat-icon">📥</div>
@@ -203,7 +204,7 @@ $activities = $activity_stmt->get_result();
         <div class="stat-card green">
           <div class="stat-header">
             <div style="flex: 1;">
-              <div class="stat-number"><?php echo $stat_approved; ?></div>
+              <div class="stat-number"><?php echo htmlspecialchars((string) $stat_approved, ENT_QUOTES, 'UTF-8'); ?></div>
               <div class="stat-label">Approved</div>
             </div>
             <div class="stat-icon">✅</div>
@@ -213,7 +214,7 @@ $activities = $activity_stmt->get_result();
         <div class="stat-card orange">
           <div class="stat-header">
             <div style="flex: 1;">
-              <div class="stat-number"><?php echo $stat_revision; ?></div>
+              <div class="stat-number"><?php echo htmlspecialchars((string) $stat_revision, ENT_QUOTES, 'UTF-8'); ?></div>
               <div class="stat-label">Revision Required</div>
             </div>
             <div class="stat-icon">🔄</div>
@@ -223,7 +224,7 @@ $activities = $activity_stmt->get_result();
         <div class="stat-card purple">
           <div class="stat-header">
             <div style="flex: 1;">
-              <div class="stat-number"><?php echo $stat_students; ?></div>
+              <div class="stat-number"><?php echo htmlspecialchars((string) $stat_students, ENT_QUOTES, 'UTF-8'); ?></div>
               <div class="stat-label">Total Students</div>
             </div>
             <div class="stat-icon">👨‍🎓</div>
@@ -256,19 +257,18 @@ $activities = $activity_stmt->get_result();
               if ($assigned->num_rows > 0):
                 $assigned->data_seek(0);
                 while ($proj = $assigned->fetch_assoc()):
-                  $student = $conn->query("SELECT * FROM users WHERE user_id = {$proj['created_by']}")->fetch_assoc();
               ?>
                 <tr>
-                  <td style="font-weight: 500;"><?php echo htmlspecialchars($proj['title']); ?></td>
-                  <td><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></td>
-                  <td><?php echo date('M d, Y', strtotime($proj['created_at'])); ?></td>
+                  <td style="font-weight: 500;"><?php echo htmlspecialchars($proj['title'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td><?php echo htmlspecialchars($proj['student_first_name'] . ' ' . $proj['student_last_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td><?php echo htmlspecialchars(date('M d, Y', strtotime($proj['created_at'])), ENT_QUOTES, 'UTF-8'); ?></td>
                   <td>
                     <span class="badge-status status-review">
-                      <?php echo ucwords(str_replace('_', ' ', $proj['status'])); ?>
+                      <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $proj['status'])), ENT_QUOTES, 'UTF-8'); ?>
                     </span>
                   </td>
                   <td>
-                    <a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=<?php echo htmlspecialchars($proj['project_id'], ENT_QUOTES, 'UTF-8'); ?>">Review</a>
+                    <a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=<?php echo (int)$proj['project_id']; ?>">Review</a>
                   </td>
                 </tr>
               <?php
@@ -297,18 +297,29 @@ $activities = $activity_stmt->get_result();
             <ul class="activity-list">
               <?php if ($activities->num_rows > 0): ?>
                 <?php while ($activity = $activities->fetch_assoc()): ?>
+                  <?php
+                  $activity_action = strtolower($activity['action']);
+                  $activity_color = 'var(--primary)';
+                  if (strpos($activity_action, 'approved') !== false) {
+                      $activity_color = 'var(--success)';
+                  } elseif (strpos($activity_action, 'revision') !== false || strpos($activity_action, 'rejected') !== false) {
+                      $activity_color = 'var(--warning)';
+                  } elseif (strpos($activity_action, 'logged in') !== false || strpos($activity_action, 'submitted') !== false || strpos($activity_action, 'created') !== false) {
+                      $activity_color = 'var(--info)';
+                  }
+                  ?>
                   <li class="activity-item">
-                    <div class="activity-dot" style="background: var(--info);"></div>
+                    <div class="activity-dot" style="background: <?php echo htmlspecialchars($activity_color, ENT_QUOTES, 'UTF-8'); ?>;"></div>
                     <div class="activity-content">
-                      <p><?php echo htmlspecialchars($activity['action']); ?></p>
-                      <div class="time"><?php echo date('M d, Y • h:i A', strtotime($activity['created_at'])); ?></div>
+                      <p><?php echo htmlspecialchars($activity['action'], ENT_QUOTES, 'UTF-8'); ?></p>
+                      <div class="time"><?php echo htmlspecialchars(date('M d, Y • h:i A', strtotime($activity['created_at'])), ENT_QUOTES, 'UTF-8'); ?></div>
                     </div>
                   </li>
                 <?php endwhile; ?>
               <?php else: ?>
                 <li class="activity-item">
                   <div class="activity-content">
-                    <p>No recent activities.</p>
+                    <p style="color: var(--text-muted);">No recent activity yet.</p>
                   </div>
                 </li>
               <?php endif; ?>
@@ -326,7 +337,7 @@ $activities = $activity_stmt->get_result();
             <div style="display: flex; justify-content: center; margin-bottom: 20px;">
               <div class="donut-chart" style="background: conic-gradient(var(--secondary) 0deg 180deg, var(--accent) 180deg 252deg, var(--danger) 252deg 288deg, var(--success) 288deg 360deg);">
                 <div class="donut-center">
-                  <div class="value"><?php echo $stat_approved + $stat_pending + $stat_revision; ?></div>
+                  <div class="value"><?php echo htmlspecialchars((string) ($stat_approved + $stat_pending + $stat_revision), ENT_QUOTES, 'UTF-8'); ?></div>
                   <div class="label">Total</div>
                 </div>
               </div>
@@ -335,17 +346,17 @@ $activities = $activity_stmt->get_result();
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--secondary);"></div>
                 <span class="legend-label">Approved</span>
-                <span class="legend-pct"><?php echo $stat_approved; ?></span>
+                <span class="legend-pct"><?php echo htmlspecialchars((string) $stat_approved, ENT_QUOTES, 'UTF-8'); ?></span>
               </div>
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--accent);"></div>
                 <span class="legend-label">Pending Review</span>
-                <span class="legend-pct"><?php echo $stat_pending; ?></span>
+                <span class="legend-pct"><?php echo htmlspecialchars((string) $stat_pending, ENT_QUOTES, 'UTF-8'); ?></span>
               </div>
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--danger);"></div>
                 <span class="legend-label">Revision Needed</span>
-                <span class="legend-pct"><?php echo $stat_revision; ?></span>
+                <span class="legend-pct"><?php echo htmlspecialchars((string) $stat_revision, ENT_QUOTES, 'UTF-8'); ?></span>
               </div>
             </div>
           </div>

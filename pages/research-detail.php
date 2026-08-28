@@ -124,6 +124,79 @@ if ($has_access && $project_id > 0) {
     }
 }
 
+function rmsTableExists($conn, $table_name) {
+    $stmt = $conn->prepare("SHOW TABLES LIKE ?");
+    if (!$stmt) {
+        return false;
+    }
+
+    $stmt->bind_param("s", $table_name);
+    $stmt->execute();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+
+    return $exists;
+}
+
+$manual_documents = [];
+$manual_reports = [];
+$publication_tracking = null;
+
+if ($has_access && $project_id > 0 && rmsTableExists($conn, 'research_documents')) {
+    $doc_query = "
+        SELECT rd.*, u.original_name
+        FROM research_documents rd
+        LEFT JOIN uploads u ON rd.upload_id = u.upload_id
+        WHERE rd.project_id = ?
+        ORDER BY FIELD(rd.document_type, 'proposal', 'revision_checklist', 'defense_material', 'mou', 'nda', 'progress_report', 'terminal_report', 'final_bound_report', 'publication_record', 'other'), rd.created_at DESC
+    ";
+    $doc_stmt = $conn->prepare($doc_query);
+    if ($doc_stmt) {
+        $doc_stmt->bind_param("i", $project_id);
+        $doc_stmt->execute();
+        $doc_result = $doc_stmt->get_result();
+        while ($row = $doc_result->fetch_assoc()) {
+            $manual_documents[$row['document_type']] = $row;
+        }
+        $doc_stmt->close();
+    }
+}
+
+if ($has_access && $project_id > 0 && rmsTableExists($conn, 'research_reports')) {
+    $report_query = "
+        SELECT *
+        FROM research_reports
+        WHERE project_id = ?
+        ORDER BY FIELD(report_type, 'midway_progress', 'terminal'), created_at DESC
+    ";
+    $report_stmt = $conn->prepare($report_query);
+    if ($report_stmt) {
+        $report_stmt->bind_param("i", $project_id);
+        $report_stmt->execute();
+        $report_result = $report_stmt->get_result();
+        while ($row = $report_result->fetch_assoc()) {
+            $manual_reports[$row['report_type']] = $row;
+        }
+        $report_stmt->close();
+    }
+}
+
+if ($has_access && $project_id > 0 && rmsTableExists($conn, 'research_publication_tracking')) {
+    $publication_query = "
+        SELECT *
+        FROM research_publication_tracking
+        WHERE project_id = ?
+        LIMIT 1
+    ";
+    $publication_stmt = $conn->prepare($publication_query);
+    if ($publication_stmt) {
+        $publication_stmt->bind_param("i", $project_id);
+        $publication_stmt->execute();
+        $publication_tracking = $publication_stmt->get_result()->fetch_assoc();
+        $publication_stmt->close();
+    }
+}
+
 // Status badge mapping
 $status_badges = [
     'draft' => ['class' => 'badge', 'style' => 'background:#e2e8f0;color:#475569;'],
@@ -160,6 +233,34 @@ function formatFileSize($bytes) {
         return round($bytes / 1024, 2) . ' KB';
     }
     return $bytes . ' B';
+}
+
+function formatManualLabel($value) {
+    return ucwords(str_replace('_', ' ', $value));
+}
+
+function manualStatusBadge($status) {
+    $badge_map = [
+        'approved' => 'badge badge-success',
+        'presented' => 'badge badge-success',
+        'published' => 'badge badge-success',
+        'archived' => 'badge badge-success',
+        'submitted' => 'badge badge-info',
+        'scheduled' => 'badge badge-info',
+        'under_review' => 'badge badge-primary',
+        'ready' => 'badge badge-primary',
+        'revision_required' => 'badge badge-warning',
+        'pending' => 'badge badge-warning',
+        'draft' => 'badge',
+        'not_scheduled' => 'badge',
+        'not_submitted' => 'badge',
+        'not_archived' => 'badge',
+        'rejected' => 'badge badge-danger',
+        'cancelled' => 'badge badge-danger',
+        'waived' => 'badge'
+    ];
+
+    return $badge_map[$status] ?? 'badge';
 }
 
 ?>
@@ -493,6 +594,127 @@ function formatFileSize($bytes) {
                 </table>
               </div>
             <?php endif; ?>
+          </div>
+        </div>
+
+        <!-- MANUAL MILESTONES CARD -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Manual Milestones</div>
+            </div>
+            <span class="badge badge-info">Research Manual 2015</span>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Requirement</th>
+                    <th>Status</th>
+                    <th>File / Reference</th>
+                    <th>Last Update</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php
+                    $document_requirements = [
+                        'proposal' => 'Proposal Document',
+                        'revision_checklist' => 'Revision Checklist',
+                        'defense_material' => 'Defense / Forum Materials',
+                        'mou' => 'Memorandum of Research Undertaking',
+                        'nda' => 'Non-Disclosure Agreement',
+                        'final_bound_report' => 'Final Bound Report',
+                        'publication_record' => 'Publication Record'
+                    ];
+                  ?>
+                  <?php foreach ($document_requirements as $type => $label): ?>
+                    <?php $document = $manual_documents[$type] ?? null; ?>
+                    <tr>
+                      <td><?php echo htmlspecialchars($label); ?></td>
+                      <td>
+                        <?php $doc_status = $document['status'] ?? 'pending'; ?>
+                        <span class="<?php echo htmlspecialchars(manualStatusBadge($doc_status)); ?>">
+                          <?php echo htmlspecialchars(formatManualLabel($doc_status)); ?>
+                        </span>
+                      </td>
+                      <td><?php echo htmlspecialchars($document['original_name'] ?? 'Not uploaded'); ?></td>
+                      <td>
+                        <?php if (!empty($document['reviewed_at'])): ?>
+                          <?php echo date('M d, Y', strtotime($document['reviewed_at'])); ?>
+                        <?php elseif (!empty($document['submitted_at'])): ?>
+                          <?php echo date('M d, Y', strtotime($document['submitted_at'])); ?>
+                        <?php else: ?>
+                          -
+                        <?php endif; ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+
+                  <?php
+                    $report_requirements = [
+                        'midway_progress' => 'Midway Progress Report',
+                        'terminal' => 'Terminal Report'
+                    ];
+                  ?>
+                  <?php foreach ($report_requirements as $type => $label): ?>
+                    <?php $report = $manual_reports[$type] ?? null; ?>
+                    <tr>
+                      <td><?php echo htmlspecialchars($label); ?></td>
+                      <td>
+                        <?php $report_status = $report['status'] ?? 'draft'; ?>
+                        <span class="<?php echo htmlspecialchars(manualStatusBadge($report_status)); ?>">
+                          <?php echo htmlspecialchars(formatManualLabel($report_status)); ?>
+                        </span>
+                      </td>
+                      <td><?php echo htmlspecialchars($report['summary'] ?? 'No report summary'); ?></td>
+                      <td>
+                        <?php if (!empty($report['reviewed_at'])): ?>
+                          <?php echo date('M d, Y', strtotime($report['reviewed_at'])); ?>
+                        <?php elseif (!empty($report['submitted_at'])): ?>
+                          <?php echo date('M d, Y', strtotime($report['submitted_at'])); ?>
+                        <?php elseif (!empty($report['due_date'])): ?>
+                          Due <?php echo date('M d, Y', strtotime($report['due_date'])); ?>
+                        <?php else: ?>
+                          -
+                        <?php endif; ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+
+                  <tr>
+                    <td>Research Colloquium</td>
+                    <td>
+                      <?php $colloquium_status = $publication_tracking['colloquium_status'] ?? 'not_scheduled'; ?>
+                      <span class="<?php echo htmlspecialchars(manualStatusBadge($colloquium_status)); ?>">
+                        <?php echo htmlspecialchars(formatManualLabel($colloquium_status)); ?>
+                      </span>
+                    </td>
+                    <td><?php echo htmlspecialchars($publication_tracking['remarks'] ?? 'No colloquium notes'); ?></td>
+                    <td>
+                      <?php echo !empty($publication_tracking['colloquium_date']) ? date('M d, Y', strtotime($publication_tracking['colloquium_date'])) : '-'; ?>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>Journal / Archive Tracking</td>
+                    <td>
+                      <?php $journal_status = $publication_tracking['journal_status'] ?? 'not_submitted'; ?>
+                      <span class="<?php echo htmlspecialchars(manualStatusBadge($journal_status)); ?>">
+                        <?php echo htmlspecialchars(formatManualLabel($journal_status)); ?>
+                      </span>
+                    </td>
+                    <td><?php echo htmlspecialchars($publication_tracking['journal_reference'] ?? 'No journal reference'); ?></td>
+                    <td>
+                      <?php $archive_status = $publication_tracking['archive_status'] ?? 'not_archived'; ?>
+                      <span class="<?php echo htmlspecialchars(manualStatusBadge($archive_status)); ?>">
+                        <?php echo htmlspecialchars(formatManualLabel($archive_status)); ?>
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 

@@ -596,6 +596,43 @@ tbody td {
   color: var(--text-dark);
 }
 
+/* Fix button visibility in tables and cards */
+.card .btn-secondary,
+.table .btn-secondary,
+tbody .btn-secondary,
+.card-body .btn-secondary {
+  background: #f1f5f9;
+  color: var(--text-dark);
+  border: 1px solid var(--border);
+}
+
+.card .btn-secondary:hover,
+.table .btn-secondary:hover,
+tbody .btn-secondary:hover,
+.card-body .btn-secondary:hover {
+  background: #e2e8f0;
+  color: var(--text-dark);
+  border-color: var(--primary);
+}
+
+/* Ensure primary buttons are always visible */
+.card .btn-primary,
+.table .btn-primary,
+tbody .btn-primary,
+.card-body .btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  border: none;
+}
+
+.card .btn-primary:hover,
+.table .btn-primary:hover,
+tbody .btn-primary:hover,
+.card-body .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(91,30,188,0.3);
+}
+
 /* BADGES */
 .badge-status {
   display: inline-flex;

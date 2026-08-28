@@ -21,7 +21,9 @@ $abstract = '';
 $status = 'draft';
 
 // Handle POST submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+    $errors[] = 'Your form has expired. Please try again.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Get form values
     $title = isset($_POST['title']) ? trim($_POST['title']) : '';
     $category_id = isset($_POST['category_id']) ? intval($_POST['category_id']) : '';
@@ -174,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception("Query error: " . $conn->error);
                 }
 
-                $upload_stmt->bind_param("iissi", $new_project_id, $user_id, $original_name, $file_name, $file_path, $file_size, $mime_type);
+                $upload_stmt->bind_param("iisssis", $new_project_id, $user_id, $original_name, $file_name, $file_path, $file_size, $mime_type);
                 if (!$upload_stmt->execute()) {
                     throw new Exception("Upload record insert failed: " . $upload_stmt->error);
                 }
@@ -377,6 +379,7 @@ if ($ay_result) {
       <!-- FORM -->
       <?php if (!$success): ?>
       <form method="POST" enctype="multipart/form-data">
+        <?php echo csrfField(); ?>
         <!-- SECTION 1: BASIC INFORMATION -->
         <div class="card" style="margin-bottom: 20px;">
           <div class="card-header">

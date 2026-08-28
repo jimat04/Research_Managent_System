@@ -43,15 +43,7 @@ INSERT INTO `academic_years` (`ay_id`, `label`, `semester`, `is_active`, `create
 (1, '2023-2024', '1st', 0, '2026-05-30 17:49:59'),
 (2, '2023-2024', '2nd', 0, '2026-05-30 17:49:59'),
 (3, '2024-2025', '1st', 0, '2026-05-30 17:49:59'),
-(4, '2024-2025', '2nd', 1, '2026-05-30 17:49:59'),
-(5, '2023-2024', '1st', 0, '2026-05-30 18:55:48'),
-(6, '2023-2024', '2nd', 0, '2026-05-30 18:55:48'),
-(7, '2024-2025', '1st', 0, '2026-05-30 18:55:48'),
-(8, '2024-2025', '2nd', 1, '2026-05-30 18:55:48'),
-(9, '2023-2024', '1st', 0, '2026-05-30 18:57:54'),
-(10, '2023-2024', '2nd', 0, '2026-05-30 18:57:54'),
-(11, '2024-2025', '1st', 0, '2026-05-30 18:57:54'),
-(12, '2024-2025', '2nd', 1, '2026-05-30 18:57:54');
+(4, '2024-2025', '2nd', 1, '2026-05-30 17:49:59');
 
 
 
@@ -66,6 +58,22 @@ CREATE TABLE `activity_log` (
 
 --
 -- Dumping data for table `activity_log`
+--
+
+INSERT INTO `activity_log` (`log_id`, `user_id`, `action`, `module`, `ip_address`, `created_at`) VALUES
+(1, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:10:36'),
+(2, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:11:06'),
+(3, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:19'),
+(5, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:48'),
+(8, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:08'),
+(9, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:18:16'),
+(10, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:31'),
+(12, 1, 'User logged out', 'authentication', '::1', '2026-05-30 18:23:21'),
+(15, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:58:48'),
+(16, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:58:50'),
+(17, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:30'),
+(19, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:46'),
+(20, 1, 'User logged out', 'authentication', '::1', '2026-05-30 19:00:00');
 
 --
 -- Table structure for table `messages`
@@ -83,51 +91,31 @@ CREATE TABLE `messages` (
 
 -- --------------------------------------------------------
 
-INSERT INTO `activity_log` (`log_id`, `user_id`, `action`, `module`, `ip_address`, `created_at`) VALUES
-(1, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:10:36'),
-(2, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:11:06'),
-(3, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:19'),
-
---
--- Indexes for table `messages`
---
-
 ALTER TABLE `messages`
   ADD PRIMARY KEY (`message_id`),
   ADD KEY `idx_recipient_read` (`recipient_id`,`is_read`),
   ADD KEY `idx_sender` (`sender_id`);
 
 -- --------------------------------------------------------
-(5, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:48'),
-(8, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:08'),
-(9, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:18:16'),
-(10, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:31'),
 
 --
 -- AUTO_INCREMENT for table `messages`
 --
+
 ALTER TABLE `messages`
   MODIFY `message_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 -- --------------------------------------------------------
-(12, 1, 'User logged out', 'authentication', '::1', '2026-05-30 18:23:21'),
-(15, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:58:48'),
-(16, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:58:50'),
-(17, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:30'),
 
 --
 -- Constraints for table `messages`
 --
+
 ALTER TABLE `messages`
   ADD CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE,
   ADD CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
 
 -- --------------------------------------------------------
-(19, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:46'),
-(20, 1, 'User logged out', 'authentication', '::1', '2026-05-30 19:00:00');
-
--- --------------------------------------------------------
-
 --
 -- Table structure for table `chapters`
 --
@@ -231,15 +219,7 @@ INSERT INTO `departments` (`dept_id`, `dept_code`, `dept_name`, `status`) VALUES
 (1, 'CCS', 'College of Computer Studies', 1),
 (2, 'CAS', 'College of Arts and Sciences', 1),
 (3, 'COE', 'College of Engineering', 1),
-(4, 'CBA', 'College of Business Administration', 1),
-(5, 'CCS', 'College of Computer Studies', 1),
-(6, 'CAS', 'College of Arts and Sciences', 1),
-(7, 'COE', 'College of Engineering', 1),
-(8, 'CBA', 'College of Business Administration', 1),
-(9, 'CCS', 'College of Computer Studies', 1),
-(10, 'CAS', 'College of Arts and Sciences', 1),
-(11, 'COE', 'College of Engineering', 1),
-(12, 'CBA', 'College of Business Administration', 1);
+(4, 'CBA', 'College of Business Administration', 1);
 
 -- --------------------------------------------------------
 
@@ -281,17 +261,7 @@ INSERT INTO `programs` (`program_id`, `dept_id`, `program_code`, `program_name`,
 (2, 1, 'BSCS', 'Bachelor of Science in Computer Science', 1),
 (3, 1, 'BSIS', 'Bachelor of Science in Information Systems', 1),
 (4, 2, 'BSBio', 'Bachelor of Science in Biology', 1),
-(5, 3, 'BSCE', 'Bachelor of Science in Civil Engineering', 1),
-(6, 1, 'BSIT', 'Bachelor of Science in Information Technology', 1),
-(7, 1, 'BSCS', 'Bachelor of Science in Computer Science', 1),
-(8, 1, 'BSIS', 'Bachelor of Science in Information Systems', 1),
-(9, 2, 'BSBio', 'Bachelor of Science in Biology', 1),
-(10, 3, 'BSCE', 'Bachelor of Science in Civil Engineering', 1),
-(11, 1, 'BSIT', 'Bachelor of Science in Information Technology', 1),
-(12, 1, 'BSCS', 'Bachelor of Science in Computer Science', 1),
-(13, 1, 'BSIS', 'Bachelor of Science in Information Systems', 1),
-(14, 2, 'BSBio', 'Bachelor of Science in Biology', 1),
-(15, 3, 'BSCE', 'Bachelor of Science in Civil Engineering', 1);
+(5, 3, 'BSCE', 'Bachelor of Science in Civil Engineering', 1);
 
 -- --------------------------------------------------------
 
@@ -341,17 +311,7 @@ INSERT INTO `research_categories` (`category_id`, `category_name`, `description`
 (2, 'Basic Research', 'Research aimed at expanding knowledge', 1),
 (3, 'Action Research', 'Research to solve a specific practical issue', 1),
 (4, 'Developmental Research', 'Research focused on developing new products/systems', 1),
-(5, 'Evaluation Research', 'Research that measures effectiveness of programs', 1),
-(6, 'Applied Research', 'Research directed toward practical applications', 1),
-(7, 'Basic Research', 'Research aimed at expanding knowledge', 1),
-(8, 'Action Research', 'Research to solve a specific practical issue', 1),
-(9, 'Developmental Research', 'Research focused on developing new products/systems', 1),
-(10, 'Evaluation Research', 'Research that measures effectiveness of programs', 1),
-(11, 'Applied Research', 'Research directed toward practical applications', 1),
-(12, 'Basic Research', 'Research aimed at expanding knowledge', 1),
-(13, 'Action Research', 'Research to solve a specific practical issue', 1),
-(14, 'Developmental Research', 'Research focused on developing new products/systems', 1),
-(15, 'Evaluation Research', 'Research that measures effectiveness of programs', 1);
+(5, 'Evaluation Research', 'Research that measures effectiveness of programs', 1);
 
 -- --------------------------------------------------------
 
@@ -390,6 +350,67 @@ CREATE TABLE `uploads` (
   `file_size` int(10) UNSIGNED DEFAULT NULL,
   `mime_type` varchar(80) DEFAULT NULL,
   `upload_date` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `research_documents`
+--
+
+CREATE TABLE `research_documents` (
+  `document_id` int(10) UNSIGNED NOT NULL,
+  `project_id` int(10) UNSIGNED NOT NULL,
+  `upload_id` int(10) UNSIGNED DEFAULT NULL,
+  `document_type` enum('proposal','revision_checklist','defense_material','mou','nda','progress_report','terminal_report','final_bound_report','publication_record','other') NOT NULL DEFAULT 'other',
+  `status` enum('pending','submitted','approved','rejected','waived') NOT NULL DEFAULT 'pending',
+  `remarks` text DEFAULT NULL,
+  `submitted_by` int(10) UNSIGNED DEFAULT NULL,
+  `reviewed_by` int(10) UNSIGNED DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `research_reports`
+--
+
+CREATE TABLE `research_reports` (
+  `report_id` int(10) UNSIGNED NOT NULL,
+  `project_id` int(10) UNSIGNED NOT NULL,
+  `document_id` int(10) UNSIGNED DEFAULT NULL,
+  `report_type` enum('midway_progress','terminal') NOT NULL,
+  `status` enum('draft','submitted','under_review','revision_required','approved','rejected') NOT NULL DEFAULT 'draft',
+  `summary` text DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `reviewed_by` int(10) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `research_publication_tracking`
+--
+
+CREATE TABLE `research_publication_tracking` (
+  `publication_id` int(10) UNSIGNED NOT NULL,
+  `project_id` int(10) UNSIGNED NOT NULL,
+  `colloquium_date` datetime DEFAULT NULL,
+  `colloquium_status` enum('not_scheduled','scheduled','presented','cancelled') NOT NULL DEFAULT 'not_scheduled',
+  `journal_status` enum('not_submitted','submitted','under_review','accepted','published','rejected') NOT NULL DEFAULT 'not_submitted',
+  `journal_reference` varchar(255) DEFAULT NULL,
+  `archive_status` enum('not_archived','ready','archived') NOT NULL DEFAULT 'not_archived',
+  `remarks` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -538,6 +559,37 @@ ALTER TABLE `uploads`
   ADD KEY `uploaded_by` (`uploaded_by`);
 
 --
+-- Indexes for table `research_documents`
+--
+ALTER TABLE `research_documents`
+  ADD PRIMARY KEY (`document_id`),
+  ADD KEY `idx_research_documents_project_type` (`project_id`,`document_type`),
+  ADD KEY `idx_research_documents_status` (`status`),
+  ADD KEY `upload_id` (`upload_id`),
+  ADD KEY `submitted_by` (`submitted_by`),
+  ADD KEY `reviewed_by` (`reviewed_by`);
+
+--
+-- Indexes for table `research_reports`
+--
+ALTER TABLE `research_reports`
+  ADD PRIMARY KEY (`report_id`),
+  ADD KEY `idx_research_reports_project_type` (`project_id`,`report_type`),
+  ADD KEY `idx_research_reports_status` (`status`),
+  ADD KEY `document_id` (`document_id`),
+  ADD KEY `reviewed_by` (`reviewed_by`);
+
+--
+-- Indexes for table `research_publication_tracking`
+--
+ALTER TABLE `research_publication_tracking`
+  ADD PRIMARY KEY (`publication_id`),
+  ADD UNIQUE KEY `project_id` (`project_id`),
+  ADD KEY `idx_publication_colloquium_status` (`colloquium_status`),
+  ADD KEY `idx_publication_journal_status` (`journal_status`),
+  ADD KEY `idx_publication_archive_status` (`archive_status`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -554,7 +606,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `academic_years`
 --
 ALTER TABLE `academic_years`
-  MODIFY `ay_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `ay_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `activity_log`
@@ -590,7 +642,7 @@ ALTER TABLE `defense_schedule`
 -- AUTO_INCREMENT for table `departments`
 --
 ALTER TABLE `departments`
-  MODIFY `dept_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `dept_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -602,7 +654,7 @@ ALTER TABLE `notifications`
 -- AUTO_INCREMENT for table `programs`
 --
 ALTER TABLE `programs`
-  MODIFY `program_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `program_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `project_advisers`
@@ -620,7 +672,7 @@ ALTER TABLE `project_members`
 -- AUTO_INCREMENT for table `research_categories`
 --
 ALTER TABLE `research_categories`
-  MODIFY `category_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `category_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `research_projects`
@@ -633,6 +685,24 @@ ALTER TABLE `research_projects`
 --
 ALTER TABLE `uploads`
   MODIFY `upload_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `research_documents`
+--
+ALTER TABLE `research_documents`
+  MODIFY `document_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `research_reports`
+--
+ALTER TABLE `research_reports`
+  MODIFY `report_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `research_publication_tracking`
+--
+ALTER TABLE `research_publication_tracking`
+  MODIFY `publication_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `users`
@@ -712,6 +782,29 @@ ALTER TABLE `uploads`
   ADD CONSTRAINT `uploads_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
   ADD CONSTRAINT `uploads_ibfk_2` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE SET NULL,
   ADD CONSTRAINT `uploads_ibfk_3` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `research_documents`
+--
+ALTER TABLE `research_documents`
+  ADD CONSTRAINT `research_documents_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `research_documents_ibfk_2` FOREIGN KEY (`upload_id`) REFERENCES `uploads` (`upload_id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `research_documents_ibfk_3` FOREIGN KEY (`submitted_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `research_documents_ibfk_4` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `research_reports`
+--
+ALTER TABLE `research_reports`
+  ADD CONSTRAINT `research_reports_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `research_reports_ibfk_2` FOREIGN KEY (`document_id`) REFERENCES `research_documents` (`document_id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `research_reports_ibfk_3` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `research_publication_tracking`
+--
+ALTER TABLE `research_publication_tracking`
+  ADD CONSTRAINT `research_publication_tracking_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

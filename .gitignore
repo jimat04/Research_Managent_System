@@ -4,6 +4,7 @@
 
 .vscode/
 .idea/
+.continue/
 
 node_modules/
 vendor/
@@ -18,3 +19,6 @@ xampp/
 *.doc
 *.pdf ~
 ~$*
+
+# Scripts
+scripts/*.sh

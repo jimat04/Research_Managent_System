@@ -1,0 +1,75 @@
+/* ============================================================
+   DESIGN TOKENS — Research Management System
+   Extracted from Research Manual 2015 alignment
+   ============================================================ */
+
+/* Color Palette */
+--color-primary:               #5B1EBC;
+--color-primary-light:         #7B3FE4;
+--color-primary-dark:          #3D0F8A;
+--color-secondary:             #0F6CBD;
+--color-secondary-light:       #1E88E5;
+--color-accent:                #F57C00;
+--color-accent-light:          #FF9800;
+--color-success:               #22c55e;
+--color-warning:               #f59e0b;
+--color-danger:                #ef4444;
+--color-info:                  #0F6CBD;
+
+/* Backgrounds */
+--bg-dark:                     #0A0833;
+--bg-darker:                   #050520;
+--bg-light:                    #F8F9FE;
+--bg-panel:                    #FFFFFF;
+--bg-subtle:                   #F0EBFF;
+
+/* Text Colors */
+--color-text-dark:             #0F172A;
+--color-text-light:            #64748B;
+--color-text-muted:            #94A3B8;
+--color-on-dark:               #F8FAFF;
+--color-on-light:              #0F172A;
+
+/* Borders & Dividers */
+--border-default:              #E2E8F0;
+--border-soft:                 #E2E8F0;
+--border-accent:               #C4A9FF;
+
+/* Shadow & Elevation */
+--shadow-sm:                   0 1px 2px rgba(0, 0, 0, 0.05);
+--shadow-md:                   0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+--shadow-lg:                   0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+--shadow-card:                 0 4px 16px rgba(0, 0, 0, 0.08);
+
+/* Radii */
+--radius-sm:                   6px;
+--radius-md:                   10px;
+--radius-lg:                   16px;
+--radius-full:                 9999px;
+
+/* Spacing Scale */
+--space-1:                     4px;
+--space-2:                     8px;
+--space-3:                     12px;
+--space-4:                     16px;
+--space-5:                     20px;
+--space-6:                     24px;
+--space-8:                     32px;
+
+/* Typography Scale */
+--font-xs:                     0.65rem;
+--font-sm:                     0.75rem;
+--font-base:                   0.875rem;
+--font-md:                     1rem;
+--font-lg:                     1.25rem;
+--font-xl:                     1.5rem;
+--font-2xl:                    2rem;
+--font-3xl:                    2.25rem;
+--font-4xl:                    3rem;
+
+/* Z-Index */
+--z-nav:                       1000;
+--z-sticky:                    50;
+--z-card:                      10;
+--z-tooltip:                   100;
+--z-modal:                     1000;

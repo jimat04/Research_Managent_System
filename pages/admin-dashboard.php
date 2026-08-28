@@ -7,17 +7,17 @@ requireRole('admin');
 $user = getCurrentUser();
 
 // Get statistics
-$total_users = $conn->query("SELECT COUNT(*) as count FROM users")->fetch_assoc()['count'];
-$total_research = $conn->query("SELECT COUNT(*) as count FROM research_projects")->fetch_assoc()['count'];
-$total_archived = $conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'archived'")->fetch_assoc()['count'];
+$total_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users")->fetch_assoc()['count'] ?? 0);
+$total_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects")->fetch_assoc()['count'] ?? 0);
+$total_archived = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'archived'")->fetch_assoc()['count'] ?? 0);
 
-$total_students = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'student'")->fetch_assoc()['count'];
-$total_faculty = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'faculty'")->fetch_assoc()['count'];
-$total_admins = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")->fetch_assoc()['count'];
+$total_students = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'student'")->fetch_assoc()['count'] ?? 0);
+$total_faculty = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'faculty'")->fetch_assoc()['count'] ?? 0);
+$total_admins = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")->fetch_assoc()['count'] ?? 0);
 
-$research_pending = $conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('draft', 'proposal')")->fetch_assoc()['count'];
-$research_approved = $conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'completed'")->fetch_assoc()['count'];
-$research_rejected = $conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'archived'")->fetch_assoc()['count'];
+$research_pending = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('draft', 'submitted')")->fetch_assoc()['count'] ?? 0);
+$research_approved = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('approved', 'completed')")->fetch_assoc()['count'] ?? 0);
+$research_rejected = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'rejected'")->fetch_assoc()['count'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -96,7 +96,7 @@ $research_rejected = $conn->query("SELECT COUNT(*) as count FROM research_projec
       <div class="user-card">
         <div class="user-avatar" style="background: linear-gradient(135deg, var(--accent), #FF9800);"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
         <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
+          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="user-role">⚙️ Administrator</div>
         </div>
       </div>
@@ -125,7 +125,7 @@ $research_rejected = $conn->query("SELECT COUNT(*) as count FROM research_projec
         <div class="user-profile-btn" onclick="alert('Profile menu')">
           <div class="profile-avatar" style="background: linear-gradient(135deg, var(--accent), #FF9800);"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
           <div class="profile-text">
-            <div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div>
+            <div class="profile-name"><?php echo htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8'); ?></div>
             <div class="profile-role" style="color: var(--accent);">Administrator</div>
           </div>
         </div>
@@ -207,7 +207,7 @@ $research_rejected = $conn->query("SELECT COUNT(*) as count FROM research_projec
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--accent);"></div>
                 <span class="legend-label">Admins</span>
-                <span class="legend-pct"><?php echo $total_admins; ?> (<?php echo $total_users > 0 ? round(($total_admins / $total_users) * 100) : 0; ?>)</span>
+                <span class="legend-pct"><?php echo $total_admins; ?> (<?php echo $total_users > 0 ? round(($total_admins / $total_users) * 100) : 0; ?>%)</span>
               </div>
             </div>
           </div>
@@ -231,18 +231,18 @@ $research_rejected = $conn->query("SELECT COUNT(*) as count FROM research_projec
             <div class="chart-legend">
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--primary);"></div>
-                <span class="legend-label">In Progress</span>
+                <span class="legend-label">In Progress / Submitted</span>
                 <span class="legend-pct"><?php echo $research_pending; ?></span>
               </div>
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--success);"></div>
-                <span class="legend-label">Completed</span>
+                <span class="legend-label">Completed / Approved</span>
                 <span class="legend-pct"><?php echo $research_approved; ?></span>
               </div>
               <div class="legend-item">
                 <div class="legend-dot" style="background: var(--warning);"></div>
-                <span class="legend-label">For Review</span>
-                <span class="legend-pct"><?php echo $total_research - $research_approved - $research_pending; ?></span>
+                <span class="legend-label">Other Statuses</span>
+                <span class="legend-pct"><?php echo max(0, $total_research - $research_approved - $research_pending); ?></span>
               </div>
             </div>
           </div>

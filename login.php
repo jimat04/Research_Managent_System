@@ -2,11 +2,29 @@
 include 'includes/config.php';
 include 'includes/auth.php';
 
+// If already logged in, redirect straight to their dashboard
+if (isLoggedIn()) {
+    $role = $_SESSION['role'] ?? 'student';
+    $dashboardMap = [
+        'student'        => 'pages/student-dashboard.php',
+        'faculty'        => 'pages/faculty-dashboard.php',
+        'research_staff' => 'pages/staff-dashboard.php',
+        'admin'          => 'pages/admin-dashboard.php',
+    ];
+    header('Location: ' . ($dashboardMap[$role] ?? 'pages/student-dashboard.php'));
+    exit();
+}
+
 $error = '';
 $success = '';
 
+if (isset($_GET['timeout'])) {
+    $error = 'Your session has expired. Please log in again.';
+}
+
 function loginFailureKey() {
-    return md5($_SERVER['REMOTE_ADDR'] . '|' . session_id());
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    return md5($ip . '|' . session_id());
 }
 
 function isLoginLocked() {
@@ -51,24 +69,25 @@ function resetFailedLogins() {
     unset($_SESSION['login_locked_until'][$key]);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+    $error = 'Your form has expired. Please try again.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['action']) ? sanitize($_POST['action']) : '';
 
     // LOGIN
     if ($action === 'login') {
-        $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
+        $email = isset($_POST['email']) ? trim($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
-        $selectedRole = isset($_POST['role']) ? sanitize($_POST['role']) : '';
 
         if (empty($email) || empty($password)) {
             $error = 'Email and password are required';
         } elseif (!isValidEmail($email)) {
             $error = 'Invalid email format';
         } elseif (isLoginLocked()) {
-    $remaining = max(0, ceil(($_SESSION['login_locked_until'][loginFailureKey()] - time()) / 60));
-    $error = "Too many failed attempts. Please try again in {$remaining} minute(s).";
-} else {
-            $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, password, role, status FROM users WHERE email = ? AND status = 'active' LIMIT 1");
+            $remaining = max(1, ceil(($_SESSION['login_locked_until'][loginFailureKey()] - time()) / 60));
+            $error = "Too many failed attempts. Please try again in {$remaining} minute(s).";
+        } else {
+            $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, password, role, status FROM users WHERE email = ? LIMIT 1");
             $stmt->bind_param('s', $email);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -76,30 +95,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result && $result->num_rows > 0) {
                 $user = $result->fetch_assoc();
 
-                if (password_verify($password, $user['password'])) {
-                    $dbRole = strtolower((string) $user['role']);
-
-                    if ($selectedRole !== $dbRole || !in_array($dbRole, ['student', 'faculty', 'admin'], true)) {
-                        recordFailedLogin();
-                        $error = 'Invalid email, password, or role.';
+                if (verifyPassword($password, $user['password'])) {
+                    if ($user['status'] !== 'active') {
+                        $error = 'Your account is pending administrator approval or suspended.';
                     } else {
-                        resetFailedLogins();
+                        $dbRole = strtolower((string) $user['role']);
+                        $validRoles = ['student', 'faculty', 'research_staff', 'admin'];
 
-                        $_SESSION['user_id'] = $user['user_id'];
-                        $_SESSION['email'] = $user['email'];
-                        $_SESSION['name'] = $user['first_name'] . ' ' . $user['last_name'];
-                        $_SESSION['role'] = $user['role'];
-                        $_SESSION['last_activity'] = time();
+                        if (!in_array($dbRole, $validRoles, true)) {
+                            recordFailedLogin();
+                            $error = 'Invalid email, password, or role.';
+                        } else {
+                            resetFailedLogins();
+                            session_regenerate_id(true);
 
-                        $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
-                        $updateStmt->bind_param('i', $user['user_id']);
-                        $updateStmt->execute();
+                            $_SESSION['user_id'] = (int) $user['user_id'];
+                            $_SESSION['email']   = $user['email'];
+                            $_SESSION['name']    = $user['first_name'] . ' ' . $user['last_name'];
+                            $_SESSION['role']    = $dbRole;
+                            $_SESSION['last_activity'] = time();
 
-                        logActivity('User logged in', 'authentication');
+                            $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
+                            $updateStmt->bind_param('i', $user['user_id']);
+                            $updateStmt->execute();
 
-                        $redirect = 'pages/' . $dbRole . '-dashboard.php';
-                        header('Location: ' . $redirect);
-                        exit();
+                            logActivity('User logged in', 'authentication');
+
+                            $dashboardMap = [
+                                'student'        => 'student-dashboard.php',
+                                'faculty'        => 'faculty-dashboard.php',
+                                'research_staff' => 'staff-dashboard.php',
+                                'admin'          => 'admin-dashboard.php',
+                            ];
+
+                            $page = $dashboardMap[$dbRole] ?? 'student-dashboard.php';
+                            header('Location: pages/' . $page);
+                            exit();
+                        }
                     }
                 } else {
                     recordFailedLogin();
@@ -116,11 +148,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
         $first_name = isset($_POST['first_name']) ? sanitize($_POST['first_name']) : '';
         $last_name = isset($_POST['last_name']) ? sanitize($_POST['last_name']) : '';
-        $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
+        $email = isset($_POST['email']) ? trim($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
         $password_confirm = isset($_POST['password_confirm']) ? $_POST['password_confirm'] : '';
         $student_id = isset($_POST['student_id']) ? sanitize($_POST['student_id']) : '';
         $role = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
+
+        $allowedRoles = ['student', 'faculty', 'research_staff'];
+        if (!in_array($role, $allowedRoles, true)) {
+            $role = 'student';
+        }
 
         if (empty($first_name) || empty($last_name) || empty($email) || empty($password)) {
             $error = 'All fields are required';
@@ -131,19 +168,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($password !== $password_confirm) {
             $error = 'Passwords do not match';
         } else {
-            // Check if email exists
-            $check = $conn->query("SELECT user_id FROM users WHERE email = '$email'");
-            if ($check && $check->num_rows > 0) {
+            $checkStmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
+            $checkStmt->bind_param('s', $email);
+            $checkStmt->execute();
+            $checkRes = $checkStmt->get_result();
+
+            if ($checkRes && $checkRes->num_rows > 0) {
                 $error = 'Email already registered';
             } else {
-                // Hash password and insert
                 $password_hash = hashPassword($password);
-                $sql = "INSERT INTO users (first_name, last_name, email, password, student_id, role, status)
-                        VALUES ('$first_name', '$last_name', '$email', '$password_hash', '$student_id', '$role', 'pending')";
+                $status = 'pending';
+                $insertStmt = $conn->prepare("INSERT INTO users (first_name, last_name, email, password, student_id, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+                $insertStmt->bind_param('sssssss', $first_name, $last_name, $email, $password_hash, $student_id, $role, $status);
 
-                if ($conn->query($sql)) {
-                    logActivity('New user registered', 'authentication');
-
+                if ($insertStmt->execute()) {
                     $success = 'Registration successful! Please wait for admin approval.';
                     $_POST = [];
                 } else {
@@ -176,23 +214,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php if ($error): ?>
         <div class="alert alert-error" style="margin-bottom: 20px;">
           <span style="color: #dc2626;">✕</span>
-          <?php echo htmlspecialchars($error); ?>
+          <?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
         </div>
       <?php endif; ?>
 
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 24px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px;">
+      <?php if ($success): ?>
+        <div class="alert alert-success" style="margin-bottom: 20px;">
+          <span style="color: #15803d;">✓</span>
+          <?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?>
+        </div>
+      <?php endif; ?>
+
+      <div style="background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.78rem; color: #93c5fd; line-height: 1.6;">
+        <strong style="color: #bfdbfe;">🔑 Demo Credentials</strong><br>
+        Student: jdelacruz@rms.edu.ph / Student@123<br>
+        Faculty: msantos@rms.edu.ph / Faculty@123<br>
+        Staff: staff@rms.edu.ph / Staff@123<br>
+        Admin: admin@rms.edu.ph / Admin@123
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px;">
         <button type="button" class="role-tab active" data-role="student" onclick="switchRole('student')" style="padding: 10px; background: var(--primary); color: white; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">🎓 Student</button>
         <button type="button" class="role-tab" data-role="faculty" onclick="switchRole('faculty')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">👨‍🏫 Faculty</button>
+        <button type="button" class="role-tab" data-role="research_staff" onclick="switchRole('research_staff')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">📋 Staff</button>
         <button type="button" class="role-tab" data-role="admin" onclick="switchRole('admin')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">⚙️ Admin</button>
       </div>
 
-      <form method="POST">
+      <form method="POST" action="login.php">
         <input type="hidden" name="action" value="login">
+        <?php echo csrfField(); ?>
         <input type="hidden" name="role" id="role" value="student">
 
         <div class="form-group">
           <label class="form-label">Email Address</label>
-          <input type="email" name="email" class="form-control" placeholder="Enter your email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+          <input type="email" name="email" id="loginEmail" class="form-control" placeholder="Enter your email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email'], ENT_QUOTES, 'UTF-8') : ''; ?>">
         </div>
 
         <div class="form-group">
@@ -238,42 +293,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p>Join the Research Management System</p>
       </div>
 
-      <?php if ($success): ?>
-        <div class="alert alert-success" style="margin-bottom: 20px;">
-          <span style="color: #15803d;">✓</span>
-          <?php echo htmlspecialchars($success); ?>
-        </div>
-      <?php endif; ?>
-
-      <form method="POST">
+      <form method="POST" action="login.php">
         <input type="hidden" name="action" value="register">
+        <?php echo csrfField(); ?>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label class="form-label">First Name</label>
-            <input type="text" name="first_name" class="form-control" placeholder="Juan" required value="<?php echo isset($_POST['first_name']) ? htmlspecialchars($_POST['first_name']) : ''; ?>">
+            <input type="text" name="first_name" class="form-control" placeholder="Juan" required value="<?php echo isset($_POST['first_name']) ? htmlspecialchars($_POST['first_name'], ENT_QUOTES, 'UTF-8') : ''; ?>">
           </div>
           <div class="form-group">
             <label class="form-label">Last Name</label>
-            <input type="text" name="last_name" class="form-control" placeholder="Dela Cruz" required value="<?php echo isset($_POST['last_name']) ? htmlspecialchars($_POST['last_name']) : ''; ?>">
+            <input type="text" name="last_name" class="form-control" placeholder="Dela Cruz" required value="<?php echo isset($_POST['last_name']) ? htmlspecialchars($_POST['last_name'], ENT_QUOTES, 'UTF-8') : ''; ?>">
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label">Email Address</label>
-          <input type="email" name="email" class="form-control" placeholder="you@university.edu.ph" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+          <input type="email" name="email" class="form-control" placeholder="you@university.edu.ph" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email'], ENT_QUOTES, 'UTF-8') : ''; ?>">
         </div>
 
         <div class="form-group">
           <label class="form-label">Student/Employee ID</label>
-          <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024-00001" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id']) : ''; ?>">
+          <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024-00001" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id'], ENT_QUOTES, 'UTF-8') : ''; ?>">
         </div>
 
         <div class="form-group">
           <label class="form-label">Role</label>
           <select name="role" class="form-control">
             <option value="student">🎓 Student</option>
-            <option value="faculty">👨‍🏫 Faculty/Staff</option>
+            <option value="faculty">👨‍🏫 Faculty/Adviser</option>
+            <option value="research_staff">📋 Research Staff</option>
           </select>
         </div>
 
@@ -306,8 +356,17 @@ function switchRole(role) {
   const roleInput = document.getElementById('role');
   const tabs = document.querySelectorAll('.role-tab');
 
-  if (roleInput) {
-    roleInput.value = role;
+  switch (role) {
+    case 'student':
+    case 'faculty':
+    case 'research_staff':
+    case 'admin':
+      if (roleInput) {
+        roleInput.value = role;
+      }
+      break;
+    default:
+      return;
   }
 
   tabs.forEach((btn) => {

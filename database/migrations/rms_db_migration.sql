@@ -120,4 +120,72 @@ ALTER TABLE activity_log ADD KEY idx_activity_user_created (user_id, created_at)
 -- 10. users.email already has a UNIQUE KEY named email in rms_db.sql; verify it before running.
 -- No password UPDATE is emitted: the three README demo hashes match their bcrypt passwords.
 
+-- 11. Add Research Manual 2015 workflow tracking tables.
+CREATE TABLE IF NOT EXISTS research_documents (
+    document_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    project_id INT UNSIGNED NOT NULL,
+    upload_id INT UNSIGNED NULL,
+    document_type ENUM('proposal','revision_checklist','defense_material','mou','nda','progress_report','terminal_report','final_bound_report','publication_record','other') NOT NULL DEFAULT 'other',
+    status ENUM('pending','submitted','approved','rejected','waived') NOT NULL DEFAULT 'pending',
+    remarks TEXT NULL,
+    submitted_by INT UNSIGNED NULL,
+    reviewed_by INT UNSIGNED NULL,
+    submitted_at DATETIME NULL,
+    reviewed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (document_id),
+    KEY idx_research_documents_project_type (project_id, document_type),
+    KEY idx_research_documents_status (status),
+    KEY idx_research_documents_upload (upload_id),
+    KEY idx_research_documents_submitted_by (submitted_by),
+    KEY idx_research_documents_reviewed_by (reviewed_by),
+    CONSTRAINT fk_research_documents_project FOREIGN KEY (project_id) REFERENCES research_projects (project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_research_documents_upload FOREIGN KEY (upload_id) REFERENCES uploads (upload_id) ON DELETE SET NULL,
+    CONSTRAINT fk_research_documents_submitted_by FOREIGN KEY (submitted_by) REFERENCES users (user_id) ON DELETE SET NULL,
+    CONSTRAINT fk_research_documents_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES users (user_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS research_reports (
+    report_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    project_id INT UNSIGNED NOT NULL,
+    document_id INT UNSIGNED NULL,
+    report_type ENUM('midway_progress','terminal') NOT NULL,
+    status ENUM('draft','submitted','under_review','revision_required','approved','rejected') NOT NULL DEFAULT 'draft',
+    summary TEXT NULL,
+    due_date DATE NULL,
+    submitted_at DATETIME NULL,
+    reviewed_at DATETIME NULL,
+    reviewed_by INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (report_id),
+    KEY idx_research_reports_project_type (project_id, report_type),
+    KEY idx_research_reports_status (status),
+    KEY idx_research_reports_document (document_id),
+    KEY idx_research_reports_reviewed_by (reviewed_by),
+    CONSTRAINT fk_research_reports_project FOREIGN KEY (project_id) REFERENCES research_projects (project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_research_reports_document FOREIGN KEY (document_id) REFERENCES research_documents (document_id) ON DELETE SET NULL,
+    CONSTRAINT fk_research_reports_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES users (user_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS research_publication_tracking (
+    publication_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    project_id INT UNSIGNED NOT NULL,
+    colloquium_date DATETIME NULL,
+    colloquium_status ENUM('not_scheduled','scheduled','presented','cancelled') NOT NULL DEFAULT 'not_scheduled',
+    journal_status ENUM('not_submitted','submitted','under_review','accepted','published','rejected') NOT NULL DEFAULT 'not_submitted',
+    journal_reference VARCHAR(255) NULL,
+    archive_status ENUM('not_archived','ready','archived') NOT NULL DEFAULT 'not_archived',
+    remarks TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (publication_id),
+    UNIQUE KEY uq_publication_project (project_id),
+    KEY idx_publication_colloquium_status (colloquium_status),
+    KEY idx_publication_journal_status (journal_status),
+    KEY idx_publication_archive_status (archive_status),
+    CONSTRAINT fk_publication_project FOREIGN KEY (project_id) REFERENCES research_projects (project_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

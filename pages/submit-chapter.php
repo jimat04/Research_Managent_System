@@ -127,7 +127,9 @@ if (!$invalid_chapter && $project) {
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$invalid_chapter && $project) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+    $errors[] = 'Your form has expired. Please try again.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !$invalid_chapter && $project) {
     $submitted_content = [];
     foreach ($chapter_fields[$chapter_number] as $field => $label) {
         $submitted_content[$field] = isset($_POST[$field]) ? trim($_POST[$field]) : '';
@@ -345,6 +347,7 @@ $status_badge = $current_status && isset($status_badges[$current_status]) ? $sta
 
         <form method="post" enctype="multipart/form-data">
           <input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="chapter" value="<?php echo $chapter_number; ?>">
+          <?php echo csrfField(); ?>
           <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Information</div></div><div class="card-body" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
             <div><strong>Project</strong><div><?php echo htmlspecialchars($project['title']); ?></div></div>
             <div><strong>Chapter</strong><div><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></div></div>

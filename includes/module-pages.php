@@ -33,6 +33,11 @@ function rms_project_access($project_id, $user) {
 function rms_handle_module_action($page_key, $user) {
     global $conn;
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
+    if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+        $_SESSION['module_error'] = 'Your form has expired. Please try again.';
+        header('Location: ' . $_SERVER['REQUEST_URI']);
+        exit;
+    }
     $user_id = (int) $user['user_id'];
 
     if ($page_key === 'submit-research.php' && $user['role'] === 'student') {
@@ -166,7 +171,7 @@ function rms_render_module($page_key, $user, $module) {
 
     if ($page_key === 'submit-research.php') {
         $categories = rms_rows($conn->query('SELECT category_id, category_name FROM research_categories WHERE status = 1 ORDER BY category_name'));
-        echo '<div class="card" style="max-width:820px"><div class="card-header"><div><div class="card-title">New Research Submission</div><div class="card-subtitle">Create a project record to begin tracking your research.</div></div></div><div class="card-body"><form method="post"><label>Research title<br><input class="form-control" name="title" required maxlength="255"></label><br><label>Research area<br><input class="form-control" name="research_area" maxlength="150"></label><br><label>Category<br><select class="form-control" name="category_id"><option value="0">Select a category</option>';
+        echo '<div class="card" style="max-width:820px"><div class="card-header"><div><div class="card-title">New Research Submission</div><div class="card-subtitle">Create a project record to begin tracking your research.</div></div></div><div class="card-body"><form method="post">' . csrfField() . '<label>Research title<br><input class="form-control" name="title" required maxlength="255"></label><br><label>Research area<br><input class="form-control" name="research_area" maxlength="150"></label><br><label>Category<br><select class="form-control" name="category_id"><option value="0">Select a category</option>';
         foreach ($categories as $category) echo '<option value="' . (int) $category['category_id'] . '">' . rms_escape($category['category_name']) . '</option>';
         echo '</select></label><br><label>Abstract<br><textarea class="form-control" name="abstract" rows="7"></textarea></label><br><button class="btn btn-primary" type="submit">Create Research Project</button></form></div></div>';
         return;
@@ -207,9 +212,38 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'notifications.php') {
-        $rows = rms_rows($conn->query("SELECT notification_id, title, message, type, is_read, created_at FROM notifications WHERE user_id = $user_id ORDER BY created_at DESC"));
-        $formatted = array_map(function ($row) { return [rms_escape($row['title']), rms_escape($row['message']), rms_escape(ucfirst($row['type'])), date('M d, Y H:i', strtotime($row['created_at'])), $row['is_read'] ? 'Read' : '<form method="post" style="display:inline"><input type="hidden" name="notification_id" value="' . (int) $row['notification_id'] . '"><button class="btn btn-primary btn-sm">Mark read</button></form>']; }, $rows);
-        echo '<div class="card"><div class="card-header"><div class="card-title">Notifications</div></div>'; rms_table(['Title', 'Message', 'Type', 'Date', 'Action'], $formatted, 'You have no notifications.'); echo '</div>'; return;
+        $rows = rms_rows($conn->query("SELECT notification_id, title, message, type, is_read, link, created_at FROM notifications WHERE user_id = $user_id ORDER BY created_at DESC"));
+        $formatted = array_map(function ($row) use ($user_id) {
+            $actions = '';
+
+            // Check if this is a message notification (link points to messages.php)
+            $is_message_notification = !empty($row['link']) && strpos($row['link'], 'messages.php') !== false;
+
+            if (!$row['is_read']) {
+                $actions .= '<form method="post" style="display:inline; margin-right: 8px;">' . csrfField() .
+                           '<input type="hidden" name="notification_id" value="' . (int) $row['notification_id'] . '">' .
+                           '<button class="btn btn-primary btn-sm">Mark read</button></form>';
+            } else {
+                $actions .= '<span style="color: var(--text-light); font-size: 0.9rem;">Read</span>';
+            }
+
+            // Add Reply button for message notifications
+            if ($is_message_notification) {
+                $actions .= ' <button class="btn btn-secondary btn-sm" onclick="location.href=\'messages.php\'">Reply</button>';
+            }
+
+            return [
+                rms_escape($row['title']),
+                rms_escape($row['message']),
+                rms_escape(ucfirst($row['type'])),
+                date('M d, Y H:i', strtotime($row['created_at'])),
+                $actions
+            ];
+        }, $rows);
+        echo '<div class="card"><div class="card-header"><div class="card-title">Notifications</div></div>';
+        rms_table(['Title', 'Message', 'Type', 'Date', 'Action'], $formatted, 'You have no notifications.');
+        echo '</div>';
+        return;
     }
 
     if ($page_key === 'calendar.php') {
@@ -220,24 +254,27 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'settings.php') {
-        echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Settings</div></div><div class="card-body"><form method="post"><label>New password<br><input class="form-control" type="password" name="new_password" minlength="8" required></label><br><label>Confirm password<br><input class="form-control" type="password" name="confirm_password" minlength="8" required></label><br><button class="btn btn-primary">Update Password</button></form></div></div>'; return;
+        echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Settings</div></div><div class="card-body"><form method="post">' . csrfField() . '<label>New password<br><input class="form-control" type="password" name="new_password" minlength="8" required></label><br><label>Confirm password<br><input class="form-control" type="password" name="confirm_password" minlength="8" required></label><br><button class="btn btn-primary">Update Password</button></form></div></div>'; return;
     }
 
     if ($page_key === 'messages.php') {
         $recipients = rms_rows($conn->query("SELECT user_id, first_name, last_name, role FROM users WHERE status = 'active' AND user_id <> $user_id ORDER BY last_name, first_name"));
-        $inbox = rms_rows($conn->query("SELECT m.message_id, m.subject, m.message, m.is_read, m.created_at, CONCAT(u.first_name, ' ', u.last_name) AS sender_name FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = $user_id ORDER BY m.created_at DESC"));
+        $inbox = rms_rows($conn->query("SELECT m.message_id, m.subject, m.message, m.is_read, m.created_at, m.sender_id, CASE WHEN m.sender_id = 0 THEN 'System' ELSE CONCAT(u.first_name, ' ', u.last_name) END AS sender_name FROM messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = $user_id ORDER BY m.created_at DESC"));
         $sent = rms_rows($conn->query("SELECT m.subject, m.message, m.created_at, CONCAT(u.first_name, ' ', u.last_name) AS recipient_name FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE m.sender_id = $user_id ORDER BY m.created_at DESC LIMIT 20"));
-        echo '<div class="card" style="max-width:820px"><div class="card-header"><div><div class="card-title">Compose Message</div><div class="card-subtitle">Send a message to an active RMS user.</div></div></div><div class="card-body"><form method="post"><label>Recipient<br><select class="form-control" name="recipient_id" required><option value="">Select recipient</option>';
+        echo '<div class="card" style="max-width:820px"><div class="card-header"><div><div class="card-title">Compose Message</div><div class="card-subtitle">Send a message to an active RMS user.</div></div></div><div class="card-body"><form method="post">' . csrfField() . '<label>Recipient<br><select class="form-control" name="recipient_id" required><option value="">Select recipient</option>';
         foreach ($recipients as $recipient) echo '<option value="' . (int) $recipient['user_id'] . '">' . rms_escape($recipient['first_name'] . ' ' . $recipient['last_name'] . ' (' . ucfirst($recipient['role']) . ')') . '</option>';
         echo '</select></label><br><label>Subject<br><input class="form-control" name="subject" maxlength="160" required></label><br><label>Message<br><textarea class="form-control" name="message" rows="5" required></textarea></label><br><button class="btn btn-primary">Send Message</button></form></div></div>';
-        $inbox_rows = array_map(function ($row) { return [rms_escape($row['sender_name']), rms_escape($row['subject']), nl2br(rms_escape($row['message'])), date('M d, Y H:i', strtotime($row['created_at'])), $row['is_read'] ? 'Read' : '<form method="post" style="display:inline"><input type="hidden" name="message_id" value="' . (int) $row['message_id'] . '"><button class="btn btn-primary btn-sm">Mark read</button></form>']; }, $inbox);
+        $inbox_rows = array_map(function ($row) {
+            $sender_display = $row['sender_id'] == 0 ? '<strong style="color: var(--primary);">🔔 ' . rms_escape($row['sender_name']) . '</strong>' : rms_escape($row['sender_name']);
+            return [$sender_display, rms_escape($row['subject']), nl2br(rms_escape($row['message'])), date('M d, Y H:i', strtotime($row['created_at'])), $row['is_read'] ? 'Read' : '<form method="post" style="display:inline">' . csrfField() . '<input type="hidden" name="message_id" value="' . (int) $row['message_id'] . '"><button class="btn btn-primary btn-sm">Mark read</button></form>'];
+        }, $inbox);
         echo '<div class="card"><div class="card-header"><div class="card-title">Inbox</div></div>'; rms_table(['From', 'Subject', 'Message', 'Date', 'Status'], $inbox_rows, 'Your inbox is empty.'); echo '</div>';
         $sent_rows = array_map(function ($row) { return [rms_escape($row['recipient_name']), rms_escape($row['subject']), nl2br(rms_escape($row['message'])), date('M d, Y H:i', strtotime($row['created_at']))]; }, $sent);
         echo '<div class="card"><div class="card-header"><div class="card-title">Sent Messages</div></div>'; rms_table(['To', 'Subject', 'Message', 'Date'], $sent_rows, 'You have not sent any messages.'); echo '</div>'; return;
     }
 
     if ($page_key === 'profile.php') {
-        echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Profile</div></div><div class="card-body"><form method="post"><label>First name<br><input class="form-control" name="first_name" value="' . rms_escape($user['first_name']) . '" required></label><br><label>Last name<br><input class="form-control" name="last_name" value="' . rms_escape($user['last_name']) . '" required></label><br><label>Email<br><input class="form-control" value="' . rms_escape($user['email']) . '" disabled></label><br><label>Contact<br><input class="form-control" name="contact" value="' . rms_escape($user['contact'] ?? '') . '"></label><br><button class="btn btn-primary">Save Profile</button></form></div></div>'; return;
+        echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Profile</div></div><div class="card-body"><form method="post">' . csrfField() . '<label>First name<br><input class="form-control" name="first_name" value="' . rms_escape($user['first_name']) . '" required></label><br><label>Last name<br><input class="form-control" name="last_name" value="' . rms_escape($user['last_name']) . '" required></label><br><label>Email<br><input class="form-control" value="' . rms_escape($user['email']) . '" disabled></label><br><label>Contact<br><input class="form-control" name="contact" value="' . rms_escape($user['contact'] ?? '') . '"></label><br><button class="btn btn-primary">Save Profile</button></form></div></div>'; return;
     }
 
     if ($page_key === 'faculty-submissions.php' || $page_key === 'faculty-review.php' || $page_key === 'faculty-students.php') {
@@ -257,7 +294,7 @@ function rms_render_module($page_key, $user, $module) {
         if (!rms_project_access($project_id, $user)) { echo '<div class="card"><h2>Research not found</h2><p>This project is not assigned to you.</p></div>'; return; }
         $project = $conn->query("SELECT rp.*, u.first_name, u.last_name FROM research_projects rp JOIN users u ON u.user_id = rp.created_by WHERE rp.project_id = $project_id")->fetch_assoc();
         $chapters = rms_rows($conn->query("SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = $project_id ORDER BY chapter_number"));
-        echo '<div class="card"><div class="card-header"><div class="card-title">Review: ' . rms_escape($project['title']) . '</div></div><div class="card-body"><p><strong>Student:</strong> ' . rms_escape($project['first_name'] . ' ' . $project['last_name']) . '</p><p>' . nl2br(rms_escape($project['abstract'] ?? 'No abstract provided.')) . '</p><form method="post"><input type="hidden" name="project_id" value="' . $project_id . '"><label>Project status<br><select class="form-control" name="status">';
+        echo '<div class="card"><div class="card-header"><div class="card-title">Review: ' . rms_escape($project['title']) . '</div></div><div class="card-body"><p><strong>Student:</strong> ' . rms_escape($project['first_name'] . ' ' . $project['last_name']) . '</p><p>' . nl2br(rms_escape($project['abstract'] ?? 'No abstract provided.')) . '</p><form method="post">' . csrfField() . '<input type="hidden" name="project_id" value="' . $project_id . '"><label>Project status<br><select class="form-control" name="status">';
         foreach (['proposal', 'in_progress', 'for_defense', 'completed', 'archived'] as $status) echo '<option value="' . $status . '"' . ($project['status'] === $status ? ' selected' : '') . '>' . rms_escape(rms_status($status)) . '</option>';
         echo '</select></label><br><label>Chapter for comment<br><select class="form-control" name="chapter_id"><option value="0">General project update</option>'; foreach ($chapters as $chapter) echo '<option value="' . (int) $chapter['chapter_id'] . '">Chapter ' . (int) $chapter['chapter_number'] . ' - ' . rms_escape($chapter['chapter_title']) . '</option>'; echo '</select></label><br><label>Feedback<br><textarea class="form-control" name="comment" rows="5"></textarea></label><br><button class="btn btn-primary">Save Review</button></form></div></div>'; return;
     }

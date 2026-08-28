@@ -18,6 +18,7 @@ $modules = [
     'faculty-review-detail.php' => ['Review Research', 'faculty', '🔍', 'Inspect a research submission and record review feedback.'],
     'faculty-students.php' => ['My Students', 'faculty', '👨‍🎓', 'Monitor the students and projects assigned to you.'],
     'faculty-reports.php' => ['Reports', 'faculty', '📊', 'View review activity and research progress reports.'],
+    'contact-messages.php' => ['Contact Messages', ['admin', 'research_staff'], '📨', 'Manage public contact form submissions and inquiries.'],
     'admin-users.php' => ['User Management', 'admin', '👥', 'Manage student, faculty, and administrator accounts.'],
     'admin-research.php' => ['Research Management', 'admin', '📁', 'Manage all research records and their workflow status.'],
     'admin-archive.php' => ['Archive Management', 'admin', '🗂️', 'Manage completed research in the institutional archive.'],
@@ -37,7 +38,16 @@ if ($module[1] !== null) {
 $user = getCurrentUser();
 $page_key = basename($_SERVER['SCRIPT_NAME']);
 rms_handle_module_action($page_key, $user);
-$dashboard = $user['role'] . '-dashboard.php';
+
+// Map role to dashboard filename
+$dashboardMap = [
+    'student' => 'student-dashboard.php',
+    'faculty' => 'faculty-dashboard.php',
+    'research_staff' => 'staff-dashboard.php',
+    'admin' => 'admin-dashboard.php'
+];
+$dashboard = $dashboardMap[$user['role']] ?? 'student-dashboard.php';
+
 $initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1));
 ?>
 <!DOCTYPE html>

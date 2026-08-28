@@ -1,5 +1,12 @@
 {
-  "dependencies": {
-    "chat": "^4.38.1"
-  }
+  "name": "rms",
+  "version": "1.0.0",
+  "description": "Research Management System",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'No build process configured yet'",
+    "build": "echo 'No build process configured yet'"
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }

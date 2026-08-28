@@ -1,5 +1,7 @@
 <?php
 include 'includes/config.php';
+require_once 'includes/auth.php';
+require_once 'includes/contact-handler.php';
 
 $name = '';
 $email = '';
@@ -15,7 +17,9 @@ $concern_types = [
     'Other'
 ];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+    $errors[] = 'Your form has expired. Please try again.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $concern_type = trim($_POST['concern_type'] ?? 'General Inquiry');
@@ -40,12 +44,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // @rms-db: Create a contact_messages table here if contact storage is needed in a future version.
-        $success = true;
-        $name = '';
-        $email = '';
-        $concern_type = 'General Inquiry';
-        $message = '';
+        $result = saveContactMessage($conn, $name, $email, $concern_type, $message);
+
+        if ($result['success']) {
+            $success = true;
+            $name = '';
+            $email = '';
+            $concern_type = 'General Inquiry';
+            $message = '';
+        } else {
+            $errors[] = 'Failed to send your message. Please try again later.';
+        }
     }
 }
 
@@ -180,6 +189,7 @@ function contact_escape($value) {
                     <?php endif; ?>
 
                     <form method="POST" action="contact.php">
+                        <?php echo csrfField(); ?>
                         <div class="form-group">
                             <label class="form-label" for="name">Name</label>
                             <input class="form-control" type="text" id="name" name="name" required value="<?php echo contact_escape($name); ?>">

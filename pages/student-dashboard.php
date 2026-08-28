@@ -5,35 +5,46 @@ include '../includes/auth.php';
 requireRole('student');
 
 $user = getCurrentUser();
-$user_id = $user['user_id'];
+$user_id = (int) $user['user_id'];
 
 // Get student's research projects
-$projects = $conn->query("
-    SELECT * FROM research_projects 
-    WHERE created_by = $user_id 
-    ORDER BY created_at DESC
-");
+$proj_stmt = $conn->prepare("SELECT * FROM research_projects WHERE created_by = ? ORDER BY created_at DESC");
+$proj_stmt->bind_param('i', $user_id);
+$proj_stmt->execute();
+$projects = $proj_stmt->get_result();
 
 // Get notifications
-$notifications = $conn->query("
-    SELECT * FROM notifications 
-    WHERE user_id = $user_id 
-    ORDER BY created_at DESC 
-    LIMIT 5
-");
+$notif_stmt = $conn->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5");
+$notif_stmt->bind_param('i', $user_id);
+$notif_stmt->execute();
+$notifications = $notif_stmt->get_result();
 
 // Get unread notifications count
-$unread = $conn->query("
-    SELECT COUNT(*) as count FROM notifications 
-    WHERE user_id = $user_id AND is_read = 0
-");
-$unread_count = $unread->fetch_assoc()['count'];
+$unread_stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_stmt->bind_param('i', $user_id);
+$unread_stmt->execute();
+$unread_count = (int) ($unread_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 // Get chapter statistics
-$stat_submitted = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = $user_id) AND status IN ('submitted', 'under_review', 'approved')")->fetch_assoc()['count'];
-$stat_review = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = $user_id) AND status = 'under_review'")->fetch_assoc()['count'];
-$stat_approved = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = $user_id) AND status = 'approved'")->fetch_assoc()['count'];
-$stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = $user_id) AND status = 'revision_required'")->fetch_assoc()['count'];
+$stat_submitted_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status IN ('submitted', 'under_review', 'approved')");
+$stat_submitted_stmt->bind_param('i', $user_id);
+$stat_submitted_stmt->execute();
+$stat_submitted = (int) ($stat_submitted_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+
+$stat_review_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'under_review'");
+$stat_review_stmt->bind_param('i', $user_id);
+$stat_review_stmt->execute();
+$stat_review = (int) ($stat_review_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+
+$stat_approved_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'approved'");
+$stat_approved_stmt->bind_param('i', $user_id);
+$stat_approved_stmt->execute();
+$stat_approved = (int) ($stat_approved_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+
+$stat_revision_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'revision_required'");
+$stat_revision_stmt->bind_param('i', $user_id);
+$stat_revision_stmt->execute();
+$stat_revision = (int) ($stat_revision_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -46,9 +57,7 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
 <body>
 
 <div class="dashboard">
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- SIDEBAR -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 8px;">🔬</div>
@@ -123,22 +132,20 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
       <div class="user-card">
         <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
         <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
+          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="user-role">🎓 Student</div>
         </div>
       </div>
     </div>
   </aside>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- MAIN CONTENT -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <div class="main-content">
     <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-left">
         <h2>Dashboard</h2>
-        <p>Welcome back, <?php echo htmlspecialchars($user['first_name']); ?>! Here's your research overview.</p>
+        <p>Welcome back, <?php echo htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8'); ?>! Here's your research overview.</p>
       </div>
 
       <div class="topbar-right">
@@ -156,7 +163,7 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
         <div class="user-profile-btn" onclick="alert('Profile menu')">
           <div class="profile-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
           <div class="profile-text">
-            <div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div>
+            <div class="profile-name"><?php echo htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8'); ?></div>
             <div class="profile-role">Student</div>
           </div>
         </div>
@@ -269,7 +276,7 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
                 <li class="activity-item">
                   <div class="activity-dot" style="background: <?php echo $color; ?>;"></div>
                   <div class="activity-content">
-                    <p><?php echo htmlspecialchars($notif['message']); ?></p>
+                    <p><?php echo htmlspecialchars($notif['message'], ENT_QUOTES, 'UTF-8'); ?></p>
                     <div class="time"><?php echo date('M d, Y', strtotime($notif['created_at'])); ?></div>
                   </div>
                 </li>
@@ -299,23 +306,29 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
               </thead>
               <tbody>
                 <?php
-                $projects->data_seek(0);
-                while ($proj = $projects->fetch_assoc()):
-                  $status_class = 'status-' . str_replace('_', '-', strtolower($proj['status']));
+                if ($projects->num_rows > 0):
+                  $projects->data_seek(0);
+                  while ($proj = $projects->fetch_assoc()):
+                    $status_class = 'status-' . str_replace('_', '-', strtolower($proj['status']));
                 ?>
                   <tr>
-                    <td style="font-weight: 500;"><?php echo htmlspecialchars($proj['title']); ?></td>
+                    <td style="font-weight: 500;"><?php echo htmlspecialchars($proj['title'], ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo date('M d, Y', strtotime($proj['created_at'])); ?></td>
                     <td>
-                      <span class="badge-status <?php echo $status_class; ?>">
-                        <?php echo ucwords(str_replace('_', ' ', $proj['status'])); ?>
+                      <span class="badge-status <?php echo htmlspecialchars($status_class, ENT_QUOTES, 'UTF-8'); ?>">
+                        <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $proj['status'])), ENT_QUOTES, 'UTF-8'); ?>
                       </span>
                     </td>
                     <td>
-                      <a class="btn btn-accent btn-sm" href="view-research.php?id=<?php echo $proj['project_id']; ?>">View</a>
+                      <a class="btn btn-accent btn-sm" href="view-research.php?id=<?php echo (int)$proj['project_id']; ?>">View</a>
                     </td>
                   </tr>
                 <?php endwhile; ?>
+                <?php else: ?>
+                  <tr>
+                    <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No research submissions yet.</td>
+                  </tr>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
@@ -350,7 +363,6 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
 </div>
 
 <script>
-// Sidebar menu item click handlers
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', function() {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
