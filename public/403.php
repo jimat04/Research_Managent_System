@@ -1,33 +1,18 @@
 <?php
 // ============================================================
-// ERROR 404 - PAGE NOT FOUND
+// ERROR 403 - ACCESS DENIED
 // ============================================================
-// This page is shown when users try to access a page that
-// doesn't exist
+// This page is shown when users try to access resources
+// they don't have permission to view
 
-http_response_code(404);
+http_response_code(403);
 
 // Load config to get site constants (but don't require database)
 if (file_exists(__DIR__ . '/includes/config.php')) {
-    include_once __DIR__ . '/includes/config.php';
+    require_once __DIR__ . '/../includes/config.php';
 } else {
     define('SITE_URL', '/rms/');
     define('SITE_NAME', 'Research Management System');
-}
-
-// Log 404 for analytics (optional)
-if (isset($conn) && $conn instanceof mysqli) {
-    $requested_url = $_SERVER['REQUEST_URI'] ?? 'unknown';
-    $referrer = $_SERVER['HTTP_REFERER'] ?? '';
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-
-    $stmt = $conn->prepare("INSERT INTO system_logs (log_type, message, ip_address, created_at) VALUES ('404', ?, ?, NOW())");
-    if ($stmt) {
-        $log_msg = "Page not found: {$requested_url} | Referrer: {$referrer}";
-        $stmt->bind_param('ss', $log_msg, $ip);
-        $stmt->execute();
-        $stmt->close();
-    }
 }
 ?>
 <!DOCTYPE html>
@@ -35,7 +20,7 @@ if (isset($conn) && $conn instanceof mysqli) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>404 - Page Not Found | <?php echo SITE_NAME; ?></title>
+    <title>403 - Access Denied | <?php echo SITE_NAME; ?></title>
     <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/style.css">
     <style>
         .error-container {
@@ -63,21 +48,21 @@ if (isset($conn) && $conn instanceof mysqli) {
             width: 120px;
             height: 120px;
             margin: 0 auto 30px;
-            background: linear-gradient(135deg, var(--secondary), var(--info));
+            background: linear-gradient(135deg, var(--danger), #dc2626);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 3rem;
             color: white;
-            box-shadow: 0 10px 30px rgba(15, 108, 189, 0.3);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
         }
 
         .error-code {
             font-family: 'Poppins', sans-serif;
             font-size: 5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, var(--secondary-light), var(--accent-light));
+            background: linear-gradient(135deg, var(--danger), #fca5a5);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -144,35 +129,23 @@ if (isset($conn) && $conn instanceof mysqli) {
             transform: translateY(-2px);
         }
 
-        .error-suggestions {
+        .error-details {
             margin-top: 40px;
             padding-top: 30px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .error-suggestions h3 {
-            color: white;
-            font-size: 1.1rem;
-            margin-bottom: 15px;
-        }
-
-        .error-suggestions ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        .error-suggestions li {
+        .error-details p {
             color: #94a3b8;
             font-size: 0.9rem;
-            margin-bottom: 10px;
         }
 
-        .error-suggestions a {
+        .error-details a {
             color: var(--primary-light);
             text-decoration: underline;
         }
 
-        .error-suggestions a:hover {
+        .error-details a:hover {
             color: var(--accent-light);
         }
 
@@ -208,16 +181,16 @@ if (isset($conn) && $conn instanceof mysqli) {
     <div class="error-container">
         <div class="error-card">
             <div class="error-icon">
-                🔍
+                🔒
             </div>
 
-            <div class="error-code">404</div>
+            <div class="error-code">403</div>
 
-            <h1 class="error-title">Page Not Found</h1>
+            <h1 class="error-title">Access Denied</h1>
 
             <p class="error-message">
-                The page you're looking for doesn't exist or may have been moved.<br>
-                Let's get you back on track.
+                You don't have permission to access this page or resource.<br>
+                This area may be restricted to certain user roles.
             </p>
 
             <div class="error-actions">
@@ -229,13 +202,11 @@ if (isset($conn) && $conn instanceof mysqli) {
                 </a>
             </div>
 
-            <div class="error-suggestions">
-                <h3>Quick Links</h3>
-                <ul>
-                    <li><a href="<?php echo SITE_URL; ?>login.php">Login to your account</a></li>
-                    <li><a href="<?php echo SITE_URL; ?>about.php">About the Research System</a></li>
-                    <li><a href="<?php echo SITE_URL; ?>contact.php">Contact Support</a></li>
-                </ul>
+            <div class="error-details">
+                <p>
+                    If you believe this is a mistake, please contact your administrator<br>
+                    or <a href="<?php echo SITE_URL; ?>contact.php">submit a support request</a>.
+                </p>
             </div>
         </div>
     </div>

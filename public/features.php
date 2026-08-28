@@ -19,7 +19,7 @@ $links = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Features | Research Management System</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="../css/style.css">
     <style>
         /* ═════════════════════════════════════════════════════════════
            MODERN REDESIGN STYLES FOR FEATURES.PHP

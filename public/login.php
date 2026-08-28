@@ -1,17 +1,17 @@
 <?php
-include 'includes/config.php';
-include 'includes/auth.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // If already logged in, redirect straight to their dashboard
 if (isLoggedIn()) {
     $role = $_SESSION['role'] ?? 'student';
     $dashboardMap = [
-        'student'        => 'pages/student-dashboard.php',
-        'faculty'        => 'pages/faculty-dashboard.php',
-        'research_staff' => 'pages/staff-dashboard.php',
-        'admin'          => 'pages/admin-dashboard.php',
+        'student'        => '../pages/student/student-dashboard.php',
+        'faculty'        => '../pages/faculty/faculty-dashboard.php',
+        'research_staff' => '../pages/staff/staff-dashboard.php',
+        'admin'          => '../pages/admin/admin-dashboard.php',
     ];
-    header('Location: ' . ($dashboardMap[$role] ?? 'pages/student-dashboard.php'));
+    header('Location: ' . ($dashboardMap[$role] ?? '../pages/student/student-dashboard.php'));
     exit();
 }
 
@@ -122,14 +122,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                             logActivity('User logged in', 'authentication');
 
                             $dashboardMap = [
-                                'student'        => 'student-dashboard.php',
-                                'faculty'        => 'faculty-dashboard.php',
-                                'research_staff' => 'staff-dashboard.php',
-                                'admin'          => 'admin-dashboard.php',
+                                'student'        => '../pages/student/student-dashboard.php',
+                                'faculty'        => '../pages/faculty/faculty-dashboard.php',
+                                'research_staff' => '../pages/staff/staff-dashboard.php',
+                                'admin'          => '../pages/admin/admin-dashboard.php',
                             ];
 
-                            $page = $dashboardMap[$dbRole] ?? 'student-dashboard.php';
-                            header('Location: pages/' . $page);
+                            $dashboard = $dashboardMap[$dbRole] ?? '../pages/student/student-dashboard.php';
+                            header('Location: ' . $dashboard);
                             exit();
                         }
                     }
@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Login — <?php echo SITE_TITLE; ?></title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="../css/style.css" />
 </head>
 <body style="background: linear-gradient(135deg, #0A0833 0%, #1a0a3a 50%, #0a1a3a 100%); min-height: 100vh;">
 

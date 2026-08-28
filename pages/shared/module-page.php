@@ -1,13 +1,14 @@
 <?php
-include '../includes/config.php';
-include '../includes/auth.php';
-include '../includes/module-pages.php';
+require_once __DIR__ . '/../../includes/config.php';
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/module-pages.php';
 
 $modules = [
     'my-research.php' => ['My Research', 'student', '📁', 'Review your research projects and current submission status.'],
     'submit-research.php' => ['Submit Research', 'student', '📤', 'Start a new research submission and upload your proposal.'],
     'my-documents.php' => ['My Documents', 'student', '📄', 'Access proposals, chapters, defense files, and manuscripts.'],
     'progress-tracking.php' => ['Progress Tracking', 'student', '📈', 'Follow milestones and review progress across your projects.'],
+    'submit-chapter.php' => ['Submit Chapter', 'student', '📝', 'Upload a research chapter for review.'],
     'messages.php' => ['Messages', null, '💬', 'Communicate with advisers, reviewers, and research collaborators.'],
     'notifications.php' => ['Notifications', null, '🔔', 'View updates about reviews, approvals, revisions, and deadlines.'],
     'calendar.php' => ['Calendar', 'student', '📅', 'Keep track of research deadlines and scheduled activities.'],
@@ -25,8 +26,9 @@ $modules = [
     'admin-reports.php' => ['Reports & Analytics', 'admin', '📈', 'Review system-wide research and user statistics.'],
     'admin-logs.php' => ['System Logs', 'admin', '⚙️', 'Inspect recent activity recorded by the system.'],
     'admin-backup.php' => ['Backup', 'admin', '💾', 'Manage database and document backup operations.'],
-    'research-archive.php' => ['Research Archive', null, '🗂️', 'Browse approved and completed research projects.']
-    , 'view-research.php' => ['Research Details', null, '📄', 'View the details and current status of a research project.']
+    'research-archive.php' => ['Research Archive', null, '🗂️', 'Browse approved and completed research projects.'],
+    'research-detail.php' => ['Research Details', null, '📄', 'View the details and current status of a research project.'],
+    'view-research.php' => ['View Research', null, '📄', 'View research project information.']
 ];
 
 $page_key = basename($_SERVER['SCRIPT_NAME']);
@@ -36,17 +38,16 @@ if ($module[1] !== null) {
     requireRole($module[1]);
 }
 $user = getCurrentUser();
-$page_key = basename($_SERVER['SCRIPT_NAME']);
 rms_handle_module_action($page_key, $user);
 
-// Map role to dashboard filename
+// Map role to dashboard path
 $dashboardMap = [
-    'student' => 'student-dashboard.php',
-    'faculty' => 'faculty-dashboard.php',
-    'research_staff' => 'staff-dashboard.php',
-    'admin' => 'admin-dashboard.php'
+    'student' => '../student/student-dashboard.php',
+    'faculty' => '../faculty/faculty-dashboard.php',
+    'research_staff' => '../staff/staff-dashboard.php',
+    'admin' => '../admin/admin-dashboard.php'
 ];
-$dashboard = $dashboardMap[$user['role']] ?? 'student-dashboard.php';
+$dashboard = $dashboardMap[$user['role']] ?? '../student/student-dashboard.php';
 
 $initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1));
 ?>
@@ -56,7 +57,7 @@ $initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_na
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($module[0]); ?> - RMS</title>
-  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../../css/style.css">
 </head>
 <body>
 <div class="dashboard">
@@ -70,7 +71,7 @@ $initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_na
       <div class="nav-item" onclick="location.href='<?php echo htmlspecialchars($dashboard); ?>'"><span class="icon">📊</span><span>Dashboard</span></div>
       <div class="nav-item active"><span class="icon"><?php echo $module[2]; ?></span><span><?php echo htmlspecialchars($module[0]); ?></span></div>
       <div class="nav-item" onclick="history.back()"><span class="icon">←</span><span>Back</span></div>
-      <div class="nav-item" onclick="location.href='../logout.php'" style="color:#ef4444"><span class="icon">🚪</span><span>Logout</span></div>
+      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color:#ef4444"><span class="icon">🚪</span><span>Logout</span></div>
     </nav>
     <div class="sidebar-footer">
       <div class="user-card">

@@ -11,7 +11,7 @@ http_response_code(500);
 // (since this is the error handler)
 try {
     if (file_exists(__DIR__ . '/includes/config.php')) {
-        include_once __DIR__ . '/includes/config.php';
+        require_once __DIR__ . '/../includes/config.php';
     }
 } catch (Exception $e) {
     // Config is broken - use defaults

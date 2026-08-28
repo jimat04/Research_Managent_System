@@ -1,5 +1,5 @@
 <?php
-include 'includes/config.php';
+require_once __DIR__ . '/../includes/config.php';
 require_once 'includes/auth.php';
 require_once 'includes/contact-handler.php';
 
@@ -68,7 +68,7 @@ function contact_escape($value) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact | Research Management System</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="../css/style.css">
     <style>
         /* @rms-ui: Keep public contact controls readable on the light card surface. */
         .contact-section { background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); }

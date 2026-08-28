@@ -1,6 +1,6 @@
 <?php
-include 'includes/config.php';
-include 'includes/auth.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // These public aggregate queries contain no user input and are safe from SQL injection; prepared statements keep the page consistent with protected areas.
 $total_research_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects");
@@ -37,8 +37,8 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>About Research Management System</title>
-        <link rel="stylesheet" href="css/style.css">
-        <link rel="stylesheet" href="css/about.css">
+        <link rel="stylesheet" href="../css/style.css">
+        <link rel="stylesheet" href="../css/about.css">
 </head>
 <body>
         <!-- NAVBAR -->

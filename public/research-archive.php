@@ -1,6 +1,6 @@
 <?php
-include 'includes/config.php';
-include 'includes/auth.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 function archive_escape($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -114,7 +114,7 @@ $is_logged_in = isLoggedIn();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Research Archive | Research Management System</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="../css/style.css">
     <style>
         /* @rms-ui: Keep the archive scannable while reusing the shared public palette. */
         .archive-hero { min-height: 56vh; }
