@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
-require_once 'includes/auth.php';
-require_once 'includes/contact-handler.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/contact-handler.php';
 
 $name = '';
 $email = '';
