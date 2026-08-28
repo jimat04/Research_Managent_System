@@ -1,0 +1,27 @@
+# Secure uploads directory
+# Allow only specific file types to be downloaded
+# Deny direct access to PHP files (prevents uploaded malicious scripts from running)
+
+# Allow document downloads
+<FilesMatch "\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+
+# Block all other files (especially .php, .exe, .sh)
+<FilesMatch ".*">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
+
+# Prevent PHP execution in uploads directory
+php_flag engine off
+
+# Prevent directory listing
+Options -Indexes
+
+# Additional security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>

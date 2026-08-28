@@ -1,0 +1,11 @@
+# Deny all direct access to configuration files
+# This prevents anyone from viewing your settings and credentials
+
+Order deny,allow
+Deny from all
+
+# Block all file types
+<FilesMatch ".*">
+    Order deny,allow
+    Deny from all
+</FilesMatch>

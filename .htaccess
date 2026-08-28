@@ -1,0 +1,79 @@
+# RMS Root .htaccess - Security Configuration
+# Last Updated: 2026-08-28
+
+# Enable RewriteEngine
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /rms/
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Protect sensitive files
+<FilesMatch "^(\.|composer\.json|composer\.lock|package\.json|package-lock\.json|README\.md|TODO\.md|\.gitignore)">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
+
+# Prevent access to .env files
+<FilesMatch "^\.env">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
+
+# Security Headers
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+
+    # Prevent MIME type sniffing
+    Header set X-Content-Type-Options "nosniff"
+
+    # Enable XSS protection
+    Header set X-XSS-Protection "1; mode=block"
+
+    # Referrer policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Disable server signature
+ServerSignature Off
+
+# Protect against SQL injection in URLs
+<IfModule mod_rewrite.c>
+    RewriteCond %{QUERY_STRING} (\<|%3C).*script.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2})
+    RewriteRule .* - [F,L]
+</IfModule>
+
+# Set default charset
+AddDefaultCharset UTF-8
+
+# Custom Error Pages
+ErrorDocument 403 /rms/403.php
+ErrorDocument 404 /rms/404.php
+ErrorDocument 500 /rms/500.php
+
+# Force HTTPS (uncomment when SSL is enabled)
+# <IfModule mod_rewrite.c>
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
+
+# PHP Security Settings (if allowed in .htaccess)
+<IfModule mod_php8.c>
+    # Disable dangerous PHP functions
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value error_log logs/php_errors.log
+
+    # Session security
+    php_value session.cookie_httponly 1
+    php_value session.use_strict_mode 1
+
+    # File upload limits
+    php_value upload_max_filesize 10M
+    php_value post_max_size 12M
+</IfModule>

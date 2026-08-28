@@ -1,0 +1,11 @@
+# Deny all direct access to database files
+# This prevents anyone from downloading your SQL files via browser
+
+Order deny,allow
+Deny from all
+
+# Block all file types
+<FilesMatch ".*">
+    Order deny,allow
+    Deny from all
+</FilesMatch>

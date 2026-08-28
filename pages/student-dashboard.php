@@ -261,7 +261,7 @@ $stat_revision = $conn->query("SELECT COUNT(*) as count FROM chapters WHERE proj
             <ul class="activity-list">
               <?php
               $count = 0;
-              while ($notif = $notifications->fetch_assoc() && $count < 5):
+              while ($count < 5 && ($notif = $notifications->fetch_assoc())):
                 $count++;
                 $colors = ['success' => '#22c55e', 'error' => '#ef4444', 'warning' => '#f59e0b', 'info' => '#0F6CBD'];
                 $color = $colors[$notif['type']] ?? '#0F6CBD';

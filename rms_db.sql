@@ -53,11 +53,7 @@ INSERT INTO `academic_years` (`ay_id`, `label`, `semester`, `is_active`, `create
 (11, '2024-2025', '1st', 0, '2026-05-30 18:57:54'),
 (12, '2024-2025', '2nd', 1, '2026-05-30 18:57:54');
 
--- --------------------------------------------------------
 
---
--- Table structure for table `activity_log`
---
 
 CREATE TABLE `activity_log` (
   `log_id` int(10) UNSIGNED NOT NULL,
@@ -70,27 +66,63 @@ CREATE TABLE `activity_log` (
 
 --
 -- Dumping data for table `activity_log`
+
 --
+-- Table structure for table `messages`
+--
+
+CREATE TABLE `messages` (
+  `message_id` int(10) UNSIGNED NOT NULL,
+  `sender_id` int(10) UNSIGNED NOT NULL,
+  `recipient_id` int(10) UNSIGNED NOT NULL,
+  `subject` varchar(160) NOT NULL,
+  `message` text NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
 
 INSERT INTO `activity_log` (`log_id`, `user_id`, `action`, `module`, `ip_address`, `created_at`) VALUES
 (1, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:10:36'),
 (2, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:11:06'),
 (3, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:19'),
-(4, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:11:39'),
+
+--
+-- Indexes for table `messages`
+--
+
+ALTER TABLE `messages`
+  ADD PRIMARY KEY (`message_id`),
+  ADD KEY `idx_recipient_read` (`recipient_id`,`is_read`),
+  ADD KEY `idx_sender` (`sender_id`);
+
+-- --------------------------------------------------------
 (5, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:48'),
-(6, 1, 'User logged out', 'authentication', '::1', '2026-05-30 18:13:35'),
-(7, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:16:17'),
 (8, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:08'),
 (9, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:18:16'),
 (10, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:31'),
-(11, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:18:43'),
+
+--
+-- AUTO_INCREMENT for table `messages`
+--
+ALTER TABLE `messages`
+  MODIFY `message_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+-- --------------------------------------------------------
 (12, 1, 'User logged out', 'authentication', '::1', '2026-05-30 18:23:21'),
-(13, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:58:09'),
-(14, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:58:29'),
 (15, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:58:48'),
 (16, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:58:50'),
 (17, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:30'),
-(18, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:59:32'),
+
+--
+-- Constraints for table `messages`
+--
+ALTER TABLE `messages`
+  ADD CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
+
+-- --------------------------------------------------------
 (19, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:46'),
 (20, 1, 'User logged out', 'authentication', '::1', '2026-05-30 19:00:00');
 

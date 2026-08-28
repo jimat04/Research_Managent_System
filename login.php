@@ -5,21 +5,69 @@ include 'includes/auth.php';
 $error = '';
 $success = '';
 
+function loginFailureKey() {
+    return md5($_SERVER['REMOTE_ADDR'] . '|' . session_id());
+}
+
+function isLoginLocked() {
+    $key = loginFailureKey();
+
+    if (empty($_SESSION['login_locked_until'][$key])) {
+        return false;
+    }
+
+    if ($_SESSION['login_locked_until'][$key] > time()) {
+        return true;
+    }
+
+    unset($_SESSION['login_locked_until'][$key]);
+    unset($_SESSION['login_failures'][$key]);
+
+    return false;
+}
+
+function recordFailedLogin() {
+    $key = loginFailureKey();
+
+    if (!isset($_SESSION['login_failures'])) {
+        $_SESSION['login_failures'] = [];
+    }
+
+    if (!isset($_SESSION['login_locked_until'])) {
+        $_SESSION['login_locked_until'] = [];
+    }
+
+    $_SESSION['login_failures'][$key] = ($_SESSION['login_failures'][$key] ?? 0) + 1;
+
+    if ($_SESSION['login_failures'][$key] >= 5) {
+        $_SESSION['login_locked_until'][$key] = time() + (15 * 60);
+        $_SESSION['login_failures'][$key] = 0;
+    }
+}
+
+function resetFailedLogins() {
+    $key = loginFailureKey();
+    unset($_SESSION['login_failures'][$key]);
+    unset($_SESSION['login_locked_until'][$key]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['action']) ? sanitize($_POST['action']) : '';
 
     // LOGIN
     if ($action === 'login') {
-        $email    = isset($_POST['email']) ? sanitize($_POST['email']) : '';
+        $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
-        $role     = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
+        $selectedRole = isset($_POST['role']) ? sanitize($_POST['role']) : '';
 
         if (empty($email) || empty($password)) {
             $error = 'Email and password are required';
         } elseif (!isValidEmail($email)) {
             $error = 'Invalid email format';
-        } else {
-            // Check user (prepared statement; don't rely on role tab for lookup)
+        } elseif (isLoginLocked()) {
+    $remaining = max(0, ceil(($_SESSION['login_locked_until'][loginFailureKey()] - time()) / 60));
+    $error = "Too many failed attempts. Please try again in {$remaining} minute(s).";
+} else {
             $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, password, role, status FROM users WHERE email = ? AND status = 'active' LIMIT 1");
             $stmt->bind_param('s', $email);
             $stmt->execute();
@@ -28,44 +76,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result && $result->num_rows > 0) {
                 $user = $result->fetch_assoc();
 
-                if (verifyPassword($password, $user['password'])) {
-                    // Set session based on DB role (do not depend on UI-selected role tab)
-                    $_SESSION['user_id']      = $user['user_id'];
-                    $_SESSION['email']        = $user['email'];
-                    $_SESSION['name']         = $user['first_name'] . ' ' . $user['last_name'];
-                    $_SESSION['role']         = $user['role'];
-                    $_SESSION['last_activity'] = time();
+                if (password_verify($password, $user['password'])) {
+                    $dbRole = strtolower((string) $user['role']);
 
-                    // Update last login
-                    $conn->query("UPDATE users SET last_login = NOW() WHERE user_id = {$user['user_id']}");
+                    if ($selectedRole !== $dbRole || !in_array($dbRole, ['student', 'faculty', 'admin'], true)) {
+                        recordFailedLogin();
+                        $error = 'Invalid email, password, or role.';
+                    } else {
+                        resetFailedLogins();
 
-                    // Log activity
-                    logActivity('User logged in', 'authentication');
+                        $_SESSION['user_id'] = $user['user_id'];
+                        $_SESSION['email'] = $user['email'];
+                        $_SESSION['name'] = $user['first_name'] . ' ' . $user['last_name'];
+                        $_SESSION['role'] = $user['role'];
+                        $_SESSION['last_activity'] = time();
 
-                    // Redirect
-                    $redirect = 'pages/' . $user['role'] . '-dashboard.php';
-                    header('Location: ' . $redirect);
-                    exit();
+                        $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
+                        $updateStmt->bind_param('i', $user['user_id']);
+                        $updateStmt->execute();
+
+                        logActivity('User logged in', 'authentication');
+
+                        $redirect = 'pages/' . $dbRole . '-dashboard.php';
+                        header('Location: ' . $redirect);
+                        exit();
+                    }
                 } else {
-                    $error = 'Invalid email or password';
+                    recordFailedLogin();
+                    $error = 'Invalid email, password, or role.';
                 }
             } else {
-                $error = 'Invalid email or password';
+                recordFailedLogin();
+                $error = 'Invalid email, password, or role.';
             }
         }
     }
 
     // REGISTER
     if ($action === 'register') {
-        $first_name  = isset($_POST['first_name']) ? sanitize($_POST['first_name']) : '';
-        $last_name   = isset($_POST['last_name']) ? sanitize($_POST['last_name']) : '';
-        $email       = isset($_POST['email']) ? sanitize($_POST['email']) : '';
-        $password    = isset($_POST['password']) ? $_POST['password'] : '';
+        $first_name = isset($_POST['first_name']) ? sanitize($_POST['first_name']) : '';
+        $last_name = isset($_POST['last_name']) ? sanitize($_POST['last_name']) : '';
+        $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
+        $password = isset($_POST['password']) ? $_POST['password'] : '';
         $password_confirm = isset($_POST['password_confirm']) ? $_POST['password_confirm'] : '';
-        $student_id  = isset($_POST['student_id']) ? sanitize($_POST['student_id']) : '';
-        $role        = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
+        $student_id = isset($_POST['student_id']) ? sanitize($_POST['student_id']) : '';
+        $role = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
 
-        // Validation
         if (empty($first_name) || empty($last_name) || empty($email) || empty($password)) {
             $error = 'All fields are required';
         } elseif (!isValidEmail($email)) {
@@ -86,11 +142,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         VALUES ('$first_name', '$last_name', '$email', '$password_hash', '$student_id', '$role', 'pending')";
 
                 if ($conn->query($sql)) {
-                    // Log activity
                     logActivity('New user registered', 'authentication');
 
                     $success = 'Registration successful! Please wait for admin approval.';
-                    // Clear form
                     $_POST = [];
                 } else {
                     $error = 'Registration failed. Please try again.';
@@ -99,14 +153,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-// Demo credentials to display
-$demo_creds = [
-    // Demo credentials shown in UI; ensure these match the passwords used when seeding `users.password` hashes
-    'admin'   => ['email' => 'admin@rms.edu.ph', 'password' => 'Admin@123'],
-    'faculty' => ['email' => 'msantos@rms.edu.ph', 'password' => 'Faculty@123'],
-    'student' => ['email' => 'jdelacruz@rms.edu.ph', 'password' => 'Student@123'],
-];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -120,7 +166,6 @@ $demo_creds = [
 
 <div class="auth-container">
   <div class="auth-card">
-    <!-- LOGIN FORM -->
     <div id="loginForm" style="display: block;">
       <div class="auth-header">
         <div class="auth-logo">🔬</div>
@@ -143,7 +188,7 @@ $demo_creds = [
 
       <form method="POST">
         <input type="hidden" name="action" value="login">
-        <input type="hidden" name="role" id="roleInput" value="student">
+        <input type="hidden" name="role" id="role" value="student">
 
         <div class="form-group">
           <label class="form-label">Email Address</label>
@@ -181,20 +226,11 @@ $demo_creds = [
       </div>
 
       <p style="text-align: center; color: #8B8FAD; font-size: 0.85rem;">
-        Don't have an account? 
+        Don't have an account?
         <a href="#" onclick="switchToRegister()" style="color: var(--primary-light); font-weight: 600;">Create one</a>
       </p>
-
-      <!-- Demo Credentials Info -->
-      <div style="margin-top: 20px; padding: 12px; background: rgba(15,108,189,0.1); border: 1px solid rgba(15,108,189,0.2); border-radius: 8px; font-size: 0.75rem; color: #60BFFF;">
-        <strong>Demo Credentials:</strong><br>
-        Student: jdelacruz@rms.edu.ph / Student@123<br>
-        Faculty: msantos@rms.edu.ph / Faculty@123<br>
-        Admin: admin@rms.edu.ph / Admin@123
-      </div>
     </div>
 
-    <!-- REGISTER FORM -->
     <div id="registerForm" style="display: none;">
       <div class="auth-header">
         <div class="auth-logo" style="background: linear-gradient(135deg, var(--secondary), var(--accent));">✨</div>
@@ -258,7 +294,7 @@ $demo_creds = [
       </form>
 
       <p style="text-align: center; color: #8B8FAD; font-size: 0.85rem;">
-        Already have an account? 
+        Already have an account?
         <a href="#" onclick="switchToLogin()" style="color: var(--primary-light); font-weight: 600;">Sign In</a>
       </p>
     </div>
@@ -267,11 +303,18 @@ $demo_creds = [
 
 <script>
 function switchRole(role) {
-  document.getElementById('roleInput').value = role;
-  document.querySelectorAll('.role-tab').forEach(btn => {
-    btn.style.background = btn.getAttribute('data-role') === role ? 'var(--primary)' : 'transparent';
-    btn.style.color = btn.getAttribute('data-role') === role ? 'white' : '#D0D3E8';
-    btn.style.fontWeight = btn.getAttribute('data-role') === role ? '600' : '500';
+  const roleInput = document.getElementById('role');
+  const tabs = document.querySelectorAll('.role-tab');
+
+  if (roleInput) {
+    roleInput.value = role;
+  }
+
+  tabs.forEach((btn) => {
+    const isActive = btn.getAttribute('data-role') === role;
+    btn.style.background = isActive ? 'var(--primary)' : 'transparent';
+    btn.style.color = isActive ? 'white' : '#D0D3E8';
+    btn.style.fontWeight = isActive ? '600' : '500';
   });
 }
 
@@ -295,8 +338,9 @@ function togglePassword(inputId, btnId) {
   btn.textContent = isHidden ? 'Hide' : 'Show';
 }
 
-// Check URL hash
-if (window.location.hash === '#register') switchToRegister();
+if (window.location.hash === '#register') {
+  switchToRegister();
+}
 </script>
 </body>
 </html>

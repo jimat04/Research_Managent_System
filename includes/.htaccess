@@ -1,0 +1,11 @@
+# Deny all direct access to PHP include files
+# These files should only be included by other PHP scripts, never accessed directly
+
+Order deny,allow
+Deny from all
+
+# Block all file types (especially .php files)
+<FilesMatch ".*">
+    Order deny,allow
+    Deny from all
+</FilesMatch>

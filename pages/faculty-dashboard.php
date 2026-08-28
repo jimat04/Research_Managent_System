@@ -5,49 +5,74 @@ include '../includes/auth.php';
 requireRole('faculty');
 
 $user = getCurrentUser();
-$user_id = $user['user_id'];
+$user_id = getCurrentUser()['user_id'];
 
 // Get assigned research projects
-$assigned = $conn->query("
+$assigned_stmt = $conn->prepare("
     SELECT rp.* FROM research_projects rp
     JOIN project_advisers pa ON rp.project_id = pa.project_id
-    WHERE pa.adviser_id = $user_id
+  WHERE pa.adviser_id = ?
     ORDER BY rp.created_at DESC
 ");
+$assigned_stmt->bind_param('i', $user_id);
+$assigned_stmt->execute();
+$assigned = $assigned_stmt->get_result();
 
 // Get statistics
-$stat_pending = $conn->query("
+$pending_stmt = $conn->prepare("
     SELECT COUNT(*) as count FROM chapters c
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-        WHERE pa.adviser_id = $user_id
+    WHERE pa.adviser_id = ?
     ) AND c.status = 'under_review'
-")->fetch_assoc()['count'];
+ ");
+$pending_stmt->bind_param('i', $user_id);
+$pending_stmt->execute();
+$stat_pending = $pending_stmt->get_result()->fetch_assoc()['count'];
 
-$stat_approved = $conn->query("
+$approved_stmt = $conn->prepare("
     SELECT COUNT(*) as count FROM chapters c
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-        WHERE pa.adviser_id = $user_id
+    WHERE pa.adviser_id = ?
     ) AND c.status = 'approved'
-")->fetch_assoc()['count'];
+");
+$approved_stmt->bind_param('i', $user_id);
+$approved_stmt->execute();
+$stat_approved = $approved_stmt->get_result()->fetch_assoc()['count'];
 
-$stat_revision = $conn->query("
+$revision_stmt = $conn->prepare("
     SELECT COUNT(*) as count FROM chapters c
     WHERE c.project_id IN (
         SELECT rp.project_id FROM research_projects rp
         JOIN project_advisers pa ON rp.project_id = pa.project_id
-        WHERE pa.adviser_id = $user_id
+    WHERE pa.adviser_id = ?
     ) AND c.status = 'revision_required'
-")->fetch_assoc()['count'];
+");
+$revision_stmt->bind_param('i', $user_id);
+$revision_stmt->execute();
+$stat_revision = $revision_stmt->get_result()->fetch_assoc()['count'];
 
-$stat_students = $conn->query("
+$students_stmt = $conn->prepare("
     SELECT COUNT(DISTINCT rp.created_by) as count FROM research_projects rp
     JOIN project_advisers pa ON rp.project_id = pa.project_id
-    WHERE pa.adviser_id = $user_id
-")->fetch_assoc()['count'];
+  WHERE pa.adviser_id = ?
+");
+$students_stmt->bind_param('i', $user_id);
+$students_stmt->execute();
+$stat_students = $students_stmt->get_result()->fetch_assoc()['count'];
+
+// @rms-db: project-level activity feed requires project_id in activity_log.
+$activity_stmt = $conn->prepare("SELECT action, module, created_at
+  FROM activity_log
+  WHERE user_id = ?
+  ORDER BY created_at DESC
+  LIMIT 5");
+$activity_stmt->bind_param('i', $user_id);
+$activity_stmt->execute();
+$activities = $activity_stmt->get_result();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -243,7 +268,7 @@ $stat_students = $conn->query("
                     </span>
                   </td>
                   <td>
-                    <a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=<?php echo $proj['project_id']; ?>">Review</a>
+                    <a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=<?php echo htmlspecialchars($proj['project_id'], ENT_QUOTES, 'UTF-8'); ?>">Review</a>
                   </td>
                 </tr>
               <?php
@@ -270,27 +295,23 @@ $stat_students = $conn->query("
           </div>
           <div class="card-body">
             <ul class="activity-list">
-              <li class="activity-item">
-                <div class="activity-dot" style="background: var(--success);"></div>
-                <div class="activity-content">
-                  <p>You approved <strong>Lisa Cruz's</strong> research on Blockchain.</p>
-                  <div class="time">May 22, 2024 • 03:15 PM</div>
-                </div>
-              </li>
-              <li class="activity-item">
-                <div class="activity-dot" style="background: var(--warning);"></div>
-                <div class="activity-content">
-                  <p>Revision requested for <strong>Mark Anthony's</strong> research.</p>
-                  <div class="time">May 22, 2024 • 01:30 PM</div>
-                </div>
-              </li>
-              <li class="activity-item">
-                <div class="activity-dot" style="background: var(--info);"></div>
-                <div class="activity-content">
-                  <p>New submission from <strong>Juan Dela Cruz</strong>.</p>
-                  <div class="time">May 23, 2024 • 09:00 AM</div>
-                </div>
-              </li>
+              <?php if ($activities->num_rows > 0): ?>
+                <?php while ($activity = $activities->fetch_assoc()): ?>
+                  <li class="activity-item">
+                    <div class="activity-dot" style="background: var(--info);"></div>
+                    <div class="activity-content">
+                      <p><?php echo htmlspecialchars($activity['action']); ?></p>
+                      <div class="time"><?php echo date('M d, Y • h:i A', strtotime($activity['created_at'])); ?></div>
+                    </div>
+                  </li>
+                <?php endwhile; ?>
+              <?php else: ?>
+                <li class="activity-item">
+                  <div class="activity-content">
+                    <p>No recent activities.</p>
+                  </div>
+                </li>
+              <?php endif; ?>
             </ul>
           </div>
         </div>

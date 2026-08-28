@@ -13,3 +13,8 @@ vendor/
 *.temp
 
 xampp/
+# Reference documents / binaries
+*.docx
+*.doc
+*.pdf ~
+~$*
