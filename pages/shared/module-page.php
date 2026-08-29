@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/module-pages.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
 
 $modules = [
     'my-research.php' => ['My Research', 'student', 'folder-kanban', 'Review your research projects and current submission status.'],
@@ -166,6 +167,30 @@ function rms_module_navigation_href($target, $prefix) {
     }
 
     return $prefix . $target;
+}
+
+// ---------------------------------------------------------------
+// Role-aware shell selection
+//
+// Admins get the orange admin shell (renderAdminShell) so that
+// pages/shared/messages.php, notifications.php, profile.php etc.
+// look identical to the rest of /pages/admin/. Other roles fall
+// through to the original generic module-shell unchanged.
+// ---------------------------------------------------------------
+if ($role === 'admin') {
+    // renderAdminShell uses basename matching for the active link,
+    // so passing 'messages.php' / 'notifications.php' here is enough
+    // to highlight the right item in the admin nav (which links to
+    // '../shared/messages.php' etc.).
+    renderAdminShell(
+        $user,
+        $page_key,
+        (string) $module[0],
+        (string) ($module[3] ?? '')
+    );
+    rms_render_module($page_key, $user, $module);
+    renderAdminShellClose();
+    return;
 }
 ?>
 <!DOCTYPE html>
