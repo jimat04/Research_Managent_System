@@ -14,8 +14,12 @@
  * the main area, the topbar, and <div class="admin-page-content">.
  * renderAdminShellClose() emits the matching closing tags plus </body></html>.
  *
+ * All navigation, CSS, and logout URLs are built from SITE_URL (defined in
+ * includes/config.php with a trailing slash) so the same sidebar works from
+ * any directory — /pages/admin/, /pages/shared/, etc. — without 404s.
+ *
  * @param array  $user          Current user row from getCurrentUser()
- * @param string $current_page  Current page slug (e.g. 'admin-users', '../shared/profile.php')
+ * @param string $current_page  Current page slug (e.g. 'admin-users', 'messages.php')
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
@@ -55,40 +59,44 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     // Canonical admin nav. Each row: [href, label, icon, exists].
     // exists=false items render as <a href="#" data-todo="build"> so we mark
     // unfinished entries without a 404 or broken-link console error.
+    //
+    // All hrefs are absolute (SITE_URL-based) so the sidebar works from any
+    // directory — e.g. /pages/admin/ and /pages/shared/ both resolve the same.
     $nav = [
         'Overview' => [
-            ['admin-dashboard.php', 'Dashboard', '📊', true],
+            [SITE_URL . 'pages/admin/admin-dashboard.php', 'Dashboard', '📊', true],
         ],
         'User Management' => [
-            ['admin-users.php',         'User Management', '👥', true],
-            ['admin-departments.php',   'Departments',     '🏛️', false],
-            ['admin-programs.php',      'Programs',        '🎓', false],
+            [SITE_URL . 'pages/admin/admin-users.php',       'User Management', '👥', true],
+            [SITE_URL . 'pages/admin/admin-departments.php', 'Departments',     '🏛️', false],
+            [SITE_URL . 'pages/admin/admin-programs.php',    'Programs',        '🎓', false],
         ],
         'Research Management' => [
-            ['admin-research.php',      'Research Projects',  '📁', true],
-            ['admin-archive.php',       'Archive',            '🗂️', true],
-            ['admin-defense.php',       'Defense Schedule',   '🛡️', false],
+            [SITE_URL . 'pages/admin/admin-research.php',    'Research Projects',  '📁', true],
+            [SITE_URL . 'pages/admin/admin-archive.php',     'Archive',            '🗂️', true],
+            [SITE_URL . 'pages/admin/admin-defense.php',     'Defense Schedule',   '🛡️', false],
         ],
         'Communication' => [
-            ['../shared/messages.php',  'Messages',         '💬', true],
-            ['../shared/notifications.php', 'Notifications', '🔔', true],
-            ['admin-contact.php',       'Contact Inbox',    '📨', true],
+            [SITE_URL . 'pages/shared/messages.php',         'Messages',      '💬', true],
+            [SITE_URL . 'pages/shared/notifications.php',    'Notifications', '🔔', true],
+            [SITE_URL . 'pages/admin/admin-contact.php',     'Contact Inbox', '📨', true],
         ],
         'Analytics' => [
-            ['admin-reports.php',       'Reports & Analytics', '📈', true],
-            ['admin-logs.php',          'Activity Logs',       '📋', true],
+            [SITE_URL . 'pages/admin/admin-reports.php',     'Reports & Analytics', '📈', true],
+            [SITE_URL . 'pages/admin/admin-logs.php',        'Activity Logs',       '📋', true],
         ],
         'System' => [
-            ['admin-backup.php',        'Backup',   '💾', true],
-            ['admin-settings.php',      'Settings', '🔧', false],
+            [SITE_URL . 'pages/admin/admin-backup.php',      'Backup',   '💾', true],
+            [SITE_URL . 'pages/admin/admin-settings.php',    'Settings', '🔧', false],
         ],
         'Account' => [
-            ['../shared/profile.php',   'Profile', '👤', true],
+            [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true],
         ],
     ];
 
-    // Active-state matcher. Matches either the full target (e.g. '../shared/profile.php')
-    // or the bare basename, so shared pages highlight correctly when visited.
+    // Active-state matcher. Matches either the full target (e.g.
+    // 'http://localhost/rms/pages/shared/profile.php') or the bare basename,
+    // so shared pages highlight correctly when visited.
     $current_basename = basename(str_replace('\\', '/', (string) $current_page));
     $is_active = function ($href) use ($current_page, $current_basename) {
         if ($href === $current_page) {
@@ -97,6 +105,11 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         $href_basename = basename(str_replace('\\', '/', (string) $href));
         return $current_basename !== '' && $current_basename === $href_basename;
     };
+
+    // Absolute asset/logout URLs (SITE_URL has a trailing slash).
+    $url_style   = SITE_URL . 'css/style.css';
+    $url_shell   = SITE_URL . 'css/admin-shell.css';
+    $url_logout  = SITE_URL . 'public/logout.php';
     ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,8 +117,8 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Admin — RMS</title>
-  <link rel="stylesheet" href="../../css/style.css">
-  <link rel="stylesheet" href="../../css/admin-shell.css">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body>
 <div class="admin-dashboard">
@@ -141,7 +154,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
       <?php endforeach; ?>
 
       <div class="admin-nav-group-title">Session</div>
-      <a class="admin-nav-item admin-nav-logout" href="../../public/logout.php">
+      <a class="admin-nav-item admin-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
         <span class="admin-nav-icon" aria-hidden="true">🚪</span>
         <span class="admin-nav-label">Logout</span>
       </a>
