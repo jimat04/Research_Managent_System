@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
 
 requireRole('admin');
 
@@ -54,379 +55,130 @@ $research_by_status = [];
 while ($row = $status_query->fetch_assoc()) {
     $research_by_status[] = $row;
 }
+
+// Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reports & Analytics — Admin — RMS</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+<style>
+  /* STATS GRID */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+    margin-bottom: 48px;
+  }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  .stat-card {
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 20px;
+    padding: 24px;
+    transition: all 0.3s;
+  }
 
-    :root {
-      --charcoal: #111827;
-      --slate: #1F2937;
-      --bg-surface: #F8FAFC;
-      --bg-card: #FFFFFF;
-      --border: #E5E7EB;
-      --gold: #C8A44D;
-      --text-primary: #111827;
-      --text-secondary: #64748B;
-      --text-muted: #94A3B8;
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  }
+
+  .stat-number {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    font-size: 14px;
+    color: var(--text-secondary, #64748B);
+    font-weight: 500;
+  }
+
+  /* CARD */
+  .card {
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+
+  .card-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: var(--charcoal, #111827);
+  }
+
+  /* CHART */
+  .chart-bar {
+    margin-bottom: 16px;
+  }
+
+  .chart-bar-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .chart-bar-track {
+    height: 32px;
+    background: var(--bg-surface, #F8FAFC);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .chart-bar-fill {
+    height: 100%;
+    background: var(--gold, #C8A44D);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 12px;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    transition: width 0.5s;
+  }
+
+  /* BENTO GRID */
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 24px;
+  }
+
+  .bento-card {
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 20px;
+    padding: 32px;
+  }
+
+  .bento-card.span-6 { grid-column: span 6; }
+  .bento-card.span-12 { grid-column: span 12; }
+
+  @media (max-width: 1200px) {
+    .bento-card.span-6 {
+      grid-column: span 12;
     }
+  }
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg-surface);
-      color: var(--text-primary);
-      line-height: 1.6;
-    }
-
-    .dashboard {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* SIDEBAR */
-    .sidebar {
-      width: 260px;
-      background: var(--charcoal);
-      color: white;
-      padding: 32px 0;
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      height: 100vh;
-      overflow-y: auto;
-    }
-
-    .sidebar-header {
-      padding: 0 24px 32px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      margin-bottom: 24px;
-    }
-
-    .sidebar-brand {
-      font-size: 20px;
-      font-weight: 700;
-      line-height: 1.2;
-      margin-bottom: 4px;
-    }
-
-    .sidebar-role {
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 0 16px;
-    }
-
-    .nav-group-title {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      margin: 24px 8px 8px;
-      text-transform: uppercase;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      margin: 2px 0;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 14px;
-      color: rgba(255,255,255,0.7);
-    }
-
-    .nav-item:hover {
-      background: rgba(255,255,255,0.08);
-      color: white;
-    }
-
-    .nav-item.active {
-      background: var(--gold);
-      color: white;
-    }
-
-    .sidebar-footer {
-      padding: 24px;
-      border-top: 1px solid rgba(255,255,255,0.1);
-    }
-
-    .user-card {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      background: var(--gold);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 14px;
-    }
-
-    .user-name {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-
-    .user-role {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* MAIN CONTENT */
-    .main-content {
-      flex: 1;
-      margin-left: 260px;
-      padding: 48px;
-    }
-
-    .page-header {
-      margin-bottom: 48px;
-    }
-
-    .page-header h1 {
-      font-size: 32px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      color: var(--charcoal);
-    }
-
-    .page-header p {
-      font-size: 16px;
-      color: var(--text-secondary);
-    }
-
-    /* STATS GRID */
+  @media (max-width: 768px) {
     .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 24px;
-      margin-bottom: 48px;
+      grid-template-columns: 1fr;
     }
+  }
+</style>
+<?php
 
-    .stat-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 24px;
-      transition: all 0.3s;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-    }
-
-    .stat-number {
-      font-size: 36px;
-      font-weight: 700;
-      line-height: 1;
-      margin-bottom: 8px;
-    }
-
-    .stat-label {
-      font-size: 14px;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    /* CARD */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      margin-bottom: 24px;
-    }
-
-    .card-title {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 24px;
-      color: var(--charcoal);
-    }
-
-    /* CHART */
-    .chart-bar {
-      margin-bottom: 16px;
-    }
-
-    .chart-bar-label {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-
-    .chart-bar-track {
-      height: 32px;
-      background: var(--bg-surface);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .chart-bar-fill {
-      height: 100%;
-      background: var(--gold);
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding: 0 12px;
-      color: white;
-      font-weight: 600;
-      font-size: 13px;
-      transition: width 0.5s;
-    }
-
-    /* BENTO GRID */
-    .bento-grid {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 24px;
-    }
-
-    .bento-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-    }
-
-    .bento-card.span-6 { grid-column: span 6; }
-    .bento-card.span-12 { grid-column: span 12; }
-
-    /* RESPONSIVE */
-    @media (max-width: 1200px) {
-      .bento-card.span-6 {
-        grid-column: span 12;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .sidebar {
-        display: none;
-      }
-
-      .main-content {
-        margin-left: 0;
-        padding: 24px;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-</head>
-<body>
-
-<div class="dashboard">
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-brand">EARIST RMS</div>
-      <div class="sidebar-role">Administrator</div>
-    </div>
-
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">Overview</div>
-      <div class="nav-item" onclick="location.href='admin-dashboard.php'">
-        <span>📊</span>
-        <span>Dashboard</span>
-      </div>
-
-      <div class="nav-group-title">Management</div>
-      <div class="nav-item" onclick="location.href='admin-users.php'">
-        <span>👥</span>
-        <span>User Management</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-research.php'">
-        <span>📁</span>
-        <span>Research Management</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-archive.php'">
-        <span>🗂️</span>
-        <span>Archive</span>
-      </div>
-
-      <div class="nav-group-title">Analytics</div>
-      <div class="nav-item active" onclick="location.href='admin-reports.php'">
-        <span>📈</span>
-        <span>Reports & Analytics</span>
-      </div>
-
-      <div class="nav-group-title">Communication</div>
-      <div class="nav-item" onclick="location.href='../shared/messages.php'">
-        <span>💬</span>
-        <span>Messages</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-contact.php'">
-        <span>📨</span>
-        <span>Contact Messages</span>
-      </div>
-
-      <div class="nav-group-title">System</div>
-      <div class="nav-item" onclick="location.href='admin-logs.php'">
-        <span>⚙️</span>
-        <span>System Logs</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-backup.php'">
-        <span>💾</span>
-        <span>Backup</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
-        <span>🔔</span>
-        <span>Notifications</span>
-      </div>
-
-      <div class="nav-group-title">Account</div>
-      <div class="nav-item" onclick="location.href='../shared/profile.php'">
-        <span>👤</span>
-        <span>Profile</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #EF4444;">
-        <span>🚪</span>
-        <span>Logout</span>
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="user-card">
-        <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-        <div>
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="user-role">Administrator</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN CONTENT -->
-  <div class="main-content">
-    <div class="page-header">
-      <h1>Reports & Analytics</h1>
-      <p>System-wide insights and research metrics.</p>
-    </div>
+renderAdminShell(
+    $user,
+    'admin-reports',
+    'Reports & Analytics',
+    'System-wide insights and research metrics.'
+);
+?>
 
     <!-- STATS -->
     <div class="stats-grid">
@@ -461,7 +213,7 @@ while ($row = $status_query->fetch_assoc()) {
           <div class="chart-bar">
             <div class="chart-bar-label">
               <span style="font-weight: 500;"><?php echo htmlspecialchars($data['month'], ENT_QUOTES, 'UTF-8'); ?></span>
-              <span style="color: var(--text-secondary);"><?php echo $data['count']; ?> projects</span>
+              <span style="color: var(--text-secondary, #64748B);"><?php echo $data['count']; ?> projects</span>
             </div>
             <div class="chart-bar-track">
               <div class="chart-bar-fill" style="width: <?php echo $width; ?>%;">
@@ -496,7 +248,7 @@ while ($row = $status_query->fetch_assoc()) {
           <div class="chart-bar">
             <div class="chart-bar-label">
               <span style="font-weight: 500;"><?php echo htmlspecialchars($status_label, ENT_QUOTES, 'UTF-8'); ?></span>
-              <span style="color: var(--text-secondary);"><?php echo $data['count']; ?> projects</span>
+              <span style="color: var(--text-secondary, #64748B);"><?php echo $data['count']; ?> projects</span>
             </div>
             <div class="chart-bar-track">
               <div class="chart-bar-fill" style="width: <?php echo $width; ?>%;">
@@ -515,7 +267,7 @@ while ($row = $status_query->fetch_assoc()) {
         <?php
         $max_dept_count = $research_by_dept ? max(array_column($research_by_dept, 'count')) : 1;
         if (empty($research_by_dept)): ?>
-          <p style="color: var(--text-muted); padding: 24px; text-align: center;">No department data available.</p>
+          <p style="color: var(--text-muted, #94A3B8); padding: 24px; text-align: center;">No department data available.</p>
         <?php else: ?>
           <?php foreach ($research_by_dept as $data):
             $width = ($data['count'] / $max_dept_count) * 100;
@@ -523,7 +275,7 @@ while ($row = $status_query->fetch_assoc()) {
             <div class="chart-bar">
               <div class="chart-bar-label">
                 <span style="font-weight: 500;"><?php echo htmlspecialchars($data['department'], ENT_QUOTES, 'UTF-8'); ?></span>
-                <span style="color: var(--text-secondary);"><?php echo $data['count']; ?> projects</span>
+                <span style="color: var(--text-secondary, #64748B);"><?php echo $data['count']; ?> projects</span>
               </div>
               <div class="chart-bar-track">
                 <div class="chart-bar-fill" style="width: <?php echo $width; ?>%;">
@@ -537,8 +289,6 @@ while ($row = $status_query->fetch_assoc()) {
         <?php endif; ?>
       </div>
     </div>
-  </div>
-</div>
 
-</body>
-</html>
+<?php
+renderAdminShellClose();
