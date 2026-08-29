@@ -133,37 +133,85 @@ function isValidEmail($email) {
 
 /**
  * Create notification
+ *
+ * Uses a prepared statement. $link is bound as NULL when null/empty,
+ * not as an empty string, so the nullable column stays semantically NULL.
  */
 function createNotification($user_id, $title, $message, $type = 'info', $link = null) {
     global $conn;
-    
+
     $user_id = intval($user_id);
-    $title   = sanitize($title);
-    $message = sanitize($message);
-    $type    = sanitize($type);
-    $link    = $link ? sanitize($link) : null;
-    
-    $sql = "INSERT INTO notifications (user_id, title, message, type, link) 
-            VALUES ($user_id, '$title', '$message', '$type', " . ($link ? "'$link'" : "NULL") . ")";
-    
-    return $conn->query($sql);
+    $title   = (string) $title;
+    $message = (string) $message;
+    $type    = (string) $type;
+    $hasLink = ($link !== null && $link !== '');
+    $linkVal = $hasLink ? (string) $link : null;
+
+    $stmt = $conn->prepare(
+        "INSERT INTO notifications (user_id, title, message, type, link)
+         VALUES (?, ?, ?, ?, ?)"
+    );
+    if ($stmt === false) {
+        return false;
+    }
+
+    if ($hasLink) {
+        $stmt->bind_param('issss', $user_id, $title, $message, $type, $linkVal);
+    } else {
+        // bind_param requires a reference; use a reusable $null variable for the NULL slot.
+        $null = null;
+        $stmt->bind_param('issss', $user_id, $title, $message, $type, $null);
+    }
+
+    $ok = $stmt->execute();
+    $stmt->close();
+    return $ok;
 }
 
 /**
  * Log activity
+ *
+ * Uses a prepared statement. $user_id and $module are bound as NULL when
+ * not set, so the nullable columns stay semantically NULL.
  */
 function logActivity($action, $module = null) {
     global $conn;
-    
-    $user_id   = isLoggedIn() ? intval($_SESSION['user_id']) : null;
-    $action    = sanitize($action);
-    $module    = $module ? sanitize($module) : null;
-    $ip        = $_SERVER['REMOTE_ADDR'];
-    
-    $sql = "INSERT INTO activity_log (user_id, action, module, ip_address) 
-            VALUES (" . ($user_id ? $user_id : "NULL") . ", '$action', " . ($module ? "'$module'" : "NULL") . ", '$ip')";
-    
-    $conn->query($sql);
+
+    $action    = (string) $action;
+    $hasUser   = isLoggedIn();
+    $user_id   = $hasUser ? intval($_SESSION['user_id']) : null;
+    $hasModule = ($module !== null && $module !== '');
+    $moduleVal = $hasModule ? (string) $module : null;
+    $ip        = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+
+    $stmt = $conn->prepare(
+        "INSERT INTO activity_log (user_id, action, module, ip_address)
+         VALUES (?, ?, ?, ?)"
+    );
+    if ($stmt === false) {
+        return;
+    }
+
+    // Type string depends on which nullable columns are NULL.
+    //   user_id INT when logged in, NULL when anonymous
+    //   module NULL when not provided
+    //   ip is always a non-null string
+    if ($hasUser && $hasModule) {
+        $stmt->bind_param('isss', $user_id, $action, $moduleVal, $ip);
+    } elseif ($hasUser && !$hasModule) {
+        $null = null;
+        $stmt->bind_param('isss', $user_id, $action, $null, $ip);
+    } elseif (!$hasUser && $hasModule) {
+        $null = null;
+        $stmt->bind_param('ssss', $null, $action, $moduleVal, $ip);
+    } else {
+        $null1 = null;
+        $null2 = null;
+        $stmt->bind_param('ssss', $null1, $action, $null2, $ip);
+    }
+
+    $stmt->execute();
+    $stmt->close();
 }
 
 /**
