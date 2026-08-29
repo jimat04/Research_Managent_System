@@ -17,6 +17,15 @@ if (isLoggedIn()) {
 
 $error = '';
 $success = '';
+$selectedRole = 'student';
+$validLoginRoles = ['student', 'faculty', 'research_staff', 'admin'];
+
+$roleLabels = [
+    'student'        => 'Student',
+    'faculty'        => 'Faculty Adviser',
+    'research_staff' => 'Research Staff',
+    'admin'          => 'Administrator',
+];
 
 if (isset($_GET['timeout'])) {
     $error = 'Your session has expired. Please log in again.';
@@ -79,6 +88,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $email = isset($_POST['email']) ? trim($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
 
+        // Preserve the user's chosen tab on any error path below, so it
+        // doesn't snap back to Student.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
+            $postedRole = strtolower((string) ($_POST['role'] ?? ''));
+            if (in_array($postedRole, $validLoginRoles, true)) {
+                $selectedRole = $postedRole;
+            }
+        }
+
         if (empty($email) || empty($password)) {
             $error = 'Email and password are required';
         } elseif (!isValidEmail($email)) {
@@ -106,31 +124,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                             recordFailedLogin();
                             $error = 'Invalid email, password, or role.';
                         } else {
-                            resetFailedLogins();
-                            session_regenerate_id(true);
+                            // Read the role tab the user clicked. Validate strictly
+                            // against the four allowed values; anything else is
+                            // treated as a malformed POST and falls back to the
+                            // default tab.
+                            $postedRole = strtolower((string) ($_POST['role'] ?? ''));
+                            if (!in_array($postedRole, $validLoginRoles, true)) {
+                                $postedRole = 'student';
+                            }
 
-                            $_SESSION['user_id'] = (int) $user['user_id'];
-                            $_SESSION['email']   = $user['email'];
-                            $_SESSION['name']    = $user['first_name'] . ' ' . $user['last_name'];
-                            $_SESSION['role']    = $dbRole;
-                            $_SESSION['last_activity'] = time();
+                            // Gate: the tab must match the DB role. If not, show a
+                            // helpful, specific error that names the correct tab.
+                            // This is NOT a failed login attempt — we do not
+                            // increment the lockout counter, log activity, set
+                            // the session, or redirect. The user simply has to
+                            // click the right tab and try again.
+                            if ($postedRole !== $dbRole) {
+                                $label    = $roleLabels[$dbRole] ?? 'a different role';
+                                $tabWord  = $roleLabels[$dbRole] ?? ucfirst($dbRole);
+                                $error    = "This account is registered as {$label}. Please click the {$tabWord} tab and sign in again.";
+                                $selectedRole = $dbRole; // auto-highlight the correct tab
+                                // Password is intentionally NOT re-rendered into
+                                // the form (security: never echo passwords back).
+                            } else {
+                                resetFailedLogins();
+                                session_regenerate_id(true);
 
-                            $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
-                            $updateStmt->bind_param('i', $user['user_id']);
-                            $updateStmt->execute();
+                                $_SESSION['user_id'] = (int) $user['user_id'];
+                                $_SESSION['email']   = $user['email'];
+                                $_SESSION['name']    = $user['first_name'] . ' ' . $user['last_name'];
+                                $_SESSION['role']    = $dbRole;
+                                $_SESSION['last_activity'] = time();
 
-                            logActivity('User logged in', 'authentication');
+                                $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
+                                $updateStmt->bind_param('i', $user['user_id']);
+                                $updateStmt->execute();
 
-                            $dashboardMap = [
-                                'student'        => '../pages/student/student-dashboard.php',
-                                'faculty'        => '../pages/faculty/faculty-dashboard.php',
-                                'research_staff' => '../pages/staff/staff-dashboard.php',
-                                'admin'          => '../pages/admin/admin-dashboard.php',
-                            ];
+                                logActivity('User logged in', 'authentication');
 
-                            $dashboard = $dashboardMap[$dbRole] ?? '../pages/student/student-dashboard.php';
-                            header('Location: ' . $dashboard);
-                            exit();
+                                $dashboardMap = [
+                                    'student'        => '../pages/student/student-dashboard.php',
+                                    'faculty'        => '../pages/faculty/faculty-dashboard.php',
+                                    'research_staff' => '../pages/staff/staff-dashboard.php',
+                                    'admin'          => '../pages/admin/admin-dashboard.php',
+                                ];
+
+                                $dashboard = $dashboardMap[$dbRole] ?? '../pages/student/student-dashboard.php';
+                                header('Location: ' . $dashboard);
+                                exit();
+                            }
                         }
                     }
                 } else {
@@ -260,16 +302,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px;">
-        <button type="button" class="role-tab active" data-role="student" onclick="switchRole('student')" style="padding: 10px; background: var(--primary); color: white; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">🎓 Student</button>
-        <button type="button" class="role-tab" data-role="faculty" onclick="switchRole('faculty')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">👨‍🏫 Faculty</button>
-        <button type="button" class="role-tab" data-role="research_staff" onclick="switchRole('research_staff')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">📋 Staff</button>
-        <button type="button" class="role-tab" data-role="admin" onclick="switchRole('admin')" style="padding: 10px; background: transparent; color: #D0D3E8; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500;">⚙️ Admin</button>
+        <?php
+        $tabs = [
+            'student'        => '🎓 Student',
+            'faculty'        => '👨‍🏫 Faculty',
+            'research_staff' => '📋 Staff',
+            'admin'          => '⚙️ Admin',
+        ];
+        foreach ($tabs as $tabKey => $tabLabel):
+            $isActive = ($selectedRole === $tabKey);
+            $bg       = $isActive ? 'var(--primary)' : 'transparent';
+            $fg       = $isActive ? 'white' : '#D0D3E8';
+            $weight   = $isActive ? '600' : '500';
+            $cls      = 'role-tab' . ($isActive ? ' active' : '');
+        ?>
+        <button type="button" class="<?php echo $cls; ?>" data-role="<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>" onclick="switchRole('<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>')" style="padding: 10px; background: <?php echo $bg; ?>; color: <?php echo $fg; ?>; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: <?php echo $weight; ?>;"><?php echo $tabLabel; ?></button>
+        <?php endforeach; ?>
       </div>
 
       <form method="POST" action="login.php">
         <input type="hidden" name="action" value="login">
         <?php echo csrfField(); ?>
-        <input type="hidden" name="role" id="role" value="student">
+        <input type="hidden" name="role" id="role" value="<?php echo htmlspecialchars($selectedRole, ENT_QUOTES, 'UTF-8'); ?>">
 
         <div class="form-group">
           <label class="form-label">Email Address</label>
@@ -556,6 +610,39 @@ function updateRegistrationFields() {
 if (window.location.hash === '#register') {
   switchToRegister();
 }
+
+// Auto-detect role from email as the user types. Unobtrusive: only switches
+// the active tab, never moves the cursor or steals focus. The substring
+// checks are intentionally simple — exact demo creds are covered, plus
+// any email that contains a role keyword (admin/staff/faculty/student).
+(function () {
+  const emailEl = document.getElementById('loginEmail');
+  if (!emailEl) return;
+
+  // Order matters: more specific patterns (e.g. "msantos") are checked
+  // before generic ones (e.g. "admin"). The first match wins.
+  const patterns = [
+    { role: 'admin',          rx: /admin/i },
+    { role: 'research_staff', rx: /staff/i },
+    { role: 'faculty',        rx: /msantos|jreyes|faculty|adviser/i },
+    { role: 'student',        rx: /jdelacruz|areyes|student/i },
+  ];
+
+  function detect(email) {
+    for (let i = 0; i < patterns.length; i++) {
+      if (patterns[i].rx.test(email)) return patterns[i].role;
+    }
+    return null;
+  }
+
+  emailEl.addEventListener('input', function () {
+    const v = emailEl.value || '';
+    const role = detect(v);
+    if (role) {
+      switchRole(role);
+    }
+  });
+})();
 </script>
 </body>
 </html>
