@@ -57,6 +57,7 @@ A PHP and MySQL research management system for students, faculty advisers, resea
 | --- | --- | --- |
 | Student | jdelacruz@rms.edu.ph | Student@123 |
 | Faculty | msantos@rms.edu.ph | Faculty@123 |
+| Research Staff | staff@rms.edu.ph | Staff@123 |
 | Admin | admin@rms.edu.ph | Admin@123 |
 
 ## Project Structure
