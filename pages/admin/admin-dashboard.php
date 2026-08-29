@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
 
 requireRole('admin');
 
@@ -13,328 +14,574 @@ $total_archived = (int) ($conn->query("SELECT COUNT(*) as count FROM research_pr
 
 $total_students = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'student'")->fetch_assoc()['count'] ?? 0);
 $total_faculty = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'faculty'")->fetch_assoc()['count'] ?? 0);
-$total_admins = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")->fetch_assoc()['count'] ?? 0);
+$total_staff = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'research_staff'")->fetch_assoc()['count'] ?? 0);
 
-$research_pending = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('draft', 'submitted')")->fetch_assoc()['count'] ?? 0);
-$research_approved = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('approved', 'completed')")->fetch_assoc()['count'] ?? 0);
-$research_rejected = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'rejected'")->fetch_assoc()['count'] ?? 0);
+$research_draft = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'draft'")->fetch_assoc()['count'] ?? 0);
+$research_review = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')")->fetch_assoc()['count'] ?? 0);
+$research_approved = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('approved', 'ongoing')")->fetch_assoc()['count'] ?? 0);
+$research_completed = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status IN ('completed', 'archived')")->fetch_assoc()['count'] ?? 0);
+
+// Get recent activity
+$activity_stmt = $conn->prepare("
+    SELECT al.action, al.module, al.created_at, u.first_name, u.last_name
+    FROM activity_log al
+    LEFT JOIN users u ON u.user_id = al.user_id
+    ORDER BY al.created_at DESC
+    LIMIT 8
+");
+$activity_stmt->execute();
+$activities = $activity_stmt->get_result();
+
+// Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Dashboard — RMS</title>
-  <link rel="stylesheet" href="../css/style.css" />
-</head>
-<body>
+<style>
+  /* STATS GRID */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    margin-bottom: 48px;
+  }
 
-<div class="dashboard">
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-logo" style="background: linear-gradient(135deg, var(--accent), #FF9800); border-radius: 8px;">🔬</div>
-      <div class="sidebar-brand">
-        Research<br>Management<br><small style="font-size: 0.65rem; color: #8B8FAD;">Admin</small>
+  .stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 20px;
+    padding: 24px;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .stat-number {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    font-size: 14px;
+    color: var(--text-light, #64748B);
+    font-weight: 500;
+  }
+
+  .stat-icon {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  /* BENTO GRID */
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .bento-card {
+    background: #ffffff;
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 20px;
+    padding: 32px;
+  }
+
+  .bento-card.span-8 { grid-column: span 8; }
+  .bento-card.span-4 { grid-column: span 4; }
+  .bento-card.span-6 { grid-column: span 6; }
+  .bento-card.span-12 { grid-column: span 12; }
+
+  .card-header {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: var(--charcoal, #111827);
+  }
+
+  .card-subtitle {
+    font-size: 14px;
+    color: var(--text-light, #64748B);
+  }
+
+  .card-action {
+    color: var(--gold, #C8A44D);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* DONUT CHART */
+  .chart-container {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .donut-chart {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .donut-center {
+    width: 100px;
+    height: 100px;
+    background: #ffffff;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .donut-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .donut-label {
+    font-size: 12px;
+    color: var(--text-light, #64748B);
+    margin-top: 4px;
+  }
+
+  .chart-legend {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  .legend-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-label {
+    color: var(--text-dark, #111827);
+  }
+
+  .legend-value {
+    font-weight: 600;
+    color: var(--text-light, #64748B);
+  }
+
+  /* ACTIVITY LIST */
+  .activity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border, #E5E7EB);
+  }
+
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+
+  .activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+
+  .activity-content {
+    flex: 1;
+  }
+
+  .activity-content p {
+    font-size: 14px;
+    margin: 0 0 4px;
+  }
+
+  .activity-time {
+    font-size: 12px;
+    color: var(--text-muted, #94A3B8);
+  }
+
+  /* QUICK ACTIONS */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-light, #F8F9FE);
+    border: 1px solid var(--border, #E5E7EB);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s, transform 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .action-btn:hover {
+    background: #ffffff;
+    border-color: var(--gold, #C8A44D);
+    transform: translateY(-1px);
+  }
+
+  .action-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--gold, #C8A44D);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .action-text {
+    flex: 1;
+  }
+
+  .action-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .action-desc {
+    font-size: 12px;
+    color: var(--text-light, #64748B);
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 1200px) {
+    .bento-card.span-8,
+    .bento-card.span-4 {
+      grid-column: span 12;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .bento-card { padding: 24px; }
+    .quick-actions { grid-template-columns: 1fr; }
+  }
+</style>
+<?php
+
+renderAdminShell(
+    $user,
+    'admin-dashboard',
+    'System Overview',
+    'University-wide research management analytics and controls.'
+);
+?>
+
+    <!-- STATS GRID -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <div>
+            <div class="stat-number"><?php echo $total_users; ?></div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-icon">👥</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <div>
+            <div class="stat-number"><?php echo $total_research; ?></div>
+            <div class="stat-label">Total Research</div>
+          </div>
+          <div class="stat-icon">📁</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <div>
+            <div class="stat-number"><?php echo $total_archived; ?></div>
+            <div class="stat-label">Archived Projects</div>
+          </div>
+          <div class="stat-icon">🗂️</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <div>
+            <div class="stat-number"><?php echo number_format($total_users + $total_research); ?></div>
+            <div class="stat-label">Records Under Management</div>
+          </div>
+          <div class="stat-icon">🗒️</div>
+        </div>
       </div>
     </div>
 
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">OVERVIEW</div>
-      <div class="nav-item active" onclick="location.href='admin-dashboard.php'">
-        <span class="icon">📊</span>
-        <span>Dashboard</span>
-      </div>
-
-      <div class="nav-group-title">MANAGEMENT</div>
-      <div class="nav-item" onclick="location.href='admin-users.php'">
-        <span class="icon">👥</span>
-        <span>User Management</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-research.php'">
-        <span class="icon">📁</span>
-        <span>Research Management</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-archive.php'">
-        <span class="icon">🗂️</span>
-        <span>Archive Management</span>
-      </div>
-
-      <div class="nav-group-title">ANALYTICS</div>
-      <div class="nav-item" onclick="location.href='admin-reports.php'">
-        <span class="icon">📈</span>
-        <span>Reports & Analytics</span>
-      </div>
-
-      <div class="nav-group-title">SYSTEM</div>
-      <div class="nav-item" onclick="location.href='admin-logs.php'">
-        <span class="icon">⚙️</span>
-        <span>System Logs</span>
-      </div>
-      <div class="nav-item" onclick="location.href='admin-backup.php'">
-        <span class="icon">💾</span>
-        <span>Backup</span>
-      </div>
-      <div class="nav-item" onclick="location.href='notifications.php'">
-        <span class="icon">🔔</span>
-        <span>Notifications</span>
-        <span class="badge info">3</span>
-      </div>
-
-      <div class="nav-group-title">ACCOUNT</div>
-      <div class="nav-item" onclick="location.href='profile.php'">
-        <span class="icon">👤</span>
-        <span>Profile</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../logout.php'" style="color: #ef4444;">
-        <span class="icon">🚪</span>
-        <span>Logout</span>
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="user-card">
-        <div class="user-avatar" style="background: linear-gradient(135deg, var(--accent), #FF9800);"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-        <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="user-role">⚙️ Administrator</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN CONTENT -->
-  <div class="main-content">
-    <!-- TOPBAR -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <h2>Admin Dashboard</h2>
-        <p>System overview and management controls</p>
-      </div>
-
-      <div class="topbar-right">
-        <div class="search-box">
-          <span style="color: #94a3b8;">🔍</span>
-          <input type="text" placeholder="Search anything...">
-        </div>
-
-        <div class="topbar-icons">
-          <div class="icon-btn has-notif">🔔</div>
-        </div>
-
-        <div class="user-profile-btn" onclick="alert('Profile menu')">
-          <div class="profile-avatar" style="background: linear-gradient(135deg, var(--accent), #FF9800);"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-          <div class="profile-text">
-            <div class="profile-name"><?php echo htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8'); ?></div>
-            <div class="profile-role" style="color: var(--accent);">Administrator</div>
+    <!-- BENTO GRID -->
+    <div class="bento-grid">
+      <!-- USER DISTRIBUTION -->
+      <div class="bento-card span-6">
+        <div class="card-header">
+          <div>
+            <div class="card-title">User Distribution</div>
+            <div class="card-subtitle">By role</div>
           </div>
+          <a href="admin-users.php" class="card-action">Manage users →</a>
         </div>
-      </div>
-    </header>
 
-    <!-- PAGE CONTENT -->
-    <div class="page-content">
-      <!-- KPI CARDS -->
-      <div class="stats-grid">
-        <div class="stat-card purple">
-          <div class="stat-header">
-            <div style="flex: 1;">
-              <div class="stat-number"><?php echo $total_users; ?></div>
-              <div class="stat-label">Total Users</div>
+        <div class="chart-container">
+          <?php
+          $user_deg1 = $total_users > 0 ? ($total_students / $total_users) * 360 : 0;
+          $user_deg2 = $user_deg1 + ($total_users > 0 ? ($total_faculty / $total_users) * 360 : 0);
+          ?>
+          <div class="donut-chart" style="background: conic-gradient(#2563EB 0deg <?php echo $user_deg1; ?>deg, #7C3AED <?php echo $user_deg1; ?>deg <?php echo $user_deg2; ?>deg, #C8A44D <?php echo $user_deg2; ?>deg 360deg);">
+            <div class="donut-center">
+              <div class="donut-value"><?php echo $total_users; ?></div>
+              <div class="donut-label">Total</div>
             </div>
-            <div class="stat-icon">👥</div>
           </div>
-        </div>
 
-        <div class="stat-card blue">
-          <div class="stat-header">
-            <div style="flex: 1;">
-              <div class="stat-number"><?php echo $total_research; ?></div>
-              <div class="stat-label">Total Research</div>
-            </div>
-            <div class="stat-icon">📁</div>
-          </div>
-        </div>
-
-        <div class="stat-card green">
-          <div class="stat-header">
-            <div style="flex: 1;">
-              <div class="stat-number"><?php echo $total_archived; ?></div>
-              <div class="stat-label">Archived Research</div>
-            </div>
-            <div class="stat-icon">🗂️</div>
-          </div>
-        </div>
-
-        <div class="stat-card orange">
-          <div class="stat-header">
-            <div style="flex: 1;">
-              <div class="stat-number" style="font-size: 1.4rem;">🟢</div>
-              <div class="stat-label">System Online</div>
-            </div>
-            <div class="stat-icon">✓</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MAIN GRID -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-        <!-- USER DISTRIBUTION -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">User Role Distribution</div>
-          </div>
-          <div class="card-body">
-            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-              <div class="donut-chart" style="background: conic-gradient(var(--primary) 0deg 252deg, var(--secondary) 252deg 324deg, var(--accent) 324deg 360deg);">
-                <div class="donut-center">
-                  <div class="value"><?php echo $total_users; ?></div>
-                  <div class="label">Users</div>
-                </div>
-              </div>
-            </div>
-            <div class="chart-legend">
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--primary);"></div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #2563EB;"></div>
                 <span class="legend-label">Students</span>
-                <span class="legend-pct"><?php echo $total_students; ?> (<?php echo $total_users > 0 ? round(($total_students / $total_users) * 100) : 0; ?>%)</span>
               </div>
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--secondary);"></div>
+              <span class="legend-value"><?php echo $total_students; ?></span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #7C3AED;"></div>
                 <span class="legend-label">Faculty</span>
-                <span class="legend-pct"><?php echo $total_faculty; ?> (<?php echo $total_users > 0 ? round(($total_faculty / $total_users) * 100) : 0; ?>%)</span>
               </div>
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--accent);"></div>
-                <span class="legend-label">Admins</span>
-                <span class="legend-pct"><?php echo $total_admins; ?> (<?php echo $total_users > 0 ? round(($total_admins / $total_users) * 100) : 0; ?>%)</span>
-              </div>
+              <span class="legend-value"><?php echo $total_faculty; ?></span>
             </div>
-          </div>
-        </div>
-
-        <!-- RESEARCH STATUS -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Research by Status</div>
-            <div class="card-subtitle">Total across all users</div>
-          </div>
-          <div class="card-body">
-            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-              <div class="donut-chart" style="background: conic-gradient(var(--primary) 0deg 115deg, var(--success) 115deg 219deg, var(--warning) 219deg 283deg, var(--danger) 283deg 360deg);">
-                <div class="donut-center">
-                  <div class="value"><?php echo $total_research; ?></div>
-                  <div class="label">Total</div>
-                </div>
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #C8A44D;"></div>
+                <span class="legend-label">Staff</span>
               </div>
-            </div>
-            <div class="chart-legend">
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--primary);"></div>
-                <span class="legend-label">In Progress / Submitted</span>
-                <span class="legend-pct"><?php echo $research_pending; ?></span>
-              </div>
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--success);"></div>
-                <span class="legend-label">Completed / Approved</span>
-                <span class="legend-pct"><?php echo $research_approved; ?></span>
-              </div>
-              <div class="legend-item">
-                <div class="legend-dot" style="background: var(--warning);"></div>
-                <span class="legend-label">Other Statuses</span>
-                <span class="legend-pct"><?php echo max(0, $total_research - $research_approved - $research_pending); ?></span>
-              </div>
+              <span class="legend-value"><?php echo $total_staff; ?></span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- BOTTOM SECTION -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-        <!-- SYSTEM ACTIVITY -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">System Activity (This Month)</div>
-            <span class="card-action" onclick="location.href='admin-logs.php'">View Logs ↗</span>
+      <!-- RESEARCH STATUS -->
+      <div class="bento-card span-6">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Research Status</div>
+            <div class="card-subtitle">Distribution by stage</div>
           </div>
-          <div class="card-body">
-            <div style="margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 0.85rem; color: #64748b;">New Submissions</span>
-                <span style="font-size: 0.85rem; font-weight: 600;">+34</span>
-              </div>
-              <div style="height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden;">
-                <div style="width: 68%; height: 100%; background: var(--primary); border-radius: 4px;"></div>
-              </div>
+          <a href="admin-research.php" class="card-action">View all →</a>
+        </div>
+
+        <div class="chart-container">
+          <?php
+          $res_deg1 = $total_research > 0 ? ($research_draft / $total_research) * 360 : 0;
+          $res_deg2 = $res_deg1 + ($total_research > 0 ? ($research_review / $total_research) * 360 : 0);
+          $res_deg3 = $res_deg2 + ($total_research > 0 ? ($research_approved / $total_research) * 360 : 0);
+          ?>
+          <div class="donut-chart" style="background: conic-gradient(#64748B 0deg <?php echo $res_deg1; ?>deg, #2563EB <?php echo $res_deg1; ?>deg <?php echo $res_deg2; ?>deg, #16A34A <?php echo $res_deg2; ?>deg <?php echo $res_deg3; ?>deg, #059669 <?php echo $res_deg3; ?>deg 360deg);">
+            <div class="donut-center">
+              <div class="donut-value"><?php echo $total_research; ?></div>
+              <div class="donut-label">Total</div>
             </div>
-            <div style="margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 0.85rem; color: #64748b;">Research Approved</span>
-                <span style="font-size: 0.85rem; font-weight: 600;">+24</span>
+          </div>
+
+          <div class="chart-legend">
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #64748B;"></div>
+                <span class="legend-label">Draft</span>
               </div>
-              <div style="height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden;">
-                <div style="width: 48%; height: 100%; background: var(--success); border-radius: 4px;"></div>
-              </div>
+              <span class="legend-value"><?php echo $research_draft; ?></span>
             </div>
-            <div style="margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 0.85rem; color: #64748b;">New Users Registered</span>
-                <span style="font-size: 0.85rem; font-weight: 600;">+12</span>
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #2563EB;"></div>
+                <span class="legend-label">Under Review</span>
               </div>
-              <div style="height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden;">
-                <div style="width: 24%; height: 100%; background: var(--secondary); border-radius: 4px;"></div>
-              </div>
+              <span class="legend-value"><?php echo $research_review; ?></span>
             </div>
-            <div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 0.85rem; color: #64748b;">Archived Studies</span>
-                <span style="font-size: 0.85rem; font-weight: 600;">+8</span>
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #16A34A;"></div>
+                <span class="legend-label">Approved</span>
               </div>
-              <div style="height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden;">
-                <div style="width: 16%; height: 100%; background: var(--accent); border-radius: 4px;"></div>
-              </div>
+              <span class="legend-value"><?php echo $research_approved; ?></span>
             </div>
+            <div class="legend-item">
+              <div class="legend-left">
+                <div class="legend-dot" style="background: #059669;"></div>
+                <span class="legend-label">Completed</span>
+              </div>
+              <span class="legend-value"><?php echo $research_completed; ?></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="bento-card span-6">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Quick Actions</div>
+            <div class="card-subtitle">Common administrative tasks</div>
           </div>
         </div>
 
-        <!-- RECENT LOGINS -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Recent Logins</div>
-            <span class="card-action" onclick="location.href='admin-logs.php'">View All ↗</span>
-          </div>
-          <div class="card-body">
-            <ul class="activity-list">
-              <li class="activity-item" style="padding: 12px 0;">
-                <div class="activity-dot" style="background: var(--success); margin-top: 2px;"></div>
-                <div class="activity-content">
-                  <p style="font-weight: 500; color: var(--text-dark);">Juan Dela Cruz <span style="color: #94a3b8; font-size: 0.8rem;">• Student</span></p>
-                  <div class="time">2 mins ago</div>
-                </div>
-                <span class="badge-status status-approved" style="font-size: 0.7rem;">Active</span>
-              </li>
-              <li class="activity-item" style="padding: 12px 0;">
-                <div class="activity-dot" style="background: var(--success); margin-top: 2px;"></div>
-                <div class="activity-content">
-                  <p style="font-weight: 500; color: var(--text-dark);">Prof. Maria Santos <span style="color: #94a3b8; font-size: 0.8rem;">• Faculty</span></p>
-                  <div class="time">15 mins ago</div>
-                </div>
-                <span class="badge-status status-approved" style="font-size: 0.7rem;">Active</span>
-              </li>
-              <li class="activity-item" style="padding: 12px 0;">
-                <div class="activity-dot" style="background: var(--success); margin-top: 2px;"></div>
-                <div class="activity-content">
-                  <p style="font-weight: 500; color: var(--text-dark);">Admin User <span style="color: #94a3b8; font-size: 0.8rem;">• Administrator</span></p>
-                  <div class="time">1 hour ago</div>
-                </div>
-                <span class="badge-status status-approved" style="font-size: 0.7rem;">Active</span>
-              </li>
-            </ul>
-          </div>
+        <div class="quick-actions">
+          <a href="admin-users.php" class="action-btn">
+            <div class="action-icon">👤</div>
+            <div class="action-text">
+              <div class="action-title">Add User</div>
+              <div class="action-desc">Create new account</div>
+            </div>
+          </a>
+
+          <a href="admin-research.php" class="action-btn">
+            <div class="action-icon">📁</div>
+            <div class="action-text">
+              <div class="action-title">Manage Research</div>
+              <div class="action-desc">Review projects</div>
+            </div>
+          </a>
+
+          <a href="admin-reports.php" class="action-btn">
+            <div class="action-icon">📊</div>
+            <div class="action-text">
+              <div class="action-title">Generate Report</div>
+              <div class="action-desc">Analytics & insights</div>
+            </div>
+          </a>
+
+          <a href="admin-backup.php" class="action-btn">
+            <div class="action-icon">💾</div>
+            <div class="action-text">
+              <div class="action-title">System Backup</div>
+              <div class="action-desc">Export database</div>
+            </div>
+          </a>
+
+          <a href="admin-archive.php" class="action-btn">
+            <div class="action-icon">🗂️</div>
+            <div class="action-text">
+              <div class="action-title">Archive Management</div>
+              <div class="action-desc">View completed research</div>
+            </div>
+          </a>
+
+          <a href="admin-logs.php" class="action-btn">
+            <div class="action-icon">📋</div>
+            <div class="action-text">
+              <div class="action-title">Activity Logs</div>
+              <div class="action-desc">System audit trail</div>
+            </div>
+          </a>
         </div>
+      </div>
+
+      <!-- SYSTEM ACTIVITY -->
+      <div class="bento-card span-6">
+        <div class="card-header">
+          <div>
+            <div class="card-title">System Activity</div>
+            <div class="card-subtitle">Recent actions across the platform</div>
+          </div>
+          <a href="admin-logs.php" class="card-action">View logs →</a>
+        </div>
+
+        <ul class="activity-list">
+          <?php
+          if ($activities->num_rows > 0):
+            while ($activity = $activities->fetch_assoc()):
+              $user_name = trim(($activity['first_name'] ?? '') . ' ' . ($activity['last_name'] ?? ''));
+              $action = $activity['action'] ?? 'Unknown action';
+              $created_at = $activity['created_at'] ?? '';
+
+              $activity_lower = strtolower($action);
+              $dot_color = '#2563EB';
+              if (strpos($activity_lower, 'approved') !== false) {
+                $dot_color = '#16A34A';
+              } elseif (strpos($activity_lower, 'submitted') !== false || strpos($activity_lower, 'created') !== false) {
+                $dot_color = '#7C3AED';
+              } elseif (strpos($activity_lower, 'revision') !== false || strpos($activity_lower, 'rejected') !== false) {
+                $dot_color = '#EA580C';
+              } elseif (strpos($activity_lower, 'login') !== false) {
+                $dot_color = '#C8A44D';
+              }
+          ?>
+            <li class="activity-item">
+              <div class="activity-dot" style="background: <?php echo $dot_color; ?>;"></div>
+              <div class="activity-content">
+                <p><?php echo $user_name ? '<strong>' . htmlspecialchars($user_name, ENT_QUOTES, 'UTF-8') . '</strong>: ' : ''; ?><?php echo htmlspecialchars($action, ENT_QUOTES, 'UTF-8'); ?></p>
+                <div class="activity-time"><?php echo $created_at ? date('M d, Y • h:i A', strtotime($created_at)) : ''; ?></div>
+              </div>
+            </li>
+          <?php
+            endwhile;
+          else:
+          ?>
+            <li class="activity-item">
+              <div class="activity-content">
+                <p style="color: var(--text-muted, #94A3B8);">No recent activity</p>
+              </div>
+            </li>
+          <?php endif; ?>
+        </ul>
       </div>
     </div>
-  </div>
-</div>
-</body>
-</html>
+
+<?php
+renderAdminShellClose();

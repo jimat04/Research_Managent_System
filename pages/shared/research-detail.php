@@ -310,11 +310,11 @@ function manualStatusBadge($status) {
         <span class="icon">📈</span>
         <span>Progress Tracking</span>
       </div>
-      <div class="nav-item" onclick="location.href='messages.php'">
+      <div class="nav-item" onclick="location.href='../shared/messages.php'">
         <span class="icon">💬</span>
         <span>Messages</span>
       </div>
-      <div class="nav-item" onclick="location.href='notifications.php'">
+      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
         <span class="icon">🔔</span>
         <span>Notifications</span>
       </div>
@@ -338,7 +338,7 @@ function manualStatusBadge($status) {
         <span class="icon">⚙️</span>
         <span>Settings</span>
       </div>
-      <div class="nav-item" onclick="location.href='../logout.php'" style="color: #ef4444;">
+      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #ef4444;">
         <span class="icon">🚪</span>
         <span>Logout</span>
       </div>

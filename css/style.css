@@ -163,6 +163,7 @@ a { text-decoration: none; color: inherit; }
 
 .hero-content .highlight {
   background: linear-gradient(135deg, #c4a9ff, var(--secondary-light));
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -659,7 +660,152 @@ tbody .btn-primary:hover,
 .status-revision { background: rgba(239,68,68,0.1); color: #dc2626; }
 .status-revision::before { background: #ef4444; }
 
+/* ═══════════════════════════════════════════════════════════ */
+/* DASHBOARD DARK LAYOUT */
+/* ═══════════════════════════════════════════════════════════ */
+
+.dashboard {
+  background: var(--bg-dark);
+}
+
+.main-content {
+  background: var(--bg-dark);
+}
+
+.page-content {
+  background: var(--bg-dark);
+}
+
+/* Ensure all content inside white cards uses dark text */
+.card:not(.welcome-banner),
+.card:not(.welcome-banner) .card-body,
+.card:not(.welcome-banner) .card-title,
+.card:not(.welcome-banner) .card-subtitle,
+.stat-number,
+.stat-label,
+tbody td,
+tbody td p,
+.table-wrap th,
+.table-wrap td,
+.activity-content,
+.activity-content p,
+.deadline-title,
+.deadline-date,
+.progress-label,
+.progress-value {
+  color: var(--text-dark);
+}
+
+/* Welcome banner (dark card with white text) */
+.welcome-banner {
+  background: linear-gradient(135deg, #0d9488, #059669);
+  color: #fff;
+}
+
+.welcome-banner h3,
+.welcome-banner p,
+.welcome-banner strong,
+.welcome-banner .card-title,
+.welcome-banner .card-subtitle {
+  color: #fff;
+}
+
+.welcome-banner p {
+  opacity: 0.9;
+}
+
+.welcome-btn {
+  display: inline-block;
+  padding: 9px 20px;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.88rem;
+  transition: all 0.2s;
+}
+
+.welcome-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateY(-1px);
+}
+
+/* Progress bars */
+.progress-wrapper {
+  margin-bottom: 16px;
+}
+
+.progress-wrapper:last-child {
+  margin-bottom: 0;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.progress-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.progress-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.progress-bar {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.primary { background: var(--primary); }
+.progress-fill.success { background: var(--success); }
+.progress-fill.warning { background: var(--warning); }
+.progress-fill.accent { background: var(--accent); }
+.progress-fill.secondary { background: var(--secondary); }
+
+/* Deadline items */
+.deadline-item {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  transition: all 0.2s;
+}
+
+.deadline-item:hover {
+  border-color: var(--primary);
+  transform: translateX(4px);
+}
+
+.deadline-title {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--text-dark);
+}
+
+.deadline-date {
+  font-size: 0.75rem;
+  color: var(--info);
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
 /* CHARTS (PLACEHOLDER) */
+/* ═══════════════════════════════════════════════════════════ */
 .chart-placeholder {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -669,40 +815,33 @@ tbody .btn-primary:hover,
 .donut-chart {
   width: 120px; height: 120px;
   border-radius: 50%;
-  background: conic-gradient(
-    var(--primary) 0deg 115deg,
-    var(--secondary) 115deg 220deg,
-    var(--accent) 220deg 290deg,
-    var(--success) 290deg 360deg
-  );
   display: flex; align-items: center; justify-content: center;
   position: relative;
   margin-bottom: 20px;
 }
 
-.donut-chart::after {
-  content: '';
-  position: absolute;
+.donut-center {
   width: 70px; height: 70px;
   background: white;
   border-radius: 50%;
-}
-
-.donut-center {
-  position: relative; z-index: 1;
-  text-align: center;
-  font-family: 'Poppins', sans-serif;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  position: relative;
+  z-index: 1;
 }
 
 .donut-center .value {
-  font-size: 1.4rem;
-  font-weight: 800;
+  font-size: 1.2rem;
+  font-weight: 700;
   color: var(--text-dark);
+  line-height: 1;
 }
 
 .donut-center .label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .chart-legend {
@@ -825,6 +964,17 @@ tbody .btn-primary:hover,
   border-color: var(--primary-light);
   background: rgba(255,255,255,0.09);
   box-shadow: 0 0 0 3px rgba(91,30,188,0.2);
+}
+
+.form-control option {
+  background: #1a1a2e;
+  color: #ffffff;
+  padding: 8px;
+}
+
+.form-control option:hover {
+  background: var(--primary);
+  color: white;
 }
 
 .form-check {

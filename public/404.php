@@ -232,7 +232,7 @@ if (isset($conn) && $conn instanceof mysqli) {
             <div class="error-suggestions">
                 <h3>Quick Links</h3>
                 <ul>
-                    <li><a href="<?php echo SITE_URL; ?>login.php">Login to your account</a></li>
+                    <li><a href="<?php echo SITE_URL; ?>public/login.php">Login to your account</a></li>
                     <li><a href="<?php echo SITE_URL; ?>about.php">About the Research System</a></li>
                     <li><a href="<?php echo SITE_URL; ?>contact.php">Contact Support</a></li>
                 </ul>

@@ -52,9 +52,9 @@ ServerSignature Off
 AddDefaultCharset UTF-8
 
 # Custom Error Pages
-ErrorDocument 403 /rms/403.php
-ErrorDocument 404 /rms/404.php
-ErrorDocument 500 /rms/500.php
+ErrorDocument 403 /rms/public/403.php
+ErrorDocument 404 /rms/public/404.php
+ErrorDocument 500 /rms/public/500.php
 
 # Force HTTPS (uncomment when SSL is enabled)
 # <IfModule mod_rewrite.c>

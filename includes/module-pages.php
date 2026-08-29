@@ -79,7 +79,7 @@ function rms_handle_module_action($page_key, $user) {
                 $statement = $conn->prepare('INSERT INTO messages (sender_id, recipient_id, subject, message) VALUES (?, ?, ?, ?)');
                 $statement->bind_param('iiss', $user_id, $recipient_id, $subject, $message);
                 if ($statement->execute()) {
-                    createNotification($recipient_id, 'New message', 'You received a new message from ' . $user['first_name'], 'info', 'pages/messages.php');
+                    createNotification($recipient_id, 'New message', 'You received a new message from ' . $user['first_name'], 'info', 'pages/shared/messages.php');
                     logActivity('Sent a message', 'messages');
                     $_SESSION['module_success'] = 'Message sent successfully.';
                 } else {

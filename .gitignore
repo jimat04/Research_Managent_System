@@ -1,24 +1,24 @@
+﻿# Sensitive
 .env
-.env.*
-!.env.example
+.env.local
+*.sql.backup
+reset-*.php
 
-.vscode/
-.idea/
-.continue/
-
-node_modules/
+# Dependencies
 vendor/
+node_modules/
 
-*.log
-*.tmp
-*.temp
-
-xampp/
-# Reference documents / binaries
+# User uploads
+uploads/
 *.docx
-*.doc
-*.pdf ~
+*.pdf
 ~$*
 
-# Scripts
-scripts/*.sh
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

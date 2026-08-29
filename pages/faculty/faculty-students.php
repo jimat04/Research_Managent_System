@@ -1,1 +1,1 @@
-<?php require __DIR__ . '/module-page.php';
+<?php require __DIR__ . '/../shared/module-page.php';

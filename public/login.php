@@ -152,7 +152,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $password = isset($_POST['password']) ? $_POST['password'] : '';
         $password_confirm = isset($_POST['password_confirm']) ? $_POST['password_confirm'] : '';
         $student_id = isset($_POST['student_id']) ? sanitize($_POST['student_id']) : '';
+        $contact = isset($_POST['contact']) ? sanitize($_POST['contact']) : '';
         $role = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
+
+        // Role-specific fields
+        $department = isset($_POST['department']) ? sanitize($_POST['department']) : null;
+        $program = isset($_POST['program']) ? sanitize($_POST['program']) : null;
+        $year_level = isset($_POST['year_level']) ? sanitize($_POST['year_level']) : null;
+        $specialization = isset($_POST['specialization']) ? sanitize($_POST['specialization']) : null;
+        $academic_rank = isset($_POST['academic_rank']) ? sanitize($_POST['academic_rank']) : null;
+        $is_reviewer = isset($_POST['is_reviewer']) ? 1 : 0;
+        $office = isset($_POST['office']) ? sanitize($_POST['office']) : null;
 
         $allowedRoles = ['student', 'faculty', 'research_staff'];
         if (!in_array($role, $allowedRoles, true)) {
@@ -177,12 +187,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 $error = 'Email already registered';
             } else {
                 $password_hash = hashPassword($password);
-                $status = 'pending';
-                $insertStmt = $conn->prepare("INSERT INTO users (first_name, last_name, email, password, student_id, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
-                $insertStmt->bind_param('sssssss', $first_name, $last_name, $email, $password_hash, $student_id, $role, $status);
+
+                // Students get auto-approved, faculty/staff need admin approval
+                $status = ($role === 'student') ? 'active' : 'pending';
+
+                $insertStmt = $conn->prepare("INSERT INTO users (first_name, last_name, email, password, student_id, contact, role, department, program, year_level, specialization, academic_rank, is_reviewer, office, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+                $insertStmt->bind_param('sssssssssssssss', $first_name, $last_name, $email, $password_hash, $student_id, $contact, $role, $department, $program, $year_level, $specialization, $academic_rank, $is_reviewer, $office, $status);
 
                 if ($insertStmt->execute()) {
-                    $success = 'Registration successful! Please wait for admin approval.';
+                    $userId = $conn->insert_id;
+
+                    // Send email verification
+                    require_once __DIR__ . '/../includes/email.php';
+                    sendVerificationEmail($userId, $email, $first_name);
+
+                    if ($role === 'student') {
+                        $success = 'Registration successful! Please check your email to verify your account. You can now log in.';
+                    } else {
+                        // Notify admins about pending approval
+                        sendPendingApprovalNotification($first_name, $last_name, $email, $role);
+                        $success = 'Registration successful! Please check your email to verify your account. An administrator will review and approve your account shortly.';
+                    }
+
                     $_POST = [];
                 } else {
                     $error = 'Registration failed. Please try again.';
@@ -293,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         <p>Join the Research Management System</p>
       </div>
 
-      <form method="POST" action="login.php">
+      <form method="POST" action="login.php" id="registrationForm">
         <input type="hidden" name="action" value="register">
         <?php echo csrfField(); ?>
 
@@ -310,21 +336,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
         <div class="form-group">
           <label class="form-label">Email Address</label>
-          <input type="email" name="email" class="form-control" placeholder="you@university.edu.ph" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email'], ENT_QUOTES, 'UTF-8') : ''; ?>">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Student/Employee ID</label>
-          <input type="text" name="student_id" class="form-control" placeholder="e.g. 2024-00001" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id'], ENT_QUOTES, 'UTF-8') : ''; ?>">
+          <input type="email" name="email" class="form-control" placeholder="you@earist.edu.ph" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email'], ENT_QUOTES, 'UTF-8') : ''; ?>">
         </div>
 
         <div class="form-group">
           <label class="form-label">Role</label>
-          <select name="role" class="form-control">
-            <option value="student">🎓 Student</option>
-            <option value="faculty">👨‍🏫 Faculty/Adviser</option>
-            <option value="research_staff">📋 Research Staff</option>
+          <select name="role" id="registerRole" class="form-control" required onchange="updateRegistrationFields()" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+            <option value="" disabled selected style="background: #0F1729; color: #8B8FAD;">Choose a role</option>
+            <option value="student" style="background: #1a1a2e; color: #ffffff; padding: 12px;">🎓 Student</option>
+            <option value="faculty" style="background: #1a1a2e; color: #ffffff; padding: 12px;">👨‍🏫 Faculty/Adviser</option>
+            <option value="research_staff" style="background: #1a1a2e; color: #ffffff; padding: 12px;">📋 Research Staff</option>
           </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Student/Employee ID</label>
+          <input type="text" name="student_id" id="studentEmployeeId" class="form-control" placeholder="e.g. 2024-00001" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id'], ENT_QUOTES, 'UTF-8') : ''; ?>">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Contact Number</label>
+          <input type="tel" name="contact" class="form-control" placeholder="09XX XXX XXXX" value="<?php echo isset($_POST['contact']) ? htmlspecialchars($_POST['contact'], ENT_QUOTES, 'UTF-8') : ''; ?>">
+        </div>
+
+        <!-- STUDENT-SPECIFIC FIELDS -->
+        <div id="studentFields" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">College/Department</label>
+            <select name="department" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+              <option value="">Select college</option>
+              <option value="College of Information and Communications Technology">CICT</option>
+              <option value="College of Engineering">College of Engineering</option>
+              <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+              <option value="College of Education">College of Education</option>
+              <option value="Graduate School">Graduate School</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Program/Course</label>
+              <input type="text" name="program" class="form-control" placeholder="e.g. BSIT, BSCS">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Year Level</label>
+              <select name="year_level" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+                <option value="">Select year</option>
+                <option value="1st">1st Year</option>
+                <option value="2nd">2nd Year</option>
+                <option value="3rd">3rd Year</option>
+                <option value="4th">4th Year</option>
+                <option value="Graduate">Graduate</option>
+                <option value="Masters">Master's</option>
+                <option value="Doctorate">Doctorate</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- FACULTY-SPECIFIC FIELDS -->
+        <div id="facultyFields" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <select name="department" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+              <option value="">Select department</option>
+              <option value="Information Technology">Information Technology</option>
+              <option value="Computer Science">Computer Science</option>
+              <option value="Engineering">Engineering</option>
+              <option value="Education">Education</option>
+              <option value="Arts and Sciences">Arts and Sciences</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Specialization/Field of Expertise</label>
+            <input type="text" name="specialization" class="form-control" placeholder="e.g. Data Science, Software Engineering">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Academic Rank</label>
+            <select name="academic_rank" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+              <option value="">Select rank</option>
+              <option value="Instructor">Instructor</option>
+              <option value="Assistant Professor">Assistant Professor</option>
+              <option value="Associate Professor">Associate Professor</option>
+              <option value="Professor">Professor</option>
+              <option value="Dean">Dean</option>
+              <option value="Director">Director</option>
+            </select>
+          </div>
+
+          <div class="form-check" style="margin-bottom: 16px;">
+            <input type="checkbox" name="is_reviewer" id="isReviewer" value="1">
+            <label for="isReviewer" style="color: #D0D3E8; font-size: 0.85rem;">I'm willing to participate in CREC/EREC reviews</label>
+          </div>
+        </div>
+
+        <!-- STAFF-SPECIFIC FIELDS -->
+        <div id="staffFields" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Office Assignment</label>
+            <select name="office" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
+              <option value="">Select office</option>
+              <option value="Office of Research Services">Office of Research Services (ORS)</option>
+              <option value="CREC Office">CREC Office</option>
+              <option value="EREC Office">EREC Office</option>
+              <option value="Graduate School Office">Graduate School Office</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <input type="text" name="department" class="form-control" placeholder="e.g. Research Management">
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -395,6 +521,36 @@ function togglePassword(inputId, btnId) {
   const isHidden = input.type === 'password';
   input.type = isHidden ? 'text' : 'password';
   btn.textContent = isHidden ? 'Hide' : 'Show';
+}
+
+function updateRegistrationFields() {
+  const role = document.getElementById('registerRole').value;
+  const studentFields = document.getElementById('studentFields');
+  const facultyFields = document.getElementById('facultyFields');
+  const staffFields = document.getElementById('staffFields');
+  const idLabel = document.getElementById('studentEmployeeId');
+
+  // Hide all role-specific fields
+  studentFields.style.display = 'none';
+  facultyFields.style.display = 'none';
+  staffFields.style.display = 'none';
+
+  // Clear required attributes from hidden fields
+  studentFields.querySelectorAll('input, select').forEach(el => el.removeAttribute('required'));
+  facultyFields.querySelectorAll('input, select').forEach(el => el.removeAttribute('required'));
+  staffFields.querySelectorAll('input, select').forEach(el => el.removeAttribute('required'));
+
+  // Show relevant fields based on role
+  if (role === 'student') {
+    studentFields.style.display = 'block';
+    if (idLabel) idLabel.placeholder = 'e.g. 2024-00001 (Student ID)';
+  } else if (role === 'faculty') {
+    facultyFields.style.display = 'block';
+    if (idLabel) idLabel.placeholder = 'e.g. F-2024-001 (Employee ID)';
+  } else if (role === 'research_staff') {
+    staffFields.style.display = 'block';
+    if (idLabel) idLabel.placeholder = 'e.g. S-2024-001 (Employee ID)';
+  }
 }
 
 if (window.location.hash === '#register') {

@@ -52,7 +52,7 @@ $page_title = isset($_GET['title']) ? $_GET['title'] : 'Page';
         <div style="font-size: 3rem; margin-bottom: 20px;">🔨</div>
         <h2 style="font-size: 1.5rem; margin-bottom: 10px;">This Page is Under Construction</h2>
         <p style="color: var(--text-muted); margin-bottom: 20px;">This feature will be available soon. In the meantime, you can:</p>
-        <button class="btn btn-primary" onclick="location.href='<?php echo htmlspecialchars($user['role'] . '-dashboard.php'); ?>'">Go to Dashboard</button>
+        <button class="btn btn-primary" onclick="location.href='../' . $user['role'] . '/' . $user['role'] . '-dashboard.php'">Go to Dashboard</button>
         <button class="btn btn-secondary" onclick="history.back()" style="margin-left: 10px;">Go Back</button>
       </div>
     </div>

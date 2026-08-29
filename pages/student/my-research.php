@@ -86,10 +86,498 @@ $status_display = [
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Research — RMS</title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --charcoal: #111827;
+      --slate: #1F2937;
+      --bg-surface: #F8FAFC;
+      --bg-card: #FFFFFF;
+      --border: #E5E7EB;
+      --gold: #C8A44D;
+      --text-primary: #111827;
+      --text-secondary: #64748B;
+      --text-muted: #94A3B8;
+
+      --status-draft: #64748B;
+      --status-proposal: #2563EB;
+      --status-crec: #3B82F6;
+      --status-erec: #7C3AED;
+      --status-revision: #EA580C;
+      --status-approved: #16A34A;
+      --status-completed: #059669;
+      --status-archived: #475569;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .dashboard {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 260px;
+      background: var(--charcoal);
+      color: white;
+      padding: 32px 0;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding: 0 24px 32px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 24px;
+    }
+
+    .sidebar-brand {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .sidebar-role {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 0 16px;
+    }
+
+    .nav-group-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin: 24px 8px 8px;
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      margin: 2px 0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .nav-item .icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .nav-item .icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,0.08);
+      color: white;
+    }
+
+    .nav-item.active {
+      background: var(--gold);
+      color: white;
+    }
+
+    .nav-item.active .icon svg {
+      stroke: white;
+    }
+
+    .nav-item .badge {
+      margin-left: auto;
+      background: var(--gold);
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+
+    .sidebar-footer {
+      padding: 24px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .user-card {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .user-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .user-role {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* MAIN CONTENT */
+    .main-content {
+      flex: 1;
+      margin-left: 260px;
+      padding: 48px;
+    }
+
+    .page-content {
+      max-width: 1400px;
+    }
+
+    /* STATS GRID */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      transition: all 0.3s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    .stat-card.purple .stat-number { color: var(--status-erec); }
+    .stat-card.blue .stat-number { color: var(--status-proposal); }
+    .stat-card.orange .stat-number { color: var(--status-revision); }
+    .stat-card.green .stat-number { color: var(--status-approved); }
+
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .stat-number {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .stat-icon {
+      font-size: 32px;
+      opacity: 0.3;
+    }
+
+    /* CARD */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-body {
+      padding: 0;
+    }
+
+    /* TABLE */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table thead {
+      background: var(--bg-surface);
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .data-table td {
+      padding: 16px;
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .data-table tr:hover {
+      background: var(--bg-surface);
+    }
+
+    /* BADGE */
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-info {
+      background: #DBEAFE;
+      color: var(--status-proposal);
+    }
+
+    .badge-primary {
+      background: #DBEAFE;
+      color: var(--status-crec);
+    }
+
+    .badge-warning {
+      background: #FEF3C7;
+      color: var(--status-revision);
+    }
+
+    .badge-success {
+      background: #DCFCE7;
+      color: var(--status-approved);
+    }
+
+    /* BUTTON */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--gold);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(200,164,77,0.3);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--charcoal);
+      color: white;
+    }
+
+    .btn-accent {
+      background: var(--status-proposal);
+      color: white;
+    }
+
+    .btn-sm {
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+
+    /* FORM */
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(200,164,77,0.1);
+    }
+
+    /* TOPBAR */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-left h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: var(--charcoal);
+    }
+
+    .topbar-left p {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .search-box input {
+      border: none;
+      background: none;
+      outline: none;
+      width: 200px;
+      font-size: 14px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-surface);
+    }
+
+    .user-profile-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .user-profile-btn:hover {
+      border-color: var(--gold);
+    }
+
+    .profile-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      color: white;
+    }
+
+    .profile-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .profile-role {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar {
+        display: none;
+      }
+
+      .main-content {
+        margin-left: 0;
+        padding: 24px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
 
@@ -99,66 +587,60 @@ $status_display = [
   <!-- ═══════════════════════════════════════════════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 8px;">🔬</div>
-      <div class="sidebar-brand">
-        Research<br>Management
-      </div>
+      <div class="sidebar-brand">EARIST RMS</div>
+      <div class="sidebar-role">Student Portal</div>
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-group-title">MAIN</div>
+      <div class="nav-group-title">Main</div>
       <div class="nav-item" onclick="location.href='student-dashboard.php'">
-        <span class="icon">📊</span>
+        <span class="icon"><i data-lucide="layout-dashboard"></i></span>
         <span>Dashboard</span>
       </div>
       <div class="nav-item active" onclick="location.href='my-research.php'">
-        <span class="icon">📁</span>
+        <span class="icon"><i data-lucide="folder-kanban"></i></span>
         <span>My Research</span>
       </div>
       <div class="nav-item" onclick="location.href='submit-research.php'">
-        <span class="icon">📤</span>
+        <span class="icon"><i data-lucide="file-up"></i></span>
         <span>Submit Research</span>
       </div>
       <div class="nav-item" onclick="location.href='my-documents.php'">
-        <span class="icon">📄</span>
+        <span class="icon"><i data-lucide="files"></i></span>
         <span>My Documents</span>
       </div>
-
-      <div class="nav-group-title">TRACKING</div>
       <div class="nav-item" onclick="location.href='progress-tracking.php'">
-        <span class="icon">📈</span>
+        <span class="icon"><i data-lucide="chart-no-axes-combined"></i></span>
         <span>Progress Tracking</span>
       </div>
-      <div class="nav-item" onclick="location.href='messages.php'">
-        <span class="icon">💬</span>
+
+      <div class="nav-group-title">Communication</div>
+      <div class="nav-item" onclick="location.href='../shared/messages.php'">
+        <span class="icon"><i data-lucide="messages-square"></i></span>
         <span>Messages</span>
       </div>
-      <div class="nav-item" onclick="location.href='notifications.php'">
-        <span class="icon">🔔</span>
+      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
+        <span class="icon"><i data-lucide="bell"></i></span>
         <span>Notifications</span>
       </div>
 
-      <div class="nav-group-title">RESOURCES</div>
-      <div class="nav-item" onclick="location.href='research-archive.php'">
-        <span class="icon">🗂️</span>
+      <div class="nav-group-title">Resources</div>
+      <div class="nav-item" onclick="location.href='../shared/research-archive.php'">
+        <span class="icon"><i data-lucide="archive"></i></span>
         <span>Research Archive</span>
       </div>
-      <div class="nav-item" onclick="location.href='calendar.php'">
-        <span class="icon">📅</span>
+      <div class="nav-item" onclick="location.href='../shared/calendar.php'">
+        <span class="icon"><i data-lucide="calendar-days"></i></span>
         <span>Calendar</span>
       </div>
 
-      <div class="nav-group-title">ACCOUNT</div>
-      <div class="nav-item" onclick="location.href='profile.php'">
-        <span class="icon">👤</span>
+      <div class="nav-group-title">Account</div>
+      <div class="nav-item" onclick="location.href='../shared/profile.php'">
+        <span class="icon"><i data-lucide="circle-user-round"></i></span>
         <span>Profile</span>
       </div>
-      <div class="nav-item" onclick="location.href='settings.php'">
-        <span class="icon">⚙️</span>
-        <span>Settings</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../logout.php'" style="color: #ef4444;">
-        <span class="icon">🚪</span>
+      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #EF4444;">
+        <span class="icon"><i data-lucide="log-out"></i></span>
         <span>Logout</span>
       </div>
     </nav>
@@ -166,9 +648,9 @@ $status_display = [
     <div class="sidebar-footer">
       <div class="user-card">
         <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-        <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
-          <div class="user-role">🎓 Student</div>
+        <div>
+          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="user-role">Student</div>
         </div>
       </div>
     </div>
@@ -389,6 +871,20 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     this.classList.add('active');
   });
+});
+
+// Initialize Lucide icons
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.lucide) {
+    lucide.createIcons();
+  } else {
+    // Wait for Lucide to load
+    setTimeout(function() {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    }, 100);
+  }
 });
 </script>
 </body>

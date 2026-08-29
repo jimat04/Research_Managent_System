@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
             logActivity($is_submit ? 'Chapter submitted' : 'Chapter saved as draft', 'chapters');
             $conn->commit();
-            header('Location: research-detail.php?id=' . $project_id . '&chapter_saved=1');
+            header('Location: ../shared/research-detail.php?id=' . $project_id . '&chapter_saved=1');
             exit();
         } catch (Exception $exception) {
             $conn->rollback();
@@ -285,40 +285,81 @@ $status_badge = $current_status && isset($status_badges[$current_status]) ? $sta
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($page_title); ?> — RMS</title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <link rel="stylesheet" href="../../css/style.css" />
 </head>
 <body>
 <div class="dashboard">
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 8px;">🔬</div>
-      <div class="sidebar-brand">Research<br>Management</div>
+      <div class="sidebar-brand">EARIST RMS</div>
+      <div class="sidebar-role">Student Portal</div>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-group-title">MAIN</div>
-      <div class="nav-item" onclick="location.href='student-dashboard.php'"><span class="icon">📊</span><span>Dashboard</span></div>
-      <div class="nav-item active" onclick="location.href='my-research.php'"><span class="icon">📁</span><span>My Research</span></div>
-      <div class="nav-item" onclick="location.href='submit-research.php'"><span class="icon">📤</span><span>Submit Research</span></div>
-      <div class="nav-item" onclick="location.href='my-documents.php'"><span class="icon">📄</span><span>My Documents</span></div>
-      <div class="nav-group-title">TRACKING</div>
-      <div class="nav-item" onclick="location.href='progress-tracking.php'"><span class="icon">📈</span><span>Progress Tracking</span></div>
-      <div class="nav-item" onclick="location.href='messages.php'"><span class="icon">💬</span><span>Messages</span></div>
-      <div class="nav-item" onclick="location.href='notifications.php'"><span class="icon">🔔</span><span>Notifications</span></div>
-      <div class="nav-group-title">RESOURCES</div>
-      <div class="nav-item" onclick="location.href='research-archive.php'"><span class="icon">🗂️</span><span>Research Archive</span></div>
-      <div class="nav-item" onclick="location.href='calendar.php'"><span class="icon">📅</span><span>Calendar</span></div>
-      <div class="nav-group-title">ACCOUNT</div>
-      <div class="nav-item" onclick="location.href='profile.php'"><span class="icon">👤</span><span>Profile</span></div>
-      <div class="nav-item" onclick="location.href='settings.php'"><span class="icon">⚙️</span><span>Settings</span></div>
-      <div class="nav-item" onclick="location.href='../logout.php'" style="color: #ef4444;"><span class="icon">🚪</span><span>Logout</span></div>
+      <div class="nav-group-title">Main</div>
+      <div class="nav-item" onclick="location.href='student-dashboard.php'">
+        <span class="icon"><i data-lucide="layout-dashboard"></i></span>
+        <span>Dashboard</span>
+      </div>
+      <div class="nav-item active" onclick="location.href='my-research.php'">
+        <span class="icon"><i data-lucide="folder-kanban"></i></span>
+        <span>My Research</span>
+      </div>
+      <div class="nav-item" onclick="location.href='submit-research.php'">
+        <span class="icon"><i data-lucide="file-up"></i></span>
+        <span>Submit Research</span>
+      </div>
+      <div class="nav-item" onclick="location.href='my-documents.php'">
+        <span class="icon"><i data-lucide="files"></i></span>
+        <span>My Documents</span>
+      </div>
+      <div class="nav-item" onclick="location.href='progress-tracking.php'">
+        <span class="icon"><i data-lucide="chart-no-axes-combined"></i></span>
+        <span>Progress Tracking</span>
+      </div>
+
+      <div class="nav-group-title">Communication</div>
+      <div class="nav-item" onclick="location.href='../shared/messages.php'">
+        <span class="icon"><i data-lucide="messages-square"></i></span>
+        <span>Messages</span>
+      </div>
+      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
+        <span class="icon"><i data-lucide="bell"></i></span>
+        <span>Notifications</span>
+      </div>
+
+      <div class="nav-group-title">Resources</div>
+      <div class="nav-item" onclick="location.href='../shared/research-archive.php'">
+        <span class="icon"><i data-lucide="archive"></i></span>
+        <span>Research Archive</span>
+      </div>
+      <div class="nav-item" onclick="location.href='../shared/calendar.php'">
+        <span class="icon"><i data-lucide="calendar-days"></i></span>
+        <span>Calendar</span>
+      </div>
+
+      <div class="nav-group-title">Account</div>
+      <div class="nav-item" onclick="location.href='../shared/profile.php'">
+        <span class="icon"><i data-lucide="circle-user-round"></i></span>
+        <span>Profile</span>
+      </div>
+      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #EF4444;">
+        <span class="icon"><i data-lucide="log-out"></i></span>
+        <span>Logout</span>
+      </div>
     </nav>
-    <div class="sidebar-footer"><div class="user-card">
-      <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-      <div class="user-info"><div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div><div class="user-role">🎓 Student</div></div>
-    </div></div>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
+        <div>
+          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="user-role">Student</div>
+        </div>
+      </div>
+    </div>
   </aside>
 
   <div class="main-content">
@@ -373,5 +414,20 @@ $status_badge = $current_status && isset($status_badges[$current_status]) ? $sta
     </div>
   </div>
 </div>
+<script>
+  // Initialize Lucide icons
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.lucide) {
+      lucide.createIcons();
+    } else {
+      // Wait for Lucide to load
+      setTimeout(function() {
+        if (window.lucide) {
+          lucide.createIcons();
+        }
+      }, 100);
+    }
+  });
+</script>
 </body>
 </html>

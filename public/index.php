@@ -263,7 +263,7 @@ if ($stat_rate === 0) $stat_rate = 95;
         <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 16px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.06);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <span style="color: #bfdbfe; font-weight: 600; font-size: 0.85rem;">🎓 Institutional Workflow</span>
-            <span style="background: rgba(34,197,94,0.2); color: #86efac; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Active 2024-2025</span>
+            <span style="background: rgba(34,197,94,0.2); color: #86efac; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Active</span>
           </div>
           <div style="font-size: 0.8rem; color: #cbd5e1; margin-bottom: 12px; line-height: 1.5;">
             5-Chapter Thesis Structure &bull; CREC &amp; EREC Reviews &bull; Defense Scheduling &bull; Archival
@@ -276,19 +276,19 @@ if ($stat_rate === 0) $stat_rate = 95;
         <!-- Role Quick Cards -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div style="background: rgba(91,30,188,0.15); border: 1px solid rgba(196,169,255,0.2); border-radius: 10px; padding: 12px;">
-            <div style="font-size: 1.1rem; margin-bottom: 4px;">🎓 Student</div>
+            <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">🎓 Student</div>
             <div style="font-size: 0.72rem; color: #D0D3E8;">Submit chapters, track revisions &amp; defenses</div>
           </div>
           <div style="background: rgba(15,108,189,0.15); border: 1px solid rgba(147,197,253,0.2); border-radius: 10px; padding: 12px;">
-            <div style="font-size: 1.1rem; margin-bottom: 4px;">👨‍🏫 Faculty</div>
+            <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">👨‍🏫 Faculty</div>
             <div style="font-size: 0.72rem; color: #D0D3E8;">Review advisees &amp; score panel defenses</div>
           </div>
           <div style="background: rgba(13,148,136,0.15); border: 1px solid rgba(94,234,212,0.2); border-radius: 10px; padding: 12px;">
-            <div style="font-size: 1.1rem; margin-bottom: 4px;">📋 Staff</div>
+            <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">📋 Staff</div>
             <div style="font-size: 0.72rem; color: #D0D3E8;">Verify forms &amp; repository management</div>
           </div>
           <div style="background: rgba(245,124,0,0.15); border: 1px solid rgba(253,186,116,0.2); border-radius: 10px; padding: 12px;">
-            <div style="font-size: 1.1rem; margin-bottom: 4px;">⚙️ Admin</div>
+            <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">⚙️ Admin</div>
             <div style="font-size: 0.72rem; color: #D0D3E8;">Campus analytics, logs &amp; system control</div>
           </div>
         </div>
