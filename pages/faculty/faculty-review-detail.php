@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 
 requireRole('faculty');
 
@@ -193,40 +194,46 @@ if ($project) {
 }
 $project_status = $project['status'] ?? '';
 $project_badge = $status_badges[$project_status] ?? $status_badges['draft'];
+
+// Render faculty shell with 'faculty-review' as current_page so Review Queue nav highlights
+renderFacultyShell(
+    $user,
+    'faculty-review',
+    'Review Project',
+    $project ? htmlspecialchars($project['title']) : 'Project details'
+);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><?php echo $project ? htmlspecialchars($project['title']) . ' — Review' : 'Review Project'; ?> — RMS</title>
-  <link rel="stylesheet" href="../css/style.css" />
-</head>
-<body>
-<div class="dashboard">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="sidebar-logo" style="background: linear-gradient(135deg, var(--secondary), var(--accent)); border-radius: 8px;">🔬</div><div class="sidebar-brand">Research<br>Management</div></div>
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">MAIN</div>
-      <div class="nav-item" onclick="location.href='faculty-dashboard.php'"><span class="icon">📊</span><span>Dashboard</span></div>
-      <div class="nav-item" onclick="location.href='faculty-submissions.php'"><span class="icon">📥</span><span>Submissions</span></div>
-      <div class="nav-item active" onclick="location.href='faculty-review.php'"><span class="icon">🔍</span><span>Review Queue</span></div>
-      <div class="nav-item" onclick="location.href='faculty-students.php'"><span class="icon">👨‍🎓</span><span>My Students</span></div>
-      <div class="nav-group-title">COMMUNICATION</div>
-      <div class="nav-item" onclick="location.href='../shared/messages.php'"><span class="icon">💬</span><span>Messages</span></div>
-      <div class="nav-item" onclick="location.href='notifications.php'"><span class="icon">🔔</span><span>Notifications</span></div>
-      <div class="nav-group-title">RESOURCES</div>
-      <div class="nav-item" onclick="location.href='research-archive.php'"><span class="icon">🗂️</span><span>Research Archive</span></div>
-      <div class="nav-item" onclick="location.href='faculty-reports.php'"><span class="icon">📊</span><span>Reports</span></div>
-      <div class="nav-group-title">ACCOUNT</div>
-      <div class="nav-item" onclick="location.href='profile.php'"><span class="icon">👤</span><span>Profile</span></div>
-      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #ef4444;"><span class="icon">🚪</span><span>Logout</span></div>
-    </nav>
-    <div class="sidebar-footer"><div class="user-card"><div class="user-avatar" style="background: linear-gradient(135deg, var(--secondary), var(--accent));"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div><div class="user-info"><div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div><div class="user-role">👨‍🏫 Faculty</div></div></div></div>
-  </aside>
-  <div class="main-content">
-    <header class="topbar"><div class="topbar-left"><h2>Review Project</h2><p><?php echo $project ? htmlspecialchars($project['title']) : 'Project details'; ?></p></div><div class="topbar-right"><div class="search-box"><span style="color: #94a3b8;">🔍</span><input type="text" placeholder="Search submissions..."></div><div class="topbar-icons"><div class="icon-btn">🔔</div></div><div class="user-profile-btn"><div class="profile-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div><div class="profile-text"><div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div><div class="profile-role">Faculty</div></div></div></div></header>
-    <div class="page-content">
+
+<style>
+  .alert { padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; }
+  .alert-success { background: #DCFCE7; color: #15803d; border: 1px solid #BBF7D0; }
+  .alert-error { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
+  .alert-warning { background: #FEF3C7; color: #D97706; border: 1px solid #FDE68A; }
+  .alert-info { background: #DBEAFE; color: #1D4ED8; border: 1px solid #BFDBFE; }
+  .card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; margin-bottom: 24px; }
+  .card-header { padding: 24px 24px 0; }
+  .card-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .card-body { padding: 24px; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-info { background: #DBEAFE; color: #1D4ED8; }
+  .badge-primary { background: #DDD6FE; color: #7C3AED; }
+  .badge-success { background: #DCFCE7; color: #16A34A; }
+  .badge-warning { background: #FEF3C7; color: #D97706; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 14px; border: none; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+  .btn-primary { background: #1d4ed8; color: white; }
+  .btn-primary:hover { background: #1e40af; }
+  .btn-secondary { background: #E5E7EB; color: #111827; }
+  .btn-secondary:hover { background: #D1D5DB; }
+  .btn-success { background: #16A34A; color: white; }
+  .btn-success:hover { background: #15803d; }
+  .btn-warning { background: #EA580C; color: white; }
+  .btn-warning:hover { background: #C2410C; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .form-control { width: 100%; padding: 12px 16px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  .profile-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #1d4ed8, #4338ca); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+  .time { font-size: 12px; color: #94A3B8; }
+</style>
       <div style="margin-bottom: 20px;"><a href="faculty-dashboard.php" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Dashboard</a><?php if ($project): ?> <span style="color: var(--text-light);">/</span> <span><?php echo htmlspecialchars($project['title']); ?></span><?php endif; ?> <!-- @rms-ui: breadcrumb separator style --></div>
       <?php if (!$project): ?>
         <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Project not found or you don't have access</h3><p style="margin: 0 0 24px; color: var(--text-light);">The research project you're looking for doesn't exist or you don't have permission to view it.</p><a href="faculty-dashboard.php" class="btn btn-primary">Go back to Dashboard</a></div>
@@ -248,8 +255,5 @@ $project_badge = $status_badges[$project_status] ?? $status_badges['draft'];
         <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Feedback History</div></div><div class="card-body"><?php if ($comments): ?><div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px;"><?php foreach ($comments as $comment): ?><div style="border-bottom: 1px solid var(--border); padding-bottom: 12px;"><div style="display: flex; gap: 10px; align-items: center;"><div class="profile-avatar"><?php echo strtoupper(substr($comment['first_name'] ?? '?', 0, 1) . substr($comment['last_name'] ?? '', 0, 1)); ?></div><strong><?php echo htmlspecialchars(($comment['first_name'] ?? 'Faculty') . ' ' . ($comment['last_name'] ?? '')); ?></strong><?php $comment_type_display = $comment['type'] ?? 'general'; ?><span class="badge"><?php echo htmlspecialchars(ucfirst($comment_type_display)); ?></span><span style="color: var(--text-light); font-size: 13px;">Re: <?php echo $comment['chapter_number'] ? 'Chapter ' . (int) $comment['chapter_number'] : 'General'; ?></span></div><div style="margin: 8px 0 0 42px; white-space: pre-wrap;"><?php echo htmlspecialchars($comment['comment'], ENT_QUOTES, 'UTF-8'); ?></div><div class="time" style="margin-left: 42px;"><?php echo date('M d, Y h:i A', strtotime($comment['created_at'])); ?></div></div><?php endforeach; ?></div><?php else: ?><p style="color: var(--text-light);">No feedback has been posted yet.</p><?php endif; ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="new_comment"><select name="comment_chapter_id" class="form-control" style="max-width: 240px; margin-bottom: 8px;"><option value="0">General</option><?php foreach ($chapters as $chapter_item): ?><option value="<?php echo $chapter_item['chapter_id']; ?>">Chapter <?php echo $chapter_item['chapter_number']; ?></option><?php endforeach; ?></select><textarea name="comment" class="form-control" rows="3" required placeholder="Write general feedback..."></textarea><div style="display: flex; justify-content: flex-end; margin-top: 8px;"><button class="btn btn-primary">Post Comment</button></div></form></div></div>
         <div class="card"><div class="card-header"><div class="card-title">Research Team</div></div><div class="card-body"><?php if ($members): ?><div style="display: flex; flex-direction: column; gap: 10px;"><?php foreach ($members as $member): ?><div style="display: flex; justify-content: space-between; padding: 12px; border: 1px solid var(--border); border-radius: 6px;"><span><?php echo htmlspecialchars($member['first_name'] . ' ' . $member['last_name']); ?></span><span class="badge <?php echo $member['role'] === 'lead' ? 'badge-primary' : 'badge-info'; ?>"><?php echo htmlspecialchars(ucfirst($member['role'])); ?></span></div><?php endforeach; ?></div><?php else: ?><p style="color: var(--text-light);">No team members found.</p><?php endif; ?></div></div>
       <?php endif; ?>
-    </div>
-  </div>
-</div>
-</body>
-</html>
+
+<?php renderFacultyShellClose(); ?>
