@@ -221,6 +221,12 @@ function handleRmsUpload($options, $files, $conn) {
 
     $opts = array_merge($defaults, $options);
 
+    // FIX #2: Folder whitelist - defense in depth
+    $allowedFolders = ['proposals', 'chapters', 'defense', 'manuscripts'];
+    if (!in_array($opts['folderTarget'], $allowedFolders, true)) {
+        return ['success' => false, 'error' => 'Invalid upload destination'];
+    }
+
     // Check if file was uploaded
     if (!isset($files[$opts['inputName']])) {
         return ['success' => false, 'error' => 'No file uploaded'];
@@ -266,22 +272,30 @@ function handleRmsUpload($options, $files, $conn) {
         return ['success' => false, 'error' => "File type not allowed. Accepted: {$allowedList}"];
     }
 
-    // Validate MIME type (basic check - can be spoofed, but adds a layer)
+    // FIX #1: Server-side MIME detection using finfo
     $allowedMimes = [
-        'pdf' => 'application/pdf',
-        'doc' => 'application/msword',
-        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'ppt' => 'application/vnd.ms-powerpoint',
-        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'png' => 'image/png',
-        'jpg' => 'image/jpeg',
-        'jpeg' => 'image/jpeg',
-        'gif' => 'image/gif'
+        'pdf' => ['application/pdf'],
+        'doc' => ['application/msword', 'application/octet-stream'],
+        'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/octet-stream'],
+        'ppt' => ['application/vnd.ms-powerpoint', 'application/octet-stream'],
+        'pptx' => ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'],
+        'png' => ['image/png'],
+        'jpg' => ['image/jpeg'],
+        'jpeg' => ['image/jpeg'],
+        'gif' => ['image/gif']
     ];
 
-    if (isset($allowedMimes[$fileExtension]) && $mimeType !== $allowedMimes[$fileExtension]) {
-        // Some browsers send different MIME types, so this is a soft check
-        // We rely more on extension validation
+    if (!function_exists('finfo_open')) {
+        return ['success' => false, 'error' => 'Server MIME detection not available'];
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $detectedMime = $finfo->file($tmpPath);
+
+    if (isset($allowedMimes[$fileExtension])) {
+        if (!in_array($detectedMime, $allowedMimes[$fileExtension], true)) {
+            return ['success' => false, 'error' => "File appears to be corrupted or is not a valid " . strtoupper($fileExtension) . " file."];
+        }
     }
 
     // Generate safe unique filename
@@ -293,6 +307,13 @@ function handleRmsUpload($options, $files, $conn) {
         if (!mkdir($targetDir, 0755, true)) {
             return ['success' => false, 'error' => 'Failed to create upload directory'];
         }
+    }
+
+    // FIX #3: Path traversal protection - verify target stays within UPLOADS_DIR
+    $realTargetDir = realpath($targetDir);
+    $realUploadsDir = realpath(UPLOADS_DIR);
+    if ($realTargetDir === false || strpos($realTargetDir, $realUploadsDir) !== 0) {
+        return ['success' => false, 'error' => 'Invalid upload path'];
     }
 
     $targetPath = $targetDir . '/' . $safeName;
@@ -308,7 +329,7 @@ function handleRmsUpload($options, $files, $conn) {
     // Store relative path for database
     $relativePath = 'uploads/' . $opts['folderTarget'] . '/' . $safeName;
 
-    // Insert into uploads table
+    // Insert into uploads table (use detected MIME type from finfo)
     $stmt = $conn->prepare('
         INSERT INTO uploads
         (project_id, chapter_id, uploaded_by, type, original_name, file_name, file_path, file_size, mime_type, uploaded_at)
@@ -329,7 +350,7 @@ function handleRmsUpload($options, $files, $conn) {
         $safeName,
         $relativePath,
         $fileSize,
-        $mimeType
+        $detectedMime
     );
 
     if (!$stmt->execute()) {
