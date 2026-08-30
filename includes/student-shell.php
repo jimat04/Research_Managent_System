@@ -93,8 +93,8 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
             [SITE_URL . 'pages/student/my-research.php',       'My Research',       '📁', true, 0],
             [SITE_URL . 'pages/student/submit-research.php',   'Submit Research',   '📝', true, 0],
             [SITE_URL . 'pages/student/submit-chapter.php',    'Submit Chapter',    '📄', true, 0],
-            [SITE_URL . 'pages/shared/my-documents.php',       'My Documents',      '📂', false, 0],
-            [SITE_URL . 'pages/shared/progress-tracking.php',  'Progress Tracking', '📈', false, 0],
+            [SITE_URL . 'pages/student/my-documents.php',      'My Documents',      '📂', true, 0],
+            [SITE_URL . 'pages/student/progress-tracking.php', 'Progress Tracking', '📈', true, 0],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',       'Messages',      '💬', true, $unread_messages],
@@ -102,7 +102,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
         ],
         'Resources' => [
             [SITE_URL . 'pages/shared/research-archive.php', 'Research Archive', '🗂️', true, 0],
-            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',         '📅', false, 0],
+            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',         '📅', true, 0],
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],

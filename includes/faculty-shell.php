@@ -90,13 +90,13 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
             [SITE_URL . 'pages/faculty/faculty-dashboard.php', 'Dashboard', '📊', true, 0],
         ],
         'Advisement' => [
-            [SITE_URL . 'pages/faculty/faculty-submissions.php', 'My Submissions',    '📥', false, 0],
-            [SITE_URL . 'pages/faculty/faculty-review.php',      'Review Chapters',   '🔍', false, 0],
-            [SITE_URL . 'pages/faculty/faculty-students.php',    'My Students',       '👨‍🎓', false, 0],
+            [SITE_URL . 'pages/faculty/faculty-submissions.php', 'My Submissions',    '📥', true, 0],
+            [SITE_URL . 'pages/faculty/faculty-review.php',      'Review Chapters',   '🔍', true, 0],
+            [SITE_URL . 'pages/faculty/faculty-students.php',    'My Students',       '👨‍🎓', true, 0],
         ],
         'Resources' => [
             [SITE_URL . 'pages/shared/research-archive.php',     'Research Archive',  '🗂️', true, 0],
-            [SITE_URL . 'pages/faculty/faculty-reports.php',     'Reports',           '📊', false, 0],
+            [SITE_URL . 'pages/faculty/faculty-reports.php',     'Reports',           '📊', true, 0],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',         'Messages',      '💬', true, $unread_messages],
