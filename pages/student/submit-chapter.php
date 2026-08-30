@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/student-shell.php';
 
 requireRole('student');
 
@@ -230,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $content_update->close();
 
             if ($file_valid) {
-                $chapters_dir = __DIR__ . '/../uploads/chapters';
+                $chapters_dir = __DIR__ . '/../../uploads/chapters';
                 if (!is_dir($chapters_dir) && !@mkdir($chapters_dir, 0755, true)) {
                     throw new Exception('Unable to create the chapter upload directory.');
                 }
@@ -250,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 }
 
                 $original_name = $_FILES['chapter_file']['name'];
-                $file_path = '../uploads/chapters/' . $safe_file_name;
+                $file_path = '../../uploads/chapters/' . $safe_file_name;
                 $file_size = (int) $_FILES['chapter_file']['size'];
                 $mime_type = $_FILES['chapter_file']['type'];
                 $upload_insert = $conn->prepare("INSERT INTO uploads
@@ -268,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
             logActivity($is_submit ? 'Chapter submitted' : 'Chapter saved as draft', 'chapters');
             $conn->commit();
-            header('Location: ../shared/research-detail.php?id=' . $project_id . '&chapter_saved=1');
+            header('Location: ' . SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id . '&chapter_saved=1');
             exit();
         } catch (Exception $exception) {
             $conn->rollback();
@@ -281,153 +282,181 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 $page_title = $invalid_chapter ? 'Invalid chapter' : ($chapter_titles[$chapter_number] ?? 'Submit Chapter');
 $current_status = $chapter['status'] ?? null;
 $status_badge = $current_status && isset($status_badges[$current_status]) ? $status_badges[$current_status] : $status_badges['draft'];
+
+renderStudentShell($user, 'submit-chapter', $page_title, $project ? htmlspecialchars($project['title']) : 'Upload a new chapter draft.');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($page_title); ?> — RMS</title>
-  <script src="https://unpkg.com/lucide@latest" defer></script>
-  <link rel="stylesheet" href="../../css/style.css" />
-</head>
-<body>
-<div class="dashboard">
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-brand">EARIST RMS</div>
-      <div class="sidebar-role">Student Portal</div>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">Main</div>
-      <div class="nav-item" onclick="location.href='student-dashboard.php'">
-        <span class="icon"><i data-lucide="layout-dashboard"></i></span>
-        <span>Dashboard</span>
-      </div>
-      <div class="nav-item active" onclick="location.href='my-research.php'">
-        <span class="icon"><i data-lucide="folder-kanban"></i></span>
-        <span>My Research</span>
-      </div>
-      <div class="nav-item" onclick="location.href='submit-research.php'">
-        <span class="icon"><i data-lucide="file-up"></i></span>
-        <span>Submit Research</span>
-      </div>
-      <div class="nav-item" onclick="location.href='my-documents.php'">
-        <span class="icon"><i data-lucide="files"></i></span>
-        <span>My Documents</span>
-      </div>
-      <div class="nav-item" onclick="location.href='progress-tracking.php'">
-        <span class="icon"><i data-lucide="chart-no-axes-combined"></i></span>
-        <span>Progress Tracking</span>
-      </div>
 
-      <div class="nav-group-title">Communication</div>
-      <div class="nav-item" onclick="location.href='../shared/messages.php'">
-        <span class="icon"><i data-lucide="messages-square"></i></span>
-        <span>Messages</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
-        <span class="icon"><i data-lucide="bell"></i></span>
-        <span>Notifications</span>
-      </div>
+<link rel="stylesheet" href="<?php echo SITE_URL; ?>css/style.css">
 
-      <div class="nav-group-title">Resources</div>
-      <div class="nav-item" onclick="location.href='../shared/research-archive.php'">
-        <span class="icon"><i data-lucide="archive"></i></span>
-        <span>Research Archive</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../shared/calendar.php'">
-        <span class="icon"><i data-lucide="calendar-days"></i></span>
-        <span>Calendar</span>
-      </div>
+<style>
+  .alert {
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
 
-      <div class="nav-group-title">Account</div>
-      <div class="nav-item" onclick="location.href='../shared/profile.php'">
-        <span class="icon"><i data-lucide="circle-user-round"></i></span>
-        <span>Profile</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #EF4444;">
-        <span class="icon"><i data-lucide="log-out"></i></span>
-        <span>Logout</span>
-      </div>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-card">
-        <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-        <div>
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="user-role">Student</div>
-        </div>
-      </div>
-    </div>
-  </aside>
+  .alert-success {
+    background: #DCFCE7;
+    color: #16A34A;
+    border: 1px solid #86EFAC;
+  }
 
-  <div class="main-content">
-    <header class="topbar">
-      <div class="topbar-left"><h2><?php echo htmlspecialchars($page_title); ?></h2><p><?php echo $project ? htmlspecialchars($project['title']) : 'Chapter submission'; ?></p></div>
-      <div class="topbar-right"><div class="search-box"><span style="color: #94a3b8;">🔍</span><input type="text" placeholder="Search anything..."></div><div class="topbar-icons"><div class="icon-btn">🔔</div></div><div class="user-profile-btn"><div class="profile-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div><div class="profile-text"><div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div><div class="profile-role">Student</div></div></div></div>
-    </header>
+  .alert-error {
+    background: #FEE2E2;
+    color: #DC2626;
+    border: 1px solid #FCA5A5;
+  }
 
-    <div class="page-content">
-      <div style="margin-bottom: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
-        <a href="my-research.php" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Back to My Research</a>
-        <?php if ($project): ?><span style="color: var(--text-light);">/</span><a href="research-detail.php?id=<?php echo $project_id; ?>" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Back to Project</a><?php endif; ?>
-        <!-- @rms-ui: breadcrumb separator style -->
-      </div>
+  .card {
+    background: #ffffff;
+    border: 1px solid #E5E7EB;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
 
-      <?php if ($invalid_chapter): ?>
-        <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Invalid chapter</h3><p style="margin: 0 0 24px; color: var(--text-light);">Choose a chapter number from 1 to 5.</p><a href="my-research.php" class="btn btn-primary">Go back to My Research</a></div>
-      <?php elseif (!$project): ?>
-        <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Project not found or you don't have access</h3><p style="margin: 0 0 24px; color: var(--text-light);">The research project you're looking for doesn't exist or you don't have permission to view it.</p><a href="my-research.php" class="btn btn-primary">Go back to My Research</a></div>
-      <?php else: ?>
-        <h1 style="margin: 0 0 8px; color: var(--text-dark); font-size: 28px;"><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></h1>
-        <p style="margin: 0 0 20px; color: var(--text-light);"><?php echo htmlspecialchars($project['title']); ?> · <?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge" style="background:#e2e8f0;color:#475569;">Not Started</span><?php endif; ?> · Version <?php echo (int) ($chapter['version'] ?? 1); ?></p>
+  .card-header {
+    margin-bottom: 16px;
+  }
 
-        <?php if ($success): ?><div class="alert alert-success"><strong>Success!</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
-        <?php if (!empty($errors)): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+  }
 
-        <form method="post" enctype="multipart/form-data">
-          <input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="chapter" value="<?php echo $chapter_number; ?>">
-          <?php echo csrfField(); ?>
-          <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Information</div></div><div class="card-body" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-            <div><strong>Project</strong><div><?php echo htmlspecialchars($project['title']); ?></div></div>
-            <div><strong>Chapter</strong><div><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></div></div>
-            <div><strong>Status</strong><div><?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge" style="background:#e2e8f0;color:#475569;">Not Started</span><?php endif; ?></div></div>
-            <div><strong>Version</strong><div>Version <?php echo (int) ($chapter['version'] ?? 1); ?></div></div>
-            <?php if ($chapter): ?><div><strong>Last updated</strong><div><?php echo !empty($chapter['updated_at']) ? date('M d, Y', strtotime($chapter['updated_at'])) : 'N/A'; ?></div></div><?php endif; ?>
-          </div></div>
+  .card-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
 
-          <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Content</div></div><div class="card-body">
-            <?php foreach ($chapter_fields[$chapter_number] as $field => $label): ?><div class="form-group"><label class="form-label" for="<?php echo $field; ?>"><?php echo htmlspecialchars($label); ?></label><textarea id="<?php echo $field; ?>" name="<?php echo $field; ?>" class="form-control" rows="8" placeholder="Write your content here..."><?php echo htmlspecialchars($content[$field] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea><small class="text-muted">Add your content for this section. You may continue editing it later.</small></div><?php endforeach; ?>
-            <!-- @rms-ui: chapter content textarea height -->
-          </div></div>
+  .form-group {
+    margin-bottom: 20px;
+  }
 
-          <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter File</div></div><div class="card-body">
-            <input type="file" name="chapter_file" accept=".pdf,.doc,.docx" class="form-control"><small class="text-muted">Accepted formats: PDF, DOC, DOCX. Max 10MB. Upload your formatted chapter document if you prefer to submit a file instead of typing content above.</small>
-            <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><div style="color: var(--text-light); font-size: 13px;">Uploading a new file will replace this.</div></div><?php endif; ?>
-            <!-- @rms-db: uploads.deleted_at is required for soft-delete replacement; this page falls back when the column is absent. -->
-          </div></div>
+  .form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 8px;
+  }
 
-          <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;"><a href="research-detail.php?id=<?php echo $project_id; ?>" class="btn btn-secondary">Cancel</a><button type="submit" name="save_draft" class="btn btn-secondary">Save as Draft</button><button type="submit" name="submit_review" class="btn btn-primary">Submit for Review</button></div>
-        </form>
-      <?php endif; ?>
-    </div>
-  </div>
+  .form-control {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: #5B1EBC;
+    box-shadow: 0 0 0 3px rgba(91, 30, 188, 0.1);
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 120px;
+  }
+
+  .text-muted {
+    font-size: 13px;
+    color: #64748B;
+    margin-top: 6px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #F1F5F9;
+    color: #64748B;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .btn-primary {
+    background: #5B1EBC;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(91, 30, 188, 0.3);
+  }
+
+  .btn-secondary {
+    background: #F8FAFC;
+    color: #111827;
+    border: 1px solid #E5E7EB;
+  }
+
+  .btn-secondary:hover {
+    background: #111827;
+    color: white;
+  }
+</style>
+
+<div style="margin-bottom: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+  <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to My Research</a>
+  <?php if ($project): ?><span style="color: #64748B;">/</span><a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to Project</a><?php endif; ?>
 </div>
-<script>
-  // Initialize Lucide icons
-  document.addEventListener('DOMContentLoaded', function() {
-    if (window.lucide) {
-      lucide.createIcons();
-    } else {
-      // Wait for Lucide to load
-      setTimeout(function() {
-        if (window.lucide) {
-          lucide.createIcons();
-        }
-      }, 100);
-    }
-  });
-</script>
-</body>
-</html>
+
+<?php if ($invalid_chapter): ?>
+  <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Invalid chapter</h3><p style="margin: 0 0 24px; color: #64748B;">Choose a chapter number from 1 to 5.</p><a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a></div>
+<?php elseif (!$project): ?>
+  <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Project not found or you don't have access</h3><p style="margin: 0 0 24px; color: #64748B;">The research project you're looking for doesn't exist or you don't have permission to view it.</p><a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a></div>
+<?php else: ?>
+  <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;"><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></h1>
+  <p style="margin: 0 0 20px; color: #64748B;"><?php echo htmlspecialchars($project['title']); ?> · <?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge">Not Started</span><?php endif; ?> · Version <?php echo (int) ($chapter['version'] ?? 1); ?></p>
+
+  <?php if ($success): ?><div class="alert alert-success"><strong>Success!</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+  <?php if (!empty($errors)): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="chapter" value="<?php echo $chapter_number; ?>">
+    <?php echo csrfField(); ?>
+
+    <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Information</div></div><div class="card-body">
+      <div><strong>Project</strong><div><?php echo htmlspecialchars($project['title']); ?></div></div>
+      <div><strong>Chapter</strong><div><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></div></div>
+      <div><strong>Status</strong><div><?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge">Not Started</span><?php endif; ?></div></div>
+      <div><strong>Version</strong><div>Version <?php echo (int) ($chapter['version'] ?? 1); ?></div></div>
+      <?php if ($chapter): ?><div><strong>Last updated</strong><div><?php echo !empty($chapter['updated_at']) ? date('M d, Y', strtotime($chapter['updated_at'])) : 'N/A'; ?></div></div><?php endif; ?>
+    </div></div>
+
+    <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Content</div></div><div class="card-body" style="display: block;">
+      <?php foreach ($chapter_fields[$chapter_number] as $field => $label): ?><div class="form-group"><label class="form-label" for="<?php echo $field; ?>"><?php echo htmlspecialchars($label); ?></label><textarea id="<?php echo $field; ?>" name="<?php echo $field; ?>" class="form-control" rows="8" placeholder="Write your content here..."><?php echo htmlspecialchars($content[$field] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea><small class="text-muted">Add your content for this section. You may continue editing it later.</small></div><?php endforeach; ?>
+    </div></div>
+
+    <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter File</div></div><div class="card-body" style="display: block;">
+      <input type="file" name="chapter_file" accept=".pdf,.doc,.docx" class="form-control"><small class="text-muted">Accepted formats: PDF, DOC, DOCX. Max 10MB. Upload your formatted chapter document if you prefer to submit a file instead of typing content above.</small>
+      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><div style="color: #64748B; font-size: 13px;">Uploading a new file will replace this.</div></div><?php endif; ?>
+    </div></div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;"><a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" class="btn btn-secondary">Cancel</a><button type="submit" name="save_draft" class="btn btn-secondary">Save as Draft</button><button type="submit" name="submit_review" class="btn btn-primary">Submit for Review</button></div>
+  </form>
+<?php endif; ?>
+
+<?php renderStudentShellClose(); ?>

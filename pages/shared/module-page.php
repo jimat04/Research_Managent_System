@@ -4,6 +4,8 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/module-pages.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
+require_once __DIR__ . '/../../includes/student-shell.php';
 
 $modules = [
     'my-research.php' => ['My Research', 'student', 'folder-kanban', 'Review your research projects and current submission status.'],
@@ -206,6 +208,35 @@ if ($role === 'research_staff') {
     );
     rms_render_module($page_key, $user, $module);
     renderStaffShellClose();
+    return;
+}
+
+if ($role === 'faculty') {
+    // Faculty shell with blue→indigo gradient and faculty-specific navigation.
+    // Basename matching ensures shared pages (messages.php, notifications.php, etc.)
+    // highlight the correct nav item.
+    renderFacultyShell(
+        $user,
+        $page_key,
+        (string) $module[0],
+        (string) ($module[3] ?? '')
+    );
+    rms_render_module($page_key, $user, $module);
+    renderFacultyShellClose();
+    return;
+}
+
+if ($role === 'student') {
+    // Student shell with purple→violet gradient and student-specific navigation.
+    // Basename matching ensures shared pages highlight correctly.
+    renderStudentShell(
+        $user,
+        $page_key,
+        (string) $module[0],
+        (string) ($module[3] ?? '')
+    );
+    rms_render_module($page_key, $user, $module);
+    renderStudentShellClose();
     return;
 }
 ?>
