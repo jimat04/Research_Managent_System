@@ -125,7 +125,9 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   <!-- SIDEBAR -->
   <aside class="staff-sidebar">
     <div class="staff-sidebar-header">
-      <div class="staff-sidebar-logo" aria-hidden="true">🔬</div>
+      <a href="<?php echo SITE_URL; ?>pages/staff/staff-dashboard.php" class="staff-sidebar-logo" aria-label="RMS Home">
+        <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
+      </a>
       <div class="staff-sidebar-brand-text">
         <div class="staff-sidebar-brand">Research Management</div>
         <small class="staff-sidebar-role">Staff</small>

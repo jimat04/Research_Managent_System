@@ -138,7 +138,9 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
   <!-- SIDEBAR -->
   <aside class="faculty-sidebar">
     <div class="faculty-sidebar-header">
-      <div class="faculty-sidebar-logo" aria-hidden="true">🔬</div>
+      <a href="<?php echo SITE_URL; ?>pages/faculty/faculty-dashboard.php" class="faculty-sidebar-logo" aria-label="RMS Home">
+        <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
+      </a>
       <div class="faculty-sidebar-brand-text">
         <div class="faculty-sidebar-brand">Research Management</div>
         <small class="faculty-sidebar-role">Faculty</small>

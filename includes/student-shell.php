@@ -140,7 +140,9 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
   <!-- SIDEBAR -->
   <aside class="student-sidebar">
     <div class="student-sidebar-header">
-      <div class="student-sidebar-logo" aria-hidden="true">🔬</div>
+      <a href="<?php echo SITE_URL; ?>pages/student/student-dashboard.php" class="student-sidebar-logo" aria-label="RMS Home">
+        <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
+      </a>
       <div class="student-sidebar-brand-text">
         <div class="student-sidebar-brand">Research Management</div>
         <small class="student-sidebar-role">Student</small>

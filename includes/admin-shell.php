@@ -125,7 +125,9 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
   <!-- SIDEBAR -->
   <aside class="admin-sidebar">
     <div class="admin-sidebar-header">
-      <div class="admin-sidebar-logo" aria-hidden="true">🔬</div>
+      <a href="<?php echo SITE_URL; ?>pages/admin/admin-dashboard.php" class="admin-sidebar-logo" aria-label="RMS Home">
+        <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
+      </a>
       <div class="admin-sidebar-brand-text">
         <div class="admin-sidebar-brand">Research Management</div>
         <small class="admin-sidebar-role">Admin</small>

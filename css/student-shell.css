@@ -44,15 +44,37 @@
 }
 
 .student-sidebar-logo {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #5B1EBC, #7c3aed);
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(91, 30, 188, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  text-decoration: none;
+}
+
+.student-sidebar-logo:hover {
+  transform: scale(1.05);
+  border-color: #5B1EBC;
+  box-shadow: 0 4px 14px rgba(91, 30, 188, 0.4);
+}
+
+.student-sidebar-logo:focus-visible {
+  outline: 2px solid #5B1EBC;
+  outline-offset: 2px;
+}
+
+.student-sidebar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .student-sidebar-brand-text {
