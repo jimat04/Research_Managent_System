@@ -828,7 +828,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
               <option value="" disabled selected style="background: #0F1729; color: #8B8FAD;">Choose a role</option>
               <option value="student" style="background: #1a1a2e; color: #ffffff; padding: 12px;">🎓 Student</option>
               <option value="faculty" style="background: #1a1a2e; color: #ffffff; padding: 12px;">👨‍🏫 Faculty/Adviser</option>
-              <option value="research_staff" style="background: #1a1a2e; color: #ffffff; padding: 12px;">📋 Research Staff</option>
             </select>
           </div>
 
