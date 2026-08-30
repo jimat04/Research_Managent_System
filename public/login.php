@@ -206,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $is_reviewer = isset($_POST['is_reviewer']) ? 1 : 0;
         $office = isset($_POST['office']) ? sanitize($_POST['office']) : null;
 
-        $allowedRoles = ['student', 'faculty', 'research_staff'];
+        $allowedRoles = ['student', 'faculty'];
         if (!in_array($role, $allowedRoles, true)) {
             $role = 'student';
         }
@@ -217,6 +217,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $error = 'Invalid email format';
         } elseif (strlen($password) < 8) {
             $error = 'Password must be at least 8 characters';
+        } elseif (!preg_match('/[A-Za-z]/', $password) || !preg_match('/[0-9]/', $password)) {
+            $error = 'Password must contain at least one letter and one number';
+        } elseif (preg_match('/\s/', $password)) {
+            $error = 'Password cannot contain spaces';
         } elseif ($password !== $password_confirm) {
             $error = 'Passwords do not match';
         } else {
