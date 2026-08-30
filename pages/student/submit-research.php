@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/file-uploader.php';
 
 requireRole('student');
 
@@ -77,46 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $errors[] = 'Research Area must not exceed 150 characters.';
     }
 
-    // File upload validation
+    // File upload handling using the RMS file uploader component
     $file_uploaded = false;
-    $upload_error = null;
-    $file_name = null;
-    $file_path = null;
-    $file_size = null;
-    $mime_type = null;
-    $original_name = null;
-
-    if (!empty($_FILES['proposal']['name'])) {
-        $max_size = 10 * 1024 * 1024; // 10 MB
-        $allowed_ext = ['pdf', 'doc', 'docx'];
-
-        $file_name_tmp = $_FILES['proposal']['name'];
-        $file_size_tmp = $_FILES['proposal']['size'];
-        $file_tmp = $_FILES['proposal']['tmp_name'];
-        $file_error = $_FILES['proposal']['error'];
-
-        // Check for upload errors
-        if ($file_error !== UPLOAD_ERR_OK) {
-            $errors[] = 'File upload error. Please try again.';
-        } elseif ($file_size_tmp > $max_size) {
-            $errors[] = 'File size must not exceed 10 MB.';
-        } else {
-            // Get file extension
-            $file_ext = strtolower(pathinfo($file_name_tmp, PATHINFO_EXTENSION));
-
-            if (!in_array($file_ext, $allowed_ext)) {
-                $errors[] = 'Invalid file format. Accepted formats: PDF, DOC, DOCX.';
-            } else {
-                $file_uploaded = true;
-                $original_name = $file_name_tmp;
-                $file_size = $file_size_tmp;
-                $mime_type = $_FILES['proposal']['type'];
-                // Generate safe filename
-                $file_name = uniqid('prop_') . '.' . $file_ext;
-                $file_path = 'proposals/' . $file_name;
-            }
-        }
-    }
+    $upload_result = null;
+    $upload_id = null;
 
     // If no errors, proceed with insertion
     if (empty($errors)) {
@@ -154,33 +119,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $member_stmt->close();
 
             // Handle file upload if present
-            if ($file_uploaded) {
-                // Create uploads/proposals directory if it doesn't exist
-                $proposals_dir = __DIR__ . '/../uploads/proposals';
-                if (!is_dir($proposals_dir)) {
-                    @mkdir($proposals_dir, 0755, true);
+            if (isset($_FILES['proposal_file']) && !empty($_FILES['proposal_file']['name'])) {
+                $upload_result = handleRmsUpload([
+                    'inputName' => 'proposal_file',
+                    'folderTarget' => 'proposals',
+                    'maxSize' => 10000, // 10MB
+                    'accept' => ['.pdf', '.doc', '.docx'],
+                    'projectId' => $new_project_id,
+                    'type' => 'proposal'
+                ], $_FILES, $conn);
+
+                if (!$upload_result['success']) {
+                    throw new Exception("File upload failed: " . $upload_result['error']);
                 }
 
-                $full_file_path = $proposals_dir . '/' . $file_name;
-
-                // Move uploaded file
-                if (!move_uploaded_file($file_tmp, $full_file_path)) {
-                    throw new Exception("Failed to save uploaded file.");
-                }
-
-                // Insert upload record
-                $upload_query = "INSERT INTO uploads (project_id, chapter_id, uploaded_by, type, original_name, file_name, file_path, file_size, mime_type, upload_date) 
-                               VALUES (?, NULL, ?, 'proposal', ?, ?, ?, ?, ?, NOW())";
-                $upload_stmt = $conn->prepare($upload_query);
-                if (!$upload_stmt) {
-                    throw new Exception("Query error: " . $conn->error);
-                }
-
-                $upload_stmt->bind_param("iisssis", $new_project_id, $user_id, $original_name, $file_name, $file_path, $file_size, $mime_type);
-                if (!$upload_stmt->execute()) {
-                    throw new Exception("Upload record insert failed: " . $upload_stmt->error);
-                }
-                $upload_stmt->close();
+                $upload_id = $upload_result['upload_id'];
+                $file_uploaded = true;
             }
 
             // Log activity
@@ -231,6 +185,7 @@ if ($ay_result) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Submit New Research — RMS</title>
+  <link rel="stylesheet" href="../../css/file-uploader.css">
   <script src="https://unpkg.com/lucide@latest" defer></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -831,25 +786,21 @@ if ($ay_result) {
             <div class="card-title">Proposal Document</div>
           </div>
           <div class="card-body" style="display: flex; flex-direction: column; gap: 16px;">
-            <div>
-              <label for="proposal" style="display: block; margin-bottom: 6px; font-weight: 500; color: var(--text-dark);">
-                Upload Proposal <span style="color: #999;">(Optional)</span>
-              </label>
-              <!-- @rms-ui: enhanced file upload area with drag-and-drop -->
-              <input 
-                type="file" 
-                id="proposal" 
-                name="proposal" 
-                class="form-control"
-                accept=".pdf,.doc,.docx"
-              />
-              <small style="color: var(--text-light); margin-top: 8px; display: block;">
-                📋 <strong>Accepted formats:</strong> PDF, DOC, DOCX | <strong>Max size:</strong> 10 MB
-              </small>
-              <small style="color: var(--text-light); margin-top: 4px; display: block;">
-                You can skip this and upload chapters later during the review process.
-              </small>
-            </div>
+            <?php
+            echo renderFileUploader([
+              'inputName' => 'proposal_file',
+              'accept' => '.pdf,.doc,.docx',
+              'maxSize' => 10000,  // 10 MB
+              'folderTarget' => 'proposals',
+              'label' => 'Upload Proposal',
+              'description' => 'Drag & drop your proposal manuscript or click to browse',
+              'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
+              'required' => false
+            ]);
+            ?>
+            <small style="color: var(--text-light); margin-top: -12px; display: block;">
+              💡 You can skip this and upload chapters later during the review process.
+            </small>
           </div>
         </div>
 
@@ -866,6 +817,7 @@ if ($ay_result) {
   </div>
 </div>
 
+<script src="../../js/file-uploader.js"></script>
 <script>
 // Sidebar menu item click handlers
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -873,24 +825,6 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     this.classList.add('active');
   });
-});
-
-// File input validation preview
-document.getElementById('proposal')?.addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (file) {
-    const maxSize = 10 * 1024 * 1024; // 10 MB
-    const allowedExtensions = ['pdf', 'doc', 'docx'];
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-
-    if (file.size > maxSize) {
-      alert('File size exceeds 10 MB limit. Please choose a smaller file.');
-      e.target.value = '';
-    } else if (!allowedExtensions.includes(fileExtension)) {
-      alert('Invalid file format. Accepted formats: PDF, DOC, DOCX.');
-      e.target.value = '';
-    }
-  }
 });
 
 // Initialize Lucide icons
