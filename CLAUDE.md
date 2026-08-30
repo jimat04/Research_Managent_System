@@ -166,372 +166,218 @@ APP_DEBUG                             — Enable PHP error display
 | `scripts/{name}.php` | `scripts/backup-database.php` | Maintenance utilities |
 ## AI Design System (Required)
 
-Every new page must follow the RMS Premium Design Language.
+## AI Design Constitution — EARIST RMS (MANDATORY)
 
-### Design Identity
-- Style: Editorial + Academic Luxury
-- Feel: Professional university platform (not a generic admin template)
-- Keywords: Minimal, Swiss, Research, Premium, Spacious
-
-### Color System (60–30–10)
-- 60% Primary: #111827 (Charcoal)
-- 30% Surface: #F8FAFC / #E5E7EB
-- 10% Accent: #C8A44D (Academic Gold)
-
-### Typography
-- Headings: Large, elegant hierarchy
-- Body: Highly readable sans-serif
-- Use consistent spacing based on an 8px grid.
-
-### Layout Rules
-- Use Bento Grid cards for dashboards.
-- Large whitespace between sections.
-- Rounded corners (16–24px).
-- Soft borders instead of heavy shadows.
-- Mobile-first and fully responsive.
-
-### Component Standards
-Every dashboard should include:
-1. Statistics cards
-2. Recent activity
-3. Progress tracker
-4. Quick actions
-5. Notification panel
-
-### UX Principles
-- Never create cramped interfaces.
-- Prefer clarity over decoration.
-- Icons should come from Lucide only.
-- Status colors:
-  - Draft: Gray
-  - CREC: Blue
-  - EREC: Purple
-  - Approved: Green
-  - Revision: Orange
-  - Archived: Slate
-
-### Research Workflow Visualization
-Always represent project status in this order:
-
-Draft → Proposal → CREC → EREC → Approval → Implementation → Midway → Terminal → Archive
-
-This workflow must remain consistent across Student, Faculty, Staff, and Admin modules.
-# AI DESIGN CONSTITUTION — EARIST Research Management System (RMS)
-
-This section is mandatory for every UI, page, component, and feature generated in this repository.
-
-## Project Identity
-
-You are designing a **premium Research Management System** for EARIST based on the **Research Manual 2015**.
-
-The application is **not** a generic admin dashboard. It should resemble a modern university research platform with an editorial, academic, and institutional aesthetic.
-
-Design philosophy:
-
-- Editorial Luxury
-- Swiss Minimalism
-- Academic Professionalism
-- Accessibility First
-- Responsive by Default
+Every UI, page, component, and feature must follow this design system. This is the source of truth — the live site uses the palette below, NOT the old charcoal/gold palette described in earlier drafts.
 
 ---
 
-# Visual Design System
+## Design Identity
 
-## Theme
+- **Style:** Modern academic platform with signature branded moments
+- **Feel:** Professional university research system (NOT a generic admin template, NOT a neon SaaS app)
+- **Keywords:** Institutional, confident, warm, spacious, accessible
+- **North-star page:** `public/login.php` (split-screen with purple gradient divider — study it for color, spacing, animation tone)
 
-**Style:** Editorial Academic Luxury
+## Stack / Tech Constraints (MUST READ)
 
-Avoid Bootstrap-looking layouts, excessive gradients, neon colors, glassmorphism, or crowded interfaces.
-
-The interface should feel similar to modern products like Notion, Linear, Arc, and premium university portals.
-
-## Color Palette (60–30–10)
-
-### Primary (60%)
-
-- Charcoal: `#111827`
-- Slate: `#1F2937`
-
-### Surface (30%)
-
-- Background: `#F8FAFC`
-- Card: `#FFFFFF`
-- Border: `#E5E7EB`
-
-### Accent (10%)
-
-- Academic Gold: `#C8A44D`
-
-### Status Colors
-
-| Status | Color |
-|---------|------|
-| Draft | `#64748B` |
-| Proposal | `#2563EB` |
-| CREC | `#3B82F6` |
-| EREC | `#7C3AED` |
-| Revision | `#EA580C` |
-| Approved | `#16A34A` |
-| Completed | `#059669` |
-| Archived | `#475569` |
-
-Never use red unless representing errors or destructive actions.
+- **No frameworks** — vanilla PHP/MySQLi/HTML/CSS/JS only
+- **No Tailwind / Bootstrap / jQuery / React / icon libraries** (no Lucide, no Font Awesome)
+- Use **emoji icons consistently** across the app (🎓 📋 🎒 🔴 📊 📁 📝 etc.)
+- Composer packages allowed: phpdotenv, PHPMailer (already in use)
+- Use SITE_URL constant for ALL cross-page links (prevents 404s from shared pages)
+- All nav links go in the role shell file (admin-shell / staff-shell / faculty-shell / student-shell)
 
 ---
 
-# Typography
+## Role Color System (CRITICAL — each role has a branded accent)
 
-Use a professional typography hierarchy.
+Every role's shell uses these exact accents. NEVER swap them.
 
-## Headings
+| Role | Slug | Accent primary | Accent hover | Tint bg | Border tint | Emoji |
+|---|---|---|---|---|---|---|
+| Admin | `admin` | `#F57C00` (orange) | `#EA580C` (deep orange) | `rgba(245,124,0,0.08)` | `rgba(245,124,0,0.18)` | 🔴 / 🛡️ |
+| Research Staff | `research_staff` | `#0d9488` (teal) | `#059669` (emerald) | `rgba(13,148,136,0.08)` | `rgba(13,148,136,0.18)` | 📋 / 🏛️ |
+| Faculty | `faculty` | `#1d4ed8` (blue) | `#4338ca` (indigo) | `rgba(29,78,216,0.08)` | `rgba(29,78,216,0.18)` | 🎓 |
+| Student | `student` | `#5B1EBC` (RMS purple) | `#7c3aed` (violet) | `rgba(91,30,188,0.08)` | `rgba(91,30,188,0.18)` | 🎒 |
 
-- Bold
-- Spacious
-- High contrast
-- Large visual hierarchy
+### Brand-wide colors (shared)
 
-## Body
+- **Sidebar dark surface:** `#111827` (deep charcoal, all 4 role sidebars use this as background)
+- **Sidebar brand panel (login left):** dark navy gradient `#0A0833 → #1a0a3a → #0a1a3a`
+- **Auth form panel (login right):** lavender gradient `#F8F4FF → #EDE5FA`
+- **Page background:** `#F8FAFC` (light cool gray)
+- **Card surface:** `#FFFFFF` (white, with subtle role-tinted shadow on hover)
+- **Primary text:** `#111827`
+- **Secondary text:** `#64748B`
+- **Muted text:** `#94A3B8`
+- **Border default:** `#E5E7EB`
+- **Divider accent gradient (login):** purple `#5B1EBC` → blue `#0F6CBD` → orange `#F57C00` (animated, 3s loop)
+- **RMS logo:** `photos/rms-logo.png` (purple profile/gear/arrows mark — use on sidebar 44px rounded tiles, login panel 110px)
 
-- Clean sans-serif
-- Comfortable line height
-- 16–18px equivalent reading size
+### Status colors
 
-Never use decorative fonts.
+| Status | Color | Hex |
+|---|---|---|
+| Draft / Pending | Slate gray | `#64748B` |
+| Submitted / Under Review | Blue | `#2563EB` |
+| CREC Review | Blue | `#3B82F6` |
+| EREC Review | Violet | `#7C3AED` |
+| For Revision | Orange | `#EA580C` |
+| Approved / Ongoing | Green | `#16A34A` |
+| Completed | Emerald | `#059669` |
+| Archived | Slate | `#475569` |
+| Error / Destructive | Red | `#EF4444` (errors, logout, delete actions only)
 
 ---
 
-# Spacing System
+## Typography
 
-Use an **8-point spacing system**.
+- **Font family:** `Inter`, sans-serif (loaded via Google Fonts at `fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap`)
+- **Headings:** bold (600–700), tight line-height (1.2), clear hierarchy
+- **Body:** 14–16px, line-height 1.6, comfortable reading
+- **Labels:** 13px, 500 weight, muted color `#64748B`
 
-| Token | Value |
-|--------|-------|
-| XS | 8px |
-| SM | 16px |
-| MD | 24px |
-| LG | 32px |
-| XL | 48px |
-| XXL | 72px |
+Never use decorative or serif fonts.
 
-Rules:
+## Spacing System (8-point grid)
+
+| Token | Value | Use |
+|---|---|---|
+| xs | 4px | icon-to-text gap |
+| sm | 8px | tight padding |
+| md | 16px | card internal padding |
+| lg | 24px | standard card padding, section gaps |
+| xl | 32px | large section spacing |
+| xxl | 48px | hero/header spacing |
 
 - Minimum card padding: 24px
-- Section spacing: 48–72px
-- Never stack components tightly
-
-Whitespace is a design feature.
+- Section spacing: 32–48px
+- Whitespace is a feature — never crowd interfaces
 
 ---
 
-# Layout Rules
+## Layout Architecture
 
-Every page must be responsive.
+### Shell pattern (role-based sidebars)
+Each role has a reusable shell in `includes/{role}-shell.php` with matching `css/{role}-shell.css`:
+- `admin-shell.php` + `admin-shell.css` (orange)
+- `staff-shell.php` + `staff-shell.css` (teal)
+- `faculty-shell.php` + `faculty-shell.css` (blue)
+- `student-shell.php` + `student-shell.css` (purple)
 
-## Dashboard Layout
+Shells output: `<!DOCTYPE><head> (with css/style.css + css/{role}-shell.css links) + dark sidebar + topbar + .{role}-page-content`
+Pages call `render{Role}Shell($user, $current_page, $title, $subtitle)` at top and `render{Role}ShellClose()` at bottom.
+Shared pages (messages/notifications/profile/research-archive/calendar) use `pages/shared/module-page.php` which renders the CORRECT role shell based on logged-in user.
 
-Include:
+**When building a new page**, do NOT write a new sidebar/topbar from scratch — call the existing shell for that role.
 
-1. Header with title & actions
-2. Statistics cards
-3. Main content grid
-4. Recent activity
-5. Sidebar widgets (desktop)
-6. Responsive collapse on mobile
+### Nav link rules
+- All sidebar/topbar links MUST use `SITE_URL . 'pages/...'` — NEVER relative `../` paths (causes 404s from shared pages)
+- Logo in sidebar links to role dashboard
+- Active nav item highlighted with role-tinted background + 3px role-colored left border
+- Badge counts (unread messages/notifications) only rendered when count > 0
 
-Prefer **Bento Grid** layouts instead of equal repetitive cards.
+### Cards
+- Border-radius: 16–20px
+- Background: white
+- Border: `1px solid #E5E7EB` (or role-tinted for active/feature cards)
+- Shadow: subtle `0 1px 3px rgba(0,0,0,0.05)`
+- Hover: soft role-tinted shadow lift
+- Padding: 24px
 
-## Cards
+### Tables
+- Rounded 16px container with white bg and border
+- Sticky header with light gray bg
+- Row hover: `#F8FAFC`
+- Status badges: rounded-full (9999px) pills, 12px 12px padding, 12px 500 weight font
 
-- Radius: 20px
-- Soft border
-- Minimal shadow
-- White background
+### Buttons
+- **Primary:** role-colored background, white text, rounded 10px, padding 10px 20px, 500 weight, hover darkens
+- **Secondary:** white bg, gray border, dark text
+- **Danger:** red bg only for delete/logout/destructive actions
+- Focus ring: 2px role-color outline, 2px offset
 
-## Tables
-
-- Rounded container
-- Sticky header when appropriate
-- Row hover state
-- Status badges
-
----
-
-# Icons
-
-Use **Lucide icons only**.
-
-Icons should be simple and consistent.
-
-Do not mix icon libraries.
-
----
-
-# RMS Workflow (Canonical)
-
-Every workflow visualization must follow this exact sequence.
-
-Draft
-
-↓
-
-Proposal Submission
-
-↓
-
-CREC Evaluation
-
-↓
-
-EREC Research Forum
-
-↓
-
-Approval / Revision
-
-↓
-
-President Approval
-
-↓
-
-MOU & NDA
-
-↓
-
-Research Implementation
-
-↓
-
-Midway Progress Report
-
-↓
-
-Terminal Report
-
-↓
-
-Final Bound Report
-
-↓
-
-Research Colloquium
-
-↓
-
-Archive & Publication
-
-Do not reorder these stages.
+### Forms
+- Labels: 13px 500, dark color
+- Inputs: rounded 10px, light gray border `#E5E7EB`, padding 10px 14px, white bg, focus ring in role color
+- Error states: red border + red text below field
+- All state-changing forms MUST include `<?= csrfField() ?>` and validate POST with `isCsrfTokenValid()`
 
 ---
 
-# User Roles
+## Responsive & Motion
 
-Maintain consistent experiences for each role.
-
-## Student
-
-Focus:
-
-- My Research
-- Chapter Upload
-- Adviser Feedback
-- Progress Timeline
-- Defense Schedule
-
-## Faculty
-
-Focus:
-
-- Assigned Advisees
-- Review Queue
-- CREC/EREC Evaluation
-- Revision Feedback
-- Panel Scoring
-
-## Staff
-
-Focus:
-
-- Document Verification
-- Scheduling
-- Research Tracking
-- Reports
-
-## Admin
-
-Focus:
-
-- Analytics
-- User Management
-- Academic Year
-- Archive
-- System Configuration
+- Sidebar collapses under 900px (stacked layout)
+- Login split-screen stacks under 900px (brand panel on top, form below, divider hidden)
+- Animations: subtle (200–300ms ease), used for hover states, page entrance, divider flow
+- Respect `prefers-reduced-motion` — disable animations/transitions when user prefers reduced motion
+- Page-load entrance: staggered fade-in (logo → title → subtitle → divider → form), 400–600ms total
+- Never use jarring bounces, neon glows, or excessive rotation
 
 ---
 
-# Component Standards
+## Workflow (Canonical — EARIST Research Manual 2015)
 
-Every generated page should reuse these components whenever possible.
+1. Proposal Submission → 2. CREC Evaluation → 3. EREC Research Forum → 4. Approval/Revision/Disapproval → 5. President Approval → 6. MOU/NDA → 7. Implementation → 8. Midway Progress → 9. Terminal Report → 10. Final Bound Report → 11. Research Colloquium → 12. Archive
 
-## Statistic Card
+Five-chapter structure: Chapter 1 Problem & Background → Chapter 2 Review of Related Literature → Chapter 3 Methodology → Chapter 4 Results & Discussion → Chapter 5 Summary/Conclusions/Recommendations.
 
-Contains:
-
-- Icon
-- Label
-- Primary metric
-- Trend indicator
-
-## Timeline
-
-Use vertical progress indicators for research milestones.
-
-## Status Badge
-
-Rounded pill badges using workflow colors.
-
-## Empty State
-
-Include:
-
-- Icon
-- Short message
-- Primary action
-
-Never leave blank tables.
+Project statuses (consistent across all roles): `draft`, `submitted`, `under_review`, `under_crec_review`, `under_erec_review`, `for_revision`, `revision_required`, `approved`, `ongoing`, `completed`, `archived`. NEVER invent new statuses without updating all shells and badges.
 
 ---
 
-# UX Principles
+## User Roles & Focus Areas
 
-1. One primary action per screen.
-2. Important information appears above the fold.
-3. Forms should be multi-step when long.
-4. Confirmation dialogs for destructive actions.
-5. Success feedback after every completed workflow.
-6. Accessibility must meet WCAG contrast standards.
+### 🎒 Student (purple)
+My Research, Submit Proposal, Submit Chapter, My Documents, Progress Tracking, Messages
 
----
+### 🎓 Faculty (blue)
+Dashboard, My Submissions, Review Chapters, My Students, Reports (adviser focus — review + advisee management)
 
-# Code Generation Rules
+### 📋 Research Staff (teal)
+Dashboard, Submissions Inbox, For CREC Review, Revision Returns, Research Archive, Document Verification, Contact Messages (processing + repository focus)
 
-When generating PHP pages:
-
-- Follow existing folder architecture.
-- Use `__DIR__` includes.
-- Use prepared statements only.
-- Escape output.
-- Include CSRF fields.
-- Respect `requireRole()`.
-- Match existing coding style.
-
-Do not introduce frameworks.
-
-Generate production-ready HTML, CSS, PHP, and JavaScript compatible with the current RMS project.
+### 🔴 Admin (orange)
+Dashboard, User Management, Research Management, Archive Management, Reports & Analytics, System Logs, Backup
 
 ---
 
-# Design Goal
+## Component Library (reuse, don't reinvent)
 
-Every page should look like a professionally funded university information system worthy of deployment in 2026—not a student CRUD project.
+- **File Uploader** (`includes/file-uploader.php`, `css/file-uploader.css`, `js/file-uploader.js`) — reusable drag-and-drop uploader with 7 visual states, progress bar, client+server validation, CSRF, finfo MIME checking, folder whitelist. Use via `renderFileUploader($options)` for any upload field (proposals, chapters, defense, manuscripts). Never build a second uploader component.
+- **Status badges** — use the `statusBadge()` helper pattern defined in each dashboard
+- **Stat cards** — icon + label + primary metric + optional trend
+- **Empty state** — centered icon + message + primary action (never blank tables)
+- **Shell helpers** — use render{Role}Shell; never duplicate sidebar markup
+
+---
+
+## Security Rules (MUST)
+
+- Use prepared statements (`$conn->prepare()`) for ALL SQL with user input — NEVER concatenate variables into SQL strings
+- CSRF tokens on every POST form (`csrfField()` + `isCsrfTokenValid()`)
+- `requireLogin()` / `requireRole()` at the top of every protected page
+- Passwords: `password_hash()` / `password_verify()` (bcrypt). Min 8 chars, must contain letter + number, no spaces
+- Soft deletes: filter `deleted_at IS NULL` on all queries against core tables (research_projects, chapters, users)
+- Uploads: always use the `handleRmsUpload()` helper (folder whitelist enforced server-side)
+- Escape output with `htmlspecialchars($value, ENT_QUOTES, 'UTF-8')` or the role-specific `se()` helper
+- .htaccess protects `includes/`, `database/`, `uploads/` blocks PHP execution
+
+---
+
+## Code Generation Rules
+
+- Follow existing folder structure (`pages/{role}/`, `includes/`, `css/`, `js/`, `public/`)
+- Use `__DIR__` for includes (never relative paths that break)
+- SITE_URL for cross-page links; relative paths are OK only within the same directory
+- Match existing coding style (procedural PHP, brace placement, function naming)
+- Do NOT introduce PHP frameworks, ORMs, CSS frameworks, JS libraries, or icon packs
+- Pages must work without JS where possible (progressive enhancement)
+- Generate production-ready code that passes visual QA: proper contrast, hover states, focus rings, responsive behavior, accessible labels
+
+---
+
+## Design Goal
+
+Every page should feel like part of a **funded, modern university research platform** — consistent role-colored accents, generous whitespace, clean typography, purposeful animation, and clear hierarchy. Not a student CRUD project, not a generic SaaS template.
