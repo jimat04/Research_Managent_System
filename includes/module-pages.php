@@ -23,10 +23,14 @@ function rms_project_access($project_id, $user) {
     $user_id = (int) $user['user_id'];
     if ($user['role'] === 'admin') return true;
     if ($user['role'] === 'student') {
-        $result = $conn->query("SELECT project_id FROM research_projects WHERE project_id = $project_id AND created_by = $user_id");
+        $stmt = $conn->prepare('SELECT project_id FROM research_projects WHERE project_id = ? AND created_by = ?');
+        $stmt->bind_param('ii', $project_id, $user_id);
     } else {
-        $result = $conn->query("SELECT rp.project_id FROM research_projects rp JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE rp.project_id = $project_id AND pa.adviser_id = $user_id");
+        $stmt = $conn->prepare('SELECT rp.project_id FROM research_projects rp JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE rp.project_id = ? AND pa.adviser_id = ?');
+        $stmt->bind_param('ii', $project_id, $user_id);
     }
+    $stmt->execute();
+    $result = $stmt->get_result();
     return $result && $result->num_rows > 0;
 }
 
@@ -61,18 +65,25 @@ function rms_handle_module_action($page_key, $user) {
 
     if ($page_key === 'notifications.php' && isset($_POST['notification_id'])) {
         $notification_id = (int) $_POST['notification_id'];
-        $conn->query("UPDATE notifications SET is_read = 1 WHERE notification_id = $notification_id AND user_id = $user_id");
+        $stmt = $conn->prepare('UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?');
+        $stmt->bind_param('ii', $notification_id, $user_id);
+        $stmt->execute();
     }
 
     if ($page_key === 'messages.php') {
         if (isset($_POST['message_id'])) {
             $message_id = (int) $_POST['message_id'];
-            $conn->query("UPDATE messages SET is_read = 1 WHERE message_id = $message_id AND recipient_id = $user_id");
+            $stmt = $conn->prepare('UPDATE messages SET is_read = 1 WHERE message_id = ? AND recipient_id = ?');
+            $stmt->bind_param('ii', $message_id, $user_id);
+            $stmt->execute();
         } elseif (isset($_POST['recipient_id'])) {
             $recipient_id = (int) $_POST['recipient_id'];
             $subject = trim($_POST['subject'] ?? '');
             $message = trim($_POST['message'] ?? '');
-            $recipient = $conn->query("SELECT user_id FROM users WHERE user_id = $recipient_id AND status = 'active'");
+            $recipient_stmt = $conn->prepare("SELECT user_id FROM users WHERE user_id = ? AND status = 'active'");
+            $recipient_stmt->bind_param('i', $recipient_id);
+            $recipient_stmt->execute();
+            $recipient = $recipient_stmt->get_result();
             if ($recipient_id === $user_id || $subject === '' || $message === '' || !$recipient || $recipient->num_rows === 0) {
                 $_SESSION['module_error'] = 'Choose an active recipient and complete all message fields.';
             } else {
@@ -178,7 +189,10 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'my-research.php') {
-        $rows = rms_rows($conn->query("SELECT project_id, title, status, created_at FROM research_projects WHERE created_by = $user_id ORDER BY created_at DESC"));
+        $stmt = $conn->prepare('SELECT project_id, title, status, created_at FROM research_projects WHERE created_by = ? ORDER BY created_at DESC');
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [rms_escape($row['title']), rms_escape(rms_status($row['status'])), date('M d, Y', strtotime($row['created_at'])), '<a class="btn btn-primary btn-sm" href="view-research.php?id=' . (int) $row['project_id'] . '">View</a>']; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">My Research Projects</div><a class="btn btn-primary btn-sm" href="submit-research.php">New Submission</a></div>';
         rms_table(['Title', 'Status', 'Created', 'Action'], $formatted);
@@ -189,8 +203,14 @@ function rms_render_module($page_key, $user, $module) {
     if ($page_key === 'view-research.php') {
         $project_id = (int) ($_GET['id'] ?? 0);
         if (!rms_project_access($project_id, $user)) { echo '<div class="card"><h2>Research not found</h2><p>You do not have access to this project.</p></div>'; return; }
-        $project = $conn->query("SELECT rp.*, rc.category_name FROM research_projects rp LEFT JOIN research_categories rc ON rc.category_id = rp.category_id WHERE rp.project_id = $project_id")->fetch_assoc();
-        $chapters = rms_rows($conn->query("SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = $project_id ORDER BY chapter_number"));
+        $project_stmt = $conn->prepare('SELECT rp.*, rc.category_name FROM research_projects rp LEFT JOIN research_categories rc ON rc.category_id = rp.category_id WHERE rp.project_id = ?');
+        $project_stmt->bind_param('i', $project_id);
+        $project_stmt->execute();
+        $project = $project_stmt->get_result()->fetch_assoc();
+        $chapters_stmt = $conn->prepare('SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = ? ORDER BY chapter_number');
+        $chapters_stmt->bind_param('i', $project_id);
+        $chapters_stmt->execute();
+        $chapters = rms_rows($chapters_stmt->get_result());
         echo '<div class="card"><div class="card-header"><div><div class="card-title">' . rms_escape($project['title']) . '</div><div class="card-subtitle">' . rms_escape($project['category_name'] ?? 'Uncategorized') . ' · ' . rms_escape(rms_status($project['status'])) . '</div></div></div><div class="card-body"><p>' . nl2br(rms_escape($project['abstract'] ?? 'No abstract provided.')) . '</p><p><strong>Research area:</strong> ' . rms_escape($project['research_area'] ?? 'Not specified') . '</p></div></div><div class="card"><div class="card-header"><div class="card-title">Chapter Progress</div></div>';
         $chapter_rows = array_map(function ($row) { return ['Chapter ' . (int) $row['chapter_number'], rms_escape($row['chapter_title']), rms_escape(rms_status($row['status']))]; }, $chapters);
         rms_table(['Chapter', 'Title', 'Status'], $chapter_rows, 'No chapters have been created yet.');
@@ -199,20 +219,32 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'my-documents.php') {
-        $condition = $user['role'] === 'admin' ? '1=1' : "rp.created_by = $user_id";
-        $rows = rms_rows($conn->query("SELECT u.original_name, u.type, u.file_size, u.upload_date, rp.title FROM uploads u JOIN research_projects rp ON rp.project_id = u.project_id WHERE $condition ORDER BY u.upload_date DESC"));
+        if ($user['role'] === 'admin') {
+            $stmt = $conn->prepare('SELECT u.original_name, u.type, u.file_size, u.upload_date, rp.title FROM uploads u JOIN research_projects rp ON rp.project_id = u.project_id ORDER BY u.upload_date DESC');
+        } else {
+            $stmt = $conn->prepare('SELECT u.original_name, u.type, u.file_size, u.upload_date, rp.title FROM uploads u JOIN research_projects rp ON rp.project_id = u.project_id WHERE rp.created_by = ? ORDER BY u.upload_date DESC');
+            $stmt->bind_param('i', $user_id);
+        }
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [rms_escape($row['original_name']), rms_escape($row['title']), rms_escape(ucfirst($row['type'])), number_format(((int) $row['file_size']) / 1024, 1) . ' KB', date('M d, Y', strtotime($row['upload_date']))]; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">Documents</div></div>'; rms_table(['File', 'Research', 'Type', 'Size', 'Uploaded'], $formatted); echo '</div>'; return;
     }
 
     if ($page_key === 'progress-tracking.php') {
-        $rows = rms_rows($conn->query("SELECT rp.title, c.chapter_number, c.chapter_title, c.status FROM chapters c JOIN research_projects rp ON rp.project_id = c.project_id WHERE rp.created_by = $user_id ORDER BY rp.title, c.chapter_number"));
+        $stmt = $conn->prepare('SELECT rp.title, c.chapter_number, c.chapter_title, c.status FROM chapters c JOIN research_projects rp ON rp.project_id = c.project_id WHERE rp.created_by = ? ORDER BY rp.title, c.chapter_number');
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [rms_escape($row['title']), 'Chapter ' . (int) $row['chapter_number'], rms_escape($row['chapter_title']), rms_escape(rms_status($row['status']))]; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">Research Progress</div></div>'; rms_table(['Research', 'Chapter', 'Title', 'Status'], $formatted, 'Chapter progress will appear after chapters are added.'); echo '</div>'; return;
     }
 
     if ($page_key === 'notifications.php') {
-        $rows = rms_rows($conn->query("SELECT notification_id, title, message, type, is_read, link, created_at FROM notifications WHERE user_id = $user_id ORDER BY created_at DESC"));
+        $stmt = $conn->prepare('SELECT notification_id, title, message, type, is_read, link, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC');
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) use ($user_id) {
             $actions = '';
 
@@ -247,8 +279,14 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'calendar.php') {
-        $condition = $user['role'] === 'admin' ? '1=1' : "ds.project_id IN (SELECT project_id FROM research_projects WHERE created_by = $user_id)";
-        $rows = rms_rows($conn->query("SELECT ds.schedule_date, ds.type, ds.venue, ds.status, rp.title FROM defense_schedule ds JOIN research_projects rp ON rp.project_id = ds.project_id WHERE $condition ORDER BY ds.schedule_date"));
+        if ($user['role'] === 'admin') {
+            $stmt = $conn->prepare('SELECT ds.schedule_date, ds.type, ds.venue, ds.status, rp.title FROM defense_schedule ds JOIN research_projects rp ON rp.project_id = ds.project_id ORDER BY ds.schedule_date');
+        } else {
+            $stmt = $conn->prepare('SELECT ds.schedule_date, ds.type, ds.venue, ds.status, rp.title FROM defense_schedule ds JOIN research_projects rp ON rp.project_id = ds.project_id WHERE ds.project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) ORDER BY ds.schedule_date');
+            $stmt->bind_param('i', $user_id);
+        }
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [date('M d, Y H:i', strtotime($row['schedule_date'])), rms_escape($row['title']), rms_escape(ucwords(str_replace('_', ' ', $row['type']))), rms_escape($row['venue'] ?? 'TBA'), rms_escape(ucwords($row['status']))]; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">Research Calendar</div></div>'; rms_table(['Date', 'Research', 'Defense Type', 'Venue', 'Status'], $formatted, 'No defense schedules have been posted.'); echo '</div>'; return;
     }
@@ -258,9 +296,20 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'messages.php') {
-        $recipients = rms_rows($conn->query("SELECT user_id, first_name, last_name, role FROM users WHERE status = 'active' AND user_id <> $user_id ORDER BY last_name, first_name"));
-        $inbox = rms_rows($conn->query("SELECT m.message_id, m.subject, m.message, m.is_read, m.created_at, m.sender_id, CASE WHEN m.sender_id = 0 THEN 'System' ELSE CONCAT(u.first_name, ' ', u.last_name) END AS sender_name FROM messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = $user_id ORDER BY m.created_at DESC"));
-        $sent = rms_rows($conn->query("SELECT m.subject, m.message, m.created_at, CONCAT(u.first_name, ' ', u.last_name) AS recipient_name FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE m.sender_id = $user_id ORDER BY m.created_at DESC LIMIT 20"));
+        $stmt = $conn->prepare("SELECT user_id, first_name, last_name, role FROM users WHERE status = 'active' AND user_id <> ? ORDER BY last_name, first_name");
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $recipients = rms_rows($stmt->get_result());
+
+        $stmt = $conn->prepare("SELECT m.message_id, m.subject, m.message, m.is_read, m.created_at, m.sender_id, CASE WHEN m.sender_id = 0 THEN 'System' ELSE CONCAT(u.first_name, ' ', u.last_name) END AS sender_name FROM messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = ? ORDER BY m.created_at DESC");
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $inbox = rms_rows($stmt->get_result());
+
+        $stmt = $conn->prepare("SELECT m.subject, m.message, m.created_at, CONCAT(u.first_name, ' ', u.last_name) AS recipient_name FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE m.sender_id = ? ORDER BY m.created_at DESC LIMIT 20");
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $sent = rms_rows($stmt->get_result());
         echo '<div class="card" style="max-width:820px"><div class="card-header"><div><div class="card-title">Compose Message</div><div class="card-subtitle">Send a message to an active RMS user.</div></div></div><div class="card-body"><form method="post">' . csrfField() . '<label>Recipient<br><select class="form-control" name="recipient_id" required><option value="">Select recipient</option>';
         foreach ($recipients as $recipient) echo '<option value="' . (int) $recipient['user_id'] . '">' . rms_escape($recipient['first_name'] . ' ' . $recipient['last_name'] . ' (' . ucfirst($recipient['role']) . ')') . '</option>';
         echo '</select></label><br><label>Subject<br><input class="form-control" name="subject" maxlength="160" required></label><br><label>Message<br><textarea class="form-control" name="message" rows="5" required></textarea></label><br><button class="btn btn-primary">Send Message</button></form></div></div>';
@@ -278,13 +327,18 @@ function rms_render_module($page_key, $user, $module) {
     }
 
     if ($page_key === 'faculty-submissions.php' || $page_key === 'faculty-review.php' || $page_key === 'faculty-students.php') {
-        $assigned = "JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = $user_id";
         if ($page_key === 'faculty-students.php') {
-            $rows = rms_rows($conn->query("SELECT DISTINCT u.first_name, u.last_name, u.email, u.program FROM users u JOIN research_projects rp ON rp.created_by = u.user_id $assigned ORDER BY u.last_name"));
+            $stmt = $conn->prepare('SELECT DISTINCT u.first_name, u.last_name, u.email, u.program FROM users u JOIN research_projects rp ON rp.created_by = u.user_id JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? ORDER BY u.last_name');
+            $stmt->bind_param('i', $user_id);
+            $stmt->execute();
+            $rows = rms_rows($stmt->get_result());
             $formatted = array_map(function ($row) { return [rms_escape($row['first_name'] . ' ' . $row['last_name']), rms_escape($row['email']), rms_escape($row['program'] ?? 'Not specified')]; }, $rows);
             echo '<div class="card"><div class="card-header"><div class="card-title">My Students</div></div>'; rms_table(['Student', 'Email', 'Program'], $formatted, 'No students are assigned yet.'); echo '</div>'; return;
         }
-        $rows = rms_rows($conn->query("SELECT rp.project_id, rp.title, rp.status, u.first_name, u.last_name, rp.created_at FROM research_projects rp JOIN users u ON u.user_id = rp.created_by $assigned ORDER BY rp.created_at DESC"));
+        $stmt = $conn->prepare('SELECT rp.project_id, rp.title, rp.status, u.first_name, u.last_name, rp.created_at FROM research_projects rp JOIN users u ON u.user_id = rp.created_by JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? ORDER BY rp.created_at DESC');
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [rms_escape($row['title']), rms_escape($row['first_name'] . ' ' . $row['last_name']), rms_escape(rms_status($row['status'])), date('M d, Y', strtotime($row['created_at'])), '<a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=' . (int) $row['project_id'] . '">Review</a>']; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">' . rms_escape($module[0]) . '</div></div>'; rms_table(['Research', 'Student', 'Status', 'Date', 'Action'], $formatted, 'No assigned submissions found.'); echo '</div>'; return;
     }
@@ -292,15 +346,24 @@ function rms_render_module($page_key, $user, $module) {
     if ($page_key === 'faculty-review-detail.php') {
         $project_id = (int) ($_GET['id'] ?? 0);
         if (!rms_project_access($project_id, $user)) { echo '<div class="card"><h2>Research not found</h2><p>This project is not assigned to you.</p></div>'; return; }
-        $project = $conn->query("SELECT rp.*, u.first_name, u.last_name FROM research_projects rp JOIN users u ON u.user_id = rp.created_by WHERE rp.project_id = $project_id")->fetch_assoc();
-        $chapters = rms_rows($conn->query("SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = $project_id ORDER BY chapter_number"));
+        $project_stmt = $conn->prepare('SELECT rp.*, u.first_name, u.last_name FROM research_projects rp JOIN users u ON u.user_id = rp.created_by WHERE rp.project_id = ?');
+        $project_stmt->bind_param('i', $project_id);
+        $project_stmt->execute();
+        $project = $project_stmt->get_result()->fetch_assoc();
+        $chapters_stmt = $conn->prepare('SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = ? ORDER BY chapter_number');
+        $chapters_stmt->bind_param('i', $project_id);
+        $chapters_stmt->execute();
+        $chapters = rms_rows($chapters_stmt->get_result());
         echo '<div class="card"><div class="card-header"><div class="card-title">Review: ' . rms_escape($project['title']) . '</div></div><div class="card-body"><p><strong>Student:</strong> ' . rms_escape($project['first_name'] . ' ' . $project['last_name']) . '</p><p>' . nl2br(rms_escape($project['abstract'] ?? 'No abstract provided.')) . '</p><form method="post">' . csrfField() . '<input type="hidden" name="project_id" value="' . $project_id . '"><label>Project status<br><select class="form-control" name="status">';
         foreach (['proposal', 'in_progress', 'for_defense', 'completed', 'archived'] as $status) echo '<option value="' . $status . '"' . ($project['status'] === $status ? ' selected' : '') . '>' . rms_escape(rms_status($status)) . '</option>';
         echo '</select></label><br><label>Chapter for comment<br><select class="form-control" name="chapter_id"><option value="0">General project update</option>'; foreach ($chapters as $chapter) echo '<option value="' . (int) $chapter['chapter_id'] . '">Chapter ' . (int) $chapter['chapter_number'] . ' - ' . rms_escape($chapter['chapter_title']) . '</option>'; echo '</select></label><br><label>Feedback<br><textarea class="form-control" name="comment" rows="5"></textarea></label><br><button class="btn btn-primary">Save Review</button></form></div></div>'; return;
     }
 
     if ($page_key === 'faculty-reports.php') {
-        $rows = rms_rows($conn->query("SELECT rp.status, COUNT(*) AS total FROM research_projects rp JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = $user_id GROUP BY rp.status ORDER BY rp.status"));
+        $stmt = $conn->prepare('SELECT rp.status, COUNT(*) AS total FROM research_projects rp JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? GROUP BY rp.status ORDER BY rp.status');
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $rows = rms_rows($stmt->get_result());
         $formatted = array_map(function ($row) { return [rms_escape(rms_status($row['status'])), (int) $row['total']]; }, $rows);
         echo '<div class="card"><div class="card-header"><div class="card-title">Assigned Research Report</div></div>'; rms_table(['Status', 'Projects'], $formatted, 'No assigned projects found.'); echo '</div>'; return;
     }
