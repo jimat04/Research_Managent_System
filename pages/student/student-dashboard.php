@@ -8,6 +8,18 @@ requireRole('student');
 $user = getCurrentUser();
 $user_id = (int) $user['user_id'];
 
+// research_projects.deleted_at is added by database/migrations/rms_db_migration.sql
+// but is NOT present in the supplied base schema. Detect at runtime so the page
+// works on both installs without throwing "Unknown column 'deleted_at'".
+$rp_deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+$rp_has_deleted_at = false;
+if ($rp_deleted_column_stmt) {
+    $rp_deleted_column_stmt->execute();
+    $rp_has_deleted_at = $rp_deleted_column_stmt->get_result()->num_rows > 0;
+    $rp_deleted_column_stmt->close();
+}
+$rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+
 // Get student's research projects
 $proj_stmt = $conn->prepare("SELECT * FROM research_projects WHERE created_by = ? ORDER BY created_at DESC");
 $proj_stmt->bind_param('i', $user_id);
@@ -27,25 +39,25 @@ $unread_stmt->execute();
 $unread_count = (int) ($unread_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 // Count PROJECTS (proposals/research projects the student has)
-$stat_projects_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status <> 'draft'");
+$stat_projects_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ?" . $rp_deleted_filter . " AND status <> 'draft'");
 $stat_projects_stmt->bind_param('i', $user_id);
 $stat_projects_stmt->execute();
 $stat_projects = (int) ($stat_projects_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 // Count projects currently under review (submitted/crec/erec)
-$stat_review_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')");
+$stat_review_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ?" . $rp_deleted_filter . " AND status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')");
 $stat_review_stmt->bind_param('i', $user_id);
 $stat_review_stmt->execute();
 $stat_review = (int) ($stat_review_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 // Count approved/ongoing/completed projects
-$stat_approved_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('approved', 'ongoing', 'completed', 'archived')");
+$stat_approved_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ?" . $rp_deleted_filter . " AND status IN ('approved', 'ongoing', 'completed', 'archived')");
 $stat_approved_stmt->bind_param('i', $user_id);
 $stat_approved_stmt->execute();
 $stat_approved = (int) ($stat_approved_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
 // Count projects returned for revision
-$stat_revision_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('for_revision', 'revision_required')");
+$stat_revision_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ?" . $rp_deleted_filter . " AND status IN ('for_revision', 'revision_required')");
 $stat_revision_stmt->bind_param('i', $user_id);
 $stat_revision_stmt->execute();
 $stat_revision = (int) ($stat_revision_stmt->get_result()->fetch_assoc()['count'] ?? 0);

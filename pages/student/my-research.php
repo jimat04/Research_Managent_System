@@ -373,7 +373,7 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your research pro
           <?php foreach ($projects as $proj): ?>
             <tr class="project-row" data-title="<?php echo htmlspecialchars(strtolower($proj['title'])); ?>" data-status="<?php echo htmlspecialchars($proj['status']); ?>">
               <td style="font-weight: 500;">
-                <a href="#" style="color: #2563EB; text-decoration: none;">
+                <a href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $proj['project_id']; ?>" style="color: #2563EB; text-decoration: none;">
                   <?php echo htmlspecialchars($proj['title']); ?>
                 </a>
               </td>
@@ -390,8 +390,13 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your research pro
               </td>
               <td><?php echo date('M d, Y', strtotime($proj['updated_at'])); ?></td>
               <td style="display: flex; gap: 4px;">
-                <a href="research-detail.php?id=<?php echo $proj['project_id']; ?>" class="btn btn-sm btn-accent">View</a>
-                <button class="btn btn-sm btn-secondary" onclick="alert('Edit project: ' + '<?php echo htmlspecialchars($proj['title']); ?>')">Edit</button>
+                <a href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $proj['project_id']; ?>" class="btn btn-sm btn-accent">View</a>
+                <?php $proj_status = $proj['status'] ?? ''; $can_edit_row = in_array($proj_status, ['draft', 'for_revision', 'revision_required'], true); ?>
+                <?php if ($can_edit_row): ?>
+                  <a href="<?php echo SITE_URL; ?>pages/student/edit-research.php?id=<?php echo (int) $proj['project_id']; ?>" class="btn btn-sm btn-secondary">Edit</a>
+                <?php else: ?>
+                  <span class="btn btn-sm btn-secondary" style="opacity: 0.5; cursor: not-allowed;" title="Editing is disabled while the project is in review.">Edit</span>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>

@@ -68,13 +68,25 @@ $content = [];
 $current_upload = null;
 $invalid_chapter = $chapter_number < 1 || $chapter_number > 5;
 
+// research_projects.deleted_at is added by database/migrations/rms_db_migration.sql
+// but is NOT present in the supplied base schema. Detect at runtime so this page
+// works on both installs without throwing "Unknown column 'rp.deleted_at'".
+$rp_deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+$rp_has_deleted_at = false;
+if ($rp_deleted_column_stmt) {
+    $rp_deleted_column_stmt->execute();
+    $rp_has_deleted_at = $rp_deleted_column_stmt->get_result()->num_rows > 0;
+    $rp_deleted_column_stmt->close();
+}
+$rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
+
 // The migration adds chapters.deleted_at; keep deleted projects and chapters inaccessible.
 if (!$invalid_chapter && $project_id > 0) {
     $project_stmt = $conn->prepare("SELECT rp.*, rc.category_name, aa.label AS ay_label, aa.semester
         FROM research_projects rp
         LEFT JOIN research_categories rc ON rp.category_id = rc.category_id
         LEFT JOIN academic_years aa ON rp.ay_id = aa.ay_id
-        WHERE rp.project_id = ? AND rp.deleted_at IS NULL
+        WHERE rp.project_id = ?" . $rp_deleted_filter . "
         AND (rp.created_by = ? OR EXISTS (
             SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?
         ))");

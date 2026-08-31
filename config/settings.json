@@ -7,9 +7,15 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "rms-smart",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "aug/claude-opus-4.6"
   },
-  "model": "sonnet",
+  "model": "rms-smart",
   "statusLine": {
     "type": "command",
-    "command": "node \"C:\\Users\\jimwe\\.claude\\statusline.js\""
+    "command": "node C:/Users/jimwe/.claude/statusline.js"
+  },
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
   }
 }

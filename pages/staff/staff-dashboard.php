@@ -14,22 +14,21 @@ function se($value) {
 
 // Stat counts
 $stat_pending = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status = 'submitted' AND deleted_at IS NULL"
+    "SELECT COUNT(*) AS count FROM research_projects WHERE status = 'submitted'"
 )->fetch_assoc()['count'] ?? 0);
 
 $stat_crec = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('under_review', 'under_crec_review') AND deleted_at IS NULL"
+    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('under_review', 'under_crec_review')"
 )->fetch_assoc()['count'] ?? 0);
 
 $stat_revision = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('revision_required', 'for_revision') AND deleted_at IS NULL"
+    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('revision_required', 'for_revision')"
 )->fetch_assoc()['count'] ?? 0);
 
 $stat_archive = (int) ($conn->query(
     "SELECT COUNT(*) AS count FROM research_projects
      WHERE status IN ('completed','archived')
-       AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-       AND deleted_at IS NULL"
+       AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 )->fetch_assoc()['count'] ?? 0);
 
 // Contact Messages count
@@ -54,7 +53,7 @@ $inbox_stmt = $conn->prepare("
     LEFT JOIN (
         SELECT DISTINCT project_id FROM uploads WHERE type = 'proposal'
     ) pu ON pu.project_id = rp.project_id
-    WHERE rp.status = 'submitted' AND rp.deleted_at IS NULL
+    WHERE rp.status = 'submitted'
     ORDER BY rp.created_at DESC
     LIMIT 10
 ");
@@ -70,7 +69,6 @@ $repo_row = $conn->query("
         SUM(status IN ('approved','ongoing','progress_report','terminal_review'))                                        AS ongoing_count,
         SUM(status IN ('completed','archived'))                                                                         AS completed_count
     FROM research_projects
-    WHERE deleted_at IS NULL
 ")->fetch_assoc();
 
 $repo_draft     = (int) ($repo_row['draft_count']     ?? 0);

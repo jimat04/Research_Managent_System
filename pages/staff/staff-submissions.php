@@ -79,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                            SET status = 'under_crec_review', updated_at = NOW()
                          WHERE project_id = ?
                            AND status = 'submitted'
-                           AND deleted_at IS NULL
                     ");
                     $upd->bind_param('i', $project_id);
                     $upd->execute();

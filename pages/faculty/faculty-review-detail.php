@@ -9,6 +9,18 @@ $user = getCurrentUser();
 $user_id = $user['user_id'];
 $project_id = isset($_GET['id']) ? intval($_GET['id']) : (isset($_POST['project_id']) ? intval($_POST['project_id']) : 0);
 $errors = [];
+
+// research_projects.deleted_at is added by database/migrations/rms_db_migration.sql
+// but is NOT present in the supplied base schema. Detect at runtime so this page
+// works on both installs without throwing "Unknown column 'rp.deleted_at'".
+$rp_deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+$rp_has_deleted_at = false;
+if ($rp_deleted_column_stmt) {
+    $rp_deleted_column_stmt->execute();
+    $rp_has_deleted_at = $rp_deleted_column_stmt->get_result()->num_rows > 0;
+    $rp_deleted_column_stmt->close();
+}
+$rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 $success = isset($_GET['action']) && $_GET['action'] === 'done' ? 'Action completed successfully.' : '';
 
 $status_badges = [
@@ -45,7 +57,7 @@ if ($project_id > 0) {
         LEFT JOIN research_categories rc ON rp.category_id = rc.category_id
         LEFT JOIN academic_years ay ON rp.ay_id = ay.ay_id
         LEFT JOIN users owner ON rp.created_by = owner.user_id
-        WHERE rp.project_id = ? AND rp.deleted_at IS NULL
+        WHERE rp.project_id = ? " . $rp_deleted_filter . "
         AND (EXISTS (SELECT 1 FROM project_advisers pa WHERE pa.project_id = rp.project_id AND pa.adviser_id = ?)
             OR rp.status IN ('submitted', 'under_crec_review', 'under_erec_review', 'for_revision', 'progress_report', 'terminal_review'))");
     if ($project_stmt) {
@@ -87,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         if ($chapter_id < 1) $errors[] = 'Invalid chapter.';
         elseif ($action === 'chapter_revise' && $comment_text === '') $errors[] = 'A revision comment is required.';
         else {
-            $chapter_check = $conn->prepare('SELECT chapter_number FROM chapters WHERE chapter_id = ? AND project_id = ? AND deleted_at IS NULL');
+            $chapter_check = $conn->prepare('SELECT chapter_number FROM chapters WHERE chapter_id = ? AND project_id = ?' . ($rp_has_deleted_at ? ' AND deleted_at IS NULL' : '') . ');');
             $chapter_check->bind_param('ii', $chapter_id, $project_id);
             $chapter_check->execute();
             $chapter_row = $chapter_check->get_result()->fetch_assoc();
@@ -157,7 +169,7 @@ $comments = [];
 $members = [];
 $proposal = null;
 if ($project) {
-    $chapter_stmt = $conn->prepare('SELECT c.*, u.first_name AS approver_first, u.last_name AS approver_last FROM chapters c LEFT JOIN users u ON c.approved_by = u.user_id WHERE c.project_id = ? AND c.deleted_at IS NULL ORDER BY c.chapter_number');
+    $chapter_stmt = $conn->prepare('SELECT c.*, u.first_name AS approver_first, u.last_name AS approver_last FROM chapters c LEFT JOIN users u ON c.approved_by = u.user_id WHERE c.project_id = ?' . ($rp_has_deleted_at ? ' AND c.deleted_at IS NULL' : '') . ' ORDER BY c.chapter_number');
     $chapter_stmt->bind_param('i', $project_id);
     $chapter_stmt->execute();
     $chapter_result = $chapter_stmt->get_result();
