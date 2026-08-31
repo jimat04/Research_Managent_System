@@ -11,9 +11,9 @@
 ## Seeded role-specific passwords
 - [x] Update `database.sql` so seeded admin/faculty/student users use different password hashes (Admin@123 / Faculty@123 / Student@123)
 ## Register flow hardening
-- [ ] Rewrite register email-exists check in login.php to use prepared statements
-- [ ] Rewrite register INSERT in login.php to use prepared statements
-- [ ] Add CSRF token to login & register forms
+- [x] Rewrite register email-exists check in login.php to use prepared statements
+- [x] Rewrite register INSERT in login.php to use prepared statements
+- [x] Add CSRF token to login & register forms
 ## Schema improvements
 - [x] Add deleted_at soft-delete columns to core tables
 - [x] Add missing created_at/updated_at timestamps
@@ -35,3 +35,6 @@
 - [ ] Build UI for required manual documents and report milestones
 - [x] Add read-only Research Manual milestone panel to student research detail page
 - [ ] Add upload/update forms for required manual documents and reports
+
+## Security hardening
+- [x] Convert includes/module-pages.php raw queries to prepared statements (28 prepared statements)
