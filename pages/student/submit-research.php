@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 throw new Exception("Query error: " . $conn->error);
             }
 
-            $insert_stmt->bind_param("siisisi", $title, $category_id, $ay_id, $research_area, $abstract, $status, $user_id);
+            $insert_stmt->bind_param("siisssi", $title, $category_id, $ay_id, $research_area, $abstract, $status, $user_id);
             if (!$insert_stmt->execute()) {
                 throw new Exception("Insert failed: " . $insert_stmt->error);
             }

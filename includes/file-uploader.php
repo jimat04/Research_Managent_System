@@ -336,7 +336,7 @@ function handleRmsUpload($options, $files, $conn) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
 
-    $projectId = $opts['projectId'] ? (int) $opts['projectId'] : null;
+    $projectId = $opts['projectId'] !== null ? (int) $opts['projectId'] : null;
     $chapterId = $opts['chapterId'] ? (int) $opts['chapterId'] : null;
     $type = $opts['type'];
 
