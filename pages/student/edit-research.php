@@ -81,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $ay_id          = isset($_POST['ay_id'])          ? (int) $_POST['ay_id']          : 0;
     $research_area  = isset($_POST['research_area'])  ? trim($_POST['research_area'])  : '';
     $abstract       = isset($_POST['abstract'])       ? trim($_POST['abstract'])       : '';
+    $action = isset($_POST['action']) ? $_POST['action'] : 'save';
 
     if (empty($title)) {
         $errors[] = 'Project Title is required.';
@@ -155,10 +156,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 }
             }
 
-            logActivity('Updated research project', 'research');
+            // If resubmitting after revision, move status back to 'submitted'
+            $new_status = null;
+            if ($action === 'resubmit' && in_array($project['status'], ['for_revision', 'revision_required', 'draft'], true)) {
+                $new_status = 'submitted';
+                $status_upd = $conn->prepare("UPDATE research_projects SET status = 'submitted' WHERE project_id = ?");
+                $status_upd->bind_param('i', $project_id);
+                $status_upd->execute();
+                $status_upd->close();
+                if (function_exists('createNotification')) {
+                    createNotification($project['created_by'], 'project', 'Your project has been resubmitted for review.', $project_id);
+                }
+                logActivity('Research project resubmitted for review after revision', 'research');
+            } else {
+                logActivity('Updated research project', 'research');
+            }
 
             $conn->commit();
-            $_SESSION['module_success'] = 'Project updated successfully.';
+            $_SESSION['module_success'] = $new_status === 'submitted'
+                ? 'Project resubmitted for review successfully.'
+                : 'Project updated successfully.';
             header('Location: ' . SITE_URL . 'pages/student/research-detail.php?id=' . $project_id);
             exit;
         } catch (Exception $e) {
@@ -379,6 +396,8 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
       'accept'             => '.pdf,.doc,.docx',
       'maxSize'            => 10000,
       'folderTarget'       => 'proposals',
+      'projectId'          => $project_id,
+      'type'               => 'proposal',
       'label'              => 'Upload New Proposal',
       'description'        => 'Drag & drop a new version or click to browse',
       'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
@@ -391,7 +410,10 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
   <!-- SUBMIT BAR -->
   <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
     <a href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $project_id; ?>" class="btn btn-secondary">Cancel</a>
-    <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+    <button type="submit" name="action" value="save" class="btn btn-secondary">💾 Save Changes</button>
+    <?php if (in_array($project['status'], ['for_revision', 'revision_required', 'draft'], true)): ?>
+      <button type="submit" name="action" value="resubmit" class="btn btn-primary">📤 Resubmit for Review</button>
+    <?php endif; ?>
   </div>
 </form>
 
