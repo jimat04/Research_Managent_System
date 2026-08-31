@@ -307,23 +307,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       padding: 60px 48px;
       overflow: hidden;
     }
-    /* Subtle radial purple glow behind the logo */
+    /* Faint crosshatch grid texture (research-paper feel, barely visible).
+       Sits below the glows so the glows tint on top of the grid, not
+       the other way around. */
     .auth-split-brand::before {
       content: '';
       position: absolute;
-      top: 20%;
-      left: 50%;
-      width: 520px;
-      height: 520px;
-      max-width: 90%;
-      transform: translate(-50%, -50%);
-      background: radial-gradient(circle at center, rgba(91,30,188,0.35) 0%, rgba(91,30,188,0.12) 40%, transparent 70%);
+      inset: 0;
       pointer-events: none;
       z-index: 0;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 40px),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 40px);
+    }
+    /* Three off-center soft radial glows, each in a different accent color.
+       Stacked as layered background images so they blend into the gradient. */
+    .auth-split-brand::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background:
+        radial-gradient(circle at 20% 70%, rgba(91,30,188,0.15) 0%, transparent 45%),
+        radial-gradient(circle at 80% 20%, rgba(59,79,138,0.12) 0%, transparent 50%),
+        radial-gradient(circle at 60% 85%, rgba(212,166,87,0.10) 0%, transparent 55%);
     }
     .auth-split-brand-inner {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       max-width: 480px;
       width: 100%;
       text-align: center;
@@ -464,21 +476,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     .auth-split-form .form-check { color: #4B5563; }
     .auth-split-form .form-check input { accent-color: var(--primary); }
 
-    /* Role tabs in the light panel — soft lavender track, deeper text.
-       The PHP loop emits inline style="background: transparent; color: #D0D3E8"
-       on inactive tabs (and var(--primary)/white on the active one). We use
-       :not(.active) with !important to override only the INACTIVE tabs while
-       leaving the active tab's inline var(--primary) untouched. */
-    .auth-split-form .role-tab:not(.active) {
-      background: #EDE5FA !important;
-      color: #6b5ca5 !important;
+    /* Role tabs — editorial underline style.
+       No filled background; active tab gets a 2px purple underline + glow. */
+    .auth-split-form .role-tab {
+      background: transparent !important;
+      border-radius: 8px;
+      padding: 10px 8px !important;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 0.78rem !important;
+      color: rgba(255,255,255,0.6) !important;
+      transition: color 180ms ease;
     }
     .auth-split-form .role-tab:not(.active):hover {
-      background: #DDD0F5 !important;
-      color: #1e1b3a !important;
+      color: rgba(255,255,255,0.85) !important;
+      background: transparent !important;
     }
-    .auth-split-form [style*="grid-template-columns: repeat(4, 1fr)"] {
-      background: #EDE5FA !important;
+    .auth-split-form .role-tab.active {
+      color: #ffffff !important;
+      background: transparent !important;
+      box-shadow: inset 0 -2px 0 0 #5B1EBC, 0 0 8px rgba(91,30,188,0.5);
+    }
+    .auth-split-form .role-tab .role-tab-emoji {
+      font-size: 16px;
+      line-height: 1;
     }
 
     /* Demo credentials box — soft purple tint to harmonize with the panel */
@@ -731,22 +754,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
           Admin: admin@rms.edu.ph / Admin@123
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; padding: 4px;">
           <?php
           $tabs = [
-              'student'        => '🎓 Student',
-              'faculty'        => '👨‍🏫 Faculty',
-              'research_staff' => '📋 Staff',
-              'admin'          => '⚙️ Admin',
+              'student'        => ['🎓', 'Student'],
+              'faculty'        => ['👨‍🏫', 'Faculty'],
+              'research_staff' => ['📋', 'Staff'],
+              'admin'          => ['⚙️', 'Admin'],
           ];
-          foreach ($tabs as $tabKey => $tabLabel):
+          foreach ($tabs as $tabKey => $tabParts):
               $isActive = ($selectedRole === $tabKey);
-              $bg       = $isActive ? 'var(--primary)' : 'transparent';
-              $fg       = $isActive ? 'white' : '#D0D3E8';
+              $fg       = $isActive ? '#ffffff' : 'rgba(255,255,255,0.6)';
               $weight   = $isActive ? '600' : '500';
               $cls      = 'role-tab' . ($isActive ? ' active' : '');
           ?>
-          <button type="button" class="<?php echo $cls; ?>" data-role="<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>" onclick="switchRole('<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>')" style="padding: 10px; background: <?php echo $bg; ?>; color: <?php echo $fg; ?>; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: <?php echo $weight; ?>;"><?php echo $tabLabel; ?></button>
+          <button type="button" class="<?php echo $cls; ?>" data-role="<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>" onclick="switchRole('<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>')" style="color: <?php echo $fg; ?>; border: none; cursor: pointer; font-weight: <?php echo $weight; ?>;"><span class="role-tab-emoji" aria-hidden="true"><?php echo $tabParts[0]; ?></span><span><?php echo $tabParts[1]; ?></span></button>
           <?php endforeach; ?>
         </div>
 
@@ -980,8 +1002,8 @@ function switchRole(role) {
 
   tabs.forEach((btn) => {
     const isActive = btn.getAttribute('data-role') === role;
-    btn.style.background = isActive ? 'var(--primary)' : 'transparent';
-    btn.style.color = isActive ? 'white' : '#D0D3E8';
+    btn.classList.toggle('active', isActive);
+    btn.style.color = isActive ? '#ffffff' : 'rgba(255,255,255,0.6)';
     btn.style.fontWeight = isActive ? '600' : '500';
   });
 }
