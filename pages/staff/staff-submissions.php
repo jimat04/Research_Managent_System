@@ -1,4 +1,6 @@
 <?php
+// TEMP: Force fresh bytecode on each request (dev only)
+if (function_exists('opcache_reset')) { @opcache_reset(); }
 /**
  * Staff — Submissions Inbox
  *
@@ -15,6 +17,26 @@ require_once __DIR__ . '/../../includes/staff-shell.php';
 
 requireLogin();
 requireRole('research_staff');
+
+// ── TEMP DEBUG — remove after fixing ──────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    echo '<div style="background:#fee2e2;border:2px solid #dc2626;padding:20px;margin:20px;font-family:monospace;font-size:14px;color:#111;position:relative;z-index:99999;">';
+    echo '<h3 style="margin-top:0;color:#dc2626;">🔍 POST DEBUG</h3>';
+    echo '<pre>' . htmlspecialchars(print_r($_POST, true)) . '</pre>';
+    echo '<h3 style="color:#dc2626;">📋 Submissions in DB (status=submitted):</h3>';
+    $dbg = $conn->query("SELECT project_id, title, status FROM research_projects WHERE status = 'submitted' ORDER BY project_id DESC LIMIT 5");
+    while ($r = $dbg->fetch_assoc()) {
+        echo "• project_id=" . (int)$r['project_id'] . " | status=" . htmlspecialchars($r['status']) . " | title=" . htmlspecialchars($r['title']) . "<br>";
+    }
+    echo '<h3 style="color:#dc2626;">🔎 Latest 5 projects overall:</h3>';
+    $dbg2 = $conn->query("SELECT project_id, title, status, created_by FROM research_projects ORDER BY project_id DESC LIMIT 5");
+    while ($r = $dbg2->fetch_assoc()) {
+        echo "• project_id=" . (int)$r['project_id'] . " | status=" . htmlspecialchars($r['status']) . " | created_by=" . (int)$r['created_by'] . " | title=" . htmlspecialchars($r['title']) . "<br>";
+    }
+    echo '<p style="color:#666;font-style:italic;">Take a screenshot of this debug box and share it. This block will be removed after fixing.</p>';
+    echo '</div>';
+}
+// ── END TEMP DEBUG ────────────────────────────────────────────────────────
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
