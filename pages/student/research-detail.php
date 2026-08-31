@@ -46,6 +46,18 @@ if ($rp_deleted_column_stmt) {
 }
 $rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 
+// project_members.created_at is added by the migration; the base dump only has (id, project_id, user_id, role).
+// Use a runtime check so this page is safe on both schemas.
+$pm_created_at_stmt = $conn->prepare("SHOW COLUMNS FROM project_members LIKE 'created_at'");
+$pm_has_created_at = false;
+if ($pm_created_at_stmt) {
+    $pm_created_at_stmt->execute();
+    $pm_has_created_at = $pm_created_at_stmt->get_result()->num_rows > 0;
+    $pm_created_at_stmt->close();
+}
+$pm_select_col = $pm_has_created_at ? 'pm.created_at AS added_at' : 'pm.id AS added_at';
+$pm_order_col  = $pm_has_created_at ? 'pm.created_at' : 'pm.id';
+
 // Fetch the project — must be owner OR a project member
 $project = null;
 if ($project_id > 0) {
@@ -80,11 +92,11 @@ if ($project_id > 0) {
 $members = [];
 if ($project) {
     $m = $conn->prepare("
-        SELECT pm.role, pm.added_at, u.user_id, u.first_name, u.last_name, u.email
+        SELECT pm.role, $pm_select_col, u.user_id, u.first_name, u.last_name, u.email
         FROM project_members pm
         LEFT JOIN users u ON pm.user_id = u.user_id
         WHERE pm.project_id = ?
-        ORDER BY (pm.role = 'lead') DESC, pm.added_at ASC
+        ORDER BY (pm.role = 'lead') DESC, $pm_order_col ASC
     ");
     if ($m) {
         $m->bind_param('i', $project_id);
