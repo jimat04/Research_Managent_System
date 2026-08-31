@@ -32,7 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $ay_id = isset($_POST['ay_id']) ? intval($_POST['ay_id']) : '';
     $research_area = isset($_POST['research_area']) ? trim($_POST['research_area']) : '';
     $abstract = isset($_POST['abstract']) ? trim($_POST['abstract']) : '';
-    $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'proposal']) ? $_POST['status'] : 'draft';
+    $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'submitted'], true) ? $_POST['status'] : 'draft';
+    if ($status === 'proposal') $status = 'submitted';
+    if (!in_array($status, ['draft', 'submitted'], true)) $status = 'draft';
 
     // Validation
     if (empty($title)) {
@@ -479,7 +481,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
   <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
     <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-secondary">Cancel</a>
     <button type="submit" name="status" value="draft" class="btn btn-secondary">Save as Draft</button>
-    <button type="submit" name="status" value="proposal" class="btn btn-primary">Submit for Review</button>
+    <button type="submit" name="status" value="submitted" class="btn btn-primary">Submit for Review</button>
   </div>
 </form>
 <?php endif; ?>
