@@ -61,7 +61,8 @@ if ($rp_deleted_column_stmt) {
     $rp_has_deleted_at = $rp_deleted_column_stmt->get_result()->num_rows > 0;
     $rp_deleted_column_stmt->close();
 }
-$rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+$rp_deleted_filter       = $rp_has_deleted_at ? ' AND deleted_at IS NULL'         : '';
+$rp_deleted_filter_aliased = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL'     : '';
 
 $user_reviewer_column_stmt = $conn->prepare("SHOW COLUMNS FROM users LIKE 'is_reviewer'");
 $users_has_is_reviewer = false;
@@ -136,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 SELECT rp.project_id, rp.title, rp.status, rp.created_by
                 FROM research_projects rp
                 WHERE rp.project_id = ?"
-                . $rp_deleted_filter . "
+                . $rp_deleted_filter_aliased . "
                 LIMIT 1
             ");
             $info_stmt->bind_param('i', $project_id);
@@ -471,7 +472,7 @@ if ($project_reviews_exists) {
             GROUP BY project_id
         ) stats ON stats.project_id = rp.project_id
         WHERE rp.status = 'under_crec_review'"
-        . $rp_deleted_filter . "
+        . $rp_deleted_filter_aliased . "
         ORDER BY rp.created_at ASC
     ";
 } else {
@@ -507,7 +508,7 @@ if ($project_reviews_exists) {
               ) first ON first.first_upload_id = u1.upload_id
         ) up ON up.project_id = rp.project_id
         WHERE rp.status = 'under_crec_review'"
-        . $rp_deleted_filter . "
+        . $rp_deleted_filter_aliased . "
         ORDER BY rp.created_at ASC
     ";
 }
