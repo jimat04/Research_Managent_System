@@ -46,6 +46,17 @@ if ($rp_deleted_column_stmt) {
 }
 $rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 
+// research_projects.updated_at IS in the base dump, but detect at runtime so
+// the page stays safe on stripped/custom schemas (e.g. fresh installs without ON UPDATE).
+$rp_ua_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'updated_at'");
+$rp_has_updated = true; // safe default — base schema includes this column
+if ($rp_ua_stmt) {
+    $rp_ua_stmt->execute();
+    $rp_has_updated = $rp_ua_stmt->get_result()->num_rows > 0;
+    $rp_ua_stmt->close();
+}
+$rp_select_updated = $rp_has_updated ? ', rp.updated_at' : '';
+
 // project_members.created_at is added by the migration; the base dump only has (id, project_id, user_id, role).
 // Use a runtime check so this page is safe on both schemas.
 $pm_created_at_stmt = $conn->prepare("SHOW COLUMNS FROM project_members LIKE 'created_at'");
@@ -64,7 +75,7 @@ if ($project_id > 0) {
     $stmt = $conn->prepare("
         SELECT
             rp.project_id, rp.title, rp.research_area, rp.abstract, rp.status,
-            rp.created_by, rp.created_at, rp.updated_at,
+            rp.created_by, rp.created_at" . $rp_select_updated . ",
             rp.category_id, rp.ay_id,
             rc.category_name,
             ay.label AS ay_label, ay.semester,
@@ -109,13 +120,36 @@ if ($project) {
     }
 }
 
+// ── runtime schema detection for chapters ────────────────────────────────
+// chapters.updated_at and chapters.deleted_at are added by rms_db_migration.sql
+// but are NOT in the base dump. Detect at runtime so this page works on both
+// migrated and unmigrated installs (mirrors the rp.deleted_at pattern above).
+$ch_ua_stmt = $conn->prepare("SHOW COLUMNS FROM chapters LIKE 'updated_at'");
+$ch_has_updated = false;
+if ($ch_ua_stmt) {
+    $ch_ua_stmt->execute();
+    $ch_has_updated = $ch_ua_stmt->get_result()->num_rows > 0;
+    $ch_ua_stmt->close();
+}
+$ch_del_stmt = $conn->prepare("SHOW COLUMNS FROM chapters LIKE 'deleted_at'");
+$ch_has_deleted = false;
+if ($ch_del_stmt) {
+    $ch_del_stmt->execute();
+    $ch_has_deleted = $ch_del_stmt->get_result()->num_rows > 0;
+    $ch_del_stmt->close();
+}
+$ch_select_extra = '';
+$ch_where_extra  = '';
+if ($ch_has_updated) $ch_select_extra .= ', updated_at';
+if ($ch_has_deleted) $ch_where_extra  .= ' AND deleted_at IS NULL';
+
 // Chapter progress (uses base schema — chapters table is in the base dump)
 $chapters = [];
 if ($project) {
     $c = $conn->prepare("
-        SELECT chapter_id, chapter_number, chapter_title, status, version, updated_at
+        SELECT chapter_id, chapter_number, chapter_title, status, version" . $ch_select_extra . "
         FROM chapters
-        WHERE project_id = ?
+        WHERE project_id = ?" . $ch_where_extra . "
         ORDER BY chapter_number ASC
     ");
     if ($c) {
@@ -411,7 +445,9 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
       </div>
       <div>
         <div class="meta-label">Last Updated</div>
+        <?php if ($rp_has_updated && !empty($project['updated_at'])): ?>
         <div class="meta-value"><?php echo date('M d, Y g:i A', strtotime($project['updated_at'])); ?></div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
@@ -483,7 +519,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
             <div class="chapter-meta">
               <?php if ($row): ?>
                 v<?php echo (int) ($row['version'] ?? 1); ?>
-                · Updated <?php echo date('M d, Y', strtotime($row['updated_at'])); ?>
+                <?php if (!empty($row['updated_at'])): ?>· Updated <?php echo date('M d, Y', strtotime($row['updated_at'])); ?><?php endif; ?>
               <?php else: ?>
                 Not yet started
               <?php endif; ?>
