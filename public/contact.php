@@ -157,7 +157,7 @@ function contact_escape($value) {
                     </div>
                     <div class="contact-detail">
                         <span class="contact-detail-icon">📍</span>
-                        <div><strong>Address</strong><span>2 Congressional Rd, General Mariano Alvarez, Cavite, Philippines</span></div>
+                        <div><strong>Address</strong><span>2 Congressional Rd, General Mariano Alvarez, Cavite, Philippines/</span></div>
                     </div>
                     <div class="contact-detail">
                         <span class="contact-detail-icon">🕒</span>
