@@ -1,0 +1,44 @@
+- generic [ref=e2]:
+  - complementary "Branding" [ref=e3]:
+    - generic [ref=e4]:
+      - img "EARIST Research Management System logo" [ref=e5]
+      - heading "Research Management System" [level=1] [ref=e6]
+      - paragraph [ref=e7]: EARIST Cavite Campus
+      - paragraph [ref=e9]: Sign in to access your research dashboard.
+      - generic [ref=e10]: 📜 EARIST Research Manual 2015
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - heading "Welcome Back" [level=1] [ref=e15]
+      - paragraph [ref=e16]: Sign in to your account
+    - generic [ref=e17]:
+      - strong [ref=e18]: 🔑 Demo Credentials
+      - text: "Student: jdelacruz@rms.edu.ph / Student@123 Faculty: msantos@rms.edu.ph / Faculty@123 Staff: staff@rms.edu.ph / Staff@123 Admin: admin@rms.edu.ph / Admin@123"
+    - generic [ref=e19]:
+      - button "🎓 Student" [ref=e20] [cursor=pointer]
+      - button "👨‍🏫 Faculty" [ref=e21] [cursor=pointer]
+      - button "📋 Staff" [ref=e22] [cursor=pointer]
+      - button "⚙️ Admin" [ref=e23] [cursor=pointer]
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]: Email Address
+        - textbox "Enter your email" [ref=e27]
+      - generic [ref=e28]:
+        - generic [ref=e29]: Password
+        - generic [ref=e30]:
+          - textbox "Enter your password" [ref=e31]
+          - button "Show" [ref=e32] [cursor=pointer]
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - checkbox "Remember me" [ref=e35] [cursor=pointer]
+          - text: Remember me
+        - link "Forgot Password?" [ref=e36] [cursor=pointer]:
+          - /url: "#forgot"
+      - button "🔑 Sign In" [ref=e37] [cursor=pointer]
+    - paragraph [ref=e38]:
+      - link "← Back to homepage" [ref=e39] [cursor=pointer]:
+        - /url: index.php
+    - generic [ref=e40]: or
+    - paragraph [ref=e41]:
+      - text: Don't have an account?
+      - link "Create one" [ref=e42] [cursor=pointer]:
+        - /url: "#"
