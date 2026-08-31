@@ -68,8 +68,8 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         ],
         'User Management' => [
             [SITE_URL . 'pages/admin/admin-users.php',       'User Management', '👥', true],
-            [SITE_URL . 'pages/admin/admin-departments.php', 'Departments',     '🏛️', false],
-            [SITE_URL . 'pages/admin/admin-programs.php',    'Programs',        '🎓', false],
+            [SITE_URL . 'pages/admin/admin-departments.php', 'Departments',     '🏛️', true],
+            [SITE_URL . 'pages/admin/admin-programs.php',    'Programs',        '🎓', true],
         ],
         'Research Management' => [
             [SITE_URL . 'pages/admin/admin-research.php',    'Research Projects',  '📁', true],
