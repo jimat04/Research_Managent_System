@@ -58,7 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 SELECT rp.project_id, rp.title, rp.status, rp.created_by
                 FROM research_projects rp
                 WHERE rp.project_id = ?
-                  AND rp.deleted_at IS NULL
                 LIMIT 1
             ");
             $info_stmt->bind_param('i', $project_id);
@@ -75,11 +74,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 if ($action === 'forward_to_crec') {
                     // Only forward projects currently sitting at 'submitted'
-                    $upd = $conn->prepare("
+                                        $upd = $conn->prepare("
                         UPDATE research_projects
                            SET status = 'under_crec_review', updated_at = NOW()
                          WHERE project_id = ?
                            AND status = 'submitted'
+                           AND deleted_at IS NULL
                     ");
                     $upd->bind_param('i', $project_id);
                     $upd->execute();
@@ -113,7 +113,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                SET status = 'for_revision', updated_at = NOW()
                              WHERE project_id = ?
                                AND status = 'submitted'
-                               AND deleted_at IS NULL
                         ");
                         $upd->bind_param('i', $project_id);
                         $upd->execute();
@@ -171,7 +170,7 @@ $page     = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
 $offset   = ($page - 1) * $per_page;
 
 // ── build WHERE clause dynamically ──────────────────────────────────────
-$where  = ["rp.status = 'submitted'", "rp.deleted_at IS NULL"];
+$where  = ["rp.status = 'submitted'"];
 $params = [];
 $types  = '';
 
