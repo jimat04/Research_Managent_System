@@ -812,7 +812,12 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
           </div>
 
           <?php if (empty($items)): ?>
-            <div class="ptrack-empty-mini">No records yet. This milestone will appear here once a document or report is logged.</div>
+            <div class="ptrack-empty-mini" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <span>No records yet. This milestone will appear here once a document or report is logged.</span>
+              <?php if (in_array($group_name, ['MOU / NDA', 'Progress Reports', 'Terminal Report'], true)): ?>
+                <a class="ptrack-link" href="<?php echo SITE_URL; ?>pages/student/submit-milestone.php?project_id=<?php echo (int) $project['project_id']; ?>">+ Submit →</a>
+              <?php endif; ?>
+            </div>
           <?php else: ?>
             <?php foreach ($items as $it):
               $row_status = (string) ($it['status'] ?? '');
@@ -859,6 +864,18 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
                 <?php if ($date_str && $group_name !== 'Research Colloquium' && $group_name !== 'Progress Reports' && $group_name !== 'Terminal Report'): ?>
                   <span style="color: #94A3B8;">· <?php echo ptrack_se($date_str); ?></span>
                 <?php endif; ?>
+
+                <?php
+                  // Minimal link to the new submit-milestone page for the four slots it
+                  // actually writes to (MOU/NDA, Midway Progress, Terminal). Show on
+                  // pending or rejected rows so the student can upload / re-upload.
+                  $ptrack_supports_submit = in_array($group_name, ['MOU / NDA', 'Progress Reports', 'Terminal Report'], true);
+                  $ptrack_needs_action    = in_array(strtolower($row_status), ['pending', 'rejected'], true);
+                  if ($ptrack_supports_submit && $ptrack_needs_action): ?>
+                    <a class="ptrack-link" href="<?php echo SITE_URL; ?>pages/student/submit-milestone.php?project_id=<?php echo (int) $project['project_id']; ?>" style="margin-left: auto;">
+                      <?php echo strtolower($row_status) === 'rejected' ? '↺ Resubmit →' : '+ Upload →'; ?>
+                    </a>
+                <?php endif; ?>
               </div>
             <?php endforeach; ?>
           <?php endif; ?>
@@ -872,6 +889,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
       <h3 class="ptrack-card-title" style="margin-bottom: 12px;">Quick Actions</h3>
       <div class="ptrack-row">
         <a class="ptrack-btn ptrack-btn-primary" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $project['project_id']; ?>">📄 View Project</a>
+        <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/student/submit-milestone.php?project_id=<?php echo (int) $project['project_id']; ?>">📑 Submit Milestone Documents</a>
         <?php if (in_array((string) $project['status'], ['approved','ongoing'], true)): ?>
           <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">📘 Submit a Chapter</a>
         <?php endif; ?>
