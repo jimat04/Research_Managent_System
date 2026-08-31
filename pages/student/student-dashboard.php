@@ -26,23 +26,26 @@ $unread_stmt->bind_param('i', $user_id);
 $unread_stmt->execute();
 $unread_count = (int) ($unread_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
-// Get chapter statistics
-$stat_submitted_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status IN ('submitted', 'under_review', 'approved')");
-$stat_submitted_stmt->bind_param('i', $user_id);
-$stat_submitted_stmt->execute();
-$stat_submitted = (int) ($stat_submitted_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+// Count PROJECTS (proposals/research projects the student has)
+$stat_projects_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status <> 'draft'");
+$stat_projects_stmt->bind_param('i', $user_id);
+$stat_projects_stmt->execute();
+$stat_projects = (int) ($stat_projects_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
-$stat_review_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'under_review'");
+// Count projects currently under review (submitted/crec/erec)
+$stat_review_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')");
 $stat_review_stmt->bind_param('i', $user_id);
 $stat_review_stmt->execute();
 $stat_review = (int) ($stat_review_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
-$stat_approved_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'approved'");
+// Count approved/ongoing/completed projects
+$stat_approved_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('approved', 'ongoing', 'completed', 'archived')");
 $stat_approved_stmt->bind_param('i', $user_id);
 $stat_approved_stmt->execute();
 $stat_approved = (int) ($stat_approved_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
-$stat_revision_stmt = $conn->prepare("SELECT COUNT(*) as count FROM chapters WHERE project_id IN (SELECT project_id FROM research_projects WHERE created_by = ?) AND status = 'revision_required'");
+// Count projects returned for revision
+$stat_revision_stmt = $conn->prepare("SELECT COUNT(*) as count FROM research_projects WHERE created_by = ? AND deleted_at IS NULL AND status IN ('for_revision', 'revision_required')");
 $stat_revision_stmt->bind_param('i', $user_id);
 $stat_revision_stmt->execute();
 $stat_revision = (int) ($stat_revision_stmt->get_result()->fetch_assoc()['count'] ?? 0);
@@ -467,10 +470,10 @@ renderStudentShell($user, 'student-dashboard', 'Welcome back, ' . htmlspecialcha
   <div class="stat-card">
     <div class="stat-header">
       <div>
-        <div class="stat-number"><?php echo $stat_submitted; ?></div>
-        <div class="stat-label">Total Submissions</div>
+        <div class="stat-number"><?php echo $stat_projects; ?></div>
+        <div class="stat-label">My Projects</div>
       </div>
-      <div class="stat-icon">📋</div>
+      <div class="stat-icon">📁</div>
     </div>
   </div>
 
@@ -488,7 +491,7 @@ renderStudentShell($user, 'student-dashboard', 'Welcome back, ' . htmlspecialcha
     <div class="stat-header">
       <div>
         <div class="stat-number"><?php echo $stat_approved; ?></div>
-        <div class="stat-label">Approved Chapters</div>
+        <div class="stat-label">Approved Projects</div>
       </div>
       <div class="stat-icon">✅</div>
     </div>
