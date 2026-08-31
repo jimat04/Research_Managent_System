@@ -332,7 +332,7 @@ function handleRmsUpload($options, $files, $conn) {
     // Insert into uploads table (use detected MIME type from finfo)
     $stmt = $conn->prepare('
         INSERT INTO uploads
-        (project_id, chapter_id, uploaded_by, type, original_name, file_name, file_path, file_size, mime_type, uploaded_at)
+        (project_id, chapter_id, uploaded_by, type, original_name, file_name, file_path, file_size, mime_type, upload_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
 
