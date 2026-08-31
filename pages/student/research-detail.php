@@ -176,10 +176,10 @@ if ($project) {
     }
     $uploads_filter = $uploads_have_deleted_at ? ' AND deleted_at IS NULL' : '';
     $d = $conn->prepare("
-        SELECT upload_id, original_name, file_name, file_size, mime_type, uploaded_at, chapter_id
+        SELECT upload_id, original_name, file_name, file_size, mime_type, upload_date, chapter_id
         FROM uploads
         WHERE project_id = ? AND type = 'proposal'" . $uploads_filter . "
-        ORDER BY uploaded_at DESC LIMIT 1
+        ORDER BY upload_date DESC LIMIT 1
     ");
     if ($d) {
         $d->bind_param('i', $project_id);
@@ -473,7 +473,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
             ·
             <?php echo number_format(((int) $proposal_doc['file_size']) / 1024, 1); ?> KB
             ·
-            Uploaded <?php echo date('M d, Y', strtotime($proposal_doc['uploaded_at'])); ?>
+            Uploaded <?php echo date('M d, Y', strtotime($proposal_doc['upload_date'])); ?>
           </div>
         </div>
         <a href="<?php echo SITE_URL; ?>public/download.php?id=<?php echo (int) $proposal_doc['upload_id']; ?>" class="btn btn-secondary btn-sm">⬇ Download</a>
