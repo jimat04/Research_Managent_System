@@ -1,6 +1,4 @@
 <?php
-// Force PHP to reload fresh file on each request (XAMPP dev)
-if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 /**
  * Staff — Submissions Inbox
  *
@@ -17,26 +15,6 @@ require_once __DIR__ . '/../../includes/staff-shell.php';
 
 requireLogin();
 requireRole('research_staff');
-
-// ── TEMP DEBUG — remove after fixing ──────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    echo '<div style="background:#fee2e2;border:2px solid #dc2626;padding:20px;margin:20px;font-family:monospace;font-size:14px;color:#111;position:relative;z-index:99999;">';
-    echo '<h3 style="margin-top:0;color:#dc2626;">🔍 POST DEBUG</h3>';
-    echo '<pre>' . htmlspecialchars(print_r($_POST, true)) . '</pre>';
-    echo '<h3 style="color:#dc2626;">📋 Submissions in DB (status=submitted):</h3>';
-    $dbg = $conn->query("SELECT project_id, title, status FROM research_projects WHERE status = 'submitted' ORDER BY project_id DESC LIMIT 5");
-    while ($r = $dbg->fetch_assoc()) {
-        echo "• project_id=" . (int)$r['project_id'] . " | status=" . htmlspecialchars($r['status']) . " | title=" . htmlspecialchars($r['title']) . "<br>";
-    }
-    echo '<h3 style="color:#dc2626;">🔎 Latest 5 projects overall:</h3>';
-    $dbg2 = $conn->query("SELECT project_id, title, status, created_by FROM research_projects ORDER BY project_id DESC LIMIT 5");
-    while ($r = $dbg2->fetch_assoc()) {
-        echo "• project_id=" . (int)$r['project_id'] . " | status=" . htmlspecialchars($r['status']) . " | created_by=" . (int)$r['created_by'] . " | title=" . htmlspecialchars($r['title']) . "<br>";
-    }
-    echo '<p style="color:#666;font-style:italic;">Take a screenshot of this debug box and share it. This block will be removed after fixing.</p>';
-    echo '</div>';
-}
-// ── END TEMP DEBUG ────────────────────────────────────────────────────────
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
@@ -78,26 +56,6 @@ $rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    // Debug: capture POST + DB state into session so it survives the PRG redirect
-    $debug_post = $_POST;
-    $debug_projs = [];
-    $dq = $conn->query("SELECT project_id, title, status, created_by FROM research_projects ORDER BY project_id DESC LIMIT 5");
-    while ($dr = $dq->fetch_assoc()) { $debug_projs[] = $dr; }
-    $_SESSION['_debug_submissions'] = [
-        'post' => $debug_post,
-        'projects' => $debug_projs,
-        'server' => [
-            'REQUEST_METHOD' => $_SERVER['REQUEST_METHOD'] ?? '?',
-            'CONTENT_TYPE' => $_SERVER['CONTENT_TYPE'] ?? '?',
-            'CONTENT_LENGTH' => $_SERVER['CONTENT_LENGTH'] ?? '?',
-            'HTTP_REFERER' => $_SERVER['HTTP_REFERER'] ?? '?',
-        ],
-        'raw_input' => file_get_contents('php://input'),
-        'time' => date('Y-m-d H:i:s'),
-    ];
-    error_log('[STAFF SUBMISSIONS] POST = ' . json_encode($_POST));
-    error_log('[STAFF SUBMISSIONS] php://input = ' . file_get_contents('php://input'));
-
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         // Mint a fresh token so the user can retry on the next request without a hard refresh
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -571,31 +529,6 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
 <?php endif; ?>
 <?php if (isset($_SESSION['module_error'])): ?>
   <div class="alert alert-error">✕ <?php echo se($_SESSION['module_error']); unset($_SESSION['module_error']); ?></div>
-<?php endif; ?>
-
-<?php if (isset($_SESSION['_debug_submissions'])):
-  $dbg = $_SESSION['_debug_submissions'];
-  unset($_SESSION['_debug_submissions']);
-?>
-  <div style="background:#fef3c7;border:2px solid #f59e0b;padding:20px;margin:20px 0;font-family:Consolas,monospace;font-size:13px;color:#111;white-space:pre-wrap;word-break:break-all;">
-    <h3 style="margin:0 0 10px;color:#92400e;">🔍 DEBUG (captured before redirect)</h3>
-    <strong>Time:</strong> <?php echo se($dbg['time']); ?>
-
-    <strong>POST data:</strong>
-    <?php echo se(print_r($dbg['post'], true)); ?>
-
-    <strong>Raw php://input:</strong>
-    <?php echo se($dbg['raw_input'] ?: '(empty)'); ?>
-
-    <strong>Server vars:</strong>
-    <?php echo se(print_r($dbg['server'], true)); ?>
-
-    <strong>Latest 5 projects in DB:</strong>
-    <?php foreach ($dbg['projects'] as $p): ?>
-    • id=<?php echo (int)$p['project_id']; ?> | status=<?php echo se($p['status']); ?> | by=<?php echo (int)$p['created_by']; ?> | <?php echo se($p['title']); ?>
-    <?php endforeach; ?>
-    <p style="color:#92400e;font-style:italic;margin:10px 0 0;">→ Tell me what shows here and I'll fix the bug.</p>
-  </div>
 <?php endif; ?>
 
 <!-- Stat summary -->
