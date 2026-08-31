@@ -30,6 +30,14 @@ function rms_project_access($project_id, $user) {
     return $result && $result->num_rows > 0;
 }
 
+// Keep the denormalized research_projects.adviser_id in sync with project_advisers
+// (mirrors the backfill in database/migrations/rms_db_migration.sql).
+function rms_sync_project_adviser($project_id) {
+    global $conn;
+    $project_id = (int) $project_id;
+    $conn->query("UPDATE research_projects rp SET rp.adviser_id = (SELECT pa.adviser_id FROM project_advisers pa WHERE pa.project_id = $project_id ORDER BY pa.assigned_at, pa.adviser_id LIMIT 1) WHERE rp.project_id = $project_id");
+}
+
 function rms_handle_module_action($page_key, $user) {
     global $conn;
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
@@ -114,6 +122,53 @@ function rms_handle_module_action($page_key, $user) {
             $statement->execute();
             $_SESSION['module_success'] = 'Password updated successfully.';
         }
+    }
+
+    if ($page_key === 'staff-assignments.php' && in_array($user['role'], ['admin', 'research_staff'], true)) {
+        $project_id = (int) ($_POST['project_id'] ?? 0);
+        $adviser_id = (int) ($_POST['adviser_id'] ?? 0);
+
+        if (isset($_POST['remove_assignment'])) {
+            if ($project_id > 0 && $adviser_id > 0) {
+                $statement = $conn->prepare('DELETE FROM project_advisers WHERE project_id = ? AND adviser_id = ?');
+                $statement->bind_param('ii', $project_id, $adviser_id);
+                $statement->execute();
+                rms_sync_project_adviser($project_id);
+                logActivity("Removed adviser #$adviser_id from project #$project_id", 'adviser_assignment');
+                $_SESSION['module_success'] = 'Adviser assignment removed.';
+            } else {
+                $_SESSION['module_error'] = 'Invalid assignment selected.';
+            }
+            header('Location: staff-assignments.php');
+            exit;
+        }
+
+        if ($project_id <= 0 || $adviser_id <= 0) {
+            $_SESSION['module_error'] = 'Choose a research project and a faculty adviser.';
+        } else {
+            $project = $conn->query("SELECT project_id FROM research_projects WHERE project_id = $project_id");
+            $adviser = $conn->query("SELECT user_id FROM users WHERE user_id = $adviser_id AND role = 'faculty' AND status = 'active'");
+            $existing = $conn->query("SELECT project_id FROM project_advisers WHERE project_id = $project_id AND adviser_id = $adviser_id");
+            if (!$project || $project->num_rows === 0) {
+                $_SESSION['module_error'] = 'Research project not found.';
+            } elseif (!$adviser || $adviser->num_rows === 0) {
+                $_SESSION['module_error'] = 'That faculty account is not available for assignment.';
+            } elseif ($existing && $existing->num_rows > 0) {
+                $_SESSION['module_error'] = 'That faculty member is already assigned to this project.';
+            } else {
+                $statement = $conn->prepare('INSERT INTO project_advisers (project_id, adviser_id) VALUES (?, ?)');
+                $statement->bind_param('ii', $project_id, $adviser_id);
+                if ($statement->execute()) {
+                    rms_sync_project_adviser($project_id);
+                    logActivity("Assigned adviser #$adviser_id to project #$project_id", 'adviser_assignment');
+                    $_SESSION['module_success'] = 'Faculty adviser assigned successfully.';
+                } else {
+                    $_SESSION['module_error'] = 'The assignment could not be saved. Please try again.';
+                }
+            }
+        }
+        header('Location: staff-assignments.php');
+        exit;
     }
 
     if ($page_key === 'faculty-review-detail.php' && $user['role'] === 'faculty') {
@@ -275,6 +330,27 @@ function rms_render_module($page_key, $user, $module) {
 
     if ($page_key === 'profile.php') {
         echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Profile</div></div><div class="card-body"><form method="post">' . csrfField() . '<label>First name<br><input class="form-control" name="first_name" value="' . rms_escape($user['first_name']) . '" required></label><br><label>Last name<br><input class="form-control" name="last_name" value="' . rms_escape($user['last_name']) . '" required></label><br><label>Email<br><input class="form-control" value="' . rms_escape($user['email']) . '" disabled></label><br><label>Contact<br><input class="form-control" name="contact" value="' . rms_escape($user['contact'] ?? '') . '"></label><br><button class="btn btn-primary">Save Profile</button></form></div></div>'; return;
+    }
+
+    if ($page_key === 'staff-assignments.php') {
+        $projects = rms_rows($conn->query("SELECT rp.project_id, rp.title, rp.status, CONCAT(u.first_name, ' ', u.last_name) AS student_name FROM research_projects rp LEFT JOIN users u ON u.user_id = rp.created_by ORDER BY rp.created_at DESC"));
+        $faculty = rms_rows($conn->query("SELECT user_id, first_name, last_name, is_reviewer FROM users WHERE role = 'faculty' AND status = 'active' ORDER BY last_name, first_name"));
+        $assignments = rms_rows($conn->query("SELECT pa.project_id, pa.adviser_id, rp.title, CONCAT(u.first_name, ' ', u.last_name) AS student_name, CONCAT(f.first_name, ' ', f.last_name) AS adviser_name, pa.assigned_at FROM project_advisers pa JOIN research_projects rp ON rp.project_id = pa.project_id LEFT JOIN users u ON u.user_id = rp.created_by JOIN users f ON f.user_id = pa.adviser_id ORDER BY pa.assigned_at DESC"));
+
+        echo '<div class="card"><div class="card-header"><div><div class="card-title">Assign Faculty Adviser</div><div class="card-subtitle">Link a research project to the faculty member who will review it. The project appears in their Review Queue immediately.</div></div></div><div class="card-body"><form method="post">' . csrfField() . '<label>Research project<br><select class="form-control" name="project_id" required><option value="">Select research project</option>';
+        foreach ($projects as $project) echo '<option value="' . (int) $project['project_id'] . '">' . rms_escape($project['title']) . ' — ' . rms_escape($project['student_name'] ?? 'no student') . ' (' . rms_escape(rms_status($project['status'])) . ')</option>';
+        echo '</select></label><br><label>Faculty adviser<br><select class="form-control" name="adviser_id" required><option value="">Select faculty adviser</option>';
+        foreach ($faculty as $member) echo '<option value="' . (int) $member['user_id'] . '">' . rms_escape($member['first_name'] . ' ' . $member['last_name'] . ((int) $member['is_reviewer'] === 1 ? ' ⭐ (CREC/EREC reviewer)' : '')) . '</option>';
+        echo '</select></label><br><button class="btn btn-primary">Assign Adviser</button></form></div></div>';
+
+        $rows = array_map(function ($row) {
+            $remove = '<form method="post" style="display:inline" onsubmit="return confirm(\'Remove this adviser assignment?\')">' . csrfField() . '<input type="hidden" name="project_id" value="' . (int) $row['project_id'] . '"><input type="hidden" name="adviser_id" value="' . (int) $row['adviser_id'] . '"><button class="btn btn-primary btn-sm" name="remove_assignment" value="1">Remove</button></form>';
+            return [rms_escape($row['title']), rms_escape($row['student_name'] ?? '—'), rms_escape($row['adviser_name']), date('M d, Y', strtotime($row['assigned_at'])), $remove];
+        }, $assignments);
+        echo '<div class="card"><div class="card-header"><div class="card-title">Current Assignments</div></div>';
+        rms_table(['Research', 'Student', 'Adviser', 'Assigned On', 'Action'], $rows, 'No advisers assigned yet. Use the form above to make the first assignment.');
+        echo '</div>';
+        return;
     }
 
     if ($page_key === 'faculty-submissions.php' || $page_key === 'faculty-review.php' || $page_key === 'faculty-students.php') {

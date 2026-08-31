@@ -21,6 +21,7 @@ $modules = [
     'faculty-students.php' => ['My Students', 'faculty', 'graduation-cap', 'Monitor the students and projects assigned to you.'],
     'faculty-reports.php' => ['Reports', 'faculty', 'chart-column', 'View review activity and research progress reports.'],
     'contact-messages.php' => ['Contact Messages', ['admin', 'research_staff'], 'mail', 'Manage public contact form submissions and inquiries.'],
+    'staff-assignments.php' => ['Adviser Assignments', ['admin', 'research_staff'], 'user-plus', 'Assign faculty advisers to research projects and manage current assignments.'],
     'admin-users.php' => ['User Management', 'admin', 'users', 'Manage student, faculty, and administrator accounts.'],
     'admin-research.php' => ['Research Management', 'admin', 'folder-kanban', 'Manage all research records and their workflow status.'],
     'admin-archive.php' => ['Archive Management', 'admin', 'archive', 'Manage completed research in the institutional archive.'],
@@ -91,6 +92,9 @@ $navigationByRole = [
     'research_staff' => [
         'Overview' => [
             ['staff-dashboard.php', 'Dashboard', 'layout-dashboard']
+        ],
+        'Management' => [
+            ['staff-assignments.php', 'Adviser Assignments', 'user-plus']
         ],
         'Communication' => [
             ['messages.php', 'Messages', 'messages-square'],
