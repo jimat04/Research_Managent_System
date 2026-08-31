@@ -55,13 +55,18 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $subtitle_default   = '';
     $page_subtitle_safe = $page_subtitle !== '' ? $page_subtitle : $subtitle_default;
 
-    // Get pending contact messages count for badge
+    // Get badge counts for nav items
     global $conn;
     $stat_contact = 0;
+    $stat_pending = 0;
     if (isset($conn)) {
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
             $stat_contact = (int) ($count_result->fetch_assoc()['count'] ?? 0);
+        }
+        $count_result = $conn->query("SELECT COUNT(*) AS count FROM research_projects WHERE status = 'submitted'");
+        if ($count_result) {
+            $stat_pending = (int) ($count_result->fetch_assoc()['count'] ?? 0);
         }
     }
 
@@ -76,7 +81,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             [SITE_URL . 'pages/staff/staff-dashboard.php', 'Dashboard', '📊', true, 0],
         ],
         'Processing' => [
-            [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', false, 0],
+            [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
             [SITE_URL . 'pages/staff/staff-crec.php',       'For CREC Review',    '🏛️', false, 0],
             [SITE_URL . 'pages/staff/staff-revisions.php',  'Revision Returns',   '🔄', false, 0],
         ],
