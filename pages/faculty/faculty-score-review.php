@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
              WHERE review_id = ? AND reviewer_id = ?
         ");
         $upd->bind_param(
-            'iiiisssii',
+            'iiiissii',
             $scores['methodology_score'], $scores['contribution_score'],
             $scores['applicability_score'], $scores['agenda_score'],
             $comments, $recommendation, $review_id, $user_id
