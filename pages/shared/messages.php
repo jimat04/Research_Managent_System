@@ -239,6 +239,12 @@ if ($r_stmt) {
 // and pre-filled when replying to a message).
 // ---------------------------------------------------------------
 $compose_recipient_id = (int) ($_GET['reply_to'] ?? 0);
+// ?to={user_id} is a friendly alias for ?reply_to={user_id} — used by
+// cross-role "Message" links (e.g. faculty-students.php) that just want
+// to pre-select a recipient without a message-id context.
+if ($compose_recipient_id <= 0) {
+    $compose_recipient_id = (int) ($_GET['to'] ?? 0);
+}
 $compose_subject      = trim((string) ($_GET['subject'] ?? ''));
 $compose_body         = '';
 
