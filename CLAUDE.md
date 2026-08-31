@@ -380,4 +380,8 @@ Dashboard, User Management, Research Management, Archive Management, Reports & A
 
 ## Design Goal
 
-Every page should feel like part of a **funded, modern university research platform** — consistent role-colored accents, generous whitespace, clean typography, purposeful animation, and clear hierarchy. Not a student CRUD project, not a generic SaaS template.
+Every page should feel like part of a **funded, modern university research platform** — consistent role-colored accents, generous whitespace, clean typography, purposeful animation, and clear hierarchy. Not a student CRUD project, not a generic SaaS template.# RMS Project Guidelines
+
+## Context Management
+- Monitor your context usage. If a conversation or multi-step task becomes long (>150k tokens), proactively summarize past steps and keep your responses concise.
+- Avoid reading massive vendor/log files completely; use targeted line ranges or search commands instead.
