@@ -42,22 +42,42 @@ function submissions_statusBadge(string $status): array {
     return $map[$status] ?? ['status-draft', ucwords(str_replace('_', ' ', $status))];
 }
 
+// ── runtime schema detection ────────────────────────────────────────────
+// research_projects.deleted_at is added by the migration but not in the base dump.
+// Mirror the same pattern edit-research.php uses so this page is safe on both schemas.
+$rp_deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+$rp_has_deleted_at = false;
+if ($rp_deleted_column_stmt) {
+    $rp_deleted_column_stmt->execute();
+    $rp_has_deleted_at = $rp_deleted_column_stmt->get_result()->num_rows > 0;
+    $rp_deleted_column_stmt->close();
+}
+$rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    // Debug: log raw POST so we can see what actually arrives from the form
+    error_log('[STAFF SUBMISSIONS] POST = ' . json_encode($_POST));
+
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
-        $_SESSION['module_error'] = 'Your form has expired. Please try again.';
+        // Mint a fresh token so the user can retry on the next request without a hard refresh
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        $_SESSION['module_error'] = 'Your session has expired. Please refresh the page and try again.';
     } else {
         $action     = (string) $_POST['action'];
-        $project_id = (int) ($_POST['project_id'] ?? 0);
+        $project_id = isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0;
 
         if ($project_id <= 0) {
-            $_SESSION['module_error'] = 'Invalid submission reference.';
+            $_SESSION['module_error'] = 'Invalid submission reference (received project_id='
+                . htmlspecialchars((string)($_POST['project_id'] ?? 'MISSING'), ENT_QUOTES, 'UTF-8')
+                . '). Please refresh the page (Ctrl+Shift+R) and try again.';
         } else {
             // Look up project + student to drive the action safely
             $info_stmt = $conn->prepare("
                 SELECT rp.project_id, rp.title, rp.status, rp.created_by
                 FROM research_projects rp
-                WHERE rp.project_id = ?
+                WHERE rp.project_id = ?"
+                . $rp_deleted_filter . "
                 LIMIT 1
             ");
             $info_stmt->bind_param('i', $project_id);
@@ -74,12 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 if ($action === 'forward_to_crec') {
                     // Only forward projects currently sitting at 'submitted'
-                                        $upd = $conn->prepare("
+                    $upd = $conn->prepare("
                         UPDATE research_projects
                            SET status = 'under_crec_review', updated_at = NOW()
                          WHERE project_id = ?
-                           AND status = 'submitted'
-                    ");
+                           AND status = 'submitted'"
+                           . $rp_deleted_filter
+                    );
                     $upd->bind_param('i', $project_id);
                     $upd->execute();
                     $affected = $conn->affected_rows;
@@ -111,8 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             UPDATE research_projects
                                SET status = 'for_revision', updated_at = NOW()
                              WHERE project_id = ?
-                               AND status = 'submitted'
-                        ");
+                               AND status = 'submitted'"
+                               . $rp_deleted_filter
+                        );
                         $upd->bind_param('i', $project_id);
                         $upd->execute();
                         $affected = $conn->affected_rows;
