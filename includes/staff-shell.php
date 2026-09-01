@@ -57,9 +57,10 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
     // Get badge counts for nav items
     global $conn;
-    $stat_contact = 0;
-    $stat_pending = 0;
-    $stat_crec    = 0;
+    $stat_contact   = 0;
+    $stat_pending   = 0;
+    $stat_crec      = 0;
+    $stat_milestones = 0;
     if (isset($conn)) {
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
@@ -72,6 +73,36 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM research_projects WHERE status = 'under_crec_review'");
         if ($count_result) {
             $stat_crec = (int) ($count_result->fetch_assoc()['count'] ?? 0);
+        }
+        // Pending milestone verifications: research_documents + research_reports
+        // with status 'submitted'. Both tables are added by a migration and may
+        // not exist on every install — check SHOW TABLES first so the shell
+        // renders cleanly on older schemas.
+        $milestone_present = ['documents' => false, 'reports' => false];
+        $tbl_check = $conn->query("SHOW TABLES");
+        if ($tbl_check) {
+            while ($trow = $tbl_check->fetch_array()) {
+                if ($trow[0] === 'research_documents') $milestone_present['documents'] = true;
+                if ($trow[0] === 'research_reports')   $milestone_present['reports']   = true;
+            }
+            $tbl_check->close();
+        }
+        $milestone_parts = [];
+        if ($milestone_present['documents']) {
+            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_documents WHERE status = 'submitted'";
+        }
+        if ($milestone_present['reports']) {
+            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_reports WHERE status = 'submitted'";
+        }
+        if (!empty($milestone_parts)) {
+            $milestone_sql = implode(' UNION ALL ', $milestone_parts);
+            $milestone_res = $conn->query($milestone_sql);
+            if ($milestone_res) {
+                while ($mrow = $milestone_res->fetch_assoc()) {
+                    $stat_milestones += (int) ($mrow['c'] ?? 0);
+                }
+                $milestone_res->close();
+            }
         }
     }
 
@@ -88,6 +119,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         'Processing' => [
             [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
             [SITE_URL . 'pages/staff/staff-crec.php',       'For CREC Review',    '🏛️', true,  $stat_crec],
+            [SITE_URL . 'pages/staff/staff-milestones.php', 'Milestones',         '📑', true,  $stat_milestones],
             [SITE_URL . 'pages/staff/staff-revisions.php',  'Revision Returns',   '🔄', false, 0],
         ],
         'Repository' => [
