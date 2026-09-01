@@ -30,7 +30,7 @@
 - [x] uploads/proposals, chapters, defense, manuscripts directories created
 - [x] Add Research Manual 2015 reference doc
 - [x] Add schema support for MOU/NDA, progress reports, terminal reports, colloquium, and publication tracking
-- [ ] pages/submit-research.php: add co-researcher/team member UI
+- [x] pages/submit-research.php: add co-researcher/team member UI
 - [ ] pages/submit-research.php: createNotification() for admin on new submission
 - [ ] Build UI for required manual documents and report milestones
 - [x] Add read-only Research Manual milestone panel to student research detail page
