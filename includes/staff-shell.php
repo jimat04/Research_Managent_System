@@ -61,6 +61,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $stat_pending   = 0;
     $stat_crec      = 0;
     $stat_milestones = 0;
+    $stat_defenses  = 0;
     if (isset($conn)) {
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
@@ -104,6 +105,23 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
                 $milestone_res->close();
             }
         }
+
+        // Upcoming defenses (status scheduled/rescheduled with date >= now).
+        // defense_schedule is in the main schema, but defend against older
+        // installs that may not have it yet.
+        $has_defense_tbl = false;
+        $def_tbl_check = $conn->query("SHOW TABLES LIKE 'defense_schedule'");
+        if ($def_tbl_check) {
+            $has_defense_tbl = ($def_tbl_check->num_rows > 0);
+            $def_tbl_check->free();
+        }
+        if ($has_defense_tbl) {
+            $def_res = $conn->query("SELECT COUNT(*) AS c FROM defense_schedule WHERE status IN ('scheduled','rescheduled') AND schedule_date >= NOW()");
+            if ($def_res) {
+                $stat_defenses = (int) ($def_res->fetch_assoc()['c'] ?? 0);
+                $def_res->close();
+            }
+        }
     }
 
     // Canonical staff nav. Each row: [href, label, icon, exists, badge_count].
@@ -120,6 +138,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
             [SITE_URL . 'pages/staff/staff-crec.php',       'For CREC Review',    '🏛️', true,  $stat_crec],
             [SITE_URL . 'pages/staff/staff-milestones.php', 'Milestones',         '📑', true,  $stat_milestones],
+            [SITE_URL . 'pages/staff/staff-defense.php',    'Defense Schedule',   '🗓️', true,  $stat_defenses],
             [SITE_URL . 'pages/staff/staff-revisions.php',  'Revision Returns',   '🔄', false, 0],
         ],
         'Repository' => [
