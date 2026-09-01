@@ -37,7 +37,7 @@ if ($project_id > 0) {
             if ($project['created_by'] == $user_id) {
                 $has_access = true;
             } else {
-                $member_query = "SELECT id FROM project_members WHERE project_id = ? AND user_id = ?";
+                $member_query = "SELECT project_member_id FROM project_members WHERE project_id = ? AND user_id = ?";
                 $member_stmt = $conn->prepare($member_query);
                 if ($member_stmt) {
                     $member_stmt->bind_param("ii", $project_id, $user_id);

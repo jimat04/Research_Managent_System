@@ -25,8 +25,9 @@ $research_archived = (int) ($conn->query("SELECT COUNT(*) as count FROM research
 // final-approval gate works on both old and new schemas.
 $rp_has_approved_by = (bool) ($conn->query("SHOW COLUMNS FROM research_projects LIKE 'approved_by'")->num_rows ?? 0);
 $rp_has_approved_at = (bool) ($conn->query("SHOW COLUMNS FROM research_projects LIKE 'approved_at'")->num_rows ?? 0);
-$rp_has_deleted_at  = (bool) ($conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'")->num_rows ?? 0);
-$rp_deleted_filter  = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+$rp_has_deleted_at        = (bool) ($conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'")->num_rows ?? 0);
+$rp_deleted_filter        = $rp_has_deleted_at ? ' AND deleted_at IS NULL'    : '';
+$rp_deleted_filter_alias  = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 
 // ── POST handlers (President/Administration final approval gate) ─────────
 $admin_flash = ['ok' => '', 'err' => ''];
@@ -187,7 +188,7 @@ $afa_sql = "
            (SELECT COUNT(*) FROM project_members   pm WHERE pm.project_id = rp.project_id) AS member_count
       FROM research_projects rp
       LEFT JOIN users u ON u.user_id = rp.created_by
-     WHERE rp.status = 'approved'" . $rp_deleted_filter . "
+     WHERE rp.status = 'approved'" . $rp_deleted_filter_alias . "
      ORDER BY rp.updated_at ASC
      LIMIT 50
 ";
