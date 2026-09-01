@@ -81,6 +81,95 @@ if ($rp_deleted_column_stmt) {
 $rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 
 // The migration adds chapters.deleted_at; keep deleted projects and chapters inaccessible.
+$ch_has_deleted_at = false;
+$ch_del_check = $conn->prepare("SHOW COLUMNS FROM chapters LIKE 'deleted_at'");
+if ($ch_del_check) {
+    $ch_del_check->execute();
+    $ch_has_deleted_at = $ch_del_check->get_result()->num_rows > 0;
+    $ch_del_check->close();
+}
+$ch_deleted_filter = $ch_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+
+// ── Friendly selection flow ───────────────────────────────────────────────
+// Many entry points link here without one or both params. Instead of dead-end
+// error cards, route the user through a project picker (when ?project_id is
+// missing/invalid) or a chapter picker (when ?project_id is valid but
+// ?chapter is missing/invalid). The full upload flow runs only when both
+// params are present and valid.
+$sch_picker_mode      = '';   // '' | 'project' | 'chapter'
+$sch_student_projects = [];   // used by 'project' picker
+$sch_project_chapters = [];   // used by 'chapter' picker
+$sch_resolved_project = null; // for 'chapter' picker we still need access control
+
+if ($project_id <= 0) {
+    // No project_id at all — show the project picker.
+    $sch_picker_mode = 'project';
+} elseif ($invalid_chapter) {
+    // project_id present but chapter missing/invalid — load project + chapters
+    $sch_picker_mode = 'chapter';
+
+    $sch_proj_stmt = $conn->prepare("SELECT rp.project_id, rp.title, rp.status
+        FROM research_projects rp
+        WHERE rp.project_id = ?" . $rp_deleted_filter . "
+        AND (rp.created_by = ? OR EXISTS (
+            SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?
+        ))
+        LIMIT 1");
+    if ($sch_proj_stmt) {
+        $sch_proj_stmt->bind_param('iii', $project_id, $user_id, $user_id);
+        $sch_proj_stmt->execute();
+        $sch_resolved_project = $sch_proj_stmt->get_result()->fetch_assoc() ?: null;
+        $sch_proj_stmt->close();
+    }
+
+    if ($sch_resolved_project) {
+        $sch_ch_stmt = $conn->prepare("SELECT chapter_id, chapter_number, chapter_title, status, version
+            FROM chapters
+            WHERE project_id = ?" . $ch_deleted_filter . "
+            ORDER BY chapter_number ASC");
+        if ($sch_ch_stmt) {
+            $sch_ch_stmt->bind_param('i', $project_id);
+            $sch_ch_stmt->execute();
+            $r = $sch_ch_stmt->get_result();
+            while ($row = $r->fetch_assoc()) {
+                $sch_project_chapters[(int) $row['chapter_number']] = $row;
+            }
+            $sch_ch_stmt->close();
+        }
+    }
+}
+
+if ($sch_picker_mode === 'project') {
+    // Load the student's projects (owned OR member), prepared statement, honour
+    // soft-delete column if present.
+    $sch_pp_stmt = $conn->prepare("SELECT rp.project_id, rp.title, rp.status, rp.updated_at,
+            rc.category_name, aa.label AS ay_label
+        FROM research_projects rp
+        LEFT JOIN research_categories rc ON rp.category_id = rc.category_id
+        LEFT JOIN academic_years aa ON rp.ay_id = aa.ay_id
+        WHERE (rp.created_by = ? OR EXISTS (
+            SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?
+        ))" . $rp_deleted_filter . "
+        ORDER BY rp.updated_at DESC, rp.project_id DESC");
+    if ($sch_pp_stmt) {
+        $sch_pp_stmt->bind_param('ii', $user_id, $user_id);
+        $sch_pp_stmt->execute();
+        $r = $sch_pp_stmt->get_result();
+        while ($row = $r->fetch_assoc()) {
+            $sch_student_projects[] = $row;
+        }
+        $sch_pp_stmt->close();
+    }
+
+    // If exactly one project, skip the picker and go straight to the chapter picker.
+    if (count($sch_student_projects) === 1) {
+        $only_pid = (int) $sch_student_projects[0]['project_id'];
+        header('Location: ' . SITE_URL . 'pages/student/submit-chapter.php?project_id=' . $only_pid);
+        exit();
+    }
+}
+
+// The migration adds chapters.deleted_at; keep deleted projects and chapters inaccessible.
 if (!$invalid_chapter && $project_id > 0) {
     $project_stmt = $conn->prepare("SELECT rp.*, rc.category_name, aa.label AS ay_label, aa.semester
         FROM research_projects rp
@@ -295,7 +384,26 @@ $page_title = $invalid_chapter ? 'Invalid chapter' : ($chapter_titles[$chapter_n
 $current_status = $chapter['status'] ?? null;
 $status_badge = $current_status && isset($status_badges[$current_status]) ? $status_badges[$current_status] : $status_badges['draft'];
 
-renderStudentShell($user, 'submit-chapter', $page_title, $project ? htmlspecialchars($project['title']) : 'Upload a new chapter draft.');
+// Page title + subtitle for the picker states.
+$sch_page_title    = 'Submit Chapter';
+$sch_page_subtitle = 'Pick a project and chapter to upload a new draft or revision.';
+if ($sch_picker_mode === 'project') {
+    $sch_page_title    = 'Choose a project';
+    $sch_page_subtitle = 'Pick one of your research projects to continue.';
+} elseif ($sch_picker_mode === 'chapter' && $sch_resolved_project) {
+    $sch_page_title    = 'Choose a chapter';
+    $sch_page_subtitle = 'Pick a chapter of "' . (string) $sch_resolved_project['title'] . '" to upload or edit.';
+} elseif ($sch_picker_mode === 'chapter') {
+    $sch_page_title    = 'Project not available';
+    $sch_page_subtitle = 'We could not find that project on your account.';
+}
+
+renderStudentShell(
+    $user,
+    'submit-chapter',
+    $sch_picker_mode !== '' ? $sch_page_title : $page_title,
+    $sch_picker_mode !== '' ? $sch_page_subtitle : ($project ? htmlspecialchars($project['title']) : 'Upload a new chapter draft.')
+);
 ?>
 
 <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/style.css">
@@ -428,17 +536,193 @@ renderStudentShell($user, 'submit-chapter', $page_title, $project ? htmlspecialc
     background: #111827;
     color: white;
   }
+
+  /* Picker (project list + chapter list) */
+  .picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .picker-item {
+    display: block;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 16px;
+    padding: 20px 22px;
+    text-decoration: none;
+    color: #111827;
+    transition: all 0.2s;
+  }
+  .picker-item:hover {
+    border-color: #5B1EBC;
+    box-shadow: 0 4px 14px rgba(91, 30, 188, 0.10);
+    transform: translateY(-1px);
+  }
+  .picker-item-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .picker-item-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.3;
+  }
+  .picker-item-meta {
+    font-size: 12px;
+    color: #64748B;
+    margin-top: 2px;
+  }
+  .picker-item-sub {
+    font-size: 12px;
+    color: #94A3B8;
+    margin-top: 10px;
+  }
+  .picker-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #5B1EBC;
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .picker-num.approved          { background: #16A34A; }
+  .picker-num.under_review      { background: #2563EB; }
+  .picker-num.revision_required { background: #EA580C; }
+  .picker-num.submitted         { background: #7C3AED; }
+  .picker-num.draft             { background: #64748B; }
+  .picker-empty {
+    text-align: center;
+    padding: 60px 40px;
+  }
+  .picker-empty .ico {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
 </style>
 
 <div style="margin-bottom: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
   <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to My Research</a>
   <?php if ($project): ?><span style="color: #64748B;">/</span><a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to Project</a><?php endif; ?>
+  <?php if ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>
+    <span style="color: #64748B;">/</span>
+    <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Switch project</a>
+  <?php endif; ?>
 </div>
 
-<?php if ($invalid_chapter): ?>
-  <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Invalid chapter</h3><p style="margin: 0 0 24px; color: #64748B;">Choose a chapter number from 1 to 5.</p><a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a></div>
+<?php if ($sch_picker_mode === 'project'): ?>
+  <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;">Choose a project</h1>
+  <p style="margin: 0 0 24px; color: #64748B;">Pick one of your research projects to continue. You can submit chapters to any project you own or are a member of.</p>
+  <?php if (empty($sch_student_projects)): ?>
+    <div class="card picker-empty">
+      <div class="ico">📭</div>
+      <h3 style="margin: 0 0 8px; color: #111827;">No research projects yet</h3>
+      <p style="margin: 0 0 24px; color: #64748B;">Submit your first research proposal to start uploading chapters.</p>
+      <a href="<?php echo SITE_URL; ?>pages/student/submit-research.php" class="btn btn-primary">+ Submit Your First Research</a>
+    </div>
+  <?php else: ?>
+    <div class="picker-grid">
+      <?php foreach ($sch_student_projects as $p):
+        $ppid    = (int) ($p['project_id'] ?? 0);
+        $ptitle  = (string) ($p['title'] ?? 'Untitled project');
+        $pstatus = (string) ($p['status'] ?? '');
+        $pcat    = (string) ($p['category_name'] ?? '');
+        $pay     = (string) ($p['ay_label'] ?? '');
+        $pupd    = (string) ($p['updated_at'] ?? '');
+        $pupd_lbl = '';
+        if ($pupd !== '' && $pupd !== '0000-00-00 00:00:00') {
+            $pupd_ts = strtotime($pupd);
+            if ($pupd_ts) $pupd_lbl = date('M d, Y', $pupd_ts);
+        }
+        $status_class = '';
+        $status_label = ucwords(str_replace('_', ' ', $pstatus));
+        if (in_array($pstatus, ['approved','ongoing'], true))      { $status_class = 'badge-success'; }
+        elseif (in_array($pstatus, ['submitted','under_review','under_crec_review','under_erec_review'], true)) { $status_class = 'badge-info'; }
+        elseif (in_array($pstatus, ['for_revision','revision_required'], true)) { $status_class = 'badge-warning'; }
+        elseif ($pstatus === 'completed') { $status_class = 'badge-success'; }
+        elseif ($pstatus === 'archived')  { $status_class = 'badge'; }
+        else                              { $status_class = 'badge'; }
+      ?>
+        <a class="picker-item" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $ppid; ?>">
+          <div class="picker-item-head">
+            <div>
+              <div class="picker-item-title"><?php echo htmlspecialchars($ptitle); ?></div>
+              <div class="picker-item-meta">
+                <?php if ($pcat !== ''): ?>📚 <?php echo htmlspecialchars($pcat); ?><?php endif; ?>
+                <?php if ($pay !== ''): ?><?php echo $pcat !== '' ? ' · ' : ''; ?>🎓 <?php echo htmlspecialchars($pay); ?><?php endif; ?>
+              </div>
+            </div>
+            <?php if ($status_label !== ''): ?>
+              <span class="badge <?php echo htmlspecialchars($status_class); ?>"><?php echo htmlspecialchars($status_label); ?></span>
+            <?php endif; ?>
+          </div>
+          <div class="picker-item-sub">Click to choose a chapter →</div>
+          <?php if ($pupd_lbl !== ''): ?>
+            <div class="picker-item-sub">Last updated: <?php echo htmlspecialchars($pupd_lbl); ?></div>
+          <?php endif; ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+
+<?php elseif ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>
+  <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;">Choose a chapter</h1>
+  <p style="margin: 0 0 24px; color: #64748B;">Pick a chapter of <strong><?php echo htmlspecialchars((string) $sch_resolved_project['title']); ?></strong> to upload or edit. Each chapter follows the EARIST Research Manual 2015 structure.</p>
+  <div class="picker-grid">
+    <?php for ($n = 1; $n <= 5; $n++):
+      $ch_row = $sch_project_chapters[$n] ?? null;
+      $ch_status = strtolower((string) ($ch_row['status'] ?? ''));
+      $ch_status_label = $ch_status !== '' ? ucwords(str_replace('_', ' ', $ch_status)) : 'Not Started';
+      $ch_num_class = $ch_status !== '' ? $ch_status : 'draft';
+      $ch_version = (int) ($ch_row['version'] ?? 0);
+    ?>
+      <a class="picker-item" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project_id; ?>&chapter=<?php echo (int) $n; ?>">
+        <div class="picker-item-head">
+          <div class="picker-num <?php echo htmlspecialchars($ch_num_class); ?>"><?php echo (int) $n; ?></div>
+          <div style="text-align: right;">
+            <span class="badge"><?php echo htmlspecialchars($ch_status_label); ?></span>
+            <?php if ($ch_version > 0): ?>
+              <div class="picker-item-sub">v<?php echo (int) $ch_version; ?></div>
+            <?php endif; ?>
+          </div>
+        </div>
+        <div class="picker-item-title"><?php echo htmlspecialchars((string) ($chapter_titles[$n] ?? ('Chapter ' . $n))); ?></div>
+        <div class="picker-item-sub">Click to <?php echo $ch_status === 'approved' ? 'view' : 'open'; ?> this chapter →</div>
+      </a>
+    <?php endfor; ?>
+  </div>
+
+<?php elseif ($sch_picker_mode === 'chapter'): ?>
+  <div class="card picker-empty">
+    <div class="ico">🔍</div>
+    <h3 style="margin: 0 0 8px; color: #111827;">Project not found</h3>
+    <p style="margin: 0 0 24px; color: #64748B;">The project you're trying to access doesn't exist or you no longer have access to it.</p>
+    <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php" class="btn btn-primary">← Choose another project</a>
+  </div>
+
+<?php elseif ($invalid_chapter): ?>
+  <div class="card picker-empty">
+    <div class="ico">📑</div>
+    <h3 style="margin: 0 0 8px; color: #111827;">Invalid chapter</h3>
+    <p style="margin: 0 0 24px; color: #64748B;">Choose a chapter number from 1 to 5.</p>
+    <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project_id; ?>" class="btn btn-primary">← Back to chapter picker</a>
+  </div>
 <?php elseif (!$project): ?>
-  <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Project not found or you don't have access</h3><p style="margin: 0 0 24px; color: #64748B;">The research project you're looking for doesn't exist or you don't have permission to view it.</p><a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a></div>
+  <div class="card picker-empty">
+    <div class="ico">🔍</div>
+    <h3 style="margin: 0 0 8px; color: #111827;">Project not found</h3>
+    <p style="margin: 0 0 24px; color: #64748B;">The research project you're looking for doesn't exist or you don't have permission to view it.</p>
+    <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php" class="btn btn-primary">← Choose a project</a>
+  </div>
 <?php else: ?>
   <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;"><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></h1>
   <p style="margin: 0 0 20px; color: #64748B;"><?php echo htmlspecialchars($project['title']); ?> · <?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge">Not Started</span><?php endif; ?> · Version <?php echo (int) ($chapter['version'] ?? 1); ?></p>
