@@ -21,7 +21,37 @@ if ($rp_deleted_column_stmt) {
     $rp_deleted_column_stmt->close();
 }
 $rp_deleted_filter = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
+
+// chapters.deleted_at is independent of research_projects.deleted_at.
+$chapter_deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM chapters LIKE 'deleted_at'");
+$chapters_has_deleted_at = false;
+if ($chapter_deleted_column_stmt) {
+    $chapter_deleted_column_stmt->execute();
+    $chapters_has_deleted_at = $chapter_deleted_column_stmt->get_result()->num_rows > 0;
+    $chapter_deleted_column_stmt->close();
+}
+$chapter_deleted_filter = $chapters_has_deleted_at ? ' AND deleted_at IS NULL' : '';
+$chapter_deleted_filter_aliased = $chapters_has_deleted_at ? ' AND c.deleted_at IS NULL' : '';
+
+// Migration 008 adds comments.project_id and makes chapter_id nullable. Detect
+// both independently so project status changes remain safe on older schemas.
+$comments_has_project_id = false;
+$comments_chapter_nullable = false;
+$comments_project_column = $conn->query("SHOW COLUMNS FROM comments LIKE 'project_id'");
+if ($comments_project_column) {
+    $comments_has_project_id = $comments_project_column->num_rows > 0;
+    $comments_project_column->close();
+}
+$comments_chapter_column = $conn->query("SHOW COLUMNS FROM comments LIKE 'chapter_id'");
+if ($comments_chapter_column) {
+    $chapter_column = $comments_chapter_column->fetch_assoc();
+    $comments_chapter_nullable = strtoupper((string) ($chapter_column['Null'] ?? 'NO')) === 'YES';
+    $comments_chapter_column->close();
+}
+
 $success = isset($_GET['action']) && $_GET['action'] === 'done' ? 'Action completed successfully.' : '';
+$warning = (string) ($_SESSION['module_warning'] ?? '');
+unset($_SESSION['module_warning']);
 
 $status_badges = [
     'draft' => ['class' => 'badge', 'style' => 'background:#e2e8f0;color:#475569;'],
@@ -99,13 +129,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         if ($chapter_id < 1) $errors[] = 'Invalid chapter.';
         elseif ($action === 'chapter_revise' && $comment_text === '') $errors[] = 'A revision comment is required.';
         else {
-            $chapter_check = $conn->prepare('SELECT chapter_number FROM chapters WHERE chapter_id = ? AND project_id = ?' . ($rp_has_deleted_at ? ' AND deleted_at IS NULL' : '') . ');');
-            $chapter_check->bind_param('ii', $chapter_id, $project_id);
-            $chapter_check->execute();
-            $chapter_row = $chapter_check->get_result()->fetch_assoc();
-            $chapter_check->close();
-            if (!$chapter_row) $errors[] = 'Chapter not found.';
-            else { $comment_type = $action === 'chapter_approve' ? 'approval' : 'correction'; $log_message = ($action === 'chapter_approve' ? 'Approved Chapter ' : 'Requested revision on Chapter ') . $chapter_row['chapter_number'] . ' of ' . $project['title']; }
+            $chapter_check = $conn->prepare('SELECT chapter_number FROM chapters WHERE chapter_id = ? AND project_id = ?' . $chapter_deleted_filter);
+            if (!$chapter_check) {
+                $errors[] = 'Unable to verify the selected chapter.';
+            } else {
+                $chapter_check->bind_param('ii', $chapter_id, $project_id);
+                $chapter_check->execute();
+                $chapter_row = $chapter_check->get_result()->fetch_assoc();
+                $chapter_check->close();
+                if (!$chapter_row) $errors[] = 'Chapter not found.';
+                else { $comment_type = $action === 'chapter_approve' ? 'approval' : 'correction'; $log_message = ($action === 'chapter_approve' ? 'Approved Chapter ' : 'Requested revision on Chapter ') . $chapter_row['chapter_number'] . ' of ' . $project['title']; }
+            }
         }
     } elseif ($action === 'new_comment') {
         $comment_text = trim($_POST['comment'] ?? '');
@@ -116,6 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
     if (empty($errors) && $action !== '') {
         $conn->begin_transaction();
+        $comment_warning = '';
         try {
             if ($new_status !== null) {
                 $status_stmt = $conn->prepare('UPDATE research_projects SET status = ?, updated_at = NOW() WHERE project_id = ?');
@@ -140,25 +175,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             }
             if ($comment_text !== '') {
                 if ($chapter_id === null) {
-                  // @rms-db: comments needs a nullable project_id to associate General feedback safely.
-                  $comment_stmt = $conn->prepare('INSERT INTO comments (chapter_id, faculty_id, comment, type) VALUES (NULL, ?, ?, ?)');
-                  if (!$comment_stmt) throw new Exception('Unable to prepare comment insert.');
-                  $comment_stmt->bind_param('iss', $user_id, $comment_text, $comment_type);
+                    $comment_stmt = null;
+                    // Project-level feedback is best-effort on legacy schemas.
+                    // Never roll back a successful project status update because
+                    // comments cannot yet represent the project relationship.
+                    try {
+                        if ($comments_has_project_id && $comments_chapter_nullable) {
+                            $comment_stmt = $conn->prepare('INSERT INTO comments (chapter_id, project_id, faculty_id, comment, type) VALUES (NULL, ?, ?, ?, ?)');
+                            if (!$comment_stmt) throw new Exception('Unable to prepare project feedback insert.');
+                            $comment_stmt->bind_param('iiss', $project_id, $user_id, $comment_text, $comment_type);
+                        } elseif ($comments_chapter_nullable) {
+                            $comment_stmt = $conn->prepare('INSERT INTO comments (chapter_id, faculty_id, comment, type) VALUES (NULL, ?, ?, ?)');
+                            if (!$comment_stmt) throw new Exception('Unable to prepare legacy project feedback insert.');
+                            $comment_stmt->bind_param('iss', $user_id, $comment_text, $comment_type);
+                        } else {
+                            throw new Exception('Migration 008 is required for project-level feedback.');
+                        }
+
+                        if (!$comment_stmt->execute()) {
+                            throw new Exception($comment_stmt->error ?: 'Comment insert failed.');
+                        }
+                    } catch (Throwable $comment_exception) {
+                        error_log('Project feedback insert failed for project #' . $project_id . ': ' . $comment_exception->getMessage());
+                        $comment_warning = $new_status !== null
+                            ? 'The project status was updated, but the feedback text could not be stored until migration 008 is applied.'
+                            : 'The feedback text could not be stored until migration 008 is applied.';
+                    } finally {
+                        if ($comment_stmt) $comment_stmt->close();
+                    }
                 } else {
-                  $comment_stmt = $conn->prepare('INSERT INTO comments (chapter_id, faculty_id, comment, type) VALUES (?, ?, ?, ?)');
-                  if (!$comment_stmt) throw new Exception('Unable to prepare comment insert.');
-                  $comment_stmt->bind_param('iiss', $chapter_id, $user_id, $comment_text, $comment_type);
+                    $comment_stmt = $conn->prepare('INSERT INTO comments (chapter_id, faculty_id, comment, type) VALUES (?, ?, ?, ?)');
+                    if (!$comment_stmt) throw new Exception('Unable to prepare comment insert.');
+                    $comment_stmt->bind_param('iiss', $chapter_id, $user_id, $comment_text, $comment_type);
+                    if (!$comment_stmt->execute()) throw new Exception('Unable to save comment.');
+                    $comment_stmt->close();
                 }
-                if (!$comment_stmt->execute()) throw new Exception('Unable to save comment.');
-                $comment_stmt->close();
             }
             logActivity($log_message, 'faculty-review');
             $conn->commit();
+            if ($comment_warning !== '') $_SESSION['module_warning'] = $comment_warning;
             header('Location: faculty-review-detail.php?id=' . $project_id . '&action=done');
             exit();
         } catch (Exception $exception) {
             $conn->rollback();
-            $errors[] = 'Unable to complete this action. Please verify the database migration is applied.';
+            error_log('Faculty review action failed for project #' . $project_id . ': ' . $exception->getMessage());
+            $errors[] = 'Unable to complete this action. No changes were saved. Please try again or contact an administrator.';
         }
     }
 }
@@ -169,7 +230,7 @@ $comments = [];
 $members = [];
 $proposal = null;
 if ($project) {
-    $chapter_stmt = $conn->prepare('SELECT c.*, u.first_name AS approver_first, u.last_name AS approver_last FROM chapters c LEFT JOIN users u ON c.approved_by = u.user_id WHERE c.project_id = ?' . ($rp_has_deleted_at ? ' AND c.deleted_at IS NULL' : '') . ' ORDER BY c.chapter_number');
+    $chapter_stmt = $conn->prepare('SELECT c.*, u.first_name AS approver_first, u.last_name AS approver_last FROM chapters c LEFT JOIN users u ON c.approved_by = u.user_id WHERE c.project_id = ?' . $chapter_deleted_filter_aliased . ' ORDER BY c.chapter_number');
     $chapter_stmt->bind_param('i', $project_id);
     $chapter_stmt->execute();
     $chapter_result = $chapter_stmt->get_result();
@@ -189,9 +250,13 @@ if ($project) {
     $proposal = $proposal_stmt->get_result()->fetch_assoc() ?: null;
     $proposal_stmt->close();
 
-    // @rms-db: project-level comments require comments.project_id; general comments are not displayed without that relationship.
-    $comment_stmt = $conn->prepare('SELECT c.*, ch.chapter_number, u.first_name, u.last_name FROM comments c INNER JOIN chapters ch ON c.chapter_id = ch.chapter_id LEFT JOIN users u ON c.faculty_id = u.user_id WHERE ch.project_id = ? ORDER BY c.created_at DESC');
-    $comment_stmt->bind_param('i', $project_id);
+    if ($comments_has_project_id) {
+        $comment_stmt = $conn->prepare('SELECT c.*, ch.chapter_number, u.first_name, u.last_name FROM comments c LEFT JOIN chapters ch ON c.chapter_id = ch.chapter_id LEFT JOIN users u ON c.faculty_id = u.user_id WHERE c.project_id = ? OR ch.project_id = ? ORDER BY c.created_at DESC');
+        $comment_stmt->bind_param('ii', $project_id, $project_id);
+    } else {
+        $comment_stmt = $conn->prepare('SELECT c.*, ch.chapter_number, u.first_name, u.last_name FROM comments c INNER JOIN chapters ch ON c.chapter_id = ch.chapter_id LEFT JOIN users u ON c.faculty_id = u.user_id WHERE ch.project_id = ? ORDER BY c.created_at DESC');
+        $comment_stmt->bind_param('i', $project_id);
+    }
     $comment_stmt->execute();
     $comment_result = $comment_stmt->get_result();
     while ($row = $comment_result->fetch_assoc()) $comments[] = $row;
@@ -251,6 +316,7 @@ renderFacultyShell(
         <div class="card" style="text-align: center; padding: 60px 40px;"><h3 style="margin: 0 0 8px;">Project not found or you don't have access</h3><p style="margin: 0 0 24px; color: var(--text-light);">The research project you're looking for doesn't exist or you don't have permission to view it.</p><a href="faculty-dashboard.php" class="btn btn-primary">Go back to Dashboard</a></div>
       <?php else: ?>
         <?php if ($success): ?><div class="alert alert-success"><strong>Success!</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+        <?php if ($warning): ?><div class="alert alert-warning"><strong>Warning:</strong> <?php echo htmlspecialchars($warning, ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
         <?php if ($errors): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
         <div class="card" style="margin-bottom: 20px;"><div class="card-body"><div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap;"><div style="flex: 1; min-width: 240px;"><h2 style="margin: 0 0 10px;"><?php echo htmlspecialchars($project['title']); ?></h2><div style="color: var(--text-light); font-size: 14px;">Student: <?php echo htmlspecialchars($project['student_name'] ?: 'N/A'); ?> · <?php echo htmlspecialchars($project['category_name'] ?? 'Uncategorized'); ?> · <?php echo htmlspecialchars(($project['ay_label'] ?? 'N/A') . ' / ' . ($project['semester'] ?? 'N/A')); ?> · Submitted: <?php echo !empty($project['created_at']) ? date('M d, Y', strtotime($project['created_at'])) : 'N/A'; ?></div></div><span class="<?php echo htmlspecialchars($project_badge['class']); ?>" <?php echo $project_badge['style'] ? 'style="' . htmlspecialchars($project_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $project_status)); ?></span></div>
           <?php if ($project_status === 'for_revision'): ?><div class="alert alert-warning" style="margin: 18px 0 0;">This project has been returned for revision.</div><?php elseif (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><div class="alert alert-info" style="margin: 18px 0 0;">Awaiting review.</div><?php endif; ?>
