@@ -845,14 +845,10 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
               </div>
             </div>
             <?php if (!$crc_is_lead && !$crc_is_self): ?>
-              <form method="POST" style="margin: 0;"
-                    onsubmit="return confirm('Remove <?php echo crc_se(addslashes($crc_full_nm)); ?> from the team?');">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
-                <input type="hidden" name="action" value="remove_member">
-                <input type="hidden" name="member_id" value="<?php echo (int) $crc_t['user_id']; ?>">
-                <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 6px 14px; color: #DC2626;">Remove</button>
-              </form>
+              <button type="submit"
+                      form="remove-member-form-<?php echo (int) $crc_t['user_id']; ?>"
+                      class="btn btn-secondary"
+                      style="font-size: 13px; padding: 6px 14px; color: #DC2626;">Remove</button>
             <?php else: ?>
               <span class="crc-team-locked" title="The lead researcher is fixed">fixed</span>
             <?php endif; ?>
@@ -864,20 +860,20 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
     <?php if (!$crc_team_full): ?>
       <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
         <label for="crc_search_input" class="form-label">Add Co-researcher</label>
-        <form method="GET" action="<?php echo SITE_URL; ?>pages/student/edit-research.php" style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <input type="hidden" name="id" value="<?php echo (int) $project_id; ?>">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
           <input
             type="text"
             id="crc_search_input"
             name="search"
+            form="member-search-form"
             class="form-control"
             placeholder="Search by name, student ID, or email…"
             value="<?php echo crc_se($crc_search_query); ?>"
             style="flex: 1;"
             maxlength="100"
           />
-          <button type="submit" class="btn btn-secondary">🔍 Search</button>
-        </form>
+          <button type="submit" form="member-search-form" class="btn btn-secondary">🔍 Search</button>
+        </div>
 
         <?php if ($crc_search_query !== ''): ?>
           <?php if (empty($crc_picker_results)): ?>
@@ -903,13 +899,10 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
                       <?php endif; ?>
                     </div>
                   </div>
-                  <form method="POST" style="margin: 0;">
-                    <?php echo csrfField(); ?>
-                    <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
-                    <input type="hidden" name="action" value="add_member">
-                    <input type="hidden" name="member_id" value="<?php echo (int) $crc_row['user_id']; ?>">
-                    <button type="submit" class="btn btn-primary" style="font-size: 13px; padding: 6px 14px;">+ Add</button>
-                  </form>
+                  <button type="submit"
+                          form="add-member-form-<?php echo (int) $crc_row['user_id']; ?>"
+                          class="btn btn-primary"
+                          style="font-size: 13px; padding: 6px 14px;">+ Add</button>
                 </div>
               <?php endforeach; ?>
             </div>
@@ -936,6 +929,38 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
     <?php endif; ?>
   </div>
 </form>
+
+<!-- These action forms stay outside the multipart edit form. The controls in
+     the team card target them with the HTML5 form attribute. -->
+<?php foreach ($crc_team_members as $crc_t):
+  $crc_is_lead = ($crc_t['role'] === 'lead');
+  $crc_is_self = ((int) $crc_t['user_id'] === $user_id);
+  if ($crc_is_lead || $crc_is_self) continue;
+  $crc_full_nm = trim($crc_t['first_name'] . ' ' . $crc_t['last_name']);
+?>
+  <form id="remove-member-form-<?php echo (int) $crc_t['user_id']; ?>" method="POST"
+        onsubmit="return confirm('Remove <?php echo crc_se(addslashes($crc_full_nm)); ?> from the team?');">
+    <?php echo csrfField(); ?>
+    <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
+    <input type="hidden" name="action" value="remove_member">
+    <input type="hidden" name="member_id" value="<?php echo (int) $crc_t['user_id']; ?>">
+  </form>
+<?php endforeach; ?>
+
+<?php if (!$crc_team_full): ?>
+  <form id="member-search-form" method="GET" action="<?php echo SITE_URL; ?>pages/student/edit-research.php">
+    <input type="hidden" name="id" value="<?php echo (int) $project_id; ?>">
+  </form>
+
+  <?php foreach ($crc_picker_results as $crc_row): ?>
+    <form id="add-member-form-<?php echo (int) $crc_row['user_id']; ?>" method="POST">
+      <?php echo csrfField(); ?>
+      <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
+      <input type="hidden" name="action" value="add_member">
+      <input type="hidden" name="member_id" value="<?php echo (int) $crc_row['user_id']; ?>">
+    </form>
+  <?php endforeach; ?>
+<?php endif; ?>
 
 <?php endif; ?>
 
