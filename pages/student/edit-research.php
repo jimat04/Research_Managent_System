@@ -244,7 +244,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 $status_upd->execute();
                 $status_upd->close();
                 if (function_exists('createNotification')) {
-                    createNotification($project['created_by'], 'project', 'Your project has been resubmitted for review.', $project_id);
+                    $notification_title = 'Project resubmitted';
+                    $student_message = 'Your project "' . $title . '" has been resubmitted for review.';
+                    $student_link = 'pages/student/research-detail.php?id=' . (int) $project_id;
+                    $actor_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                    $review_message = 'Project "' . $title . '" has been resubmitted for review by ' . $actor_name . '.';
+
+                    createNotification(
+                        (int) $project['created_by'],
+                        $notification_title,
+                        $student_message,
+                        'success',
+                        $student_link
+                    );
+
+                    // Keep co-researchers informed with the same confirmation
+                    // shown to the project owner.
+                    $member_notify_stmt = $conn->prepare(
+                        'SELECT user_id FROM project_members WHERE project_id = ? AND user_id <> ?'
+                    );
+                    if (!$member_notify_stmt) {
+                        throw new Exception('Unable to prepare co-researcher notifications.');
+                    }
+                    $member_notify_stmt->bind_param('ii', $project_id, $user_id);
+                    if (!$member_notify_stmt->execute()) {
+                        throw new Exception('Unable to load co-researchers for notification.');
+                    }
+                    $member_notify_result = $member_notify_stmt->get_result();
+                    while ($member = $member_notify_result->fetch_assoc()) {
+                        createNotification(
+                            (int) $member['user_id'],
+                            $notification_title,
+                            $student_message,
+                            'success',
+                            $student_link
+                        );
+                    }
+                    $member_notify_stmt->close();
+
+                    $adviser_notify_stmt = $conn->prepare(
+                        'SELECT adviser_id FROM project_advisers WHERE project_id = ? AND adviser_id IS NOT NULL'
+                    );
+                    if (!$adviser_notify_stmt) {
+                        throw new Exception('Unable to prepare adviser notifications.');
+                    }
+                    $adviser_notify_stmt->bind_param('i', $project_id);
+                    if (!$adviser_notify_stmt->execute()) {
+                        throw new Exception('Unable to load advisers for notification.');
+                    }
+                    $adviser_notify_result = $adviser_notify_stmt->get_result();
+                    while ($adviser = $adviser_notify_result->fetch_assoc()) {
+                        createNotification(
+                            (int) $adviser['adviser_id'],
+                            $notification_title,
+                            $review_message,
+                            'info',
+                            'pages/faculty/faculty-review-detail.php?id=' . (int) $project_id
+                        );
+                    }
+                    $adviser_notify_stmt->close();
+
+                    $staff_notify_stmt = $conn->prepare(
+                        "SELECT user_id FROM users WHERE role = 'research_staff' AND status = 'active'"
+                    );
+                    if (!$staff_notify_stmt) {
+                        throw new Exception('Unable to prepare research staff notifications.');
+                    }
+                    if (!$staff_notify_stmt->execute()) {
+                        throw new Exception('Unable to load research staff for notification.');
+                    }
+                    $staff_notify_result = $staff_notify_stmt->get_result();
+                    while ($staff = $staff_notify_result->fetch_assoc()) {
+                        createNotification(
+                            (int) $staff['user_id'],
+                            $notification_title,
+                            $review_message,
+                            'info',
+                            'pages/staff/staff-submissions.php'
+                        );
+                    }
+                    $staff_notify_stmt->close();
                 }
                 logActivity('Research project resubmitted for review after revision', 'research');
             } else {
