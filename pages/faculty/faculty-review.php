@@ -204,7 +204,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $snippet = mb_strlen($feedback) > 140 ? mb_substr($feedback, 0, 140) . '…' : $feedback;
             $notif_msg .= ' Feedback: "' . $snippet . '"';
         }
-        $notif_link = SITE_URL . 'pages/student/student-chapter.php?id=' . (int) $chap['project_id'];
+        $notif_link = SITE_URL . 'pages/student/submit-chapter.php?project_id=' . (int) $chap['project_id']
+                    . '&chapter=' . (int) $chap['chapter_number'];
 
         // Best-effort — createNotification() returns false if the
         // notifications table is missing. Same pattern as messages.php.
