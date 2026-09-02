@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         createNotification(
                             $student_id,
                             'Proposal forwarded to CREC',
-                            'Your proposal "' . $short . '" has been forwarded to the College Research Ethics Committee (CREC) for review.',
+                            'Your proposal "' . $short . '" has been forwarded to the College Research Evaluation Committee (CREC) for review.',
                             'info',
                             SITE_URL . 'pages/student/my-research.php'
                         );

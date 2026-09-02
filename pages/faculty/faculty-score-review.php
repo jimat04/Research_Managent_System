@@ -2,10 +2,10 @@
 /**
  * Faculty - Score CREC/EREC Review (OVPREIS Form No. 3)
  *
- * The assigned faculty member enters the four OVPREIS Form No. 3 criterion
+ * The assigned faculty member enters the OVPREIS Form No. 3 criterion
  * scores plus comments and a recommendation. Completed rows feed the
  * endorsement gate on the Staff CREC Review page
- * (>= 2 completed reviews AND average score >= 50/80).
+ * (>= 2 completed reviews AND average score >= 62.5% of the available total).
  */
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
@@ -23,13 +23,34 @@ function scorerev_se($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-// OVPREIS Form No. 3 criteria: [column, label, max score].
+// Migration 007 completes the six-criterion /100 form. Retain the legacy
+// four-criterion /80 form until both new columns are present.
+$form3_columns = ['capability_score' => false, 'thrusts_score' => false];
+foreach (array_keys($form3_columns) as $column) {
+    // Column names come only from the fixed whitelist above. MariaDB does
+    // not reliably support placeholders in SHOW COLUMNS ... LIKE.
+    $column_result = $conn->query("SHOW COLUMNS FROM project_reviews LIKE '" . $column . "'");
+    if ($column_result) {
+        $form3_columns[$column] = $column_result->num_rows > 0;
+        $column_result->close();
+    }
+}
+$form3_full = $form3_columns['capability_score'] && $form3_columns['thrusts_score'];
+
+// OVPREIS Form No. 3 criteria: [column, exact manual label, max score].
 $CRITERIA = [
-    ['methodology_score',   'Soundness of Methodology',               20],
-    ['contribution_score',  'Contribution to Knowledge',              20],
-    ['applicability_score', 'Applicability / Marketability',          30],
-    ['agenda_score',        'Alignment with College Research Agenda', 10],
+    ['contribution_score',  'Contribution to the body of knowledge/practice',               20],
+    ['methodology_score',   'Soundness of research proposal/design',                        20],
+    ['applicability_score', 'Applicability/Marketability of the research output',            30],
 ];
+if ($form3_full) {
+    $CRITERIA[] = ['capability_score', 'Capability of proponent to carry out research project', 10];
+}
+$CRITERIA[] = ['agenda_score', 'Aligned with the EARIST and College Research Agenda', 10];
+if ($form3_full) {
+    $CRITERIA[] = ['thrusts_score', 'Conformity to national research thrusts (DOST/CHED)', 10];
+}
+$form3_max_score = array_sum(array_column($CRITERIA, 2));
 
 $review = null;
 if ($review_id > 0) {
@@ -80,22 +101,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     }
 
     if (!$errors) {
-        $upd = $conn->prepare("
-            UPDATE project_reviews
-               SET methodology_score = ?, contribution_score = ?, applicability_score = ?, agenda_score = ?,
-                   comments = ?, recommendation = ?, reviewed_at = NOW()
-             WHERE review_id = ? AND reviewer_id = ?
-        ");
-        $upd->bind_param(
-            'iiiissii',
-            $scores['methodology_score'], $scores['contribution_score'],
-            $scores['applicability_score'], $scores['agenda_score'],
-            $comments, $recommendation, $review_id, $user_id
-        );
+        if ($form3_full) {
+            $upd = $conn->prepare("
+                UPDATE project_reviews
+                   SET contribution_score = ?, methodology_score = ?, applicability_score = ?,
+                       capability_score = ?, agenda_score = ?, thrusts_score = ?,
+                       comments = ?, recommendation = ?, reviewed_at = NOW()
+                 WHERE review_id = ? AND reviewer_id = ?
+            ");
+            $upd->bind_param(
+                'iiiiiissii',
+                $scores['contribution_score'], $scores['methodology_score'],
+                $scores['applicability_score'], $scores['capability_score'],
+                $scores['agenda_score'], $scores['thrusts_score'],
+                $comments, $recommendation, $review_id, $user_id
+            );
+        } else {
+            $upd = $conn->prepare("
+                UPDATE project_reviews
+                   SET contribution_score = ?, methodology_score = ?, applicability_score = ?, agenda_score = ?,
+                       comments = ?, recommendation = ?, reviewed_at = NOW()
+                 WHERE review_id = ? AND reviewer_id = ?
+            ");
+            $upd->bind_param(
+                'iiiissii',
+                $scores['contribution_score'], $scores['methodology_score'],
+                $scores['applicability_score'], $scores['agenda_score'],
+                $comments, $recommendation, $review_id, $user_id
+            );
+        }
         if ($upd->execute()) {
             $level = strtoupper((string) $review['review_level']);
             $title = (string) ($review['title'] ?? 'your research');
-            logActivity("Submitted $level review (score $total/80, $recommendation) for project #{$review['project_id']}", 'faculty_review');
+            logActivity("Submitted $level review (score $total/$form3_max_score, $recommendation) for project #{$review['project_id']}", 'faculty_review');
 
             if (!empty($review['student_id'])) {
                 createNotification(
@@ -112,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     createNotification(
                         (int) $staff['user_id'],
                         "$level review submitted",
-                        "{$user['first_name']} {$user['last_name']} scored \"$title\" $total/80 and recommended: $recommendation.",
+                        "{$user['first_name']} {$user['last_name']} scored \"$title\" $total/$form3_max_score and recommended: $recommendation.",
                         'info',
                         'pages/staff/staff-crec.php'
                     );
@@ -159,7 +197,7 @@ renderFacultyShell($user, 'faculty-score-review', 'Score Proposal', $review ? (s
     <input type="hidden" name="review_id" value="<?php echo (int) $review_id; ?>">
 
     <h3 style="margin:8px 0 4px;">OVPREIS Form No. 3 - Criteria</h3>
-    <p style="color:#64748B;margin:0 0 16px;">Maximum total: 80 points. Enter a whole-number score per criterion.</p>
+    <p style="color:#64748B;margin:0 0 16px;">Maximum total: <?php echo (int) $form3_max_score; ?> points. Enter a whole-number score per criterion.</p>
 
     <?php foreach ($CRITERIA as [$column, $label, $max]):
         $current = $_POST[$column] ?? $review[$column] ?? '';

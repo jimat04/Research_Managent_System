@@ -7,7 +7,7 @@
  *
  *   - Assign / unassign faculty reviewers (users.role='faculty' AND is_reviewer=1)
  *   - Endorse to EREC    → status: under_crec_review → under_erec_review
- *                          (requires >= 2 completed reviews AND avg score >= 50/80)
+ *                          (requires >= 2 completed reviews AND avg score >= 62.5%)
  *   - Return for revision → status: under_crec_review → for_revision (reason required)
  *   - Reject              → status: under_crec_review → rejected (reason required)
  *
@@ -118,6 +118,30 @@ if (!$project_reviews_exists) {
     }
 }
 
+// Migration 007 expands OVPREIS Form No. 3 from 80 to 100 points. Build all
+// score expressions and thresholds from the columns actually available so
+// unmigrated installations retain their original 50/80 behavior.
+$form3_has_capability = false;
+$form3_has_thrusts = false;
+if ($project_reviews_exists) {
+    $capability_check = $conn->query("SHOW COLUMNS FROM project_reviews LIKE 'capability_score'");
+    $form3_has_capability = $capability_check && $capability_check->num_rows > 0;
+    if ($capability_check) $capability_check->close();
+
+    $thrusts_check = $conn->query("SHOW COLUMNS FROM project_reviews LIKE 'thrusts_score'");
+    $form3_has_thrusts = $thrusts_check && $thrusts_check->num_rows > 0;
+    if ($thrusts_check) $thrusts_check->close();
+}
+$form3_full = $form3_has_capability && $form3_has_thrusts;
+$form3_max_score = $form3_full ? 100 : 80;
+$form3_threshold = $form3_max_score * 0.625;
+$form3_extra_score_sql = $form3_full
+    ? ' + COALESCE(capability_score,0) + COALESCE(thrusts_score,0)'
+    : '';
+$form3_extra_select_sql = $form3_full
+    ? ', pr.capability_score, pr.thrusts_score'
+    : ', NULL AS capability_score, NULL AS thrusts_score';
+
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -200,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     createNotification(
                                         $reviewer_id,
                                         'New CREC review assignment',
-                                        'You have been assigned to review "' . $short . '" for the College Research Ethics Committee.',
+                                        'You have been assigned to review "' . $short . '" for the College Research Evaluation Committee.',
                                         'info',
                                         SITE_URL . 'pages/faculty/faculty-review.php'
                                     );
@@ -260,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 COALESCE(methodology_score,0) +
                                 COALESCE(contribution_score,0) +
                                 COALESCE(applicability_score,0) +
-                                COALESCE(agenda_score,0)
+                                COALESCE(agenda_score,0)" . $form3_extra_score_sql . "
                               ) AS avg_score
                             FROM project_reviews
                             WHERE project_id = ? AND review_level = 'crec'
@@ -275,8 +299,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                         if ($completed < 2) {
                             $_SESSION['module_error'] = 'Cannot endorse: at least 2 completed reviews are required (currently ' . $completed . ').';
-                        } elseif ($avg < 50.0) {
-                            $_SESSION['module_error'] = 'Cannot endorse: average score is ' . number_format($avg, 1) . '/80, below the 50-point threshold.';
+                        } elseif ($avg < $form3_threshold) {
+                            $_SESSION['module_error'] = 'Cannot endorse: average score is ' . number_format($avg, 1) . '/' . $form3_max_score . ', below the ' . number_format($form3_threshold, 1) . '-point threshold.';
                         } else {
                             $upd = $conn->prepare("
                                 UPDATE research_projects
@@ -294,7 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 createNotification(
                                     $student_id,
                                     'Proposal endorsed to EREC',
-                                    'Your proposal "' . $short . '" has been endorsed by CREC (avg score ' . number_format($avg, 1) . '/80) and forwarded to the Ethics Review Committee (EREC).',
+                                    'Your proposal "' . $short . '" has been endorsed by CREC (avg score ' . number_format($avg, 1) . '/' . $form3_max_score . ') and forwarded to the EARIST Research Evaluation Committee (EREC).',
                                     'success',
                                     SITE_URL . 'pages/student/my-research.php'
                                 );
@@ -305,14 +329,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                         createNotification(
                                             (int) $a['user_id'],
                                             'Project endorsed to EREC',
-                                            'Project #' . $project_id . ' ("' . $short . '") was endorsed by CREC with avg ' . number_format($avg, 1) . '/80.',
+                                            'Project #' . $project_id . ' ("' . $short . '") was endorsed by CREC with avg ' . number_format($avg, 1) . '/' . $form3_max_score . '.',
                                             'info',
                                             SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
                                         );
                                     }
                                 }
                                 logActivity(
-                                    'Endorsed project #' . $project_id . ' ("' . $title . '") from CREC to EREC (avg ' . number_format($avg, 1) . '/80)',
+                                    'Endorsed project #' . $project_id . ' ("' . $title . '") from CREC to EREC (avg ' . number_format($avg, 1) . '/' . $form3_max_score . ')',
                                     'crec_review'
                                 );
                                 $_SESSION['module_success'] = 'Project endorsed to EREC.';
@@ -465,7 +489,7 @@ if ($project_reviews_exists) {
                     COALESCE(methodology_score,0) +
                     COALESCE(contribution_score,0) +
                     COALESCE(applicability_score,0) +
-                    COALESCE(agenda_score,0)
+                    COALESCE(agenda_score,0)" . $form3_extra_score_sql . "
                 ) AS avg_score
             FROM project_reviews
             WHERE review_level = 'crec'
@@ -524,7 +548,7 @@ if ($project_reviews_exists && !empty($projects)) {
     $rv_stmt = $conn->prepare("
         SELECT pr.review_id, pr.project_id, pr.reviewer_id, pr.review_level,
                pr.methodology_score, pr.contribution_score, pr.applicability_score,
-               pr.agenda_score, pr.recommendation, pr.reviewed_at,
+               pr.agenda_score" . $form3_extra_select_sql . ", pr.recommendation, pr.reviewed_at,
                u.first_name, u.last_name, u.email, u.academic_rank
           FROM project_reviews pr
           JOIN users u ON u.user_id = pr.reviewer_id
@@ -894,14 +918,14 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
             $completed = (int) ($row['completed_count'] ?? 0);
             $avg       = $row['avg_score'] !== null ? (float) $row['avg_score'] : null;
 
-            $can_endorse = ($completed >= 2) && ($avg !== null) && ($avg >= 50.0);
+            $can_endorse = ($completed >= 2) && ($avg !== null) && ($avg >= $form3_threshold);
             $endorse_title = '';
             if ($completed < 2) {
                 $endorse_title = 'Needs at least 2 completed reviews (currently ' . $completed . ')';
-            } elseif ($avg === null || $avg < 50.0) {
-                $endorse_title = 'Average score is below the 50/80 threshold';
+            } elseif ($avg === null || $avg < $form3_threshold) {
+                $endorse_title = 'Average score is below the ' . number_format($form3_threshold, 1) . '/' . $form3_max_score . ' threshold';
             } else {
-                $endorse_title = 'Forward this proposal to the Ethics Review Committee (EREC)';
+                $endorse_title = 'Forward this proposal to the EARIST Research Evaluation Committee (EREC)';
             }
 
             $assigned_reviewers = $reviewers_by_project[(int) $row['project_id']] ?? [];
@@ -940,7 +964,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
                   <div class="review-progress <?php echo $can_endorse ? 'ready' : ''; ?>">
                     <?php echo se($completed . '/' . $assigned); ?> reviewer<?php echo $assigned !== 1 ? 's' : ''; ?>
                     <?php if ($avg !== null): ?>
-                      <span class="avg">avg <?php echo se(number_format($avg, 1)); ?>/80</span>
+                      <span class="avg">avg <?php echo se(number_format($avg, 1)); ?>/<?php echo (int) $form3_max_score; ?></span>
                     <?php else: ?>
                       <span class="avg">no scores yet</span>
                     <?php endif; ?>
@@ -1111,12 +1135,15 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
                 'c_score'       => $r['contribution_score'] !== null ? (int) $r['contribution_score'] : null,
                 'a_score'       => $r['applicability_score'] !== null ? (int) $r['applicability_score'] : null,
                 'g_score'       => $r['agenda_score'] !== null ? (int) $r['agenda_score'] : null,
+                'p_score'       => $r['capability_score'] !== null ? (int) $r['capability_score'] : null,
+                't_score'       => $r['thrusts_score'] !== null ? (int) $r['thrusts_score'] : null,
                 'recommendation'=> $r['recommendation'] ?? null,
             ];
         }, $rs);
     }
     echo json_encode($js_data, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
   ?>;
+  const form3MaxScore = <?php echo (int) $form3_max_score; ?>;
 
   const availableReviewers = <?php
     $js_avail = array_map(function ($r) {
@@ -1185,14 +1212,21 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
       left.appendChild(meta);
 
       if (r.reviewed) {
-        const score = (r.m_score || 0) + (r.c_score || 0) + (r.a_score || 0) + (r.g_score || 0);
-        const total = (r.m_score !== null ? r.m_score : '?') + '/20 · '
-                    + (r.c_score !== null ? r.c_score : '?') + '/20 · '
-                    + (r.a_score !== null ? r.a_score : '?') + '/30 · '
-                    + (r.g_score !== null ? r.g_score : '?') + '/10';
+        const score = (r.c_score || 0) + (r.m_score || 0) + (r.a_score || 0)
+                    + (r.p_score || 0) + (r.g_score || 0) + (r.t_score || 0);
+        const total = (r.c_score !== null ? r.c_score : '?') + '/20 · '
+                    + (r.m_score !== null ? r.m_score : '?') + '/20 · '
+                    + (r.a_score !== null ? r.a_score : '?') + '/30'
+                    + (form3MaxScore === 100
+                      ? ' · ' + (r.p_score !== null ? r.p_score : '?') + '/10'
+                      : '')
+                    + ' · ' + (r.g_score !== null ? r.g_score : '?') + '/10'
+                    + (form3MaxScore === 100
+                      ? ' · ' + (r.t_score !== null ? r.t_score : '?') + '/10'
+                      : '');
         const scoreLine = document.createElement('div');
         scoreLine.className = 'meta';
-        scoreLine.innerHTML = '✅ Reviewed · <span class="score-pill">' + score + '/80</span> '
+        scoreLine.innerHTML = '✅ Reviewed · <span class="score-pill">' + score + '/' + form3MaxScore + '</span> '
           + '<span style="color: #94A3B8;">(' + total + ')</span>';
         if (r.recommendation) {
           const rec = document.createElement('span');
