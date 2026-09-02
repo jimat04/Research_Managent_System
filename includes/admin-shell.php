@@ -74,7 +74,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         'Research Management' => [
             [SITE_URL . 'pages/admin/admin-research.php',    'Research Projects',  '📁', true],
             [SITE_URL . 'pages/admin/admin-archive.php',     'Archive',            '🗂️', true],
-            [SITE_URL . 'pages/admin/admin-defense.php',     'Defense Schedule',   '🛡️', false],
+            [SITE_URL . 'pages/staff/staff-defense.php',     'Defense Schedule',   '🛡️', true],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',         'Messages',      '💬', true],

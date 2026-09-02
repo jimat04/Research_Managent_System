@@ -26,6 +26,7 @@
 
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 
 requireLogin();
@@ -33,6 +34,7 @@ requireRole(['research_staff', 'admin']);
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$role    = (string) ($user['role'] ?? 'research_staff');
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function sdef_se($value) {
@@ -598,12 +600,14 @@ if ($sdef_has_table) {
     }
 }
 
-renderStaffShell(
-    $user,
-    'staff-defense.php',
-    'Defense Schedule',
-    'Schedule proposal, pre-oral, and final defenses for active research projects.'
-);
+$page_title = 'Defense Schedule';
+$page_subtitle = 'Schedule proposal, pre-oral, and final defenses for active research projects.';
+
+if ($role === 'admin') {
+    renderAdminShell($user, 'staff-defense.php', $page_title, $page_subtitle);
+} else {
+    renderStaffShell($user, 'staff-defense.php', $page_title, $page_subtitle);
+}
 ?>
 
 <style>
@@ -1291,4 +1295,10 @@ renderStaffShell(
   reschedDate.addEventListener('change', () => reschedDate.classList.remove('invalid'));
 </script>
 
-<?php renderStaffShellClose(); ?>
+<?php
+if ($role === 'admin') {
+    renderAdminShellClose();
+} else {
+    renderStaffShellClose();
+}
+?>
