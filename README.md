@@ -108,13 +108,13 @@ Secondary pages (e.g., `messages.php`) delegate to `pages/shared/module-page.php
 
 - **Authentication** — login with role tabs and wrong-role guidance, login rate limiting, public registration, email verification links, and role-based approval (students activate immediately; faculty/staff wait for admin approval)
 - **Student workflow** — create/submit research, upload chapters and proposals, track the CREC/EREC status workflow and manual milestones, view adviser feedback
-- **Faculty workflow** — assigned advisees, submission review queue, CREC/EREC evaluation, revision requests, approvals, comments, and reports
+- **Faculty workflow** — assigned advisees, submission review queue, EREC evaluation and OVPREIS Form No. 3 scoring, revision requests, approvals, comments, and reports (CREC review itself is handled by Research Staff in `pages/staff/staff-crec.php`)
 - **Admin tools** — analytics dashboard, user management, research oversight, archive, reports, activity logs, and database backups
-- **Research office staff** — staff dashboard plus contact-message management
-- **Shared modules** — messaging, notifications, profiles, settings, and calendar
+- **Research office staff** — staff dashboard, submissions inbox, CREC review workbench, defense scheduling, milestone verification queue, and contact-message management
+- **Shared modules** — messaging, notifications, profiles, calendar, and cross-role research detail (calendar / settings / view-research / shared `research-archive` are placeholder stubs routed through `pages/shared/module-page.php`)
 - **Email notifications** — registration verification, account approval, and contact-form replies via PHPMailer (SMTP or `mail()`)
 - **Public site** — homepage, about, features, contact form, public research archive, and branded error pages
-- **Premium design language** — editorial/academic theme with design tokens (`css/tokens.php`), charcoal + academic gold palette, Lucide icons, bento-grid dashboards
+- **Premium design language** — role-tinted academic platform with design tokens (`css/tokens.php`), dark sidebar + role accent (Admin orange, Staff teal, Faculty blue, Student purple), emoji icons, 8-point spacing grid, rounded 16–20px cards (see `CLAUDE.md` "AI Design Constitution")
 
 ## Research Manual 2015
 
@@ -155,9 +155,9 @@ For production: set `APP_ENV=production`, disable `APP_DEBUG`, configure real SM
 
 ## Project Status
 
-**Completed:** security hardening (`.htaccess`, `.env` migration, CSRF, rate limiting), page restructure into `public/` + role-based `pages/`, module-page system, student/faculty/admin/staff dashboards, email verification + notification system, contact-message management, custom error pages, and the design-token UI layer.
+**Completed:** security hardening (`.htaccess`, `.env` migration, CSRF, soft-delete columns), page restructure into `public/` + role-based `pages/`, the module-page system, full student / faculty / admin / staff page sets (31 of 33 role pages built — see `docs/progress/PROGRESS_AUDIT.md` for the full status), email verification + notification system, contact-message management, custom error pages, the role-tinted design-token UI layer, milestone upload + verification (MOU/NDA, progress + terminal reports), defense scheduling, co-researcher team management on submissions, and the admin final-approval gate that moves approved projects to `in_progress`.
 
-**In progress / known gaps:** some secondary pages are thin module stubs (calendar, messages, settings, etc.), co-researcher/team-member UI on submissions, upload forms for manual-milestone documents (MOU/NDA, progress and terminal reports), and admin notification on new submissions. Tracked in `TODO.md`.
+**In progress / known gaps:** four `pages/shared/` stubs (`calendar.php`, `research-archive.php`, `settings.php`, `view-research.php`); the EARIST Research Manual 2015 ORS Consolidation stage and the Final Bound Report upload slot (Manual steps 3 and 11); the admin notification on new submission; and login rate limiting (the prior "done" check did not actually land in the code — see `TODO.md` Notes). Tracked in `TODO.md`.
 
 See `docs/progress/PROGRESS_AUDIT.md` for the latest audit and `docs/planning/PRIORITY_PLAN.md` for the roadmap.
 

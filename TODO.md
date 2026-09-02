@@ -4,7 +4,7 @@
 - [x] Update `login.php` to validate credentials using prepared statements (avoid SQL injection).
 - [x] Ensure the demo credentials shown match the DB seeding strategy (or remove hard-coded demo passwords from UI).
 - [x] Add clearer errors for wrong role vs wrong password (without leaking which account exists).
-- [x] Add basic rate limiting for repeated failed logins.
+- [x] Add basic rate limiting for repeated failed logins. ← **REGRESSION:** see § Notes
 - [x] Verify student/faculty/admin role tabs correctly set `role` in POST.
 - [x] Smoke test: login with existing DB users.
 
@@ -32,9 +32,34 @@
 - [x] Add schema support for MOU/NDA, progress reports, terminal reports, colloquium, and publication tracking
 - [x] pages/submit-research.php: add co-researcher/team member UI
 - [ ] pages/submit-research.php: createNotification() for admin on new submission
-- [ ] Build UI for required manual documents and report milestones
+- [x] Build UI for required manual documents and report milestones ← **pages/student/submit-milestone.php + pages/staff/staff-milestones.php**
 - [x] Add read-only Research Manual milestone panel to student research detail page
-- [ ] Add upload/update forms for required manual documents and reports
+- [x] Add upload/update forms for required manual documents and reports ← **same pages**
 
 ## Security hardening
 - [x] Convert includes/module-pages.php raw queries to prepared statements (28 prepared statements)
+
+---
+
+## Manual workflow completion (this sprint)
+
+Completed against the EARIST Research Manual 2015 + the late-2026 feature push:
+
+- [x] **Milestone submission UI (student)** — `pages/student/submit-milestone.php` handles MOU / NDA / Midway Progress / Terminal uploads with re-upload after `rejected`.
+- [x] **Milestone verification queue (staff)** — `pages/staff/staff-milestones.php` provides approve / reject / waive for both `research_documents` and `research_reports`, with notifications back to the student.
+- [x] **Defense scheduling with notifications** — `pages/staff/staff-defense.php` schedules proposal / pre-oral / final defenses; notifies project owner, all `project_members`, and all `project_advisers`.
+- [x] **Co-researcher team management on submit and edit** — `pages/student/submit-research.php` and `pages/student/edit-research.php` add/remove team members (cap 5), insert `project_members` rows, and notify invitees.
+- [x] **Admin final approval gate** — `pages/admin/admin-research.php` writes `approved_by` / `approved_at` and moves approved projects to `in_progress` (commit `9a8c395`).
+- [x] **Publication, colloquium, and archive tracking on admin archive page** — `pages/admin/admin-archive.php` reads/writes `research_publication_tracking.colloquium_status`, `colloquium_date`, `journal_status`, `journal_reference`, `archive_status` (commit `1129b47`).
+- [x] **Chapter picker fix in `submit-chapter.php`** — replaces the previous invalid-chapter dead-end with a populated chapter select (commit `e82c18c`).
+
+## Still genuinely open
+
+- [ ] **ORS Consolidation stage (Manual step 3)** — no status, no page, no UI. See `docs/progress/PROGRESS_AUDIT.md` § 4 priority 1.
+- [ ] **Final Bound Report upload slot (Manual step 11)** — `pages/staff/staff-milestones.php` already lists the document type, but `pages/student/submit-milestone.php` has no upload card for it.
+- [ ] **`pages/student/submit-research.php` admin notification** — co-researchers are notified, admin is not.
+- [ ] **Replace the four 1-line shared stubs** — `pages/shared/{calendar,research-archive,settings,view-research}.php` are `require __DIR__ . '/module-page.php';` with no real content.
+
+## Notes — regressions to flag
+
+- **Login rate limiting is missing in the actual code.** The "Add basic rate limiting for repeated failed logins" task was previously checked off, but `grep -nE "rate|attempt"` against `includes/auth.php` and `public/login.php` returns nothing. The login form posts credentials and either logs in or rejects, with no per-account or per-IP throttle. Treat as P1 security gap, not a done item. (Listed under § 4 priority 8 in the audit.)

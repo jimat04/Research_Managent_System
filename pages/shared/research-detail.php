@@ -125,15 +125,28 @@ if ($has_access && $project_id > 0) {
 }
 
 function rmsTableExists($conn, $table_name) {
-    $stmt = $conn->prepare("SHOW TABLES LIKE ?");
-    if (!$stmt) {
+    // SHOW TABLES LIKE ? doesn't support bound placeholders in MariaDB/MySQL.
+    // We therefore whitelist the table name strictly and inline it; inputs are
+    // hard-coded in this file (research_documents, research_reports,
+    // research_publication_tracking) so SQL injection is not possible.
+    static $allowed_tables = [
+        'research_documents'             => true,
+        'research_reports'               => true,
+        'research_publication_tracking'  => true,
+    ];
+
+    if (!isset($allowed_tables[$table_name])) {
         return false;
     }
 
-    $stmt->bind_param("s", $table_name);
-    $stmt->execute();
-    $exists = $stmt->get_result()->num_rows > 0;
-    $stmt->close();
+    $escaped = $conn->real_escape_string($table_name);
+    $result  = $conn->query("SHOW TABLES LIKE '" . $escaped . "'");
+    if ($result === false) {
+        return false;
+    }
+
+    $exists = $result->num_rows > 0;
+    $result->close();
 
     return $exists;
 }
