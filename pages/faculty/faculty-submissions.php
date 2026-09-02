@@ -13,7 +13,7 @@
  *   - CREC/EREC review-> faculty-score-review.php?id={review_id}
  *
  * Filters (GET):
- *   ?status={all|draft|proposal|in_progress|for_defense|completed|archived}
+ *   ?status={all|one of the current research_projects workflow statuses}
  *   ?q={text search on title}
  *
  * Summary stat cards: total assigned, pending review, in progress, completed.
@@ -61,7 +61,24 @@ if ($tbl_stmt) {
 // Read filters from GET
 // ------------------------------------------------------------------
 $status_filter = (string) ($_GET['status'] ?? 'all');
-$allowed_statuses = ['draft', 'proposal', 'in_progress', 'for_defense', 'completed', 'archived'];
+$status_options = [
+    'draft'               => 'Draft',
+    'proposal'            => 'Proposal',
+    'submitted'           => 'Submitted',
+    'under_review'        => 'Under Review',
+    'under_crec_review'   => 'CREC Review',
+    'under_erec_review'   => 'EREC Review',
+    'for_revision'        => 'For Revision',
+    'revision_required'   => 'Revision Required',
+    'rejected'            => 'Rejected',
+    'approved'            => 'Approved',
+    'ongoing'             => 'Ongoing',
+    'progress_report'     => 'Progress Report',
+    'terminal_review'     => 'Terminal Review',
+    'completed'           => 'Completed',
+    'archived'            => 'Archived',
+];
+$allowed_statuses = array_keys($status_options);
 if (!in_array($status_filter, $allowed_statuses, true)) {
     $status_filter = 'all';
 }
@@ -258,17 +275,17 @@ if (!empty($rows)) {
 // Summary stat cards. Counts across BOTH roles (adviser + reviewer).
 // ------------------------------------------------------------------
 $stat_total    = count($rows);
-$stat_pending  = 0; // proposal / draft / under_review-like states
-$stat_progress = 0; // in_progress / for_defense
+$stat_pending  = 0; // submitted/review/revision states needing attention
+$stat_progress = 0; // approved/implementation/reporting states
 $stat_done     = 0; // completed / archived
 
 foreach ($rows as $r) {
     $s = (string) $r['status'];
     if (in_array($s, ['completed', 'archived'], true)) {
         $stat_done++;
-    } elseif (in_array($s, ['in_progress', 'for_defense'], true)) {
+    } elseif (in_array($s, ['approved', 'ongoing', 'progress_report', 'terminal_review'], true)) {
         $stat_progress++;
-    } else {
+    } elseif (in_array($s, ['submitted', 'under_review', 'under_crec_review', 'under_erec_review', 'for_revision', 'revision_required'], true)) {
         $stat_pending++;
     }
 }
@@ -278,14 +295,23 @@ foreach ($rows as $r) {
 // ------------------------------------------------------------------
 function fsub_status_badge($status) {
     $map = [
-        'draft'       => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
-        'proposal'    => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Proposal'],
-        'in_progress' => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'In Progress'],
-        'for_defense' => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'For Defense'],
-        'completed'   => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Completed'],
-        'archived'    => ['#475569', 'rgba(71,85,105,0.10)',  'rgba(71,85,105,0.25)',  'Archived'],
+        'draft'               => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
+        'proposal'            => ['#0369A1', 'rgba(3,105,161,0.10)',   'rgba(3,105,161,0.25)',   'Proposal'],
+        'submitted'           => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Submitted'],
+        'under_review'        => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'Under Review'],
+        'under_crec_review'   => ['#4F46E5', 'rgba(79,70,229,0.10)',  'rgba(79,70,229,0.25)',  'CREC Review'],
+        'under_erec_review'   => ['#9333EA', 'rgba(147,51,234,0.10)', 'rgba(147,51,234,0.25)', 'EREC Review'],
+        'for_revision'        => ['#D97706', 'rgba(217,119,6,0.10)',  'rgba(217,119,6,0.25)',  'For Revision'],
+        'revision_required'   => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'Revision Required'],
+        'rejected'            => ['#DC2626', 'rgba(220,38,38,0.10)',  'rgba(220,38,38,0.25)',  'Rejected'],
+        'approved'            => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Approved'],
+        'ongoing'             => ['#0F766E', 'rgba(15,118,110,0.10)', 'rgba(15,118,110,0.25)', 'Ongoing'],
+        'progress_report'     => ['#0891B2', 'rgba(8,145,178,0.10)',  'rgba(8,145,178,0.25)',  'Progress Report'],
+        'terminal_review'     => ['#A21CAF', 'rgba(162,28,175,0.10)', 'rgba(162,28,175,0.25)', 'Terminal Review'],
+        'completed'           => ['#15803D', 'rgba(21,128,61,0.10)',  'rgba(21,128,61,0.25)',  'Completed'],
+        'archived'            => ['#475569', 'rgba(71,85,105,0.10)',  'rgba(71,85,105,0.25)',  'Archived'],
     ];
-    $row = $map[$status] ?? $map['draft'];
+    $row = $map[$status] ?? ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', ucwords(str_replace('_', ' ', (string) $status))];
     [$fg, $bg, $bd, $label] = $row;
     return '<span style="display:inline-block;font-size:12px;font-weight:500;'
          . 'padding:3px 10px;border-radius:9999px;'
@@ -323,7 +349,7 @@ function fsub_format_date($ts) {
 // ------------------------------------------------------------------
 $subtitle = $stat_total === 0
     ? 'No research is assigned to you yet.'
-    : $stat_total . ' project' . ($stat_total === 1 ? '' : 's') . ' assigned &middot; '
+    : $stat_total . ' project' . ($stat_total === 1 ? '' : 's') . ' assigned · '
       . $stat_pending . ' need attention.';
 
 renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle);
@@ -534,13 +560,12 @@ renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle
   <div class="fsub-field">
     <label for="fsub-status">Status</label>
     <select id="fsub-status" name="status">
-      <option value="all"        <?php echo $status_filter === 'all'        ? 'selected' : ''; ?>>All statuses</option>
-      <option value="draft"       <?php echo $status_filter === 'draft'       ? 'selected' : ''; ?>>Draft</option>
-      <option value="proposal"    <?php echo $status_filter === 'proposal'    ? 'selected' : ''; ?>>Proposal</option>
-      <option value="in_progress" <?php echo $status_filter === 'in_progress' ? 'selected' : ''; ?>>In progress</option>
-      <option value="for_defense" <?php echo $status_filter === 'for_defense' ? 'selected' : ''; ?>>For defense</option>
-      <option value="completed"   <?php echo $status_filter === 'completed'   ? 'selected' : ''; ?>>Completed</option>
-      <option value="archived"    <?php echo $status_filter === 'archived'    ? 'selected' : ''; ?>>Archived</option>
+      <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All statuses</option>
+      <?php foreach ($status_options as $status_value => $status_label): ?>
+        <option value="<?php echo fsub_se($status_value); ?>" <?php echo $status_filter === $status_value ? 'selected' : ''; ?>>
+          <?php echo fsub_se($status_label); ?>
+        </option>
+      <?php endforeach; ?>
     </select>
   </div>
   <div class="fsub-field" style="flex:1 1 240px;min-width:240px;">
