@@ -66,6 +66,7 @@ $project = null;
 $chapter = null;
 $content = [];
 $current_upload = null;
+$chapter_has_review_activity = false;
 $invalid_chapter = $chapter_number < 1 || $chapter_number > 5;
 
 // research_projects.deleted_at is added by database/migrations/rms_db_migration.sql
@@ -206,6 +207,14 @@ if (!$invalid_chapter && $project) {
             $content = $content_stmt->get_result()->fetch_assoc() ?: [];
             $content_stmt->close();
         }
+
+        $review_stmt = $conn->prepare('SELECT 1 FROM comments WHERE chapter_id = ? LIMIT 1');
+        if ($review_stmt) {
+            $review_stmt->bind_param('i', $chapter['chapter_id']);
+            $review_stmt->execute();
+            $chapter_has_review_activity = $review_stmt->get_result()->num_rows > 0;
+            $review_stmt->close();
+        }
     }
 
     // uploads.deleted_at is present in some installations but not in the supplied base dump.
@@ -232,12 +241,49 @@ if (!$invalid_chapter && $project) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !$invalid_chapter && $project) {
+    if (isset($_POST['withdraw_submission'])) {
+        if (!$chapter || $chapter['status'] !== 'submitted') {
+            $errors[] = 'Only a submitted chapter that has not entered review can be withdrawn.';
+        } elseif ($chapter_has_review_activity) {
+            $errors[] = 'This chapter can no longer be withdrawn because faculty review has already started.';
+        } else {
+            // Re-check status and review activity in the UPDATE to prevent a
+            // race with a faculty action occurring after the page was loaded.
+            $withdraw_stmt = $conn->prepare("UPDATE chapters ch
+                SET status = 'draft', submitted_at = NULL, updated_at = NOW()
+                WHERE ch.chapter_id = ?
+                  AND ch.project_id = ?
+                  AND ch.status = 'submitted'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM comments c WHERE c.chapter_id = ch.chapter_id
+                  )");
+            if (!$withdraw_stmt) {
+                $errors[] = 'Unable to prepare the withdrawal. Please try again.';
+            } else {
+                $withdraw_stmt->bind_param('ii', $chapter['chapter_id'], $project_id);
+                $withdraw_stmt->execute();
+                if ($withdraw_stmt->affected_rows === 1) {
+                    $chapter['status'] = 'draft';
+                    $chapter['submitted_at'] = null;
+                    $success = 'Chapter submission withdrawn. You can edit and submit it again.';
+                    logActivity('Chapter submission withdrawn', 'chapters');
+                } else {
+                    $errors[] = 'This chapter can no longer be withdrawn because review has already started.';
+                }
+                $withdraw_stmt->close();
+            }
+        }
+    } else {
     $submitted_content = [];
     foreach ($chapter_fields[$chapter_number] as $field => $label) {
         $submitted_content[$field] = isset($_POST[$field]) ? trim($_POST[$field]) : '';
     }
 
     $is_submit = isset($_POST['submit_review']);
+    $editable_statuses = ['draft', 'revision_required'];
+    if ($chapter && !in_array($chapter['status'], $editable_statuses, true)) {
+        $errors[] = 'This chapter is locked while awaiting review or after approval.';
+    }
     $has_content = false;
     foreach ($submitted_content as $value) {
         if ($value !== '') {
@@ -378,11 +424,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         }
     }
     $content = array_merge($content, $submitted_content);
+    }
 }
 
 $page_title = $invalid_chapter ? 'Invalid chapter' : ($chapter_titles[$chapter_number] ?? 'Submit Chapter');
 $current_status = $chapter['status'] ?? null;
 $status_badge = $current_status && isset($status_badges[$current_status]) ? $status_badges[$current_status] : $status_badges['draft'];
+$can_edit_chapter = !$chapter || in_array($current_status, ['draft', 'revision_required'], true);
+$can_withdraw_chapter = $chapter && $current_status === 'submitted' && !$chapter_has_review_activity;
 
 // Page title + subtitle for the picker states.
 $sch_page_title    = 'Submit Chapter';
@@ -743,15 +792,28 @@ renderStudentShell(
     </div></div>
 
     <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Content</div></div><div class="card-body" style="display: block;">
-      <?php foreach ($chapter_fields[$chapter_number] as $field => $label): ?><div class="form-group"><label class="form-label" for="<?php echo $field; ?>"><?php echo htmlspecialchars($label); ?></label><textarea id="<?php echo $field; ?>" name="<?php echo $field; ?>" class="form-control" rows="8" placeholder="Write your content here..."><?php echo htmlspecialchars($content[$field] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea><small class="text-muted">Add your content for this section. You may continue editing it later.</small></div><?php endforeach; ?>
+      <?php foreach ($chapter_fields[$chapter_number] as $field => $label): ?><div class="form-group"><label class="form-label" for="<?php echo $field; ?>"><?php echo htmlspecialchars($label); ?></label><textarea id="<?php echo $field; ?>" name="<?php echo $field; ?>" class="form-control" rows="8" placeholder="Write your content here..." <?php echo $can_edit_chapter ? '' : 'disabled'; ?>><?php echo htmlspecialchars($content[$field] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea><small class="text-muted"><?php echo $can_edit_chapter ? 'Add your content for this section. You may continue editing it later.' : 'This chapter is locked while it is awaiting review or has already been approved.'; ?></small></div><?php endforeach; ?>
     </div></div>
 
     <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter File</div></div><div class="card-body" style="display: block;">
-      <input type="file" name="chapter_file" accept=".pdf,.doc,.docx" class="form-control"><small class="text-muted">Accepted formats: PDF, DOC, DOCX. Max 10MB. Upload your formatted chapter document if you prefer to submit a file instead of typing content above.</small>
-      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><div style="color: #64748B; font-size: 13px;">Uploading a new file will replace this.</div></div><?php endif; ?>
+      <input type="file" name="chapter_file" accept=".pdf,.doc,.docx" class="form-control" <?php echo $can_edit_chapter ? '' : 'disabled'; ?>><small class="text-muted">Accepted formats: PDF, DOC, DOCX. Max 10MB. Upload your formatted chapter document if you prefer to submit a file instead of typing content above.</small>
+      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><?php if ($can_edit_chapter): ?><div style="color: #64748B; font-size: 13px;">Uploading a new file will replace this.</div><?php endif; ?></div><?php endif; ?>
     </div></div>
 
-    <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;"><a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" class="btn btn-secondary">Cancel</a><button type="submit" name="save_draft" class="btn btn-secondary">Save as Draft</button><button type="submit" name="submit_review" class="btn btn-primary">Submit for Review</button></div>
+    <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+      <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" class="btn btn-secondary"><?php echo $can_edit_chapter ? 'Cancel' : 'Back to Project'; ?></a>
+      <?php if ($can_edit_chapter): ?>
+        <button type="submit" name="save_draft" class="btn btn-secondary">Save as Draft</button>
+        <button type="submit" name="submit_review" class="btn btn-primary"><?php echo $current_status === 'revision_required' ? 'Resubmit for Review' : 'Submit for Review'; ?></button>
+      <?php elseif ($can_withdraw_chapter): ?>
+        <button type="button" class="btn btn-secondary" disabled>Awaiting Review</button>
+        <button type="submit" name="withdraw_submission" class="btn" style="background: #EA580C; border-color: #EA580C; color: #fff;" onclick="return confirm('Withdraw this chapter submission and reopen it for editing?');">Withdraw &amp; Edit</button>
+      <?php elseif (in_array($current_status, ['submitted', 'under_review'], true)): ?>
+        <button type="button" class="btn btn-secondary" disabled>Awaiting Review</button>
+      <?php elseif ($current_status === 'approved'): ?>
+        <button type="button" class="btn btn-secondary" disabled>Chapter Approved</button>
+      <?php endif; ?>
+    </div>
   </form>
 <?php endif; ?>
 

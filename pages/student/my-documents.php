@@ -231,6 +231,14 @@ $type_to_label = [
 
 $project_to_label = [
     'draft'       => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
+    'submitted'   => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Submitted'],
+    'under_review' => ['#2563EB', 'rgba(37,99,235,0.10)', 'rgba(37,99,235,0.25)',  'Under Review'],
+    'under_crec_review' => ['#3B82F6', 'rgba(59,130,246,0.10)', 'rgba(59,130,246,0.25)', 'CREC Review'],
+    'under_erec_review' => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'EREC Review'],
+    'for_revision' => ['#EA580C', 'rgba(234,88,12,0.10)', 'rgba(234,88,12,0.25)', 'For Revision'],
+    'revision_required' => ['#EA580C', 'rgba(234,88,12,0.10)', 'rgba(234,88,12,0.25)', 'Revision Required'],
+    'approved'    => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Approved'],
+    'ongoing'     => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Ongoing'],
     'proposal'    => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Proposal'],
     'in_progress' => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'In Progress'],
     'for_defense' => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'For Defense'],
@@ -239,11 +247,11 @@ $project_to_label = [
 ];
 
 $chapter_to_label = [
-    'draft'             => ['#64748B', 'Draft'],
-    'submitted'         => ['#2563EB', 'Submitted'],
-    'under_review'      => ['#7C3AED', 'Under Review'],
-    'revision_required' => ['#EA580C', 'Needs Revision'],
-    'approved'          => ['#16A34A', 'Approved'],
+    'draft'             => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
+    'submitted'         => ['#2563EB', 'rgba(37,99,235,0.10)',   'rgba(37,99,235,0.25)',   'Submitted'],
+    'under_review'      => ['#7C3AED', 'rgba(124,58,237,0.10)',  'rgba(124,58,237,0.25)',  'Under Review'],
+    'revision_required' => ['#EA580C', 'rgba(234,88,12,0.10)',   'rgba(234,88,12,0.25)',   'Needs Revision'],
+    'approved'          => ['#16A34A', 'rgba(22,163,74,0.10)',   'rgba(22,163,74,0.25)',   'Approved'],
 ];
 
 // Resolve each upload's URL. We use a single helper to keep the logic
@@ -274,6 +282,24 @@ function mydoc_file_exists_check(array $row, array $type_to_folder): bool {
 
 // Group uploads by project_id for the sectioned table.
 $grouped = []; // [project_id => [project meta, [rows]]
+
+// In the default "All types" view, include accessible projects that do not
+// have an upload yet. This makes "All projects" truthful and explains why a
+// submitted project may not currently have a document to download.
+if ($type_filter === 'all') {
+    foreach ($projects as $pid => $project_row) {
+        if ($project_filter > 0 && $project_filter !== (int) $pid) {
+            continue;
+        }
+        $grouped[(int) $pid] = [
+            'project_id'     => (int) $pid,
+            'project_title'  => (string) ($project_row['title'] ?? ''),
+            'project_status' => (string) ($project_row['status'] ?? 'draft'),
+            'rows'           => [],
+        ];
+    }
+}
+
 foreach ($upload_rows as $r) {
     $pid = (int) $r['project_id'];
     if (!isset($grouped[$pid])) {
@@ -586,8 +612,8 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
   <div class="mydoc-error"><?php echo mydoc_se(implode(' ', $errors)); ?></div>
 <?php endif; ?>
 
-<?php if ($stat_total === 0): ?>
-  <!-- Global empty state: student has never uploaded anything. -->
+<?php if (empty($projects)): ?>
+  <!-- Global empty state: the student has no research projects yet. -->
   <div class="mydoc-group">
     <div class="mydoc-empty">
       <div class="mydoc-empty-icon">📂</div>
@@ -659,7 +685,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
   </div>
 </form>
 
-<?php if (empty($upload_rows)): ?>
+<?php if (empty($grouped)): ?>
   <div class="mydoc-group">
     <div class="mydoc-no-results">
       <div class="mydoc-no-results-title">No documents match your filters</div>
@@ -690,6 +716,13 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
         </div>
       </div>
 
+      <?php if (empty($g['rows'])): ?>
+        <div class="mydoc-no-results" style="margin: 0; border: 0; border-top: 1px solid #E5E7EB; border-radius: 0;">
+          <div class="mydoc-no-results-title">No documents uploaded for this project</div>
+          <div>This project exists, but no proposal or chapter file was attached.</div>
+          <a class="mydoc-link" href="<?php echo mydoc_se($project_url); ?>" style="display:inline-block;margin-top:8px;">View project →</a>
+        </div>
+      <?php else: ?>
       <table class="mydoc-table">
         <thead>
           <tr>
@@ -769,7 +802,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
                 <span class="mydoc-missing">File missing on disk</span>
               <?php else: ?>
                 <a class="mydoc-link" href="<?php echo mydoc_se($download); ?>" target="_blank" rel="noopener">
-                  ⬇ Download
+                Download
                 </a>
               <?php endif; ?>
             </td>
@@ -777,6 +810,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
         <?php endforeach; ?>
         </tbody>
       </table>
+      <?php endif; ?>
     </div>
   <?php endforeach; ?>
 
@@ -788,6 +822,6 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
 
 <?php endif; /* end of "rows" */ ?>
 
-<?php endif; /* end of "stat_total === 0" */ ?>
+<?php endif; /* end of "empty projects" */ ?>
 
 <?php renderStudentShellClose(); ?>

@@ -31,21 +31,22 @@
 
 Log in as **Juan (jdelacruz@rms.edu.ph)**.
 
-1. ☐ Dashboard loads without PHP warnings/errors anywhere on the page
-2. ☐ **Submit Research** → fill title `E2E Test Research <today's date>`, area, abstract, category
-3. ☐ **Co-researchers:** search and add **Anna Reyes** — she appears as selected
-4. ☐ Try adding **yourself** → must be rejected/not offered
-5. ☐ Attach proposal PDF, submit → success, no error
-6. ☐ **My Research** → new project listed with correct status
-7. ☐ Open the project → detail page shows title, abstract, **team: Juan (lead) + Anna (member)**
-8. ☐ **Sidebar → Submit Chapter** (no params) → chapter picker appears (NOT "Invalid chapter")
-9. ☐ Upload Chapter 1 via the picker → chapter shows as submitted on the project detail
+1. (working) Dashboard loads without PHP warnings/errors anywhere on the page
+2. (the submit button not working ) **Submit Research** → fill title `E2E Test Research <today's date>`, area, abstract, category
+3. (when i add anna, the error "❌ Please fix the following errors:
+Abstract is required.") **Co-researchers:** search and add **Anna Reyes** — she appears as selected
+4. (samem error as number 3) Try adding **yourself** → must be rejected/not offered
+5. (attach file is working) Attach proposal PDF, submit → success, no error
+6. (the first project is working) **My Research** → new project listed with correct status
+7. (working from the first project) Open the project → detail page shows title, abstract, **team: Juan (lead) + Anna (member)**
+8. (working) **Sidebar → Submit Chapter** (no params) → chapter picker appears (NOT "Invalid chapter")
+9. (whe i submit tchapter one, it's working , but the css of the nxt page when i clicked the button "submit for review", and since i already submit chapter 1, there should be edit chapter if the user wants to edit it or it got rejected) Upload Chapter 1 via the picker → chapter shows as submitted on the project detail
 
 Log in as **Anna (areyes@rms.edu.ph)**.
 
-10. ☐ Notification: added as co-researcher
-11. ☐ **My Research** → the project appears for her too
-12. ☐ She can open the project detail (member access works)
+10. (sine juan in number 3 has error i cannot confirm this) Notification: added as co-researcher
+11. (same reason as #1) **My Research** → the project appears for her too
+12. (same reason) She can open the project detail (member access works)
 
 ---
 

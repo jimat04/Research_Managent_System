@@ -55,9 +55,9 @@ $for_revision = 0;
 $completed = 0;
 
 foreach ($projects as $proj) {
-    if ($proj['status'] === 'proposal' || $proj['status'] === 'in_progress') {
+    if (in_array($proj['status'], ['submitted', 'under_review', 'under_crec_review', 'under_erec_review', 'proposal'], true)) {
         $under_review++;
-    } else if ($proj['status'] === 'draft') {
+    } else if (in_array($proj['status'], ['for_revision', 'revision_required'], true)) {
         $for_revision++;
     } else if ($proj['status'] === 'completed') {
         $completed++;
@@ -67,6 +67,14 @@ foreach ($projects as $proj) {
 // Status badge mapping
 $status_map = [
     'draft' => 'badge',
+    'submitted' => 'badge badge-info',
+    'under_review' => 'badge badge-info',
+    'under_crec_review' => 'badge badge-info',
+    'under_erec_review' => 'badge badge-primary',
+    'for_revision' => 'badge badge-warning',
+    'revision_required' => 'badge badge-warning',
+    'approved' => 'badge badge-success',
+    'ongoing' => 'badge badge-success',
     'proposal' => 'badge badge-info',
     'in_progress' => 'badge badge-primary',
     'for_defense' => 'badge badge-warning',
@@ -76,6 +84,14 @@ $status_map = [
 
 $status_display = [
     'draft' => 'Draft',
+    'submitted' => 'Submitted',
+    'under_review' => 'Under Review',
+    'under_crec_review' => 'CREC Review',
+    'under_erec_review' => 'EREC Review',
+    'for_revision' => 'For Revision',
+    'revision_required' => 'Revision Required',
+    'approved' => 'Approved',
+    'ongoing' => 'Ongoing',
     'proposal' => 'Proposal',
     'in_progress' => 'In Progress',
     'for_defense' => 'For Defense',
@@ -344,6 +360,14 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your research pro
       <select id="statusFilter" class="form-control" style="min-width: 180px;">
         <option value="">All Statuses</option>
         <option value="draft">Draft</option>
+        <option value="submitted">Submitted</option>
+        <option value="under_review">Under Review</option>
+        <option value="under_crec_review">CREC Review</option>
+        <option value="under_erec_review">EREC Review</option>
+        <option value="for_revision">For Revision</option>
+        <option value="revision_required">Revision Required</option>
+        <option value="approved">Approved</option>
+        <option value="ongoing">Ongoing</option>
         <option value="proposal">Proposal</option>
         <option value="in_progress">In Progress</option>
         <option value="for_defense">For Defense</option>

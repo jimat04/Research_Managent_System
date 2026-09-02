@@ -127,62 +127,40 @@ $abstract = '';
 $status = 'draft';
 
 // Co-researcher search state (for the picker UI on the form)
-$crc_search_query    = isset($_GET['search']) ? trim((string) $_GET['search']) : (isset($_POST['crc_search']) ? trim((string) $_POST['crc_search']) : '');
+$crc_search_query    = isset($_POST['crc_search']) ? trim((string) $_POST['crc_search']) : '';
 $crc_search_results  = [];
 $crc_selected        = [];   // array of user rows currently picked
 $crc_selected_ids    = [];   // just the ids, for quick lookup
+$crc_raw_ids         = [];
+$crc_is_picker_post  = false;
 
-// Picker add/remove — GET-driven (?add=N / ?remove=N) so the form keeps its
-// draft state. We track picks in session so they survive across GETs
-// (e.g. user types search, hits search, then clicks + Add).
+// Picker add/remove/search are POST-driven (crc_do=search|add|remove) so the
+// in-progress form fields (title, abstract, etc.) survive via the normal
+// POST re-render. We track picks in session so they persist across picker
+// actions and across the eventual real submit.
 if (!isset($_SESSION['crc_picks']) || !is_array($_SESSION['crc_picks'])) {
     $_SESSION['crc_picks'] = [];
 }
 $crc_picks = &$_SESSION['crc_picks'];
 
-if (isset($_GET['add']) && !$success) {
-    $crc_add_id = (int) $_GET['add'];
-    if ($crc_add_id > 0 && !in_array($crc_add_id, $crc_picks, true) && $crc_add_id !== $user_id) {
-        // Verify eligible before adding to session
-        $crc_check = crc_validate_candidates($conn, [$crc_add_id], $user_id);
-        if (!empty($crc_check)) {
-            if (count($crc_picks) < CRC_MAX_CO_RESEARCHERS) {
-                $crc_picks[] = $crc_add_id;
-            }
-        }
-    }
-    $crc_redirect = SITE_URL . 'pages/student/submit-research.php';
-    $crc_qs = [];
-    if ($crc_search_query !== '') $crc_qs['search'] = $crc_search_query;
-    if (!empty($crc_qs)) $crc_redirect .= '?' . http_build_query($crc_qs);
-    header('Location: ' . $crc_redirect);
-    exit;
-}
-
-if (isset($_GET['remove']) && !$success) {
-    $crc_rm_id = (int) $_GET['remove'];
-    if ($crc_rm_id > 0) {
-        $crc_picks = array_values(array_filter($crc_picks, function ($id) use ($crc_rm_id) {
-            return (int) $id !== $crc_rm_id;
-        }));
-    }
-    $crc_redirect = SITE_URL . 'pages/student/submit-research.php';
-    $crc_qs = [];
-    if ($crc_search_query !== '') $crc_qs['search'] = $crc_search_query;
-    if (!empty($crc_qs)) $crc_redirect .= '?' . http_build_query($crc_qs);
-    header('Location: ' . $crc_redirect);
-    exit;
-}
-
-// After successful submission, clear the picker state so the next visit
-// starts clean. Must happen before render.
-if ($success) {
+// A plain GET always starts a fresh form. Do not leak picks from an
+// abandoned submission into the next visit.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $_SESSION['crc_picks'] = [];
     $crc_picks = [];
 }
 
 // Handle POST submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+    // Preserve the visible draft even when the token expired; no picker or
+    // project action is performed until the user submits a valid token.
+    $title = isset($_POST['title']) ? trim($_POST['title']) : '';
+    $category_id = isset($_POST['category_id']) ? intval($_POST['category_id']) : '';
+    $ay_id = isset($_POST['ay_id']) ? intval($_POST['ay_id']) : '';
+    $research_area = isset($_POST['research_area']) ? trim($_POST['research_area']) : '';
+    $abstract = isset($_POST['abstract']) ? trim($_POST['abstract']) : '';
+    $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'submitted'], true) ? $_POST['status'] : 'draft';
+    $crc_raw_ids = crc_normalize_ids($_POST['co_researchers'] ?? []);
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Get form values
@@ -199,20 +177,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     // Server-side validation re-checks existence, role, and active status.
     $crc_raw_ids = crc_normalize_ids($_POST['co_researchers'] ?? []);
 
-    if (count($crc_raw_ids) > CRC_MAX_CO_RESEARCHERS) {
+    // Picker controls post through this same form. They only update picker
+    // state and re-render; project validation and insertion belong solely to
+    // the existing submit buttons named "status".
+    $crc_picker_action = '';
+    $crc_picker_id = 0;
+    if (isset($_POST['crc_do']) && $_POST['crc_do'] === 'search') {
+        $crc_picker_action = 'search';
+    } elseif (isset($_POST['crc_add'])) {
+        $crc_picker_action = 'add';
+        $crc_picker_id = (int) $_POST['crc_add'];
+    } elseif (isset($_POST['crc_remove'])) {
+        $crc_picker_action = 'remove';
+        $crc_picker_id = (int) $_POST['crc_remove'];
+    }
+    $crc_is_picker_post = $crc_picker_action !== '';
+
+    if ($crc_is_picker_post) {
+        // Rebuild the session from eligible posted candidates first, then
+        // apply the requested action. This retains self-exclusion, active
+        // student validation, deduplication, and the team-size cap.
+        $crc_valid_current = crc_validate_candidates($conn, $crc_raw_ids, $user_id);
+        $crc_picks = array_map(function ($row) {
+            return (int) $row['user_id'];
+        }, array_slice($crc_valid_current, 0, CRC_MAX_CO_RESEARCHERS));
+
+        if ($crc_picker_action === 'add'
+            && $crc_picker_id > 0
+            && $crc_picker_id !== $user_id
+            && !in_array($crc_picker_id, $crc_picks, true)
+            && count($crc_picks) < CRC_MAX_CO_RESEARCHERS) {
+            $crc_candidate = crc_validate_candidates($conn, [$crc_picker_id], $user_id);
+            if (!empty($crc_candidate)) {
+                $crc_picks[] = $crc_picker_id;
+            }
+        } elseif ($crc_picker_action === 'remove' && $crc_picker_id > 0) {
+            $crc_picks = array_values(array_filter($crc_picks, function ($id) use ($crc_picker_id) {
+                return (int) $id !== $crc_picker_id;
+            }));
+        }
+
+        $crc_raw_ids = $crc_picks;
+    }
+
+    if (!$crc_is_picker_post && count($crc_raw_ids) > CRC_MAX_CO_RESEARCHERS) {
         $errors[] = 'You can add at most ' . CRC_MAX_CO_RESEARCHERS . ' co-researchers (5 members total including you).';
     }
 
-    // Validation
-    if (empty($title)) {
+    // Full validation runs only when a real submit button was pressed.
+    if (!$crc_is_picker_post && isset($_POST['status']) && empty($title)) {
         $errors[] = 'Project Title is required.';
-    } elseif (strlen($title) > 255) {
+    } elseif (!$crc_is_picker_post && isset($_POST['status']) && strlen($title) > 255) {
         $errors[] = 'Project Title must not exceed 255 characters.';
     }
 
-    if (empty($category_id)) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && empty($category_id)) {
         $errors[] = 'Research Category is required.';
-    } else {
+    } elseif (!$crc_is_picker_post && isset($_POST['status'])) {
         // Verify category exists
         $cat_stmt = $conn->prepare("SELECT category_id FROM research_categories WHERE category_id = ? AND status = 1");
         $cat_stmt->bind_param("i", $category_id);
@@ -224,9 +245,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $cat_stmt->close();
     }
 
-    if (empty($ay_id)) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && empty($ay_id)) {
         $errors[] = 'Academic Year / Semester is required.';
-    } else {
+    } elseif (!$crc_is_picker_post && isset($_POST['status'])) {
         // Verify AY exists
         $ay_stmt = $conn->prepare("SELECT ay_id FROM academic_years WHERE ay_id = ? AND is_active = 1");
         $ay_stmt->bind_param("i", $ay_id);
@@ -238,14 +259,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $ay_stmt->close();
     }
 
-    if (empty($abstract)) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && empty($abstract)) {
         $errors[] = 'Abstract is required.';
-    } elseif (strlen($abstract) > 5000) {
+    } elseif (!$crc_is_picker_post && isset($_POST['status']) && strlen($abstract) > 5000) {
         $errors[] = 'Abstract must not exceed 5000 characters.';
     }
 
-    if (strlen($research_area) > 150) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && strlen($research_area) > 150) {
         $errors[] = 'Research Area must not exceed 150 characters.';
+    }
+
+    $proposal_file_selected = isset($_FILES['proposal_file'])
+        && !empty($_FILES['proposal_file']['name'])
+        && $_FILES['proposal_file']['error'] !== UPLOAD_ERR_NO_FILE;
+    if (!$crc_is_picker_post && isset($_POST['status']) && $status === 'submitted' && !$proposal_file_selected) {
+        $errors[] = 'A proposal document is required when submitting for review. You may save without a file as a draft.';
     }
 
     // File upload handling using the RMS file uploader component
@@ -254,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $upload_id = null;
 
     // If no errors, proceed with insertion
-    if (empty($errors)) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && empty($errors)) {
         // Start transaction
         $conn->begin_transaction();
 
@@ -360,6 +388,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $success_message = $status === 'draft'
                 ? 'Research project saved as draft successfully.'
                 : 'Research project submitted for review successfully.';
+            $_SESSION['crc_picks'] = [];
+            $crc_picks = [];
 
         } catch (Exception $e) {
             // Rollback on error
@@ -389,8 +419,8 @@ if ($ay_result) {
     }
 }
 
-// Co-researcher picker state (only relevant on GET; after a failed POST
-// we re-hydrate selection from the raw POST so the user's picks persist).
+// Co-researcher picker state. Picker POSTs and failed submissions re-hydrate
+// from their validated posted/session selection.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     // Hydrate from session on GET (after add/remove, picks are in session)
     $crc_raw_ids = array_values(array_unique(array_map('intval', $crc_picks)));
@@ -551,6 +581,8 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
     justify-content: center;
     width: 22px;
     height: 22px;
+    padding: 0;
+    border: 0;
     border-radius: 50%;
     background: rgba(91, 30, 188, 0.15);
     color: #5B1EBC;
@@ -558,6 +590,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
     font-size: 16px;
     line-height: 1;
     font-weight: 700;
+    cursor: pointer;
   }
   .crc-pill-remove:hover {
     background: #DC2626;
@@ -633,7 +666,6 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
 <?php if (!$success): ?>
 <form method="POST" enctype="multipart/form-data" action="<?php echo SITE_URL; ?>pages/student/submit-research.php">
   <?php echo csrfField(); ?>
-  <input type="hidden" name="crc_search" value="<?php echo crc_se($crc_search_query); ?>">
   <?php foreach ($crc_selected_ids as $crc_sid): ?>
     <input type="hidden" name="co_researchers[]" value="<?php echo (int) $crc_sid; ?>">
   <?php endforeach; ?>
@@ -739,19 +771,19 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
           Co-researchers <span style="color: #999;">(Optional)</span>
         </label>
 
-        <form method="GET" action="<?php echo SITE_URL; ?>pages/student/submit-research.php" style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
           <input
             type="text"
             id="crc_search_input"
-            name="search"
+            name="crc_search"
             class="form-control"
             placeholder="Search by name, student ID, or email…"
             value="<?php echo crc_se($crc_search_query); ?>"
             style="flex: 1;"
             maxlength="100"
           />
-          <button type="submit" class="btn btn-secondary">🔍 Search</button>
-        </form>
+          <button type="submit" name="crc_do" value="search" formnovalidate class="btn btn-secondary">🔍 Search</button>
+        </div>
 
         <?php
           $crc_remaining = CRC_MAX_CO_RESEARCHERS - count($crc_selected_ids);
@@ -769,12 +801,15 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
                   <?php if (!empty($crc_row['student_id'])): ?>
                     <small style="opacity: 0.7; margin-left: 4px;"><?php echo crc_se($crc_row['student_id']); ?></small>
                   <?php endif; ?>
-                  <a
-                    href="<?php echo SITE_URL; ?>pages/student/submit-research.php?<?php echo crc_se(http_build_query(array_filter(['search' => $crc_search_query, 'remove' => (int) $crc_row['user_id']]))); ?>"
+                  <button
+                    type="submit"
+                    name="crc_remove"
+                    value="<?php echo (int) $crc_row['user_id']; ?>"
+                    formnovalidate
                     class="crc-pill-remove"
                     title="Remove"
                     aria-label="Remove co-researcher"
-                  >×</a>
+                  >×</button>
                 </span>
               <?php endforeach; ?>
             </div>
@@ -795,13 +830,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
             </small>
             <div class="crc-result-list">
               <?php foreach ($crc_search_results as $crc_row): ?>
-                <?php
-                  $crc_disabled = $crc_remaining <= 0;
-                  $crc_link = SITE_URL . 'pages/student/submit-research.php?' . http_build_query(array_filter([
-                    'search' => $crc_search_query,
-                    'add'    => (int) $crc_row['user_id'],
-                  ]));
-                ?>
+                <?php $crc_disabled = $crc_remaining <= 0; ?>
                 <div class="crc-result">
                   <div class="crc-result-info">
                     <div class="crc-result-name">
@@ -819,7 +848,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
                   <?php if ($crc_disabled): ?>
                     <button type="button" class="btn btn-secondary" disabled style="font-size: 13px; padding: 6px 14px;">+ Add</button>
                   <?php else: ?>
-                    <a href="<?php echo crc_se($crc_link); ?>" class="btn btn-primary" style="font-size: 13px; padding: 6px 14px;">+ Add</a>
+                    <button type="submit" name="crc_add" value="<?php echo (int) $crc_row['user_id']; ?>" formnovalidate class="btn btn-primary" style="font-size: 13px; padding: 6px 14px;">+ Add</button>
                   <?php endif; ?>
                 </div>
               <?php endforeach; ?>
@@ -876,7 +905,10 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
       ]);
       ?>
       <small style="color: #64748B; margin-top: -12px; display: block;">
-        💡 You can skip this and upload chapters later during the review process.
+        💡 Optional when saving a draft; required when submitting for review.
+      </small>
+      <small style="color: #EA580C; margin-top: -8px; display: block;">
+        Please re-select your proposal file after using the co-researcher search, add, or remove controls.
       </small>
     </div>
   </div>

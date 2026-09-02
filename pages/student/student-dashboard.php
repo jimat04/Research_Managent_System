@@ -721,7 +721,7 @@ renderStudentShell($user, 'student-dashboard', 'Welcome back, ' . htmlspecialcha
                   </span>
                 </td>
                 <td>
-                  <a class="btn btn-primary btn-sm" href="view-research.php?id=<?php echo (int)$proj['project_id']; ?>">View</a>
+                  <a class="btn btn-primary btn-sm" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $proj['project_id']; ?>">View</a>
                 </td>
               </tr>
             <?php endwhile; ?>

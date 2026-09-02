@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/student-shell.php';
 
 requireRole('student');
 
@@ -277,141 +278,16 @@ function manualStatusBadge($status) {
 }
 
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><?php echo $has_access && $project ? htmlspecialchars($project['title']) . ' — Research Details' : 'Research Project'; ?> — RMS</title>
-  <link rel="stylesheet" href="../css/style.css" />
-</head>
-<body>
-
-<div class="dashboard">
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- SIDEBAR -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-logo" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 8px;">🔬</div>
-      <div class="sidebar-brand">
-        Research<br>Management
-      </div>
-    </div>
-
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">MAIN</div>
-      <div class="nav-item" onclick="location.href='student-dashboard.php'">
-        <span class="icon">📊</span>
-        <span>Dashboard</span>
-      </div>
-      <div class="nav-item active" onclick="location.href='my-research.php'">
-        <span class="icon">📁</span>
-        <span>My Research</span>
-      </div>
-      <div class="nav-item" onclick="location.href='submit-research.php'">
-        <span class="icon">📤</span>
-        <span>Submit Research</span>
-      </div>
-      <div class="nav-item" onclick="location.href='my-documents.php'">
-        <span class="icon">📄</span>
-        <span>My Documents</span>
-      </div>
-
-      <div class="nav-group-title">TRACKING</div>
-      <div class="nav-item" onclick="location.href='progress-tracking.php'">
-        <span class="icon">📈</span>
-        <span>Progress Tracking</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../shared/messages.php'">
-        <span class="icon">💬</span>
-        <span>Messages</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../shared/notifications.php'">
-        <span class="icon">🔔</span>
-        <span>Notifications</span>
-      </div>
-
-      <div class="nav-group-title">RESOURCES</div>
-      <div class="nav-item" onclick="location.href='research-archive.php'">
-        <span class="icon">🗂️</span>
-        <span>Research Archive</span>
-      </div>
-      <div class="nav-item" onclick="location.href='calendar.php'">
-        <span class="icon">📅</span>
-        <span>Calendar</span>
-      </div>
-
-      <div class="nav-group-title">ACCOUNT</div>
-      <div class="nav-item" onclick="location.href='profile.php'">
-        <span class="icon">👤</span>
-        <span>Profile</span>
-      </div>
-      <div class="nav-item" onclick="location.href='settings.php'">
-        <span class="icon">⚙️</span>
-        <span>Settings</span>
-      </div>
-      <div class="nav-item" onclick="location.href='../../public/logout.php'" style="color: #ef4444;">
-        <span class="icon">🚪</span>
-        <span>Logout</span>
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="user-card">
-        <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-        <div class="user-info">
-          <div class="user-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
-          <div class="user-role">🎓 Student</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- MAIN CONTENT -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="main-content">
-    <!-- TOPBAR -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <h2><?php echo $has_access && $project ? htmlspecialchars($project['title']) : 'Research Project'; ?></h2>
-        <p>
-          <?php if ($has_access && $project): ?>
-            <?php echo htmlspecialchars($project['category_name'] ?? 'Uncategorized'); ?> • <?php echo htmlspecialchars($project['ay_label'] ?? 'N/A'); ?> • <?php echo htmlspecialchars($project['semester'] ?? ''); ?>
-          <?php else: ?>
-            Project details
-          <?php endif; ?>
-        </p>
-      </div>
-
-      <div class="topbar-right">
-        <div class="search-box">
-          <span style="color: #94a3b8;">🔍</span>
-          <input type="text" placeholder="Search anything...">
-        </div>
-
-        <div class="topbar-icons">
-          <div class="icon-btn">
-            🔔
-          </div>
-        </div>
-
-        <div class="user-profile-btn" onclick="alert('Profile menu')">
-          <div class="profile-avatar"><?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?></div>
-          <div class="profile-text">
-            <div class="profile-name"><?php echo htmlspecialchars($user['first_name']); ?></div>
-            <div class="profile-role">Student</div>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- PAGE CONTENT -->
-    <div class="page-content">
+<?php
+$detail_title = $has_access && $project ? $project['title'] : 'Research project';
+$detail_subtitle = $has_access && $project
+    ? ($project['category_name'] ?? 'Uncategorized') . ' • ' . ($project['ay_label'] ?? 'N/A') . ' • ' . ($project['semester'] ?? '')
+    : 'Project details';
+renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
+?>
       <!-- BREADCRUMB -->
       <div style="margin-bottom: 20px;">
-        <a href="my-research.php" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Back to My Research</a>
+        <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Back to My Research</a>
       </div>
 
       <?php if (!$has_access || !$project): ?>
@@ -422,7 +298,7 @@ function manualStatusBadge($status) {
           <p style="margin: 0 0 24px 0; color: var(--text-light); font-size: 14px;">
             The research project you're looking for doesn't exist or you don't have permission to view it.
           </p>
-          <a href="my-research.php" class="btn btn-primary">Go back to My Research</a>
+          <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a>
         </div>
 
       <?php else: ?>
@@ -443,18 +319,6 @@ function manualStatusBadge($status) {
               </div>
             </div>
 
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
-              <?php if ($project['status'] === 'draft'): ?>
-                <a href="#" class="btn btn-sm btn-accent">Edit Project</a>
-                <a href="#" class="btn btn-sm btn-primary">Submit for Review</a>
-              <?php elseif ($project['status'] === 'for_defense'): ?>
-                <a href="#" class="btn btn-sm btn-secondary">Submit Update</a>
-                <a href="#" class="btn btn-sm btn-accent">Edit Project</a>
-              <?php else: ?>
-                <a href="#" class="btn btn-sm btn-secondary">Upload Chapter</a>
-              <?php endif; ?>
-              <a href="#" class="btn btn-sm btn-secondary" title="Available after approval" style="cursor: not-allowed; opacity: 0.6;">View in Archive</a>
-            </div>
           </div>
         </div>
 
@@ -491,7 +355,7 @@ function manualStatusBadge($status) {
                 No chapters submitted yet. Start with Chapter 1.
               </div>
               <div style="display: flex; justify-content: center; gap: 8px;">
-                <a href="submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
+                <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
               </div>
             <?php else: ?>
               <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -521,11 +385,15 @@ function manualStatusBadge($status) {
                     </div>
                     <div>
                       <?php if (!isset($chapters[$i])): ?>
-                        <a href="submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Upload</a>
-                      <?php elseif (isset($chapters[$i]['status']) && in_array($chapters[$i]['status'], ['draft', 'revision_required', 'submitted'])): ?>
-                        <a href="submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Upload</a>
-                      <?php elseif (isset($chapters[$i]['status']) && $chapters[$i]['status'] === 'approved'): ?>
-                        <a href="#" class="btn btn-sm btn-accent">View</a>
+                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
+                      <?php elseif ($chapters[$i]['status'] === 'draft'): ?>
+                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
+                      <?php elseif ($chapters[$i]['status'] === 'revision_required'): ?>
+                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
+                      <?php elseif (in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
+                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
+                      <?php elseif ($chapters[$i]['status'] === 'approved'): ?>
+                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
                       <?php endif; ?>
                     </div>
                   </div>
@@ -742,19 +610,6 @@ function manualStatusBadge($status) {
           </div>
         </div>
 
-      <?php endif; ?>
-    </div>
-  </div>
-</div>
+<?php endif; ?>
 
-<script>
-// Sidebar menu item click handlers
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', function() {
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    this.classList.add('active');
-  });
-});
-</script>
-</body>
-</html>
+<?php renderStudentShellClose(); ?>
