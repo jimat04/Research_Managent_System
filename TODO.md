@@ -60,6 +60,6 @@ Completed against the EARIST Research Manual 2015 + the late-2026 feature push:
 - [ ] **`pages/student/submit-research.php` admin notification** — co-researchers are notified, admin is not.
 - [ ] **Replace the four 1-line shared stubs** — `pages/shared/{calendar,research-archive,settings,view-research}.php` are `require __DIR__ . '/module-page.php';` with no real content.
 
-## Notes — regressions to flag
+## Notes — follow-ups (not regressions)
 
-- **Login rate limiting is missing in the actual code.** The "Add basic rate limiting for repeated failed logins" task was previously checked off, but `grep -nE "rate|attempt"` against `includes/auth.php` and `public/login.php` returns nothing. The login form posts credentials and either logs in or rejects, with no per-account or per-IP throttle. Treat as P1 security gap, not a done item. (Listed under § 4 priority 8 in the audit.)
+- **Login rate limiting is in place, not missing.** `public/login.php` implements `loginFailureKey()` (keyed by client IP + session id), `isLoginLocked()`, `recordFailedLogin()`, and `resetFailedLogins()`. After 5 failed attempts the IP is locked out for 15 minutes and the user sees `"Too many failed attempts. Please try again in N minute(s)."` (message at `public/login.php:106`). It is **session-based**: clearing cookies resets the counter, so it is not a true per-account / per-IP lockout across sessions. A DB-backed `login_attempts` table (keyed by IP and/or email) would survive cookie clearing and is worth doing as a P2 hardening upgrade — not a fix for a missing feature.

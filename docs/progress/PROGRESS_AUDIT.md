@@ -187,7 +187,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 7. `pages/shared/settings.php` — render profile-preferences + email notification toggles (a thin new form).
 
 ### 🟡 P1 — security hygiene
-8. **Login rate limiting.** The TODO list claims it ("Add basic rate limiting for repeated failed logins" — marked done), but `grep` for `rate|attempt` in `includes/auth.php` and `public/login.php` returns nothing relevant. The login flow does not currently rate-limit. Add a per-IP / per-email counter (e.g. on the `users.last_failed_login_at` + a new `login_attempts` table or a 60 s lockout after 5 failed attempts).
+8. **Login rate limiting — current state and upgrade path.** `public/login.php` already implements `loginFailureKey()` (keyed by client IP + session id), `isLoginLocked()`, `recordFailedLogin()`, and `resetFailedLogins()`. After 5 failed attempts the IP is locked out for 15 minutes and the user sees `"Too many failed attempts. Please try again in N minute(s)."` (message at `public/login.php:106`). It is session-based, so clearing cookies resets the counter. A DB-backed `login_attempts` table (keyed by IP and/or email, surviving cookie clearing) would be a P2 hardening upgrade, not a fix for a missing feature.
 9. **`pages/staff/staff-crec.php:302` reads `users WHERE role='admin'` with raw `$conn->query`** — it is a hard-coded string, but migrating it to a prepared statement keeps the style consistent.
 
 ### 🟢 P2 — nice-to-have
