@@ -1,12 +1,20 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
+require_once __DIR__ . '/../../includes/staff-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
 
-requireRole('student');
+requireLogin();
 
 $user = getCurrentUser();
-$user_id = $user['user_id'];
+if (!$user) {
+    header('Location: ' . SITE_URL . 'public/login.php');
+    exit;
+}
+$user_id = (int) $user['user_id'];
+$role = (string) ($user['role'] ?? 'student');
 
 // Get project ID from URL
 $project_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -34,19 +42,57 @@ if ($project_id > 0) {
         if ($result->num_rows > 0) {
             $project = $result->fetch_assoc();
 
-            // Check access: creator OR member
-            if ($project['created_by'] == $user_id) {
+            // Admin and Research Staff process projects system-wide.
+            if ($role === 'admin' || $role === 'research_staff') {
                 $has_access = true;
-            } else {
-                $member_query = "SELECT project_member_id FROM project_members WHERE project_id = ? AND user_id = ?";
-                $member_stmt = $conn->prepare($member_query);
-                if ($member_stmt) {
-                    $member_stmt->bind_param("ii", $project_id, $user_id);
-                    $member_stmt->execute();
-                    if ($member_stmt->get_result()->num_rows > 0) {
-                        $has_access = true;
+            } elseif ($role === 'student') {
+                // Students may only view projects they own or have joined.
+                if ((int) $project['created_by'] === $user_id) {
+                    $has_access = true;
+                }
+                if (!$has_access) {
+                    $member_query = "SELECT project_member_id FROM project_members WHERE project_id = ? AND user_id = ?";
+                    $member_stmt = $conn->prepare($member_query);
+                    if ($member_stmt) {
+                        $member_stmt->bind_param("ii", $project_id, $user_id);
+                        $member_stmt->execute();
+                        if ($member_stmt->get_result()->num_rows > 0) {
+                            $has_access = true;
+                        }
+                        $member_stmt->close();
                     }
-                    $member_stmt->close();
+                }
+            } elseif ($role === 'faculty') {
+                // Faculty may view projects assigned to them as adviser.
+                $faculty_stmt = $conn->prepare(
+                    'SELECT 1 FROM project_advisers WHERE project_id = ? AND adviser_id = ? LIMIT 1'
+                );
+                if ($faculty_stmt) {
+                    $faculty_stmt->bind_param('ii', $project_id, $user_id);
+                    $faculty_stmt->execute();
+                    $has_access = $faculty_stmt->get_result()->num_rows > 0;
+                    $faculty_stmt->close();
+                }
+
+                // CREC/EREC reviewer assignments live in migration 006's
+                // optional project_reviews table.
+                if (!$has_access) {
+                    $reviews_table = $conn->query("SHOW TABLES LIKE 'project_reviews'");
+                    $has_reviews_table = $reviews_table && $reviews_table->num_rows > 0;
+                    if ($reviews_table) {
+                        $reviews_table->close();
+                    }
+                    if ($has_reviews_table) {
+                        $review_stmt = $conn->prepare(
+                            'SELECT 1 FROM project_reviews WHERE project_id = ? AND reviewer_id = ? LIMIT 1'
+                        );
+                        if ($review_stmt) {
+                            $review_stmt->bind_param('ii', $project_id, $user_id);
+                            $review_stmt->execute();
+                            $has_access = $review_stmt->get_result()->num_rows > 0;
+                            $review_stmt->close();
+                        }
+                    }
                 }
             }
         }
@@ -283,7 +329,20 @@ $detail_title = $has_access && $project ? $project['title'] : 'Research project'
 $detail_subtitle = $has_access && $project
     ? ($project['category_name'] ?? 'Uncategorized') . ' • ' . ($project['ay_label'] ?? 'N/A') . ' • ' . ($project['semester'] ?? '')
     : 'Project details';
-renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
+
+if ($role === 'admin') {
+    $referrer_path = parse_url((string) ($_SERVER['HTTP_REFERER'] ?? ''), PHP_URL_PATH);
+    $admin_active = basename((string) $referrer_path) === 'admin-archive.php'
+        ? 'admin-archive.php'
+        : 'admin-research.php';
+    renderAdminShell($user, $admin_active, $detail_title, $detail_subtitle);
+} elseif ($role === 'research_staff') {
+    renderStaffShell($user, 'staff-submissions.php', $detail_title, $detail_subtitle);
+} elseif ($role === 'faculty') {
+    renderFacultyShell($user, 'faculty-submissions.php', $detail_title, $detail_subtitle);
+} else {
+    renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
+}
 ?>
       <!-- BREADCRUMB -->
       <div style="margin-bottom: 20px;">
@@ -612,4 +671,14 @@ renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
 
 <?php endif; ?>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if ($role === 'admin') {
+    renderAdminShellClose();
+} elseif ($role === 'research_staff') {
+    renderStaffShellClose();
+} elseif ($role === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>
