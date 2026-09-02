@@ -4,7 +4,7 @@
 - [x] Update `login.php` to validate credentials using prepared statements (avoid SQL injection).
 - [x] Ensure the demo credentials shown match the DB seeding strategy (or remove hard-coded demo passwords from UI).
 - [x] Add clearer errors for wrong role vs wrong password (without leaking which account exists).
-- [x] Add basic rate limiting for repeated failed logins. ← **REGRESSION:** see § Notes
+- [x] Add basic rate limiting for repeated failed logins.
 - [x] Verify student/faculty/admin role tabs correctly set `role` in POST.
 - [x] Smoke test: login with existing DB users.
 
