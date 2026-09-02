@@ -54,6 +54,26 @@ if ($rp_deleted_column_stmt) {
 }
 $rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
 
+// project_advisers has a minimal base schema, while some installations add
+// optional role/assigned_at columns. Detect them before building INSERTs.
+$project_advisers_exists = false;
+$pa_has_role = false;
+$pa_has_assigned_at = false;
+$pa_table_check = $conn->query("SHOW TABLES LIKE 'project_advisers'");
+if ($pa_table_check) {
+    $project_advisers_exists = $pa_table_check->num_rows > 0;
+    $pa_table_check->close();
+}
+if ($project_advisers_exists) {
+    $pa_role_check = $conn->query("SHOW COLUMNS FROM project_advisers LIKE 'role'");
+    $pa_has_role = $pa_role_check && $pa_role_check->num_rows > 0;
+    if ($pa_role_check) $pa_role_check->close();
+
+    $pa_assigned_check = $conn->query("SHOW COLUMNS FROM project_advisers LIKE 'assigned_at'");
+    $pa_has_assigned_at = $pa_assigned_check && $pa_assigned_check->num_rows > 0;
+    if ($pa_assigned_check) $pa_assigned_check->close();
+}
+
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -89,7 +109,146 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $title      = (string) ($project['title'] ?? 'your research');
                 $short      = mb_substr($title, 0, 60) . (mb_strlen($title) > 60 ? '…' : '');
 
-                if ($action === 'forward_to_crec') {
+                if ($action === 'assign_adviser') {
+                    $adviser_id = isset($_POST['adviser_id']) ? (int) $_POST['adviser_id'] : 0;
+                    if (!$project_advisers_exists) {
+                        $_SESSION['module_error'] = 'Adviser assignments are unavailable because the project_advisers table is missing.';
+                    } elseif (($project['status'] ?? '') !== 'submitted') {
+                        $_SESSION['module_error'] = 'This project is no longer in the submissions inbox.';
+                    } elseif ($adviser_id <= 0) {
+                        $_SESSION['module_error'] = 'Select an active faculty member to assign.';
+                    } else {
+                        $faculty_stmt = $conn->prepare(
+                            "SELECT user_id, first_name, last_name
+                               FROM users
+                              WHERE user_id = ? AND role = 'faculty' AND status = 'active'
+                              LIMIT 1"
+                        );
+                        $faculty_stmt->bind_param('i', $adviser_id);
+                        $faculty_stmt->execute();
+                        $faculty = $faculty_stmt->get_result()->fetch_assoc();
+                        $faculty_stmt->close();
+
+                        if (!$faculty) {
+                            $_SESSION['module_error'] = 'The selected faculty member is unavailable.';
+                        } else {
+                            $duplicate_stmt = $conn->prepare(
+                                'SELECT 1 FROM project_advisers WHERE project_id = ? AND adviser_id = ? LIMIT 1'
+                            );
+                            $duplicate_stmt->bind_param('ii', $project_id, $adviser_id);
+                            $duplicate_stmt->execute();
+                            $already_assigned = $duplicate_stmt->get_result()->num_rows > 0;
+                            $duplicate_stmt->close();
+
+                            if ($already_assigned) {
+                                $_SESSION['module_error'] = 'That faculty member is already assigned to this project.';
+                            } else {
+                                if ($pa_has_role && $pa_has_assigned_at) {
+                                    $insert_stmt = $conn->prepare(
+                                        "INSERT INTO project_advisers (project_id, adviser_id, role, assigned_at)
+                                         VALUES (?, ?, 'adviser', NOW())"
+                                    );
+                                } elseif ($pa_has_role) {
+                                    $insert_stmt = $conn->prepare(
+                                        "INSERT INTO project_advisers (project_id, adviser_id, role)
+                                         VALUES (?, ?, 'adviser')"
+                                    );
+                                } elseif ($pa_has_assigned_at) {
+                                    $insert_stmt = $conn->prepare(
+                                        'INSERT INTO project_advisers (project_id, adviser_id, assigned_at) VALUES (?, ?, NOW())'
+                                    );
+                                } else {
+                                    $insert_stmt = $conn->prepare(
+                                        'INSERT INTO project_advisers (project_id, adviser_id) VALUES (?, ?)'
+                                    );
+                                }
+
+                                if (!$insert_stmt) {
+                                    $_SESSION['module_error'] = 'Could not prepare the adviser assignment.';
+                                } else {
+                                    $insert_stmt->bind_param('ii', $project_id, $adviser_id);
+                                    if ($insert_stmt->execute()) {
+                                        $adviser_name = trim($faculty['first_name'] . ' ' . $faculty['last_name']);
+                                        createNotification(
+                                            $adviser_id,
+                                            'New adviser assignment',
+                                            'You have been assigned as adviser for "' . $short . '".',
+                                            'info',
+                                            SITE_URL . 'pages/faculty/faculty-submissions.php'
+                                        );
+                                        createNotification(
+                                            $student_id,
+                                            'Adviser assigned',
+                                            $adviser_name . ' has been assigned as adviser for "' . $short . '".',
+                                            'info',
+                                            SITE_URL . 'pages/student/my-research.php'
+                                        );
+                                        logActivity(
+                                            'Assigned faculty #' . $adviser_id . ' (' . $adviser_name . ') as adviser for project #' . $project_id . ' ("' . $title . '")',
+                                            'adviser_assignment'
+                                        );
+                                        $_SESSION['module_success'] = $adviser_name . ' assigned as adviser.';
+                                    } else {
+                                        $_SESSION['module_error'] = 'Could not assign the adviser. Please try again.';
+                                    }
+                                    $insert_stmt->close();
+                                }
+                            }
+                        }
+                    }
+
+                } elseif ($action === 'remove_adviser') {
+                    $adviser_id = isset($_POST['adviser_id']) ? (int) $_POST['adviser_id'] : 0;
+                    if (!$project_advisers_exists || $adviser_id <= 0) {
+                        $_SESSION['module_error'] = 'Invalid adviser assignment.';
+                    } elseif (($project['status'] ?? '') !== 'submitted') {
+                        $_SESSION['module_error'] = 'This project is no longer in the submissions inbox.';
+                    } else {
+                        $assigned_stmt = $conn->prepare(
+                            "SELECT pa.adviser_id, u.first_name, u.last_name
+                               FROM project_advisers pa
+                               LEFT JOIN users u ON u.user_id = pa.adviser_id
+                              WHERE pa.project_id = ? AND pa.adviser_id = ?
+                              LIMIT 1"
+                        );
+                        $assigned_stmt->bind_param('ii', $project_id, $adviser_id);
+                        $assigned_stmt->execute();
+                        $assigned_adviser = $assigned_stmt->get_result()->fetch_assoc();
+                        $assigned_stmt->close();
+
+                        if (!$assigned_adviser) {
+                            $_SESSION['module_error'] = 'That adviser is no longer assigned to this project.';
+                        } else {
+                            $delete_stmt = $conn->prepare(
+                                'DELETE FROM project_advisers WHERE project_id = ? AND adviser_id = ?'
+                            );
+                            $delete_stmt->bind_param('ii', $project_id, $adviser_id);
+                            $delete_stmt->execute();
+                            $removed = $delete_stmt->affected_rows > 0;
+                            $delete_stmt->close();
+
+                            if ($removed) {
+                                $adviser_name = trim(($assigned_adviser['first_name'] ?? '') . ' ' . ($assigned_adviser['last_name'] ?? ''));
+                                createNotification(
+                                    $adviser_id,
+                                    'Adviser assignment removed',
+                                    'You are no longer assigned as adviser for "' . $short . '".',
+                                    'warning',
+                                    SITE_URL . 'pages/faculty/faculty-submissions.php'
+                                );
+                                logActivity(
+                                    'Removed faculty #' . $adviser_id . ($adviser_name !== '' ? ' (' . $adviser_name . ')' : '')
+                                    . ' as adviser for project #' . $project_id . ' ("' . $title . '")',
+                                    'adviser_assignment'
+                                );
+                                $_SESSION['module_success'] = 'Adviser assignment removed.';
+                            } else {
+                                $_SESSION['module_error'] = 'Could not remove the adviser assignment.';
+                            }
+                        }
+                    }
+
+                } elseif ($action === 'forward_to_crec') {
                     // Only forward projects currently sitting at 'submitted'
                     $upd = $conn->prepare("
                         UPDATE research_projects
@@ -281,6 +440,43 @@ while ($row = $list_result->fetch_assoc()) {
 $list_stmt->close();
 
 // ── categories (for the filter dropdown) ─────────────────────────────────
+// Current adviser assignments for the projects on this page.
+$advisers_by_project = [];
+if ($project_advisers_exists && !empty($submissions)) {
+    $project_ids = array_map(fn($row) => (int) $row['project_id'], $submissions);
+    $placeholders = implode(',', array_fill(0, count($project_ids), '?'));
+    $adviser_stmt = $conn->prepare("
+        SELECT pa.project_id, pa.adviser_id, u.first_name, u.last_name
+          FROM project_advisers pa
+          LEFT JOIN users u ON u.user_id = pa.adviser_id
+         WHERE pa.project_id IN ($placeholders)
+           AND pa.adviser_id IS NOT NULL
+         ORDER BY u.last_name, u.first_name
+    ");
+    if ($adviser_stmt) {
+        $adviser_stmt->bind_param(str_repeat('i', count($project_ids)), ...$project_ids);
+        $adviser_stmt->execute();
+        $adviser_result = $adviser_stmt->get_result();
+        while ($adviser = $adviser_result->fetch_assoc()) {
+            $advisers_by_project[(int) $adviser['project_id']][] = $adviser;
+        }
+        $adviser_stmt->close();
+    }
+}
+
+// All active faculty can serve as advisers; reviewer eligibility is separate.
+$active_faculty = [];
+$faculty_result = $conn->query("
+    SELECT user_id, first_name, last_name, email
+      FROM users
+     WHERE role = 'faculty' AND status = 'active'
+     ORDER BY last_name, first_name
+");
+if ($faculty_result) {
+    $active_faculty = $faculty_result->fetch_all(MYSQLI_ASSOC);
+    $faculty_result->close();
+}
+
 $cat_result = $conn->query("
     SELECT category_id, category_name
       FROM research_categories
@@ -430,6 +626,14 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
   .proposal-missing { color: #EA580C; font-size: 13px; font-weight: 500; }
 
   .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .adviser-panel { min-width: 230px; }
+  .adviser-panel summary { cursor: pointer; color: #0F766E; font-size: 13px; font-weight: 600; }
+  .adviser-panel[open] summary { margin-bottom: 10px; }
+  .adviser-list { display: grid; gap: 8px; margin-bottom: 10px; }
+  .adviser-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .adviser-assign { display: flex; align-items: center; gap: 6px; }
+  .adviser-assign select { min-width: 150px; padding: 7px 9px; border: 1px solid #E5E7EB; border-radius: 8px; background: #FFFFFF; }
+  .warning-badge { display: inline-block; padding: 4px 9px; border-radius: 9999px; background: #FEF3C7; color: #B45309; font-size: 12px; font-weight: 600; }
 
   /* Empty state */
   .empty-state {
@@ -592,6 +796,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
             <th>Category</th>
             <th>Submitted</th>
             <th>Proposal</th>
+            <th>Adviser</th>
             <th>Status</th>
             <th style="min-width: 220px;">Actions</th>
           </tr>
@@ -612,6 +817,11 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                 ? SITE_URL . $row['proposal_file_path']
                 : '';
             $proposal_name = $row['proposal_original_name'] ?? 'proposal file';
+            $project_advisers = $advisers_by_project[(int) $row['project_id']] ?? [];
+            $assigned_adviser_ids = array_map(fn($adviser) => (int) $adviser['adviser_id'], $project_advisers);
+            $faculty_to_assign = array_filter($active_faculty, function ($faculty) use ($assigned_adviser_ids) {
+                return !in_array((int) $faculty['user_id'], $assigned_adviser_ids, true);
+            });
           ?>
             <tr>
               <td style="color: #64748B; font-weight: 500;"><?php echo se($idx); ?></td>
@@ -636,6 +846,64 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                   </a>
                 <?php else: ?>
                   <span class="proposal-missing">⚠️ Not attached</span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if (!$project_advisers_exists): ?>
+                  <span class="warning-badge">Assignment unavailable</span>
+                <?php else: ?>
+                  <details class="adviser-panel">
+                    <summary>
+                      <?php if (empty($project_advisers)): ?>
+                        <span class="warning-badge">No adviser assigned</span>
+                      <?php else: ?>
+                        <?php
+                          $adviser_names = array_map(function ($adviser) {
+                              $name = trim(($adviser['first_name'] ?? '') . ' ' . ($adviser['last_name'] ?? ''));
+                              return $name !== '' ? $name : 'Faculty #' . (int) $adviser['adviser_id'];
+                          }, $project_advisers);
+                          echo se(implode(', ', $adviser_names));
+                        ?>
+                      <?php endif; ?>
+                    </summary>
+
+                    <?php if (!empty($project_advisers)): ?>
+                      <div class="adviser-list">
+                        <?php foreach ($project_advisers as $adviser):
+                          $adviser_name = trim(($adviser['first_name'] ?? '') . ' ' . ($adviser['last_name'] ?? ''));
+                          if ($adviser_name === '') $adviser_name = 'Faculty #' . (int) $adviser['adviser_id'];
+                        ?>
+                          <div class="adviser-item">
+                            <span><?php echo se($adviser_name); ?></span>
+                            <form method="POST" onsubmit="return confirm('Remove this adviser assignment?');">
+                              <?php echo csrfField(); ?>
+                              <input type="hidden" name="action" value="remove_adviser">
+                              <input type="hidden" name="project_id" value="<?php echo (int) $row['project_id']; ?>">
+                              <input type="hidden" name="adviser_id" value="<?php echo (int) $adviser['adviser_id']; ?>">
+                              <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                            </form>
+                          </div>
+                        <?php endforeach; ?>
+                      </div>
+                    <?php endif; ?>
+
+                    <form method="POST" class="adviser-assign">
+                      <?php echo csrfField(); ?>
+                      <input type="hidden" name="action" value="assign_adviser">
+                      <input type="hidden" name="project_id" value="<?php echo (int) $row['project_id']; ?>">
+                      <select name="adviser_id" aria-label="Select adviser" required <?php echo empty($faculty_to_assign) ? 'disabled' : ''; ?>>
+                        <option value="">Select faculty</option>
+                        <?php foreach ($faculty_to_assign as $faculty):
+                          $faculty_name = trim(($faculty['first_name'] ?? '') . ' ' . ($faculty['last_name'] ?? ''));
+                        ?>
+                          <option value="<?php echo (int) $faculty['user_id']; ?>">
+                            <?php echo se($faculty_name . (!empty($faculty['email']) ? ' — ' . $faculty['email'] : '')); ?>
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                      <button type="submit" class="btn btn-primary btn-sm" <?php echo empty($faculty_to_assign) ? 'disabled' : ''; ?>>Assign</button>
+                    </form>
+                  </details>
                 <?php endif; ?>
               </td>
               <td>

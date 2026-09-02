@@ -464,6 +464,8 @@ if ($project_reviews_exists) {
             up.file_name  AS proposal_file_name,
             up.file_path  AS proposal_file_path,
             up.original_name AS proposal_original_name,
+            (SELECT COUNT(*) FROM project_advisers pa
+              WHERE pa.project_id = rp.project_id AND pa.adviser_id IS NOT NULL) AS adviser_count,
             COALESCE(stats.assigned_count, 0)  AS assigned_count,
             COALESCE(stats.completed_count, 0) AS completed_count,
             stats.avg_score                   AS avg_score
@@ -515,6 +517,8 @@ if ($project_reviews_exists) {
             up.file_name  AS proposal_file_name,
             up.file_path  AS proposal_file_path,
             up.original_name AS proposal_original_name,
+            (SELECT COUNT(*) FROM project_advisers pa
+              WHERE pa.project_id = rp.project_id AND pa.adviser_id IS NOT NULL) AS adviser_count,
             0 AS assigned_count,
             0 AS completed_count,
             NULL AS avg_score
@@ -648,6 +652,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   .badge-status.status-review    { background: #DBEAFE; color: #2563EB; }
   .badge-status.status-pending   { background: #FEF3C7; color: #EA580C; }
   .badge-status.status-approved  { background: #DCFCE7; color: #16A34A; }
+  .badge-adviser-warning { display: inline-block; margin-top: 6px; padding: 3px 8px; border-radius: 9999px; background: #FEF3C7; color: #B45309; font-size: 11px; font-weight: 700; }
 
   .proposal-link {
     color: #0d9488;
@@ -941,6 +946,9 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
                    style="color: #111827; font-weight: 600; text-decoration: none;">
                   <?php echo se($row['title']); ?>
                 </a>
+                <?php if ((int) ($row['adviser_count'] ?? 0) === 0): ?>
+                  <div><span class="badge-adviser-warning">No adviser</span></div>
+                <?php endif; ?>
               </td>
               <td>
                 <div style="font-weight: 500; color: #111827;"><?php echo se($student_name); ?></div>
