@@ -120,6 +120,55 @@ if ($project) {
     }
 }
 
+// Feedback is loaded only after the owner/member access query above succeeds.
+$project_feedback = [];
+$committee_reviews = [];
+$comments_have_project_id = false;
+if ($project) {
+    $comments_project_column = $conn->query("SHOW COLUMNS FROM comments LIKE 'project_id'");
+    if ($comments_project_column) {
+        $comments_have_project_id = $comments_project_column->num_rows > 0;
+        $comments_project_column->close();
+    }
+
+    if ($comments_have_project_id) {
+        $feedback_stmt = $conn->prepare("
+            SELECT c.comment, c.type, c.created_at, u.first_name, u.last_name
+              FROM comments c
+              LEFT JOIN users u ON u.user_id = c.faculty_id
+             WHERE c.project_id = ? AND c.chapter_id IS NULL
+             ORDER BY c.created_at DESC, c.comment_id DESC
+        ");
+        if ($feedback_stmt) {
+            $feedback_stmt->bind_param('i', $project_id);
+            $feedback_stmt->execute();
+            $project_feedback = $feedback_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $feedback_stmt->close();
+        }
+    }
+
+    $reviews_table = $conn->query("SHOW TABLES LIKE 'project_reviews'");
+    $project_reviews_exist = $reviews_table && $reviews_table->num_rows > 0;
+    if ($reviews_table) $reviews_table->close();
+
+    if ($project_reviews_exist) {
+        $review_stmt = $conn->prepare("
+            SELECT pr.review_level, pr.recommendation, pr.comments, pr.reviewed_at,
+                   u.first_name, u.last_name
+              FROM project_reviews pr
+              LEFT JOIN users u ON u.user_id = pr.reviewer_id
+             WHERE pr.project_id = ? AND pr.reviewed_at IS NOT NULL
+             ORDER BY pr.reviewed_at DESC, pr.review_id DESC
+        ");
+        if ($review_stmt) {
+            $review_stmt->bind_param('i', $project_id);
+            $review_stmt->execute();
+            $committee_reviews = $review_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $review_stmt->close();
+        }
+    }
+}
+
 // ── runtime schema detection for chapters ────────────────────────────────
 // chapters.updated_at and chapters.deleted_at are added by rms_db_migration.sql
 // but are NOT in the base dump. Detect at runtime so this page works on both
@@ -274,6 +323,15 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
   .badge-orange  { background: #FEF3C7; color: #EA580C; }
   .badge-green   { background: #DCFCE7; color: #16A34A; }
   .badge-emerald { background: #D1FAE5; color: #059669; }
+  .badge-red     { background: #FEE2E2; color: #DC2626; }
+
+  .feedback-list { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+  .feedback-item { padding: 16px; background: #F8FAFC; border: 1px solid #E5E7EB; border-radius: 12px; }
+  .feedback-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .feedback-author { color: #111827; font-size: 14px; font-weight: 700; }
+  .feedback-date { color: #94A3B8; font-size: 12px; margin-left: auto; }
+  .feedback-text { color: #334155; font-size: 14px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; }
+  .feedback-section + .feedback-section { margin-top: 24px; padding-top: 24px; border-top: 1px solid #E5E7EB; }
 
   .abstract-body {
     margin-top: 12px;
@@ -450,6 +508,68 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
         <?php endif; ?>
       </div>
     </div>
+  </div>
+
+  <!-- FEEDBACK AND REVIEWS -->
+  <div class="card">
+    <h2 class="card-title">Feedback &amp; Reviews</h2>
+    <p class="card-subtitle">Comments and recommendations shared by faculty and committee reviewers</p>
+
+    <?php if (!empty($project_feedback)): ?>
+      <section class="feedback-section">
+        <div class="meta-label">Faculty Feedback</div>
+        <div class="feedback-list">
+          <?php foreach ($project_feedback as $feedback):
+            $feedback_type = strtolower((string) ($feedback['type'] ?? 'general'));
+            $feedback_badge = $feedback_type === 'correction' ? 'orange'
+                : ($feedback_type === 'approval' ? 'green' : 'slate');
+            $feedback_author = trim(($feedback['first_name'] ?? '') . ' ' . ($feedback['last_name'] ?? ''));
+          ?>
+            <article class="feedback-item">
+              <div class="feedback-head">
+                <span class="feedback-author"><?php echo rd_escape($feedback_author !== '' ? $feedback_author : 'Faculty'); ?></span>
+                <span class="badge badge-<?php echo rd_escape($feedback_badge); ?>"><?php echo rd_escape(ucfirst($feedback_type)); ?></span>
+                <time class="feedback-date"><?php echo !empty($feedback['created_at']) ? rd_escape(date('M d, Y g:i A', strtotime($feedback['created_at']))) : ''; ?></time>
+              </div>
+              <div class="feedback-text"><?php echo nl2br(rd_escape($feedback['comment'] ?? '')); ?></div>
+            </article>
+          <?php endforeach; ?>
+        </div>
+      </section>
+    <?php endif; ?>
+
+    <?php if (!empty($committee_reviews)): ?>
+      <section class="feedback-section">
+        <div class="meta-label">Committee Reviews</div>
+        <div class="feedback-list">
+          <?php foreach ($committee_reviews as $review):
+            $recommendation = strtolower((string) ($review['recommendation'] ?? ''));
+            $recommendation_badge = $recommendation === 'approve' ? 'green'
+                : ($recommendation === 'reject' ? 'red' : 'orange');
+            $reviewer_name = trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''));
+            $review_level = strtoupper((string) ($review['review_level'] ?? ''));
+          ?>
+            <article class="feedback-item">
+              <div class="feedback-head">
+                <span class="badge badge-violet"><?php echo rd_escape($review_level); ?></span>
+                <span class="feedback-author"><?php echo rd_escape($reviewer_name !== '' ? $reviewer_name : 'Committee Reviewer'); ?></span>
+                <?php if ($recommendation !== ''): ?>
+                  <span class="badge badge-<?php echo rd_escape($recommendation_badge); ?>"><?php echo rd_escape(ucfirst($recommendation)); ?></span>
+                <?php endif; ?>
+                <time class="feedback-date"><?php echo !empty($review['reviewed_at']) ? rd_escape(date('M d, Y g:i A', strtotime($review['reviewed_at']))) : ''; ?></time>
+              </div>
+              <?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?>
+                <div class="feedback-text"><?php echo nl2br(rd_escape($review['comments'])); ?></div>
+              <?php endif; ?>
+            </article>
+          <?php endforeach; ?>
+        </div>
+      </section>
+    <?php endif; ?>
+
+    <?php if (empty($project_feedback) && empty($committee_reviews)): ?>
+      <div class="empty">No feedback yet.</div>
+    <?php endif; ?>
   </div>
 
   <!-- ABSTRACT -->
