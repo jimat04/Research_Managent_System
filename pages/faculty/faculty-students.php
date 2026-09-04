@@ -63,7 +63,10 @@ function fstu_deleted_filter($conn, $table, $alias) {
 $u_deleted  = fstu_deleted_filter($conn, 'users',               'u');
 $rp_deleted = fstu_deleted_filter($conn, 'research_projects',   'rp');
 $pm_deleted = fstu_deleted_filter($conn, 'project_members',     'pm');
-$ch_deleted = fstu_deleted_filter($conn, 'chapters',            'ch');
+// The chapter aggregate queries below use `FROM chapters` without an alias.
+// Keep this filter unqualified so it is valid when deleted_at exists, while
+// still omitting it entirely on the base schema where that column is absent.
+$ch_deleted = fstu_has_column($conn, 'chapters', 'deleted_at') ? ' AND deleted_at IS NULL' : '';
 
 // ------------------------------------------------------------------
 // Filters

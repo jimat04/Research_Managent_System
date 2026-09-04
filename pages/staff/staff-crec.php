@@ -248,6 +248,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         if ($review_id <= 0) {
                             $_SESSION['module_error'] = 'Invalid reviewer assignment reference.';
                         } else {
+                            $reviewer_stmt = $conn->prepare("
+                                SELECT pr.reviewer_id, pr.review_level,
+                                       u.first_name, u.last_name
+                                  FROM project_reviews pr
+                                  LEFT JOIN users u ON u.user_id = pr.reviewer_id
+                                 WHERE pr.review_id = ?
+                                   AND pr.project_id = ?
+                                   AND pr.reviewed_at IS NULL
+                                 LIMIT 1
+                            ");
+                            $reviewer_stmt->bind_param('ii', $review_id, $project_id);
+                            $reviewer_stmt->execute();
+                            $removed_reviewer = $reviewer_stmt->get_result()->fetch_assoc();
+                            $reviewer_stmt->close();
+
                             $del = $conn->prepare("
                                 DELETE FROM project_reviews
                                  WHERE review_id = ?
@@ -260,8 +275,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             $del->close();
 
                             if ($affected > 0) {
+                                $removed_reviewer_name = '';
+                                $removed_review_level = 'CREC';
+                                if ($removed_reviewer) {
+                                    $removed_reviewer_id = (int) ($removed_reviewer['reviewer_id'] ?? 0);
+                                    $removed_review_level = strtoupper((string) ($removed_reviewer['review_level'] ?? 'crec'));
+                                    $removed_reviewer_name = trim(
+                                        ($removed_reviewer['first_name'] ?? '') . ' ' . ($removed_reviewer['last_name'] ?? '')
+                                    );
+                                    if ($removed_reviewer_id > 0) {
+                                        createNotification(
+                                            $removed_reviewer_id,
+                                            'Review assignment removed',
+                                            'You are no longer assigned as ' . $removed_review_level . ' reviewer for "' . $title . '".',
+                                            'info',
+                                            SITE_URL . 'pages/faculty/faculty-my-reviews.php'
+                                        );
+                                    }
+                                }
                                 logActivity(
-                                    'Removed reviewer assignment #' . $review_id . ' from CREC review of project #' . $project_id,
+                                    'Removed reviewer assignment #' . $review_id
+                                    . ($removed_reviewer_name !== '' ? ' (' . $removed_reviewer_name . ')' : '')
+                                    . ' from ' . $removed_review_level . ' review of project #' . $project_id,
                                     'crec_review'
                                 );
                                 $_SESSION['module_success'] = 'Reviewer removed from assignment.';

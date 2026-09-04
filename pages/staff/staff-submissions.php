@@ -18,6 +18,7 @@ requireRole('research_staff');
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$adviser_locked_statuses = ['draft', 'completed', 'archived', 'rejected'];
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function se($value) {
@@ -113,8 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $adviser_id = isset($_POST['adviser_id']) ? (int) $_POST['adviser_id'] : 0;
                     if (!$project_advisers_exists) {
                         $_SESSION['module_error'] = 'Adviser assignments are unavailable because the project_advisers table is missing.';
-                    } elseif (($project['status'] ?? '') !== 'submitted') {
-                        $_SESSION['module_error'] = 'This project is no longer in the submissions inbox.';
+                    } elseif (in_array((string) ($project['status'] ?? ''), $adviser_locked_statuses, true)) {
+                        $_SESSION['module_error'] = 'Advisers can only be assigned to active projects.';
                     } elseif ($adviser_id <= 0) {
                         $_SESSION['module_error'] = 'Select an active faculty member to assign.';
                     } else {
@@ -201,34 +202,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $adviser_id = isset($_POST['adviser_id']) ? (int) $_POST['adviser_id'] : 0;
                     if (!$project_advisers_exists || $adviser_id <= 0) {
                         $_SESSION['module_error'] = 'Invalid adviser assignment.';
-                    } elseif (($project['status'] ?? '') !== 'submitted') {
-                        $_SESSION['module_error'] = 'This project is no longer in the submissions inbox.';
+                    } elseif (in_array((string) ($project['status'] ?? ''), $adviser_locked_statuses, true)) {
+                        $_SESSION['module_error'] = 'Advisers can only be removed from active projects.';
                     } else {
-                        $assigned_stmt = $conn->prepare(
-                            "SELECT pa.adviser_id, u.first_name, u.last_name
-                               FROM project_advisers pa
-                               LEFT JOIN users u ON u.user_id = pa.adviser_id
-                              WHERE pa.project_id = ? AND pa.adviser_id = ?
-                              LIMIT 1"
-                        );
-                        $assigned_stmt->bind_param('ii', $project_id, $adviser_id);
-                        $assigned_stmt->execute();
-                        $assigned_adviser = $assigned_stmt->get_result()->fetch_assoc();
-                        $assigned_stmt->close();
+                        $removed = false;
+                        $assigned_adviser = null;
 
-                        if (!$assigned_adviser) {
-                            $_SESSION['module_error'] = 'That adviser is no longer assigned to this project.';
-                        } else {
+                        try {
+                            $conn->begin_transaction();
+
+                            $assigned_at_sql = $pa_has_assigned_at
+                                ? 'COALESCE(pa.assigned_at, NOW())'
+                                : 'NOW()';
+                            $role_sql = $pa_has_role ? 'pa.role' : 'NULL';
+                            $assigned_stmt = $conn->prepare(
+                                "SELECT pa.adviser_id, {$assigned_at_sql} AS assigned_at,
+                                        {$role_sql} AS adviser_role, u.first_name, u.last_name
+                                   FROM project_advisers pa
+                                   LEFT JOIN users u ON u.user_id = pa.adviser_id
+                                  WHERE pa.project_id = ? AND pa.adviser_id = ?
+                                  LIMIT 1
+                                  FOR UPDATE"
+                            );
+                            if (!$assigned_stmt) {
+                                throw new RuntimeException('Could not prepare the adviser lookup.');
+                            }
+                            $assigned_stmt->bind_param('ii', $project_id, $adviser_id);
+                            $assigned_stmt->execute();
+                            $assigned_adviser = $assigned_stmt->get_result()->fetch_assoc();
+                            $assigned_stmt->close();
+
+                            if (!$assigned_adviser) {
+                                throw new RuntimeException('That adviser is no longer assigned to this project.');
+                            }
+
+                            $adviser_role = $assigned_adviser['adviser_role'] ?? null;
+                            $assigned_at = (string) $assigned_adviser['assigned_at'];
+                            $history_stmt = $conn->prepare(
+                                'INSERT INTO project_advisers_history
+                                    (project_id, adviser_id, role, assigned_at, removed_at, removed_by)
+                                 VALUES (?, ?, ?, ?, NOW(), ?)'
+                            );
+                            if (!$history_stmt) {
+                                throw new RuntimeException('Adviser history is unavailable. Please apply migration 009.');
+                            }
+                            $history_stmt->bind_param('iissi', $project_id, $adviser_id, $adviser_role, $assigned_at, $user_id);
+                            if (!$history_stmt->execute()) {
+                                $history_stmt->close();
+                                throw new RuntimeException('Could not preserve the adviser assignment history.');
+                            }
+                            $history_stmt->close();
+
                             $delete_stmt = $conn->prepare(
                                 'DELETE FROM project_advisers WHERE project_id = ? AND adviser_id = ?'
                             );
+                            if (!$delete_stmt) {
+                                throw new RuntimeException('Could not prepare the adviser removal.');
+                            }
                             $delete_stmt->bind_param('ii', $project_id, $adviser_id);
                             $delete_stmt->execute();
                             $removed = $delete_stmt->affected_rows > 0;
                             $delete_stmt->close();
 
-                            if ($removed) {
+                            if (!$removed) {
+                                throw new RuntimeException('That adviser is no longer assigned to this project.');
+                            }
+
+                            $conn->commit();
+                        } catch (Throwable $exception) {
+                            $conn->rollback();
+                            error_log('Adviser removal failed for project #' . $project_id . ': ' . $exception->getMessage());
+                            $_SESSION['module_error'] = 'Could not remove the adviser while preserving assignment history. Please verify migration 009 is applied and try again.';
+                        }
+
+                        if ($removed && $assigned_adviser) {
                                 $adviser_name = trim(($assigned_adviser['first_name'] ?? '') . ' ' . ($assigned_adviser['last_name'] ?? ''));
+                                if ($adviser_name === '') {
+                                    $adviser_name = 'The previous adviser';
+                                }
                                 createNotification(
                                     $adviser_id,
                                     'Adviser assignment removed',
@@ -236,15 +287,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     'warning',
                                     SITE_URL . 'pages/faculty/faculty-submissions.php'
                                 );
+
+                                $student_recipients = [];
+                                if ($student_id > 0 && $student_id !== $adviser_id) {
+                                    $student_recipients[$student_id] = true;
+                                }
+                                $member_stmt = $conn->prepare(
+                                    'SELECT user_id FROM project_members WHERE project_id = ? AND user_id <> ?'
+                                );
+                                if ($member_stmt) {
+                                    $member_stmt->bind_param('ii', $project_id, $adviser_id);
+                                    $member_stmt->execute();
+                                    $member_result = $member_stmt->get_result();
+                                    while ($member = $member_result->fetch_assoc()) {
+                                        $member_id = (int) ($member['user_id'] ?? 0);
+                                        if ($member_id > 0) {
+                                            $student_recipients[$member_id] = true;
+                                        }
+                                    }
+                                    $member_stmt->close();
+                                }
+
+                                $student_message = $adviser_name . ' is no longer the adviser for "' . $title . '". A new adviser will be assigned.';
+                                foreach (array_keys($student_recipients) as $recipient_id) {
+                                    createNotification(
+                                        (int) $recipient_id,
+                                        'Adviser assignment changed',
+                                        $student_message,
+                                        'info',
+                                        SITE_URL . 'pages/student/research-detail.php?id=' . $project_id
+                                    );
+                                }
                                 logActivity(
                                     'Removed faculty #' . $adviser_id . ($adviser_name !== '' ? ' (' . $adviser_name . ')' : '')
                                     . ' as adviser for project #' . $project_id . ' ("' . $title . '")',
                                     'adviser_assignment'
                                 );
                                 $_SESSION['module_success'] = 'Adviser assignment removed.';
-                            } else {
-                                $_SESSION['module_error'] = 'Could not remove the adviser assignment.';
-                            }
                         }
                     }
 
@@ -335,10 +414,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $search   = trim((string) ($_GET['q']        ?? ''));
 $category = (int)         ($_GET['category'] ?? 0);
 $range    = (string)     ($_GET['range']     ?? 'all');
+$status_view = (string)  ($_GET['status_view'] ?? 'submitted');
 
 $valid_ranges = ['all', 'week', 'month'];
 if (!in_array($range, $valid_ranges, true)) {
     $range = 'all';
+}
+
+$valid_status_views = ['submitted', 'active'];
+if (!in_array($status_view, $valid_status_views, true)) {
+    $status_view = 'submitted';
 }
 
 // ── pagination ───────────────────────────────────────────────────────────
@@ -347,7 +432,9 @@ $page     = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
 $offset   = ($page - 1) * $per_page;
 
 // ── build WHERE clause dynamically ──────────────────────────────────────
-$where  = ["rp.status = 'submitted'"];
+$where  = [$status_view === 'active'
+    ? "rp.status NOT IN ('draft', 'completed', 'archived', 'rejected')"
+    : "rp.status = 'submitted'"];
 $params = [];
 $types  = '';
 
@@ -487,10 +574,13 @@ $categories = $cat_result ? $cat_result->fetch_all(MYSQLI_ASSOC) : [];
 
 // Build a query string for pagination links that preserves filters
 function submissions_filter_qs(array $overrides = []): string {
+    global $status_view;
+
     $base = [
         'q'        => $_GET['q']        ?? '',
         'category' => $_GET['category'] ?? '',
         'range'    => $_GET['range']    ?? 'all',
+        'status_view' => $status_view,
         'page'     => '',
     ];
     $merged = array_merge($base, $overrides);
@@ -740,12 +830,20 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
   <div class="icon">📥</div>
   <div>
     <div class="num"><?php echo se($total_pending); ?></div>
-    <div class="lbl">Pending verification<?php echo $total_pending !== 1 ? 's' : ''; ?></div>
+    <div class="lbl"><?php echo se($status_view === 'active' ? 'Active projects' : 'Pending verification' . ($total_pending !== 1 ? 's' : '')); ?></div>
   </div>
 </div>
 
 <!-- Filter bar -->
 <form method="GET" class="filter-bar" action="">
+  <div class="field">
+    <label for="f_status_view">Project view</label>
+    <select id="f_status_view" name="status_view">
+      <option value="submitted" <?php echo $status_view === 'submitted' ? 'selected' : ''; ?>>Intake queue</option>
+      <option value="active" <?php echo $status_view === 'active' ? 'selected' : ''; ?>>All active projects</option>
+    </select>
+  </div>
+
   <div class="field">
     <label for="f_q">Search</label>
     <input id="f_q" type="text" name="q" value="<?php echo se($search); ?>" placeholder="Title, student name, or student ID…">
@@ -783,7 +881,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
   <?php if (empty($submissions)): ?>
     <div class="empty-state">
       <div class="empty-state-icon">📭</div>
-      <p>No pending submissions match your filters.</p>
+      <p><?php echo se($status_view === 'active' ? 'No active projects match your filters.' : 'No pending submissions match your filters.'); ?></p>
     </div>
   <?php else: ?>
     <div class="table-wrap">

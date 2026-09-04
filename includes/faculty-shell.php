@@ -24,6 +24,8 @@
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
 function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = '') {
+    global $conn;
+
     // Normalise the user object
     $shell_user = [
         'first_name' => $user['first_name'] ?? '',
@@ -49,18 +51,75 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         $full_name = 'Faculty';
     }
 
-    $role_label = '🎓 Faculty Adviser';
+    $role_label = 'Faculty';
 
     $page_title_safe    = $page_title    !== '' ? $page_title    : 'Faculty';
     $subtitle_default   = '';
     $page_subtitle_safe = $page_subtitle !== '' ? $page_subtitle : $subtitle_default;
 
     // Get unread message and notification counts for badges
-    global $conn;
     $user_id = (int) ($user['user_id'] ?? 0);
     $pending_reviews = 0;
     $unread_messages = 0;
     $unread_notifications = 0;
+    $faculty_sub_roles = [];
+
+    // Appointment badges are informative only. A missing table or database
+    // error must not prevent the shared shell from rendering.
+    if ($conn instanceof mysqli && $user_id > 0) {
+        try {
+            $adviser_stmt = $conn->prepare(
+                'SELECT EXISTS(SELECT 1 FROM project_advisers WHERE adviser_id = ? LIMIT 1) AS held'
+            );
+            if ($adviser_stmt) {
+                $adviser_stmt->bind_param('i', $user_id);
+                $adviser_stmt->execute();
+                $is_adviser = (bool) ($adviser_stmt->get_result()->fetch_assoc()['held'] ?? false);
+                $adviser_stmt->close();
+            } else {
+                $is_adviser = false;
+            }
+
+            $crec_stmt = $conn->prepare(
+                "SELECT EXISTS(SELECT 1 FROM project_reviews WHERE reviewer_id = ? AND review_level = 'crec' LIMIT 1) AS held"
+            );
+            if ($crec_stmt) {
+                $crec_stmt->bind_param('i', $user_id);
+                $crec_stmt->execute();
+                $is_crec_reviewer = (bool) ($crec_stmt->get_result()->fetch_assoc()['held'] ?? false);
+                $crec_stmt->close();
+            } else {
+                $is_crec_reviewer = false;
+            }
+
+            $erec_stmt = $conn->prepare(
+                "SELECT EXISTS(SELECT 1 FROM project_reviews WHERE reviewer_id = ? AND review_level = 'erec' LIMIT 1) AS held"
+            );
+            if ($erec_stmt) {
+                $erec_stmt->bind_param('i', $user_id);
+                $erec_stmt->execute();
+                $is_erec_reviewer = (bool) ($erec_stmt->get_result()->fetch_assoc()['held'] ?? false);
+                $erec_stmt->close();
+            } else {
+                $is_erec_reviewer = false;
+            }
+
+            if ($is_adviser) {
+                $faculty_sub_roles[] = ['label' => 'Adviser', 'class' => 'adviser'];
+            }
+            if ($is_crec_reviewer) {
+                $faculty_sub_roles[] = ['label' => 'CREC Reviewer', 'class' => 'crec'];
+            }
+            if ($is_erec_reviewer) {
+                $faculty_sub_roles[] = ['label' => 'EREC Reviewer', 'class' => 'erec'];
+            }
+            if (!empty($user['is_reviewer']) && !$is_crec_reviewer && !$is_erec_reviewer) {
+                $faculty_sub_roles[] = ['label' => 'Reviewer', 'class' => 'eligible'];
+            }
+        } catch (Throwable $exception) {
+            $faculty_sub_roles = [];
+        }
+    }
 
     if (isset($conn) && $user_id > 0) {
         $msg_stmt = $conn->prepare("SELECT COUNT(*) AS c FROM messages WHERE recipient_id = ? AND is_read = 0");
@@ -155,6 +214,14 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Faculty — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
+  <style>
+    .faculty-role-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+    .faculty-role-pill { display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 11px; font-weight: 600; line-height: 1.35; white-space: nowrap; }
+    .faculty-role-pill--adviser { color: #1d4ed8; background: #dbeafe; }
+    .faculty-role-pill--crec { color: #92400e; background: #fef3c7; }
+    .faculty-role-pill--erec { color: #6b21a8; background: #f3e8ff; }
+    .faculty-role-pill--eligible { color: #475569; background: #e2e8f0; }
+  </style>
 </head>
 <body>
 <div class="faculty-dashboard">
@@ -206,7 +273,12 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         <div class="faculty-user-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
         <div class="faculty-user-info">
           <div class="faculty-user-name"><?php echo htmlspecialchars($full_name, ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="faculty-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="faculty-user-role faculty-role-line">
+            <span><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span>
+            <?php foreach ($faculty_sub_roles as $sub_role): ?>
+              <span class="faculty-role-pill faculty-role-pill--<?php echo htmlspecialchars($sub_role['class'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($sub_role['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+            <?php endforeach; ?>
+          </div>
         </div>
       </div>
     </div>
@@ -226,7 +298,12 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
           <div class="faculty-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="faculty-topbar-user-text">
             <div class="faculty-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Faculty', ENT_QUOTES, 'UTF-8'); ?></div>
-            <div class="faculty-topbar-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div class="faculty-topbar-user-role faculty-role-line">
+              <span><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span>
+              <?php foreach ($faculty_sub_roles as $sub_role): ?>
+                <span class="faculty-role-pill faculty-role-pill--<?php echo htmlspecialchars($sub_role['class'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($sub_role['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+              <?php endforeach; ?>
+            </div>
           </div>
         </div>
       </div>

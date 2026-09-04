@@ -21,7 +21,7 @@ function getCurrentUser() {
     }
     
     $user_id = intval($_SESSION['user_id']);
-    $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, role, student_id, department, program, contact, avatar, status, created_at FROM users WHERE user_id = ? LIMIT 1");
+    $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, role, student_id, department, program, contact, avatar, status, is_reviewer, created_at FROM users WHERE user_id = ? LIMIT 1");
     $stmt->bind_param('i', $user_id);
     $stmt->execute();
     $result = $stmt->get_result();

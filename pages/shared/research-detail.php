@@ -174,12 +174,12 @@ if ($has_access && $project_id > 0) {
 function rmsTableExists($conn, $table_name) {
     // SHOW TABLES LIKE ? doesn't support bound placeholders in MariaDB/MySQL.
     // We therefore whitelist the table name strictly and inline it; inputs are
-    // hard-coded in this file (research_documents, research_reports,
-    // research_publication_tracking) so SQL injection is not possible.
+    // hard-coded in this file so SQL injection is not possible.
     static $allowed_tables = [
         'research_documents'             => true,
         'research_reports'               => true,
         'research_publication_tracking'  => true,
+        'project_advisers_history'        => true,
     ];
 
     if (!isset($allowed_tables[$table_name])) {
@@ -201,6 +201,27 @@ function rmsTableExists($conn, $table_name) {
 $manual_documents = [];
 $manual_reports = [];
 $publication_tracking = null;
+$previous_advisers = [];
+
+if ($has_access && $project_id > 0 && rmsTableExists($conn, 'project_advisers_history')) {
+    $history_stmt = $conn->prepare("
+        SELECT pah.adviser_id, pah.assigned_at, pah.removed_at,
+               u.first_name, u.last_name
+          FROM project_advisers_history pah
+          LEFT JOIN users u ON u.user_id = pah.adviser_id
+         WHERE pah.project_id = ?
+         ORDER BY pah.removed_at DESC, pah.id DESC
+    ");
+    if ($history_stmt) {
+        $history_stmt->bind_param('i', $project_id);
+        $history_stmt->execute();
+        $history_result = $history_stmt->get_result();
+        while ($history = $history_result->fetch_assoc()) {
+            $previous_advisers[] = $history;
+        }
+        $history_stmt->close();
+    }
+}
 
 if ($has_access && $project_id > 0 && rmsTableExists($conn, 'research_documents')) {
     $doc_query = "
@@ -375,6 +396,20 @@ if ($role === 'admin') {
                 📅 Created: <?php echo date('M d, Y', strtotime($project['created_at'])); ?><br>
                 🔄 Last updated: <?php echo date('M d, Y', strtotime($project['updated_at'])); ?><br>
                 👤 Lead: <?php echo htmlspecialchars($project['first_name'] . ' ' . $project['last_name']); ?>
+                <?php if (!empty($previous_advisers)): ?>
+                  <br>
+                  <span style="color: var(--text-light);">
+                    Previous adviser(s):
+                    <?php foreach ($previous_advisers as $index => $previous_adviser):
+                      $previous_name = trim(($previous_adviser['first_name'] ?? '') . ' ' . ($previous_adviser['last_name'] ?? ''));
+                      if ($previous_name === '') {
+                          $previous_name = 'Faculty #' . (int) $previous_adviser['adviser_id'];
+                      }
+                      $assigned_date = date('M d, Y', strtotime((string) $previous_adviser['assigned_at']));
+                      $removed_date = date('M d, Y', strtotime((string) $previous_adviser['removed_at']));
+                    ?><?php echo $index > 0 ? '; ' : ''; ?><?php echo htmlspecialchars($previous_name . ' (' . $assigned_date . ' - ' . $removed_date . ')', ENT_QUOTES, 'UTF-8'); ?><?php endforeach; ?>
+                  </span>
+                <?php endif; ?>
               </div>
             </div>
 

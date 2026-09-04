@@ -171,7 +171,35 @@ if (!$list_stmt) {
     call_user_func_array([$list_stmt, 'bind_param'], $bind_args);
     $list_stmt->execute();
     $result = $list_stmt->get_result();
-    while ($r = $result->fetch_assoc()) { $rows[] = $r; }
+    $rows_by_project = [];
+    while ($r = $result->fetch_assoc()) {
+        $pid = (int) $r['project_id'];
+        if (!isset($rows_by_project[$pid])) {
+            $rows_by_project[$pid] = $r;
+            continue;
+        }
+
+        $current = $rows_by_project[$pid];
+        $candidate_is_adviser = ($r['role_kind'] ?? '') === 'adviser';
+        $current_is_adviser = ($current['role_kind'] ?? '') === 'adviser';
+
+        // One project may reach this UNION through both relationships. Keep a
+        // single display row, preferring the adviser context as documented
+        // above. For duplicate reviewer assignments, prefer work that is not
+        // completed yet, then the newest review id.
+        if ($candidate_is_adviser && !$current_is_adviser) {
+            $rows_by_project[$pid] = $r;
+        } elseif (!$candidate_is_adviser && !$current_is_adviser) {
+            $candidate_pending = empty($r['reviewed_at']);
+            $current_pending = empty($current['reviewed_at']);
+            if (($candidate_pending && !$current_pending)
+                || ($candidate_pending === $current_pending
+                    && (int) ($r['review_id'] ?? 0) > (int) ($current['review_id'] ?? 0))) {
+                $rows_by_project[$pid] = $r;
+            }
+        }
+    }
+    $rows = array_values($rows_by_project);
     $list_stmt->close();
 }
 
