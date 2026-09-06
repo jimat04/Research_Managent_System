@@ -50,6 +50,20 @@ function notif_se($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+/** Build a usable notification URL from either a relative path or full URL. */
+function notif_link_url($link) {
+  $link = trim((string) $link);
+  if ($link === '') {
+    return '';
+  }
+
+  if (preg_match('#^(https?:)?//#i', $link)) {
+    return $link;
+  }
+
+  return SITE_URL . ltrim($link, '/');
+}
+
 /**
  * Render a timestamp as a relative phrase like "just now", "5 min ago",
  * "2 hours ago", "3 days ago", or a fallback absolute date for older rows.
@@ -408,7 +422,7 @@ notif_flash('error');
               <span class="notif-absolute">&middot; <?php echo notif_se($abs); ?></span>
             <?php endif; ?>
             <?php if ($link !== ''): ?>
-              <a class="notif-link" href="<?php echo notif_se(SITE_URL . ltrim($link, '/')); ?>" target="_blank" rel="noopener">Open &rarr;</a>
+              <a class="notif-link" href="<?php echo notif_se(notif_link_url($link)); ?>" target="_blank" rel="noopener">Open &rarr;</a>
             <?php endif; ?>
           </div>
         </div>

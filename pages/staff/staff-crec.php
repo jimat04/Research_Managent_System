@@ -1,14 +1,17 @@
 <?php
 /**
- * Staff — CREC Review
+ * Staff — CREC / EREC Review
  *
- * Research Staff manages the College Research Evaluation Committee (CREC) workflow
- * for proposals that have been forwarded from the Submissions Inbox.
+ * Research Staff manages both committee stages for proposals forwarded from
+ * the Submissions Inbox.
  *
  *   - Assign / unassign faculty reviewers (users.role='faculty' AND is_reviewer=1)
  *   - Endorse to EREC    → status: under_crec_review → under_erec_review
  *                          (requires >= 2 completed reviews AND avg score >= 62.5%)
+ *   - Recommend approval → status: under_erec_review → approved
+ *                          (requires the same EREC review count and score gate)
  *   - Return for revision → status: under_crec_review → for_revision (reason required)
+ *                          or under_erec_review → for_revision (reason required)
  *   - Reject              → status: under_crec_review → rejected (reason required)
  *
  * Reviewer scores (OVPREIS Form No. 3) live in `project_reviews` and are entered
@@ -29,6 +32,60 @@ $user_id = (int) $user['user_id'];
 // ── helpers ────────────────────────────────────────────────────────────────
 function se($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+/** Resolve the committee level exclusively from persisted project state. */
+function crec_review_level_for_status(string $status): ?string {
+    $levels = [
+        'under_crec_review' => 'crec',
+        'under_erec_review' => 'erec',
+    ];
+    return $levels[$status] ?? null;
+}
+
+/** Return all deduplicated stakeholders for an EREC disposition. */
+function crec_erec_recipients(mysqli $conn, int $project_id, int $owner_id): array {
+    $recipient_ids = [];
+    if ($owner_id > 0) {
+        $recipient_ids[$owner_id] = true;
+    }
+
+    $member_stmt = $conn->prepare('SELECT user_id FROM project_members WHERE project_id = ?');
+    if ($member_stmt) {
+        $member_stmt->bind_param('i', $project_id);
+        $member_stmt->execute();
+        $member_result = $member_stmt->get_result();
+        while ($member = $member_result->fetch_assoc()) {
+            $member_id = (int) ($member['user_id'] ?? 0);
+            if ($member_id > 0) $recipient_ids[$member_id] = true;
+        }
+        $member_stmt->close();
+    }
+
+    $adviser_stmt = $conn->prepare('SELECT adviser_id FROM project_advisers WHERE project_id = ? AND adviser_id IS NOT NULL');
+    if ($adviser_stmt) {
+        $adviser_stmt->bind_param('i', $project_id);
+        $adviser_stmt->execute();
+        $adviser_result = $adviser_stmt->get_result();
+        while ($adviser = $adviser_result->fetch_assoc()) {
+            $adviser_id = (int) ($adviser['adviser_id'] ?? 0);
+            if ($adviser_id > 0) $recipient_ids[$adviser_id] = true;
+        }
+        $adviser_stmt->close();
+    }
+
+    $admin_stmt = $conn->prepare("SELECT user_id FROM users WHERE role = 'admin' AND status = 'active'");
+    if ($admin_stmt) {
+        $admin_stmt->execute();
+        $admin_result = $admin_stmt->get_result();
+        while ($admin = $admin_result->fetch_assoc()) {
+            $admin_id = (int) ($admin['user_id'] ?? 0);
+            if ($admin_id > 0) $recipient_ids[$admin_id] = true;
+        }
+        $admin_stmt->close();
+    }
+
+    return array_map('intval', array_keys($recipient_ids));
 }
 
 // Status badge helper (mirrors staff-submissions)
@@ -175,10 +232,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $student_id = (int) ($project['created_by'] ?? 0);
                 $title      = (string) ($project['title'] ?? 'your research');
                 $short      = mb_substr($title, 0, 60) . (mb_strlen($title) > 60 ? '…' : '');
+                $project_review_level = crec_review_level_for_status((string) ($project['status'] ?? ''));
 
                 if ($action === 'assign_reviewer') {
                     if (!$project_reviews_exists) {
                         $_SESSION['module_error'] = 'Reviewer system is not yet available. Please run database migration 006_create_project_reviews.sql.';
+                    } elseif ($project_review_level === null) {
+                        $_SESSION['module_error'] = 'Reviewers can only be assigned while a project is in CREC or EREC review.';
                     } else {
                         $reviewer_id = (int) ($_POST['reviewer_id'] ?? 0);
                         if ($reviewer_id <= 0) {
@@ -209,10 +269,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 $ins = $conn->prepare("
                                     INSERT INTO project_reviews
                                         (project_id, reviewer_id, review_level, created_at, updated_at)
-                                    VALUES (?, ?, 'crec', NOW(), NOW())
+                                    VALUES (?, ?, ?, NOW(), NOW())
                                     ON DUPLICATE KEY UPDATE updated_at = NOW()
                                 ");
-                                $ins->bind_param('ii', $project_id, $reviewer_id);
+                                $ins->bind_param('iis', $project_id, $reviewer_id, $project_review_level);
                                 $ins->execute();
                                 $affected = $ins->affected_rows;
                                 $ins->close();
@@ -220,19 +280,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 // affected_rows: 1 = inserted, 2 = updated on duplicate key
                                 if ($affected > 0) {
                                     $rev_name = trim(($reviewer['first_name'] ?? '') . ' ' . ($reviewer['last_name'] ?? '')) ?: ('Reviewer #' . $reviewer_id);
+                                    $level_label = strtoupper($project_review_level);
+                                    $committee_name = $project_review_level === 'erec'
+                                        ? 'EARIST Research Evaluation Committee'
+                                        : 'College Research Evaluation Committee';
                                     // Notify the reviewer
                                     createNotification(
                                         $reviewer_id,
-                                        'New CREC review assignment',
-                                        'You have been assigned to review "' . $short . '" for the College Research Evaluation Committee.',
+                                        'New ' . $level_label . ' review assignment',
+                                        'You have been assigned to review "' . $short . '" for the ' . $committee_name . '.',
                                         'info',
-                                        SITE_URL . 'pages/faculty/faculty-review.php'
+                                        SITE_URL . 'pages/faculty/faculty-my-reviews.php'
                                     );
                                     logActivity(
-                                        'Assigned reviewer ' . $rev_name . ' to CREC review of project #' . $project_id . ' ("' . $title . '")',
-                                        'crec_review'
+                                        'Assigned reviewer ' . $rev_name . ' to ' . $level_label . ' review of project #' . $project_id . ' ("' . $title . '")',
+                                        $project_review_level . '_review'
                                     );
-                                    $_SESSION['module_success'] = 'Reviewer assigned successfully.';
+                                    $_SESSION['module_success'] = $level_label . ' reviewer assigned successfully.';
                                 } else {
                                     $_SESSION['module_error'] = 'Reviewer could not be assigned.';
                                 }
@@ -243,6 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 } elseif ($action === 'remove_reviewer') {
                     if (!$project_reviews_exists) {
                         $_SESSION['module_error'] = 'Reviewer system is not yet available.';
+                    } elseif ($project_review_level === null) {
+                        $_SESSION['module_error'] = 'Reviewers can only be removed while a project is in CREC or EREC review.';
                     } else {
                         $review_id = (int) ($_POST['review_id'] ?? 0);
                         if ($review_id <= 0) {
@@ -255,10 +321,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                   LEFT JOIN users u ON u.user_id = pr.reviewer_id
                                  WHERE pr.review_id = ?
                                    AND pr.project_id = ?
+                                   AND pr.review_level = ?
                                    AND pr.reviewed_at IS NULL
                                  LIMIT 1
                             ");
-                            $reviewer_stmt->bind_param('ii', $review_id, $project_id);
+                            $reviewer_stmt->bind_param('iis', $review_id, $project_id, $project_review_level);
                             $reviewer_stmt->execute();
                             $removed_reviewer = $reviewer_stmt->get_result()->fetch_assoc();
                             $reviewer_stmt->close();
@@ -267,9 +334,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 DELETE FROM project_reviews
                                  WHERE review_id = ?
                                    AND project_id = ?
+                                   AND review_level = ?
                                    AND reviewed_at IS NULL
                             ");
-                            $del->bind_param('ii', $review_id, $project_id);
+                            $del->bind_param('iis', $review_id, $project_id, $project_review_level);
                             $del->execute();
                             $affected = $conn->affected_rows;
                             $del->close();
@@ -297,7 +365,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     'Removed reviewer assignment #' . $review_id
                                     . ($removed_reviewer_name !== '' ? ' (' . $removed_reviewer_name . ')' : '')
                                     . ' from ' . $removed_review_level . ' review of project #' . $project_id,
-                                    'crec_review'
+                                    $project_review_level . '_review'
                                 );
                                 $_SESSION['module_success'] = 'Reviewer removed from assignment.';
                             } else {
@@ -358,8 +426,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     SITE_URL . 'pages/student/my-research.php'
                                 );
                                 // Notify all admins
-                                $admins = $conn->query("SELECT user_id FROM users WHERE role='admin' AND status='active'");
-                                if ($admins) {
+                                $admin_stmt = $conn->prepare("SELECT user_id FROM users WHERE role = 'admin' AND status = 'active'");
+                                if ($admin_stmt) {
+                                    $admin_stmt->execute();
+                                    $admins = $admin_stmt->get_result();
                                     while ($a = $admins->fetch_assoc()) {
                                         createNotification(
                                             (int) $a['user_id'],
@@ -369,6 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                             SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
                                         );
                                     }
+                                    $admin_stmt->close();
                                 }
                                 logActivity(
                                     'Endorsed project #' . $project_id . ' ("' . $title . '") from CREC to EREC (avg ' . number_format($avg, 1) . '/' . $form3_max_score . ')',
@@ -378,6 +449,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             } else {
                                 $_SESSION['module_error'] = 'Project is no longer in CREC review (it may have already been processed).';
                             }
+                        }
+                    }
+
+                } elseif ($action === 'erec_endorse') {
+                    if (!$project_reviews_exists) {
+                        $_SESSION['module_error'] = 'Reviewer system is not yet available.';
+                    } elseif ($project_review_level !== 'erec') {
+                        $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
+                    } else {
+                        $agg_stmt = $conn->prepare("
+                            SELECT
+                              COUNT(DISTINCT reviewer_id) AS assigned_count,
+                              COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL THEN reviewer_id END) AS completed_count,
+                              AVG(
+                                COALESCE(methodology_score,0) +
+                                COALESCE(contribution_score,0) +
+                                COALESCE(applicability_score,0) +
+                                COALESCE(agenda_score,0)" . $form3_extra_score_sql . "
+                              ) AS avg_score
+                            FROM project_reviews
+                            WHERE project_id = ? AND review_level = 'erec'
+                        ");
+                        $agg_stmt->bind_param('i', $project_id);
+                        $agg_stmt->execute();
+                        $agg = $agg_stmt->get_result()->fetch_assoc();
+                        $agg_stmt->close();
+
+                        $completed = (int) ($agg['completed_count'] ?? 0);
+                        $avg = (float) ($agg['avg_score'] ?? 0);
+
+                        if ($completed < 2) {
+                            $_SESSION['module_error'] = 'Cannot endorse: at least 2 completed EREC reviews are required (currently ' . $completed . ').';
+                        } elseif ($avg < $form3_threshold) {
+                            $_SESSION['module_error'] = 'Cannot endorse: EREC average score is ' . number_format($avg, 1) . '/' . $form3_max_score . ', below the ' . number_format($form3_threshold, 1) . '-point threshold.';
+                        } else {
+                            $upd = $conn->prepare("
+                                UPDATE research_projects
+                                   SET status = 'approved', updated_at = NOW()
+                                 WHERE project_id = ?
+                                   AND status = 'under_erec_review'"
+                                   . $rp_deleted_filter
+                            );
+                            $upd->bind_param('i', $project_id);
+                            $upd->execute();
+                            $affected = $upd->affected_rows;
+                            $upd->close();
+
+                            if ($affected > 0) {
+                                $notification_message = 'EREC has endorsed "' . $title . '" and recommended it to the President for final approval.';
+                                foreach (crec_erec_recipients($conn, $project_id, $student_id) as $recipient_id) {
+                                    createNotification(
+                                        $recipient_id,
+                                        'EREC endorsement completed',
+                                        $notification_message,
+                                        'success',
+                                        SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
+                                    );
+                                }
+                                logActivity(
+                                    'EREC endorsed project #' . $project_id . ' ("' . $title . '") for President final approval (avg ' . number_format($avg, 1) . '/' . $form3_max_score . ')',
+                                    'erec_endorse'
+                                );
+                                $_SESSION['module_success'] = 'EREC endorsement recorded. The project is awaiting President final approval.';
+                            } else {
+                                $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
+                            }
+                        }
+                    }
+
+                } elseif ($action === 'erec_return_revision') {
+                    $reason = trim((string) ($_POST['revision_reason'] ?? ''));
+                    if ($project_review_level !== 'erec') {
+                        $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
+                    } elseif (mb_strlen($reason) < 20) {
+                        $_SESSION['module_error'] = 'Revision reason is required (minimum 20 characters).';
+                    } else {
+                        $upd = $conn->prepare("
+                            UPDATE research_projects
+                               SET status = 'for_revision', updated_at = NOW()
+                             WHERE project_id = ?
+                               AND status = 'under_erec_review'"
+                               . $rp_deleted_filter
+                        );
+                        $upd->bind_param('i', $project_id);
+                        $upd->execute();
+                        $affected = $upd->affected_rows;
+                        $upd->close();
+
+                        if ($affected > 0) {
+                            $notification_message = 'EREC returned "' . $title . '" for revision. Reason: ' . $reason;
+                            foreach (crec_erec_recipients($conn, $project_id, $student_id) as $recipient_id) {
+                                createNotification(
+                                    $recipient_id,
+                                    'EREC returned project for revision',
+                                    $notification_message,
+                                    'warning',
+                                    SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
+                                );
+                            }
+                            logActivity(
+                                'EREC returned project #' . $project_id . ' ("' . $title . '") for revision: ' . $reason,
+                                'erec_return_revision'
+                            );
+                            $_SESSION['module_success'] = 'EREC returned the project for revision.';
+                        } else {
+                            $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
                         }
                     }
 
@@ -469,15 +646,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // ── count (for stat card) ───────────────────────────────────────────────
-$count_result = $conn->query("
-    SELECT COUNT(*) AS c
+$total_crec = 0;
+$total_erec = 0;
+$count_stmt = $conn->prepare("
+    SELECT status, COUNT(*) AS c
       FROM research_projects
-     WHERE status = 'under_crec_review'"
-     . $rp_deleted_filter
-);
-$total_crec = (int) ($count_result ? ($count_result->fetch_assoc()['c'] ?? 0) : 0);
-if ($count_result) {
-    $count_result->close();
+     WHERE status IN ('under_crec_review', 'under_erec_review')"
+     . $rp_deleted_filter . "
+     GROUP BY status
+");
+if ($count_stmt) {
+    $count_stmt->execute();
+    $count_result = $count_stmt->get_result();
+    while ($count_row = $count_result->fetch_assoc()) {
+        if (($count_row['status'] ?? '') === 'under_crec_review') {
+            $total_crec = (int) ($count_row['c'] ?? 0);
+        } elseif (($count_row['status'] ?? '') === 'under_erec_review') {
+            $total_erec = (int) ($count_row['c'] ?? 0);
+        }
+    }
+    $count_stmt->close();
 }
 
 // ── main list query ──────────────────────────────────────────────────────
@@ -520,6 +708,7 @@ if ($project_reviews_exists) {
         LEFT JOIN (
             SELECT
                 project_id,
+                review_level,
                 COUNT(DISTINCT reviewer_id) AS assigned_count,
                 COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL THEN reviewer_id END) AS completed_count,
                 AVG(
@@ -529,10 +718,14 @@ if ($project_reviews_exists) {
                     COALESCE(agenda_score,0)" . $form3_extra_score_sql . "
                 ) AS avg_score
             FROM project_reviews
-            WHERE review_level = 'crec'
-            GROUP BY project_id
+            WHERE review_level IN ('crec', 'erec')
+            GROUP BY project_id, review_level
         ) stats ON stats.project_id = rp.project_id
-        WHERE rp.status = 'under_crec_review'"
+               AND stats.review_level = CASE
+                   WHEN rp.status = 'under_crec_review' THEN 'crec'
+                   WHEN rp.status = 'under_erec_review' THEN 'erec'
+               END
+        WHERE rp.status IN ('under_crec_review', 'under_erec_review')"
         . $rp_deleted_filter_aliased . "
         ORDER BY rp.created_at ASC
     ";
@@ -570,14 +763,30 @@ if ($project_reviews_exists) {
                    GROUP BY project_id
               ) first ON first.first_upload_id = u1.upload_id
         ) up ON up.project_id = rp.project_id
-        WHERE rp.status = 'under_crec_review'"
+        WHERE rp.status IN ('under_crec_review', 'under_erec_review')"
         . $rp_deleted_filter_aliased . "
         ORDER BY rp.created_at ASC
     ";
 }
 
-$list_result = $conn->query($list_sql);
-$projects = $list_result ? $list_result->fetch_all(MYSQLI_ASSOC) : [];
+$list_stmt = $conn->prepare($list_sql);
+$projects = [];
+if ($list_stmt) {
+    $list_stmt->execute();
+    $list_result = $list_stmt->get_result();
+    $projects = $list_result->fetch_all(MYSQLI_ASSOC);
+    $list_stmt->close();
+}
+$projects_by_stage = ['crec' => [], 'erec' => []];
+$project_stage_by_id = [];
+foreach ($projects as $project_row) {
+    $stage = crec_review_level_for_status((string) ($project_row['status'] ?? ''));
+    if ($stage !== null) {
+        $project_id_key = (int) $project_row['project_id'];
+        $projects_by_stage[$stage][] = $project_row;
+        $project_stage_by_id[$project_id_key] = $stage;
+    }
+}
 
 // ── load reviewers per project (for the modal lists) ────────────────────
 $reviewers_by_project = [];
@@ -592,7 +801,7 @@ if ($project_reviews_exists && !empty($projects)) {
           FROM project_reviews pr
           JOIN users u ON u.user_id = pr.reviewer_id
          WHERE pr.project_id IN ($placeholders)
-           AND pr.review_level = 'crec'
+           AND pr.review_level IN ('crec', 'erec')
          ORDER BY u.last_name, u.first_name
     ");
     if ($rv_stmt) {
@@ -600,7 +809,11 @@ if ($project_reviews_exists && !empty($projects)) {
         $rv_stmt->execute();
         $rv_res = $rv_stmt->get_result();
         while ($r = $rv_res->fetch_assoc()) {
-            $reviewers_by_project[(int) $r['project_id']][] = $r;
+            $review_project_id = (int) $r['project_id'];
+            $expected_level = $project_stage_by_id[$review_project_id] ?? null;
+            if ($expected_level !== null && ($r['review_level'] ?? '') === $expected_level) {
+                $reviewers_by_project[$review_project_id][] = $r;
+            }
         }
         $rv_stmt->close();
     }
@@ -609,7 +822,7 @@ if ($project_reviews_exists && !empty($projects)) {
 // ── load available faculty reviewers (for the assign dropdown) ───────────
 $available_reviewers = [];
 if ($users_has_is_reviewer) {
-    $avail_result = $conn->query("
+    $avail_stmt = $conn->prepare("
         SELECT user_id, first_name, last_name, email, academic_rank, specialization
           FROM users
          WHERE role = 'faculty'
@@ -617,13 +830,16 @@ if ($users_has_is_reviewer) {
            AND is_reviewer = 1
          ORDER BY last_name, first_name
     ");
-    if ($avail_result) {
+    if ($avail_stmt) {
+        $avail_stmt->execute();
+        $avail_result = $avail_stmt->get_result();
         $available_reviewers = $avail_result->fetch_all(MYSQLI_ASSOC);
+        $avail_stmt->close();
     }
 }
 
 // Render shell
-renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evaluation Committee — assign reviewers and endorse proposals.');
+renderStaffShell($user, 'staff-crec.php', 'CREC / EREC Review', 'Assign committee reviewers and record CREC or EREC dispositions.');
 ?>
 
 <style>
@@ -646,6 +862,12 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   .stat-card .icon { font-size: 36px; }
   .stat-card .num  { text-align: center; font-size: 32px; font-weight: 700; line-height: 1; color: #111827; }
   .stat-card .lbl  { font-size: 13px; color: #64748B; margin-top: 4px; font-weight: 500; }
+  .stage-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .review-stage { margin-bottom: 32px; }
+  .stage-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+  .stage-heading h2 { margin: 0; color: #111827; font-size: 20px; }
+  .stage-heading p { margin: 4px 0 0; color: #64748B; font-size: 13px; }
+  .stage-count { min-width: 32px; padding: 5px 10px; border-radius: 9999px; background: #EDE9FE; color: #6D28D9; font-size: 13px; font-weight: 700; text-align: center; }
 
   /* Table */
   .card {
@@ -884,6 +1106,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   }
 
   @media (max-width: 768px) {
+    .stage-stat-grid { grid-template-columns: 1fr; gap: 0; }
     .stat-card { flex-direction: column; align-items: flex-start; }
     td, th { padding: 12px; font-size: 13px; }
   }
@@ -902,43 +1125,87 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   </div>
 <?php endif; ?>
 
-<!-- Stat summary -->
-<div class="stat-card">
-  <div class="icon">🏛️</div>
-  <div>
-    <div class="num"><?php echo se($total_crec); ?></div>
-    <div class="lbl">Proposal<?php echo $total_crec !== 1 ? 's' : ''; ?> awaiting CREC review</div>
+<!-- Stage summaries -->
+<div class="stage-stat-grid">
+  <div class="stat-card">
+    <div class="icon">🏛️</div>
+    <div>
+      <div class="num"><?php echo se($total_crec); ?></div>
+      <div class="lbl">Proposal<?php echo $total_crec !== 1 ? 's' : ''; ?> awaiting CREC review</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="icon">⚖️</div>
+    <div>
+      <div class="num"><?php echo se($total_erec); ?></div>
+      <div class="lbl">Proposal<?php echo $total_erec !== 1 ? 's' : ''; ?> awaiting EREC review</div>
+    </div>
   </div>
 </div>
 
-<!-- CREC projects table -->
-<div class="card">
-  <?php if (empty($projects)): ?>
-    <div class="empty-state">
-      <div class="empty-state-icon">🏛️</div>
-      <p>No proposals currently in CREC review.</p>
-      <p style="font-size: 13px; margin-top: 8px; color: #94A3B8;">
-        When staff forwards a submission from the Inbox, it will appear here.
-      </p>
+<?php
+$stage_sections = [
+    'crec' => [
+        'title' => 'CREC Review',
+        'description' => 'College-level evaluation before forwarding to EREC.',
+        'empty' => 'No proposals currently in CREC review.',
+        'empty_help' => 'When staff forwards a submission from the Inbox, it will appear here.',
+        'endorse_action' => 'crec_endorse',
+        'endorse_label' => '✓ Endorse to EREC',
+        'endorse_help' => 'Forward this proposal to the EARIST Research Evaluation Committee (EREC)',
+    ],
+    'erec' => [
+        'title' => 'EREC Review',
+        'description' => 'Institute-level evaluation before recommendation to the President.',
+        'empty' => 'No proposals currently in EREC review.',
+        'empty_help' => 'Projects endorsed by CREC will appear here for EREC assignment and disposition.',
+        'endorse_action' => 'erec_endorse',
+        'endorse_label' => '✓ Recommend for Final Approval',
+        'endorse_help' => 'Recommend this proposal to the President for final approval',
+    ],
+];
+?>
+
+<?php foreach ($stage_sections as $stage_key => $stage_section):
+    $stage_projects = $projects_by_stage[$stage_key] ?? [];
+    $is_erec_stage = $stage_key === 'erec';
+?>
+<section class="review-stage" aria-labelledby="<?php echo se($stage_key); ?>-review-heading">
+  <div class="stage-heading">
+    <div>
+      <h2 id="<?php echo se($stage_key); ?>-review-heading"><?php echo se($stage_section['title']); ?></h2>
+      <p><?php echo se($stage_section['description']); ?></p>
     </div>
-  <?php else: ?>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 60px;">#</th>
-            <th>Research Title</th>
-            <th>Student</th>
-            <th>Category</th>
-            <th>Forwarded</th>
-            <th>Proposal</th>
-            <th>Review Progress</th>
-            <th>Status</th>
-            <th style="min-width: 280px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($projects as $i => $row):
+    <span class="stage-count"><?php echo count($stage_projects); ?></span>
+  </div>
+
+  <div class="card">
+    <?php if (empty($stage_projects)): ?>
+      <div class="empty-state">
+        <div class="empty-state-icon"><?php echo $is_erec_stage ? '⚖️' : '🏛️'; ?></div>
+        <p><?php echo se($stage_section['empty']); ?></p>
+        <p style="font-size: 13px; margin-top: 8px; color: #94A3B8;">
+          <?php echo se($stage_section['empty_help']); ?>
+        </p>
+      </div>
+    <?php else: ?>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 60px;">#</th>
+              <th>Research Title</th>
+              <th>Student</th>
+              <th>Category</th>
+              <th>Forwarded</th>
+              <th>Proposal</th>
+              <th>Review Progress</th>
+              <th>Status</th>
+              <th style="min-width: 280px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($stage_projects as $i => $row):
             $idx          = $i + 1;
             [$b_class, $b_label] = crec_statusBadge($row['status'] ?? 'under_crec_review');
 
@@ -965,7 +1232,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
             } elseif ($avg === null || $avg < $form3_threshold) {
                 $endorse_title = 'Average score is below the ' . number_format($form3_threshold, 1) . '/' . $form3_max_score . ' threshold';
             } else {
-                $endorse_title = 'Forward this proposal to the EARIST Research Evaluation Committee (EREC)';
+                $endorse_title = $stage_section['endorse_help'];
             }
 
             $assigned_reviewers = $reviewers_by_project[(int) $row['project_id']] ?? [];
@@ -1022,41 +1289,45 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
               <td>
                 <div class="row-actions">
                   <button type="button" class="btn btn-secondary btn-sm"
-                          onclick="openReviewersModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
-                    👥 Reviewers
+                          onclick="openReviewersModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>', '<?php echo se(strtoupper($stage_key)); ?>')">
+                    👥 <?php echo se(strtoupper($stage_key)); ?> Reviewers
                   </button>
                   <?php if ($can_endorse): ?>
                     <form method="POST" style="display: inline;">
                       <?php echo csrfField(); ?>
-                      <input type="hidden" name="action" value="crec_endorse">
+                      <input type="hidden" name="action" value="<?php echo se($stage_section['endorse_action']); ?>">
                       <input type="hidden" name="project_id" value="<?php echo (int) $row['project_id']; ?>">
                       <button type="submit" class="btn btn-primary btn-sm" title="<?php echo se($endorse_title); ?>">
-                        ✓ Endorse to EREC
+                        <?php echo se($stage_section['endorse_label']); ?>
                       </button>
                     </form>
                   <?php else: ?>
                     <button type="button" class="btn btn-secondary btn-sm disabled"
                             title="<?php echo se($endorse_title); ?>" disabled>
-                      ✓ Endorse to EREC
+                      <?php echo se($stage_section['endorse_label']); ?>
                     </button>
                   <?php endif; ?>
                   <button type="button" class="btn btn-danger btn-sm"
-                          onclick="openReturnModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
+                          onclick="openReturnModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>', '<?php echo se($stage_key); ?>')">
                     ↩ Return
                   </button>
-                  <button type="button" class="btn btn-reject btn-sm"
-                          onclick="openRejectModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
-                    ✕ Reject
-                  </button>
+                  <?php if (!$is_erec_stage): ?>
+                    <button type="button" class="btn btn-reject btn-sm"
+                            onclick="openRejectModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
+                      ✕ Reject
+                    </button>
+                  <?php endif; ?>
                 </div>
               </td>
             </tr>
           <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  <?php endif; ?>
-</div>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </div>
+</section>
+<?php endforeach; ?>
 
 <!-- Manage Reviewers modal -->
 <div id="reviewersModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reviewersModalTitle">
@@ -1067,7 +1338,8 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
     </div>
     <div class="modal-body">
       <p style="margin: 0 0 16px; font-size: 14px; color: #64748B;">
-        Project: <strong id="rv_title" style="color: #111827;"></strong>
+        <strong id="rv_level" style="color: #6D28D9;"></strong> project:
+        <strong id="rv_title" style="color: #111827;"></strong>
       </p>
 
       <div class="form-group">
@@ -1103,7 +1375,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   <div class="modal-content">
     <form method="POST" id="returnForm">
       <?php echo csrfField(); ?>
-      <input type="hidden" name="action" value="crec_return">
+      <input type="hidden" name="action" id="return_action" value="crec_return">
       <input type="hidden" name="project_id" id="return_project_id" value="">
 
       <div class="modal-header">
@@ -1118,7 +1390,7 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
           <label class="form-label" for="revision_reason">Reason <span style="color: #EF4444;">*</span></label>
           <textarea id="revision_reason" name="revision_reason" class="form-control" rows="5" minlength="20" required
                     placeholder="Explain what the student needs to fix (min. 20 characters)…"></textarea>
-          <span class="form-help">This message will be sent to the student as a notification. CREC returns require more detail than initial verification returns.</span>
+          <span class="form-help">This message will be sent to project stakeholders. Committee returns require a detailed reason.</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -1204,13 +1476,15 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   // ── Reviewers modal ───────────────────────────────────────────────
   const rvModal      = document.getElementById('reviewersModal');
   const rvTitle      = document.getElementById('rv_title');
+  const rvLevel      = document.getElementById('rv_level');
   const rvProjectId  = document.getElementById('rv_project_id');
   const rvList       = document.getElementById('rv_list');
   const rvSelect     = document.getElementById('reviewer_id');
   const assignForm   = document.getElementById('assignForm');
 
-  function openReviewersModal(projectId, title) {
+  function openReviewersModal(projectId, title, level) {
     rvTitle.textContent = title;
+    rvLevel.textContent = level;
     rvProjectId.value   = projectId;
     renderReviewerList(projectId);
     renderAssignOptions(projectId);
@@ -1345,11 +1619,16 @@ renderStaffShell($user, 'staff-crec.php', 'CREC Review', 'College Research Evalu
   const returnForm  = document.getElementById('returnForm');
   const returnTitle = document.getElementById('return_title');
   const returnPid   = document.getElementById('return_project_id');
+  const returnAction = document.getElementById('return_action');
+  const returnModalTitle = document.getElementById('returnModalTitle');
   const reasonField = document.getElementById('revision_reason');
 
-  function openReturnModal(projectId, title) {
+  function openReturnModal(projectId, title, stage) {
     returnPid.value        = projectId;
     returnTitle.textContent = title;
+    const isErec = stage === 'erec';
+    returnAction.value = isErec ? 'erec_return_revision' : 'crec_return';
+    returnModalTitle.textContent = '↩ Return for Revision (' + (isErec ? 'EREC' : 'CREC') + ')';
     reasonField.value      = '';
     reasonField.classList.remove('invalid');
     returnModal.style.display = 'flex';

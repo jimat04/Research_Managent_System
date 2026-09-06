@@ -71,9 +71,11 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         if ($count_result) {
             $stat_pending = (int) ($count_result->fetch_assoc()['count'] ?? 0);
         }
-        $count_result = $conn->query("SELECT COUNT(*) AS count FROM research_projects WHERE status = 'under_crec_review'");
-        if ($count_result) {
-            $stat_crec = (int) ($count_result->fetch_assoc()['count'] ?? 0);
+        $committee_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('under_crec_review', 'under_erec_review')");
+        if ($committee_count_stmt) {
+            $committee_count_stmt->execute();
+            $stat_crec = (int) ($committee_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+            $committee_count_stmt->close();
         }
         // Pending milestone verifications: research_documents + research_reports
         // with status 'submitted'. Both tables are added by a migration and may
@@ -136,7 +138,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         ],
         'Processing' => [
             [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
-            [SITE_URL . 'pages/staff/staff-crec.php',       'For CREC Review',    '🏛️', true,  $stat_crec],
+            [SITE_URL . 'pages/staff/staff-crec.php',       'CREC / EREC Review', '🏛️', true,  $stat_crec],
             [SITE_URL . 'pages/staff/staff-milestones.php', 'Milestones',         '📑', true,  $stat_milestones],
             [SITE_URL . 'pages/staff/staff-defense.php',    'Defense Schedule',   '🗓️', true,  $stat_defenses],
             [SITE_URL . 'pages/staff/staff-revisions.php',  'Revision Returns',   '🔄', false, 0],

@@ -49,7 +49,11 @@ if ($comments_chapter_column) {
     $comments_chapter_column->close();
 }
 
-$success = isset($_GET['action']) && $_GET['action'] === 'done' ? 'Action completed successfully.' : '';
+$success = (string) ($_SESSION['module_success'] ?? '');
+unset($_SESSION['module_success']);
+if ($success === '' && isset($_GET['action']) && $_GET['action'] === 'done') {
+    $success = 'Action completed successfully.';
+}
 $warning = (string) ($_SESSION['module_warning'] ?? '');
 unset($_SESSION['module_warning']);
 
@@ -107,10 +111,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $comment_text = '';
     $comment_type = 'general';
     $chapter_id = null;
+    $action_success_message = '';
 
     if ($action === 'project_approve') {
-        $next_status = ['submitted' => 'under_crec_review', 'under_crec_review' => 'under_erec_review', 'under_erec_review' => 'approved'];
-        if (isset($next_status[$project['status']])) {
+        $next_status = ['submitted' => 'under_crec_review', 'under_crec_review' => 'under_erec_review'];
+        if ($project['status'] === 'under_erec_review') {
+            $comment_text = 'Faculty recommendation: approve. Final endorsement remains subject to the EREC committee decision through the Research Staff office.';
+            $comment_type = 'approval';
+            $log_message = 'Recorded faculty approval recommendation for ' . $project['title'] . ' during EREC review';
+            $action_success_message = 'Your recommendation was recorded. Project endorsement is decided by EREC through the Research Staff office.';
+        } elseif (isset($next_status[$project['status']])) {
             $new_status = $next_status[$project['status']];
             $log_message = 'Approved ' . $project['title'];
         } else {
@@ -120,9 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $comment_text = trim($_POST['reason'] ?? '');
         if ($comment_text === '') $errors[] = 'A revision reason is required.';
         else { $new_status = 'for_revision'; $comment_type = 'correction'; $log_message = 'Requested revision on ' . $project['title']; }
-    } elseif ($action === 'project_ongoing') {
-        if ($project['status'] === 'approved') { $new_status = 'ongoing'; $log_message = 'Marked ' . $project['title'] . ' as ongoing'; }
-        else $errors[] = 'Only approved projects can be marked as ongoing.';
     } elseif ($action === 'chapter_approve' || $action === 'chapter_revise') {
         $chapter_id = intval($_POST['chapter_id'] ?? 0);
         $comment_text = trim($_POST['chapter_comment'] ?? '');
@@ -214,6 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             logActivity($log_message, 'faculty-review');
             $conn->commit();
             if ($comment_warning !== '') $_SESSION['module_warning'] = $comment_warning;
+            if ($action_success_message !== '') $_SESSION['module_success'] = $action_success_message;
             header('Location: faculty-review-detail.php?id=' . $project_id . '&action=done');
             exit();
         } catch (Exception $exception) {
@@ -321,7 +329,7 @@ renderFacultyShell(
         <div class="card" style="margin-bottom: 20px;"><div class="card-body"><div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap;"><div style="flex: 1; min-width: 240px;"><h2 style="margin: 0 0 10px;"><?php echo htmlspecialchars($project['title']); ?></h2><div style="color: var(--text-light); font-size: 14px;">Student: <?php echo htmlspecialchars($project['student_name'] ?: 'N/A'); ?> · <?php echo htmlspecialchars($project['category_name'] ?? 'Uncategorized'); ?> · <?php echo htmlspecialchars(($project['ay_label'] ?? 'N/A') . ' / ' . ($project['semester'] ?? 'N/A')); ?> · Submitted: <?php echo !empty($project['created_at']) ? date('M d, Y', strtotime($project['created_at'])) : 'N/A'; ?></div></div><span class="<?php echo htmlspecialchars($project_badge['class']); ?>" <?php echo $project_badge['style'] ? 'style="' . htmlspecialchars($project_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $project_status)); ?></span></div>
           <?php if ($project_status === 'for_revision'): ?><div class="alert alert-warning" style="margin: 18px 0 0;">This project has been returned for revision.</div><?php elseif (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><div class="alert alert-info" style="margin: 18px 0 0;">Awaiting review.</div><?php endif; ?>
           <?php if (!empty($project['abstract'])): ?><details style="margin-top: 18px;"><summary style="cursor: pointer; color: var(--primary);">Show abstract</summary><div style="white-space: pre-wrap; line-height: 1.6; margin-top: 10px;"><?php echo htmlspecialchars($project['abstract'], ENT_QUOTES, 'UTF-8'); ?></div></details><?php endif; ?>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px;"><button type="button" class="btn btn-warning" onclick="document.getElementById('revisionModal').style.display='block'">Request Revision</button><?php if (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_approve"><button class="btn btn-success">Approve</button></form><?php endif; ?><?php if ($project_status === 'approved'): ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_ongoing"><button class="btn btn-secondary">Mark as Ongoing</button></form><?php endif; ?><?php if ($proposal): ?><a class="btn btn-secondary" href="../../uploads/proposals/<?php echo rawurlencode($proposal['file_name']); ?>" target="_blank" rel="noopener">Download Proposal</a><?php else: ?><button class="btn btn-secondary" disabled>Download Proposal</button><?php endif; ?></div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px;"><button type="button" class="btn btn-warning" onclick="document.getElementById('revisionModal').style.display='block'">Request Revision</button><?php if (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_approve"><button class="btn btn-success"><?php echo $project_status === 'under_erec_review' ? 'Record Recommendation' : 'Approve'; ?></button></form><?php endif; ?><?php if ($proposal): ?><a class="btn btn-secondary" href="../../uploads/proposals/<?php echo rawurlencode($proposal['file_name']); ?>" target="_blank" rel="noopener">Download Proposal</a><?php else: ?><button class="btn btn-secondary" disabled>Download Proposal</button><?php endif; ?></div>
         </div></div>
         <div id="revisionModal" class="card" style="display: none; margin-bottom: 20px;"><div class="card-header"><div class="card-title">Request Revision</div></div><div class="card-body"><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_request_revision"><textarea name="reason" class="form-control" rows="4" required placeholder="Explain what needs to be revised..."></textarea><div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;"><button type="button" class="btn btn-secondary" onclick="document.getElementById('revisionModal').style.display='none'">Cancel</button><button class="btn btn-warning">Request Revision</button></div></form></div></div><!-- @rms-ui: modal styling --></div>
         <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapters</div></div><div class="card-body"><div style="display: flex; flex-direction: column; gap: 12px;">
