@@ -17,10 +17,15 @@
 | Faculty (2nd) | jreyes@rms.edu.ph | Faculty@123 |
 | Student (lead) | jdelacruz@rms.edu.ph | Student@123 |
 | Student (co-researcher) | areyes@rms.edu.ph | Student@123 |
-| Research Staff | *(your staff account)* | |
+| Staff (EREC Office) | EREC@rms.edu.ph | Staff@123 |
+| Staff (CREC Office) | CREC@rms.edu.ph | Staff@123 |
+| Staff (Office of Research Services) | ORS@rms.edu.ph | Staff@123 |
+| Staff (Graduate School Office) | graduate@rms.edu.ph | Staff@123 |
+
+Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
 
 - ☐ XAMPP Apache + MySQL running
-- ☐ A research_staff account exists and can log in (if not: create one via Admin → User Management)
+- ☐ Each office staff account can log in
 - ☐ Have 2 small test PDFs ready (any PDF renamed, e.g. `test-proposal.pdf`, `test-chapter.pdf`)
 - ☐ Optional but recommended: backup the DB first so you can re-run this script clean:
   `& "C:\xampp\mysql\bin\mysqldump.exe" -u root rms_db > rms_backup_before_e2e.sql`

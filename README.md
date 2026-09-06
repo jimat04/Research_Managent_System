@@ -55,10 +55,17 @@ A PHP and MySQL research management system for students, faculty advisers, resea
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Student | jdelacruz@rms.edu.ph | Student@123 |
-| Faculty | msantos@rms.edu.ph | Faculty@123 |
-| Research Staff | staff@rms.edu.ph | Staff@123 |
 | Admin | admin@rms.edu.ph | Admin@123 |
+| Faculty (reviewer) | msantos@rms.edu.ph | Faculty@123 |
+| Faculty (reviewer) | jreyes@rms.edu.ph | Faculty@123 |
+| Student | jdelacruz@rms.edu.ph | Student@123 |
+| Student | areyes@rms.edu.ph | Student@123 |
+| Staff (EREC Office) | EREC@rms.edu.ph | Staff@123 |
+| Staff (CREC Office) | CREC@rms.edu.ph | Staff@123 |
+| Staff (Office of Research Services) | ORS@rms.edu.ph | Staff@123 |
+| Staff (Graduate School Office) | graduate@rms.edu.ph | Staff@123 |
+
+Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
 
 ## Project Structure
 

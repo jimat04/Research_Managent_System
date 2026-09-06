@@ -446,7 +446,11 @@ INSERT INTO `users` (`user_id`, `role`, `first_name`, `last_name`, `email`, `pas
 (2, 'faculty', 'Maria', 'Santos', 'msantos@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 'active', '2026-05-31 02:59:30', '2026-05-30 17:49:59', '2026-05-30 18:59:30'),
 (3, 'faculty', 'Jose', 'Reyes', 'jreyes@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
 (4, 'student', 'Juan', 'Dela Cruz', 'jdelacruz@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00001', 'College of Computer Studies', 'BSIT', NULL, NULL, 'active', '2026-05-31 02:58:09', '2026-05-30 17:49:59', '2026-05-30 18:58:09'),
-(5, 'student', 'Anna', 'Reyes', 'areyes@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00002', 'College of Computer Studies', 'BSIT', NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54');
+(5, 'student', 'Anna', 'Reyes', 'areyes@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00002', 'College of Computer Studies', 'BSIT', NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
+(6, 'research_staff', 'EREC', 'Staff', 'EREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'EREC Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
+(7, 'research_staff', 'CREC', 'Staff', 'CREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'CREC Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
+(8, 'research_staff', 'ORS', 'Staff', 'ORS@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'Office of Research Services', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
+(9, 'research_staff', 'Graduate', 'Staff', 'graduate@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'Graduate School Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54');
 
 --
 -- Indexes for dumped tables
