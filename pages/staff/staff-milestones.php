@@ -70,6 +70,7 @@ function smil_milestone_label(string $kind, string $type): string {
             'nda'                  => 'NDA',
             'progress_report'      => 'Midway Progress Report',
             'terminal_report'      => 'Terminal Report',
+            'bound_report'         => 'Final Bound Report',
             'final_bound_report'   => 'Final Bound Report',
             'publication_record'   => 'Publication Record',
             'defense_material'     => 'Defense Material',

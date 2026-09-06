@@ -7,6 +7,7 @@
  *   - NDA  (Non-Disclosure Agreement)          → research_documents
  *   - Midway Progress Report                    → research_reports
  *   - Terminal Report                           → research_reports
+ *   - Final Bound Report (bound copy + CD)      → research_documents
  *
  * The four tables (`research_documents`, `research_reports`) already exist;
  * this page is the first place that actually INSERTs/UPDATEs them from a
@@ -83,6 +84,16 @@ function msub_status_class($key) {
     return $map[$key] ?? 'slate';
 }
 
+function msub_slot_visible_for_status(array $slot, string $project_status): bool {
+    $visible_statuses = $slot['visible_statuses'] ?? null;
+    return !is_array($visible_statuses)
+        || in_array($project_status, $visible_statuses, true);
+}
+
+function msub_slot_storage_doc_type(array $slot): string {
+    return (string) ($slot['storage_doc_type'] ?? $slot['doc_type']);
+}
+
 // ── defensive schema detection ───────────────────────────────────────────
 // research_projects.deleted_at may or may not exist (added by migration).
 $rp_has_deleted_at = false;
@@ -116,6 +127,21 @@ function msub_table_exists($conn, $name) {
 }
 $tbl_documents = msub_table_exists($conn, 'research_documents');
 $tbl_reports   = msub_table_exists($conn, 'research_reports');
+
+// The current schema uses final_bound_report; newer installs may adopt the
+// shorter bound_report value requested by the milestone definition.
+$bound_storage_doc_type = 'final_bound_report';
+if ($tbl_documents) {
+    $doc_type_check = $conn->prepare("SHOW COLUMNS FROM research_documents LIKE 'document_type'");
+    if ($doc_type_check) {
+        $doc_type_check->execute();
+        $doc_type_column = $doc_type_check->get_result()->fetch_assoc();
+        $doc_type_check->close();
+        if (str_contains((string) ($doc_type_column['Type'] ?? ''), "'bound_report'")) {
+            $bound_storage_doc_type = 'bound_report';
+        }
+    }
+}
 
 // research_reports columns — detect presence so we can build a safe UPDATE.
 $rr_has_document_id = false;
@@ -165,7 +191,7 @@ if (!$project && !empty($projects)) {
     $project_id = (int) $project['project_id'];
 }
 
-// ── load the four milestone rows for the selected project ───────────────
+// ── load the milestone rows for the selected project ───────────────────
 // $slots: keyed by slot id; each has display label + storage target.
 $slots = [
     'mou' => [
@@ -203,6 +229,17 @@ $slots = [
         'doc_row'      => null,
         'report_row'   => null,
         'upload_row'   => null,
+    ],
+    'bound' => [
+        'label'            => 'Final Bound Report (bound copy + CD)',
+        'doc_type'         => 'bound_report',
+        'storage_doc_type' => $bound_storage_doc_type,
+        'report_type'      => null,
+        'visible_statuses' => ['completed', 'archived'],
+        'description'      => 'Final bound copy with the accompanying CD, submitted after terminal-report revisions are complete.',
+        'doc_row'          => null,
+        'report_row'       => null,
+        'upload_row'       => null,
     ],
 ];
 
@@ -250,7 +287,8 @@ if ($project && $project_id > 0) {
 
     // Stitch the rows into $slots.
     foreach ($slots as $sid => $slot) {
-        $slots[$sid]['doc_row']    = $doc_by_type[$slot['doc_type']]    ?? null;
+        $storage_doc_type = msub_slot_storage_doc_type($slot);
+        $slots[$sid]['doc_row'] = $doc_by_type[$storage_doc_type] ?? null;
         if ($slot['report_type']) {
             $slots[$sid]['report_row'] = $rep_by_type[$slot['report_type']] ?? null;
         }
@@ -304,20 +342,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Re-validate the project against the user's owned/member list
         // (a tampered POST project_id must not slip through).
-        $post_project_valid = false;
+        $post_project_row = null;
         foreach ($projects as $p) {
             if ((int) $p['project_id'] === $post_project) {
-                $post_project_valid = true;
+                $post_project_row = $p;
                 break;
             }
         }
-        if (!$post_project_valid) {
+        if (!$post_project_row) {
             $errors[] = 'Invalid project. Please pick a project you own or are a member of.';
         } elseif (!isset($slots[$slot_key])) {
             $errors[] = 'Invalid milestone. Please pick a valid milestone slot.';
+        } elseif (!msub_slot_visible_for_status(
+            $slots[$slot_key],
+            (string) ($post_project_row['status'] ?? '')
+        )) {
+            $errors[] = 'The Final Bound Report can only be submitted after the project is completed or archived.';
         } else {
             $slot = $slots[$slot_key];
             $project_id = $post_project;
+            $project = $post_project_row;
 
             // ── file validation ─────────────────────────────────────────
             $file_uploaded = isset($_FILES['milestone_file'])
@@ -451,11 +495,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (!$ins_doc) {
                             throw new Exception('Unable to prepare document insert.');
                         }
+                        $storage_doc_type = msub_slot_storage_doc_type($slot);
                         $ins_doc->bind_param(
                             'iissi',
                             $project_id,
                             $new_upload_id,
-                            $slot['doc_type'],
+                            $storage_doc_type,
                             $remarks,
                             $user_id
                         );
@@ -554,6 +599,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'milestones'
                     );
 
+                    $student_name = trim(
+                        (string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? '')
+                    );
+
                     // Best-effort adviser notification (mirrors messages.php pattern:
                     // createNotification() may return false if the notifications table
                     // is unavailable; we don't want the upload to fail in that case).
@@ -567,9 +616,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $adv_stmt->bind_param('i', $project_id);
                             $adv_stmt->execute();
                             $adv_res = $adv_stmt->get_result();
-                            $student_name = trim(
-                                (string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? '')
-                            );
                             $link = 'pages/student/submit-milestone.php?project_id=' . $project_id;
                             while ($adv_row = $adv_res->fetch_assoc()) {
                                 $adv_id = (int) $adv_row['adviser_id'];
@@ -587,6 +633,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             $adv_stmt->close();
                         }
+                    }
+
+                    if ($slot_key === 'bound') {
+                        $staff_stmt = $conn->prepare(
+                            "SELECT user_id FROM users WHERE role = 'research_staff' AND status = 'active'"
+                        );
+                        if (!$staff_stmt || !$staff_stmt->execute()) {
+                            if ($staff_stmt) { $staff_stmt->close(); }
+                            throw new Exception('Unable to load Final Bound Report notification recipients.');
+                        }
+                        $staff_result = $staff_stmt->get_result();
+                        while ($staff_row = $staff_result->fetch_assoc()) {
+                            createNotification(
+                                (int) $staff_row['user_id'],
+                                'Final Bound Report submitted',
+                                ($student_name !== '' ? $student_name : 'A student')
+                                    . ' submitted the Final Bound Report for "'
+                                    . (string) $project['title'] . '".',
+                                'info',
+                                'pages/staff/staff-milestones.php'
+                            );
+                        }
+                        $staff_stmt->close();
                     }
 
                     $conn->commit();
@@ -642,7 +711,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors) && $project && $proj
         }
     }
     foreach ($slots as $sid => $slot) {
-        $slots[$sid]['doc_row']    = $doc_by_type[$slot['doc_type']]    ?? null;
+        $storage_doc_type = msub_slot_storage_doc_type($slot);
+        $slots[$sid]['doc_row'] = $doc_by_type[$storage_doc_type] ?? null;
         if ($slot['report_type']) {
             $slots[$sid]['report_row'] = $rep_by_type[$slot['report_type']] ?? null;
         }
@@ -681,7 +751,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors) && $project && $proj
 
 // ── Page title ──────────────────────────────────────────────────────────
 $page_title    = 'Submit Milestone Documents';
-$page_subtitle = 'Upload the Research Manual 2015 milestone files (MOU, NDA, midway progress, terminal).';
+$page_subtitle = 'Upload the Research Manual 2015 milestone files (MOU, NDA, midway progress, terminal, final bound report).';
 if ($project) {
     $page_subtitle = 'Upload milestone files for "' . (string) $project['title'] . '".';
 }
@@ -830,7 +900,7 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
   <div class="msub-page-header">
     <div>
       <h2 class="msub-page-title">Submit Milestone Documents</h2>
-      <p class="msub-page-sub">EARIST Research Manual 2015 — MOU, NDA, Midway Progress Report, and Terminal Report.</p>
+      <p class="msub-page-sub">EARIST Research Manual 2015 — MOU, NDA, Midway Progress Report, Terminal Report, and Final Bound Report.</p>
     </div>
     <form method="get" class="msub-switcher">
       <label for="project_id" style="font-size: 13px; color: #64748B; font-weight: 500;">Project:</label>
@@ -865,6 +935,9 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
   <?php endif; ?>
 
   <?php foreach ($slots as $slot_key => $slot):
+    if (!msub_slot_visible_for_status($slot, (string) ($project['status'] ?? ''))) {
+        continue;
+    }
     $doc    = $slot['doc_row'];
     $report = $slot['report_row'];
     $upl    = $slot['upload_row'];
