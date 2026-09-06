@@ -95,7 +95,12 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_documents WHERE status = 'submitted'";
         }
         if ($milestone_present['reports']) {
-            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_reports WHERE status = 'submitted'";
+            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_reports rr WHERE rr.status = 'submitted'
+                AND NOT EXISTS (
+                    SELECT 1 FROM research_documents rd
+                    WHERE rd.project_id = rr.project_id
+                      AND rd.document_type IN ('progress_report','terminal_report')
+                )";
         }
         if (!empty($milestone_parts)) {
             $milestone_sql = implode(' UNION ALL ', $milestone_parts);
