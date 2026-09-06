@@ -101,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     }
 
     if (!$errors) {
+        $send_completion_notification = $review['reviewed_at'] === null;
         if ($form3_full) {
             $upd = $conn->prepare("
                 UPDATE project_reviews
@@ -135,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $title = (string) ($review['title'] ?? 'your research');
             logActivity("Submitted $level review (score $total/$form3_max_score, $recommendation) for project #{$review['project_id']}", 'faculty_review');
 
-            if (!empty($review['student_id'])) {
+            if ($send_completion_notification && !empty($review['student_id'])) {
                 createNotification(
                     (int) $review['student_id'],
                     "$level review completed",

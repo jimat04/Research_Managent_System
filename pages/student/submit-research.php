@@ -383,6 +383,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 );
             }
 
+            if ($status === 'submitted') {
+                $student_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                $staff_notify_stmt = $conn->prepare(
+                    "SELECT user_id FROM users
+                     WHERE role IN ('research_staff', 'admin') AND status = 'active'"
+                );
+                if (!$staff_notify_stmt) {
+                    throw new Exception('Unable to prepare proposal submission notifications.');
+                }
+                if (!$staff_notify_stmt->execute()) {
+                    throw new Exception('Unable to load proposal submission notification recipients.');
+                }
+                $staff_notify_result = $staff_notify_stmt->get_result();
+                while ($recipient = $staff_notify_result->fetch_assoc()) {
+                    createNotification(
+                        (int) $recipient['user_id'],
+                        'New research proposal submitted',
+                        $student_name . ' submitted "' . $title . '" for review.',
+                        'info',
+                        SITE_URL . 'pages/staff/staff-submissions.php'
+                    );
+                }
+                $staff_notify_stmt->close();
+            }
+
             // Set success flag
             $success = true;
             $success_message = $status === 'draft'
