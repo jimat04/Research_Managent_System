@@ -261,6 +261,7 @@
    ───────────────────────────────────────────────────────────── */
 .student-main {
   flex: 1;
+  min-width: 0;
   margin-left: 260px;
   min-height: 100vh;
   display: flex;
@@ -286,6 +287,19 @@
 
 .student-topbar-left {
   min-width: 0;
+}
+
+.student-mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .student-topbar-title {
@@ -376,11 +390,32 @@
   }
   .student-sidebar.is-open {
     transform: translateX(0);
+    z-index: 200;
+    box-shadow: 12px 0 28px rgba(15, 23, 42, 0.28);
   }
   .student-main { margin-left: 0; }
   .student-topbar { padding: 16px 24px; min-height: 72px; }
+  .student-topbar-left { display: flex; align-items: center; gap: 8px; }
+  .student-mobile-menu-btn { display: inline-flex; }
   .student-topbar-title { font-size: 20px; }
   .student-topbar-subtitle { display: none; }
   .student-page-content { padding: 24px 20px; }
   .student-topbar-user-text { display: none; }
+  .student-page-content table.table-mobile-stack { width: 100%; table-layout: fixed; }
+  .student-page-content table.table-mobile-stack thead { display: none; }
+  .student-page-content table.table-mobile-stack tbody tr { display: block; width: 100%; }
+  .student-page-content table.table-mobile-stack tbody td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .student-page-content table.table-mobile-stack tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12px;
+    opacity: 0.6;
+  }
 }

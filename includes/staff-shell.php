@@ -248,6 +248,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   <main class="staff-main">
     <header class="staff-topbar">
       <div class="staff-topbar-left">
+        <button type="button" class="staff-mobile-menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
         <h1 class="staff-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
         <?php if ($page_subtitle_safe !== ''): ?>
           <p class="staff-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
@@ -277,6 +278,17 @@ function renderStaffShellClose() {
     </div><!-- /.staff-page-content -->
   </main>
 </div><!-- /.staff-dashboard -->
+<script>
+(() => {
+  const button = document.querySelector('.staff-mobile-menu-btn');
+  const sidebar = document.querySelector('.staff-sidebar');
+  if (!button || !sidebar) return;
+  const closeMenu = () => { sidebar.classList.remove('is-open'); button.setAttribute('aria-expanded', 'false'); };
+  button.addEventListener('click', (event) => { event.stopPropagation(); const open = sidebar.classList.toggle('is-open'); button.setAttribute('aria-expanded', String(open)); });
+  document.addEventListener('click', (event) => { if (sidebar.classList.contains('is-open') && !sidebar.contains(event.target) && !button.contains(event.target)) closeMenu(); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
+})();
+</script>
 </body>
 </html>
     <?php

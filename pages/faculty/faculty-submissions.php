@@ -624,7 +624,7 @@ renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle
   </div>
 <?php else: ?>
   <div class="fsub-table-wrap">
-    <table class="fsub-table">
+    <table class="fsub-table table-mobile-stack">
       <thead>
         <tr>
           <th>Research</th>

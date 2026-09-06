@@ -248,6 +248,7 @@
    ───────────────────────────────────────────────────────────── */
 .admin-main {
   flex: 1;
+  min-width: 0;
   margin-left: 260px;
   min-height: 100vh;
   display: flex;
@@ -273,6 +274,19 @@
 
 .admin-topbar-left {
   min-width: 0;
+}
+
+.admin-mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .admin-topbar-title {
@@ -363,11 +377,32 @@
   }
   .admin-sidebar.is-open {
     transform: translateX(0);
+    z-index: 200;
+    box-shadow: 12px 0 28px rgba(15, 23, 42, 0.28);
   }
   .admin-main { margin-left: 0; }
   .admin-topbar { padding: 16px 24px; min-height: 72px; }
+  .admin-topbar-left { display: flex; align-items: center; gap: 8px; }
+  .admin-mobile-menu-btn { display: inline-flex; }
   .admin-topbar-title { font-size: 20px; }
   .admin-topbar-subtitle { display: none; }
   .admin-page-content { padding: 24px 20px; }
   .admin-topbar-user-text { display: none; }
+  .admin-page-content table.table-mobile-stack { width: 100%; table-layout: fixed; }
+  .admin-page-content table.table-mobile-stack thead { display: none; }
+  .admin-page-content table.table-mobile-stack tbody tr { display: block; width: 100%; }
+  .admin-page-content table.table-mobile-stack tbody td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .admin-page-content table.table-mobile-stack tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12px;
+    opacity: 0.6;
+  }
 }

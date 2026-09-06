@@ -1034,7 +1034,7 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
     </div>
   <?php else: ?>
     <div class="frep-table-wrap">
-      <table class="frep-table">
+      <table class="frep-table table-mobile-stack">
         <thead>
           <tr>
             <th>Research</th>
@@ -1089,7 +1089,7 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
       </div>
     </div>
     <div class="frep-table-wrap">
-      <table class="frep-table">
+      <table class="frep-table table-mobile-stack">
         <thead>
           <tr>
             <th>Project</th>

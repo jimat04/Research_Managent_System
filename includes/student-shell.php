@@ -195,6 +195,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
   <main class="student-main">
     <header class="student-topbar">
       <div class="student-topbar-left">
+        <button type="button" class="student-mobile-menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
         <h1 class="student-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
         <?php if ($page_subtitle_safe !== ''): ?>
           <p class="student-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
@@ -224,6 +225,17 @@ function renderStudentShellClose() {
     </div><!-- /.student-page-content -->
   </main>
 </div><!-- /.student-dashboard -->
+<script>
+(() => {
+  const button = document.querySelector('.student-mobile-menu-btn');
+  const sidebar = document.querySelector('.student-sidebar');
+  if (!button || !sidebar) return;
+  const closeMenu = () => { sidebar.classList.remove('is-open'); button.setAttribute('aria-expanded', 'false'); };
+  button.addEventListener('click', (event) => { event.stopPropagation(); const open = sidebar.classList.toggle('is-open'); button.setAttribute('aria-expanded', String(open)); });
+  document.addEventListener('click', (event) => { if (sidebar.classList.contains('is-open') && !sidebar.contains(event.target) && !button.contains(event.target)) closeMenu(); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
+})();
+</script>
 </body>
 </html>
     <?php

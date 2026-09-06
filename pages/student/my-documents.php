@@ -604,6 +604,8 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
   }
 
   @media (max-width: 720px) {
+    .mydoc-field { width: 100%; min-width: 0; }
+    .mydoc-field select { width: 100%; min-width: 0; }
     .mydoc-table thead { display: none; }
     .mydoc-table tbody td { display: block; padding: 10px 18px; }
     .mydoc-table tbody tr { display: block; border-top: 1px solid #E5E7EB; }
@@ -736,7 +738,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
           <a class="mydoc-link" href="<?php echo mydoc_se($project_url); ?>" style="display:inline-block;margin-top:8px;">View project →</a>
         </div>
       <?php else: ?>
-      <table class="mydoc-table">
+      <table class="mydoc-table table-mobile-stack">
         <thead>
           <tr>
             <th>File</th>

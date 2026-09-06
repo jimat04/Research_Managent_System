@@ -1,6 +1,7 @@
 # RMS Progress Audit Report
 
 **Audit Date:** September 6, 2026
+**Last updated:** September 6, 2026 (closeout — stubs & dead links resolved)
 **Auditor:** Claude (E2E walkthrough pass on live DB)
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
@@ -9,7 +10,7 @@
 
 ## 📊 EXECUTIVE SUMMARY
 
-### Overall Progress: ≈ 90% Complete (E2E-proven end to end)
+### Overall Progress: ≈ 95% Complete (E2E-proven end to end; remainder optional or unbuilt-by-design)
 
 **What changed since the 2026-09-02 audit:**
 
@@ -20,16 +21,19 @@
 - Notification family complete: staff+admin notified on INITIAL submission; no duplicate notifications on re-scores; relative notification links auto-prefixed with SITE_URL.
 - Office-based staff demo accounts (ERS/CREC/ORS/Graduate School), demo credentials synced across README/CLAUDE.md/walkthrough (migration 010).
 - 8/8 E2E walkthrough phases PASSED through the UI with no DB bypasses on the main line.
+- Final Bound Report milestone added (manual step 14), gated to completed/archived projects, documents-only slot (ce93675).
+- Dead nav links resolved by building their targets: staff Revision Returns + Document Verification (9af01b6); admin System Settings & Status page with migration probes and storage stats (f420113).
+- All four shared stubs replaced with real pages: Research Calendar (defense + colloquium events, role-scoped), Settings (CSRF password change), Research Archive (search/year filter), View Research (metadata-only, neutral deny for non-archived ids) (9eeeef2, 0615e9b).
 
 **Status Breakdown:**
 - ✅ **Fully built:** 33 role pages
 - 🟡 **Thin / partial:** a handful of dashboards (e.g. `pages/faculty/faculty-my-reviews.php` at 114 lines)
-- ❌ **Stubs (1-line `require module-page.php`):** 4 — `pages/shared/{calendar,research-archive,settings,view-research}.php`
+- **Stubs:** 0 (former shared stubs are now real pages: `calendar.php` 320 lines, `settings.php` 208 lines, `research-archive.php` 217 lines, `view-research.php` 348 lines; measured with `wc -l`)
 - 🔴 **Genuine feature gaps:**
-  - ORS consolidation stage (optional - staff inbox covers intake)
-  - final bound report upload (manual step 14)
-  - rate limiting on auth endpoints
-  - dead nav links (admin-settings, document-verification, staff-revisions)
+  - Email verification (migration 003): columns intentionally unapplied - no code reads them; feature unbuilt by design.
+  - ORS consolidation stage (optional - staff inbox covers intake).
+  - Rate limiting on auth endpoints.
+  - P3 polish: chapter attachments in My Documents; cumulative-completions stat in reports.
 
 **Critical Security Status:** 🟢 **STRONG** (CSRF, prepared statements, .htaccess, .env, soft-delete all in place; raw `$conn->query` only on hard-coded schema/lookup strings or internal DDL checks).
 
@@ -70,8 +74,9 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 | `admin-contact.php` | 552 | ✅ Built | Contact-message triage. |
 | `admin-departments.php` | 607 | ✅ Built | Department CRUD. |
 | `admin-programs.php` | 669 | ✅ Built | Program CRUD. |
+| `admin-settings.php` | 429 | ✅ Built | Read-only environment, migration-probe, and storage diagnostics. |
 
-**Summary:** 10/10 admin pages built. No stubs.
+**Summary:** 11/11 admin pages built. No stubs.
 
 ### 1.2 Research Staff portal (`pages/staff/`)
 
@@ -82,9 +87,11 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 | `staff-crec.php` | 1346 | ✅ Built | CREC review workbench. |
 | `staff-defense.php` | 1294 | ✅ Built | Defense scheduling, notifies owner + members + advisers. |
 | `staff-milestones.php` | 1217 | ✅ Built | Approve / reject / waive for documents + reports. |
+| `staff-revisions.php` | 370 | ✅ Built | Project- and chapter-level revision-return monitor with guarded comments. |
+| `document-verification.php` | 377 | ✅ Built | Read-only document metadata, reviewer, file-presence, size, and SHA-1 verification. |
 | `contact-messages.php` | 446 | ✅ Built | Public contact-message triage. |
 
-**Summary:** 6/6 staff pages built. No stubs.
+**Summary:** 8/8 staff pages built. No stubs.
 
 ### 1.3 Faculty portal (`pages/faculty/`)
 
@@ -127,12 +134,12 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 | `notifications.php` | 454 | ✅ Built | Read / delete actions. |
 | `profile.php` | 581 | ✅ Built | Edit + password change. |
 | `research-detail.php` | 760 | ✅ Built | Cross-role research detail. |
-| `calendar.php` | 1 | ❌ Stub | `require __DIR__ . '/module-page.php';` — renders a placeholder card only. |
-| `research-archive.php` | 1 | ❌ Stub | Same. |
-| `settings.php` | 1 | ❌ Stub | Same. |
-| `view-research.php` | 1 | ❌ Stub | Same. |
+| `calendar.php` | 320 | ✅ Built | Role-scoped defense and colloquium month grid with a 60-day upcoming list. |
+| `research-archive.php` | 217 | ✅ Built | Completed/archive browser with wildcard-safe search and year filtering. |
+| `settings.php` | 208 | ✅ Built | Account summary and CSRF-protected password change hub. |
+| `view-research.php` | 348 | ✅ Built | Metadata-only archive detail with neutral denial for unavailable IDs. |
 
-**Summary:** 6/10 shared pages built, 4/10 stubs. (Each stub delegates to `module-page.php?key=...` which still renders a generic placeholder, so the route is at least navigable.)
+**Summary:** 10/10 shared pages built. No stubs.
 
 ---
 

@@ -261,6 +261,7 @@
    ───────────────────────────────────────────────────────────── */
 .faculty-main {
   flex: 1;
+  min-width: 0;
   margin-left: 260px;
   min-height: 100vh;
   display: flex;
@@ -286,6 +287,19 @@
 
 .faculty-topbar-left {
   min-width: 0;
+}
+
+.faculty-mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .faculty-topbar-title {
@@ -376,11 +390,32 @@
   }
   .faculty-sidebar.is-open {
     transform: translateX(0);
+    z-index: 200;
+    box-shadow: 12px 0 28px rgba(15, 23, 42, 0.28);
   }
   .faculty-main { margin-left: 0; }
   .faculty-topbar { padding: 16px 24px; min-height: 72px; }
+  .faculty-topbar-left { display: flex; align-items: center; gap: 8px; }
+  .faculty-mobile-menu-btn { display: inline-flex; }
   .faculty-topbar-title { font-size: 20px; }
   .faculty-topbar-subtitle { display: none; }
   .faculty-page-content { padding: 24px 20px; }
   .faculty-topbar-user-text { display: none; }
+  .faculty-page-content table.table-mobile-stack { width: 100%; table-layout: fixed; }
+  .faculty-page-content table.table-mobile-stack thead { display: none; }
+  .faculty-page-content table.table-mobile-stack tbody tr { display: block; width: 100%; }
+  .faculty-page-content table.table-mobile-stack tbody td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .faculty-page-content table.table-mobile-stack tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12px;
+    opacity: 0.6;
+  }
 }
