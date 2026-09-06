@@ -1,29 +1,54 @@
 # RMS Progress Audit Report
 
-**Audit Date:** September 2, 2026
-**Auditor:** Claude (verification pass against current `main` @ `1129b47`)
+**Audit Date:** September 6, 2026
+**Auditor:** Claude (E2E walkthrough pass on live DB)
+**Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
 
 ---
 
 ## 📊 EXECUTIVE SUMMARY
 
-### Overall Progress: **≈ 82% Complete** (production-credible, residual gaps)
+### Overall Progress: ≈ 90% Complete (E2E-proven end to end)
 
-**What changed since the previous (2026-08-28) audit:**
-- Hardcoded DB credentials removed — `.env` (`/.env` exists alongside `.env.example`) and `includes/config.php` is now phpdotenv-driven.
-- All custom error pages exist (`public/403.php`, `public/404.php`, `public/500.php`).
-- Backup scripts exist (`scripts/backup-database.sh`).
-- The student/faculty/admin/staff page set has been fleshed out — most pages are 400–1300 lines, only four shared pages remain as 1-line stubs.
-- The full EARIST Research Manual 2015 workflow (steps 1–13) now has at least one page per step except step 3 (ORS Consolidation) and the Final Bound Report upload slot.
+**What changed since the 2026-09-02 audit:**
+
+- EREC staff workflow built (assignment, >=2-review + threshold endorsement, return-for-revision); faculty can no longer advance status past EREC (bypass closed).
+- Adviser reassignment at any active stage + permanent adviser history (project_advisers_history, migration 009) + removal notifications to all parties.
+- Faculty sub-role badges (Adviser / CREC / EREC Reviewer) derived from live data.
+- Milestone dual-write (research_documents + research_reports) deduplicated in queue/badges with status mirroring; project auto-completes on terminal report approval (guarded: only approved terminal_report, only from 'ongoing').
+- Notification family complete: staff+admin notified on INITIAL submission; no duplicate notifications on re-scores; relative notification links auto-prefixed with SITE_URL.
+- Office-based staff demo accounts (ERS/CREC/ORS/Graduate School), demo credentials synced across README/CLAUDE.md/walkthrough (migration 010).
+- 8/8 E2E walkthrough phases PASSED through the UI with no DB bypasses on the main line.
 
 **Status Breakdown:**
 - ✅ **Fully built:** 33 role pages
 - 🟡 **Thin / partial:** a handful of dashboards (e.g. `pages/faculty/faculty-my-reviews.php` at 114 lines)
 - ❌ **Stubs (1-line `require module-page.php`):** 4 — `pages/shared/{calendar,research-archive,settings,view-research}.php`
-- 🔴 **Genuine feature gaps:** ORS consolidation stage; final bound report upload slot; admin notification on new submission; rate limiting.
+- 🔴 **Genuine feature gaps:**
+  - ORS consolidation stage (optional - staff inbox covers intake)
+  - final bound report upload (manual step 14)
+  - rate limiting on auth endpoints
+  - dead nav links (admin-settings, document-verification, staff-revisions)
 
 **Critical Security Status:** 🟢 **STRONG** (CSRF, prepared statements, .htaccess, .env, soft-delete all in place; raw `$conn->query` only on hard-coded schema/lookup strings or internal DDL checks).
+
+---
+
+## 0. E2E Walkthrough Results (2026-09-06)
+
+| Phase | Scope                                                                                      | Result                                   |
+| ----- | ------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| 1     | Team proposal submission                                                                   | PASS                                     |
+| 2     | Staff intake, adviser assignment, CREC forward                                             | PASS                                     |
+| 3     | CREC scoring (Form 3, 6 criteria), chapter loop incl. revision + adviser change mid-flight | PASS                                     |
+| 4     | EREC assignment, 2-review + threshold endorsement, President final approval                | PASS (feature built mid-test)            |
+| 5     | MOU + midway report (Form 4) with reject/re-upload cycle                                   | PASS (duplicate-queue bug found & fixed) |
+| 6     | Defense scheduling, terminal report, completion                                            | PASS                                     |
+| 7     | Colloquium, publication, archive                                                           | PASS                                     |
+| 8     | Profile, notifications, access control (403s), logs, reports                               | PASS                                     |
+
+Notes: ownership spot-check used project 1 which turned out to be same-owner (invalid fixture - retest with a non-member account); milestone badge fixture validated 3->2 after dedupe fix.
 
 ---
 
