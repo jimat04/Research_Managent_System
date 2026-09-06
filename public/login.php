@@ -487,15 +487,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       justify-content: center;
       gap: 4px;
       font-size: 0.78rem !important;
-      color: rgba(255,255,255,0.6) !important;
+      color: #64748b !important;
       transition: color 180ms ease;
     }
     .auth-split-form .role-tab:not(.active):hover {
-      color: rgba(255,255,255,0.85) !important;
+      color: #4338ca !important;
       background: transparent !important;
     }
     .auth-split-form .role-tab.active {
-      color: #ffffff !important;
+      color: #5B1EBC !important;
       background: transparent !important;
       box-shadow: inset 0 -2px 0 0 #5B1EBC, 0 0 8px rgba(91,30,188,0.5);
     }
@@ -764,7 +764,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
           ];
           foreach ($tabs as $tabKey => $tabParts):
               $isActive = ($selectedRole === $tabKey);
-              $fg       = $isActive ? '#ffffff' : 'rgba(255,255,255,0.6)';
+              $fg       = $isActive ? '#5B1EBC' : '#64748B';
               $weight   = $isActive ? '600' : '500';
               $cls      = 'role-tab' . ($isActive ? ' active' : '');
           ?>
@@ -1003,7 +1003,7 @@ function switchRole(role) {
   tabs.forEach((btn) => {
     const isActive = btn.getAttribute('data-role') === role;
     btn.classList.toggle('active', isActive);
-    btn.style.color = isActive ? '#ffffff' : 'rgba(255,255,255,0.6)';
+    btn.style.color = isActive ? '#5B1EBC' : '#64748B';
     btn.style.fontWeight = isActive ? '600' : '500';
   });
 }
