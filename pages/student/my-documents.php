@@ -254,28 +254,41 @@ $chapter_to_label = [
     'approved'          => ['#16A34A', 'rgba(22,163,74,0.10)',   'rgba(22,163,74,0.25)',   'Approved'],
 ];
 
-// Resolve each upload's URL. We use a single helper to keep the logic
-// consistent and easy to audit. file_exists() is called only on values
-// the page itself composed from DB fields, so it's safe.
-function mydoc_resolve_url(array $row, array $type_to_folder): string {
+// Resolve each upload's storage folder from a whitelisted stored path or
+// the type fallback. Milestone uploads use type=other but live in their own
+// folder, so the type alone is not sufficient.
+function mydoc_storage_location(array $row, array $type_to_folder): array {
     $type = (string) ($row['type'] ?? '');
     $name = (string) ($row['file_name'] ?? '');
     if ($type === '' || $name === '' || !isset($type_to_folder[$type])) {
+        return ['', ''];
+    }
+
+    $folder = $type_to_folder[$type];
+    $stored_path = str_replace('\\', '/', (string) ($row['file_path'] ?? ''));
+    $allowed_folders = ['proposals', 'chapters', 'defense', 'manuscripts', 'other', 'milestones'];
+    $path_pattern = '#^uploads/(' . implode('|', $allowed_folders) . ')/'
+                  . preg_quote($name, '#') . '$#';
+    if (preg_match($path_pattern, ltrim($stored_path, '/'), $matches)) {
+        $folder = $matches[1];
+    }
+
+    return [$folder, $name];
+}
+
+function mydoc_resolve_url(array $row, array $type_to_folder): string {
+    [$folder, $name] = mydoc_storage_location($row, $type_to_folder);
+    if ($folder === '' || $name === '') {
         return '';
     }
-    $folder = $type_to_folder[$type];
-    // We never trust $row['file_path'] directly (it may be in legacy form
-    // like "../../uploads/chapters/..."). Build the URL from scratch.
     return SITE_URL . 'uploads/' . $folder . '/' . rawurlencode($name);
 }
 
 function mydoc_file_exists_check(array $row, array $type_to_folder): bool {
-    $type = (string) ($row['type'] ?? '');
-    $name = (string) ($row['file_name'] ?? '');
-    if ($type === '' || $name === '' || !isset($type_to_folder[$type])) {
+    [$folder, $name] = mydoc_storage_location($row, $type_to_folder);
+    if ($folder === '' || $name === '') {
         return false;
     }
-    $folder = $type_to_folder[$type];
     $path = __DIR__ . '/../../uploads/' . $folder . '/' . $name;
     return is_file($path);
 }
