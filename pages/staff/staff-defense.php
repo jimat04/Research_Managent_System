@@ -323,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $defense_id = isset($_POST['defense_id']) ? (int) $_POST['defense_id'] : 0;
         $reason     = trim((string) ($_POST['reason'] ?? ''));
 
-        if ($defense_id <= 0) {
+        if ($defense_id < 0) {
             $_SESSION['module_error'] = 'Invalid defense reference.';
             header('Location: ' . $redirect);
             exit;

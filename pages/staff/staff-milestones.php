@@ -346,7 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         // Only rows currently in 'submitted' can be acted on (unless the status
         // is already terminal — in that case the action would be a no-op).
-        if (!in_array($current, ['submitted'], true) && !in_array($action, ['noop'], true)) {
+        if (!in_array($current, ['submitted'], true) && !in_array($action, ['noop', 'complete_project'], true)) {
             $_SESSION['module_error'] = 'This milestone has already been processed (status: ' . $current . ').';
             header('Location: ' . $redirect);
             exit;
@@ -354,6 +354,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         $reason      = trim((string) ($_POST['reason'] ?? ''));
         $link_student = SITE_URL . 'pages/student/progress-tracking.php?project_id=' . (int) $row['project_id'];
+
+        if ($action === 'complete_project') {
+          if ($kind !== 'doc' || $doc_type !== 'terminal_report' || $current !== 'approved') {
+            $_SESSION['module_error'] = 'Only an approved terminal report can complete a project.';
+            header('Location: ' . $redirect);
+            exit;
+          }
+          $complete = $conn->prepare(
+            "UPDATE research_projects SET status = 'completed', updated_at = NOW()
+             WHERE project_id = ? AND status = 'ongoing'"
+          );
+          if ($complete) {
+            $project_row_id = (int) $row['project_id'];
+            $complete->bind_param('i', $project_row_id);
+            $complete->execute();
+            $completed = $complete->affected_rows;
+            $complete->close();
+          } else {
+            $completed = 0;
+          }
+          if ($completed > 0) {
+            if ($student_id > 0) {
+              createNotification(
+                $student_id,
+                'Research project completed',
+                'Your research project "' . $short_title . '" has been marked completed after terminal report approval.',
+                'success',
+                $link_student
+              );
+            }
+            logActivity('Marked project #' . (int) $row['project_id'] . ' completed', 'milestone_verification');
+            $_SESSION['module_success'] = 'Research project marked as completed.';
+          } else {
+            $_SESSION['module_error'] = 'The project could not be completed from its current status.';
+          }
+          header('Location: ' . $redirect);
+          exit;
+        }
 
         $new_status = '';
         $log_msg    = '';
@@ -506,6 +544,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $smil_has_documents,
                 $smil_has_reports
             );
+              $is_terminal_approval = $new_status === 'approved'
+                && (($kind === 'doc' && $doc_type === 'terminal_report')
+                  || ($kind === 'rep' && $doc_type === 'terminal'));
+              if ($is_terminal_approval) {
+                $complete = $conn->prepare(
+                  "UPDATE research_projects SET status = 'completed', updated_at = NOW()
+                   WHERE project_id = ? AND status = 'ongoing'"
+                );
+                if ($complete) {
+                  $project_row_id = (int) $row['project_id'];
+                  $complete->bind_param('i', $project_row_id);
+                  $complete->execute();
+                  $complete->close();
+                }
+              }
             // Notify the student
             if ($student_id > 0) {
                 createNotification(
@@ -1234,7 +1287,17 @@ renderStaffShell(
                     <?php endif; ?>
                   </div>
                 <?php else: ?>
-                  <span style="font-size: 12px; color: #94A3B8;">No further action</span>
+                  <?php if ($kind === 'doc' && $mtype === 'terminal_report' && $status === 'approved'): ?>
+                    <form method="POST" style="display: inline;">
+                      <?php echo csrfField(); ?>
+                      <input type="hidden" name="action" value="complete_project">
+                      <input type="hidden" name="kind" value="doc">
+                      <input type="hidden" name="row_id" value="<?php echo (int) $row_id; ?>">
+                      <button type="submit" class="btn btn-primary btn-sm">✓ Complete Project</button>
+                    </form>
+                  <?php else: ?>
+                    <span style="font-size: 12px; color: #94A3B8;">No further action</span>
+                  <?php endif; ?>
                 <?php endif; ?>
               </td>
             </tr>
