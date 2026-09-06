@@ -145,16 +145,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     'pages/student/my-research.php'
                 );
             }
-            $staff_result = $conn->query("SELECT user_id FROM users WHERE role = 'research_staff' AND status = 'active'");
-            if ($staff_result) {
-                while ($staff = $staff_result->fetch_assoc()) {
-                    createNotification(
-                        (int) $staff['user_id'],
-                        "$level review submitted",
-                        "{$user['first_name']} {$user['last_name']} scored \"$title\" $total/$form3_max_score and recommended: $recommendation.",
-                        'info',
-                        'pages/staff/staff-crec.php'
-                    );
+            if ($send_completion_notification) {
+                $staff_result = $conn->query("SELECT user_id FROM users WHERE role = 'research_staff' AND status = 'active'");
+                if ($staff_result) {
+                    while ($staff = $staff_result->fetch_assoc()) {
+                        createNotification(
+                            (int) $staff['user_id'],
+                            "$level review submitted",
+                            "{$user['first_name']} {$user['last_name']} scored \"$title\" $total/$form3_max_score and recommended: $recommendation.",
+                            'info',
+                            'pages/staff/staff-crec.php'
+                        );
+                    }
                 }
             }
             header('Location: faculty-my-reviews.php?saved=1');
