@@ -87,7 +87,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         ],
         'System' => [
             [SITE_URL . 'pages/admin/admin-backup.php',      'Backup',   '💾', true],
-            [SITE_URL . 'pages/admin/admin-settings.php',    'Settings', '🔧', false],
+            [SITE_URL . 'pages/admin/admin-settings.php',    'Settings', '🔧', true],
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true],
