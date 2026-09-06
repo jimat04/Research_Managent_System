@@ -149,6 +149,118 @@ $smil_doc_has_reviewed_at = $smil_has_documents ? smil_column_exists($conn, 'res
 $smil_rep_has_reviewed_by = $smil_has_reports   ? smil_column_exists($conn, 'research_reports',   'reviewed_by') : false;
 $smil_rep_has_reviewed_at = $smil_has_reports   ? smil_column_exists($conn, 'research_reports',   'reviewed_at') : false;
 
+function smil_mirror_sibling(
+  mysqli $conn,
+  string $source_kind,
+  int $project_id,
+  string $source_type,
+  string $status,
+  string $remarks,
+  int $reviewed_by,
+  bool $doc_has_reviewed_by,
+  bool $doc_has_reviewed_at,
+  bool $rep_has_reviewed_by,
+  bool $rep_has_reviewed_at,
+  bool $has_documents,
+  bool $has_reports
+): void {
+  $report_type = [
+    'progress_report' => 'midway_progress',
+    'terminal_report' => 'terminal',
+  ][$source_type] ?? null;
+  $document_type = [
+    'midway_progress' => 'progress_report',
+    'terminal'        => 'terminal_report',
+  ][$source_type] ?? null;
+
+  if ($source_kind === 'doc' && $report_type !== null && $has_reports) {
+    $find = $conn->prepare(
+      'SELECT report_id FROM research_reports WHERE project_id = ? AND report_type = ? LIMIT 1'
+    );
+    if (!$find) return;
+    $find->bind_param('is', $project_id, $report_type);
+    if (!$find->execute()) {
+      $find->close();
+      return;
+    }
+    $sibling = $find->get_result()->fetch_assoc();
+    $find->close();
+    if (!$sibling) return;
+
+    $sets = ['summary = ?'];
+    $params = [$remarks];
+    $types = 's';
+    if (in_array($status, ['submitted', 'approved', 'rejected'], true)) {
+      array_unshift($sets, 'status = ?');
+      array_unshift($params, $status);
+      $types = 's' . $types;
+    }
+    if ($rep_has_reviewed_by && in_array($status, ['approved', 'rejected'], true)) {
+      $sets[] = 'reviewed_by = ?';
+      $params[] = $reviewed_by;
+      $types .= 'i';
+    }
+    if ($rep_has_reviewed_at && in_array($status, ['approved', 'rejected'], true)) {
+      $sets[] = 'reviewed_at = NOW()';
+    }
+    $params[] = (int) $sibling['report_id'];
+    $types .= 'i';
+    $mirror = $conn->prepare(
+      'UPDATE research_reports SET ' . implode(', ', $sets) . ' WHERE report_id = ?'
+    );
+    if (!$mirror) return;
+    $bind = [];
+    foreach ($params as $key => $value) $bind[$key] = &$params[$key];
+    call_user_func_array([$mirror, 'bind_param'], array_merge([$types], $bind));
+    $mirror->execute();
+    $mirror->close();
+    return;
+  }
+
+  if ($source_kind === 'rep' && $document_type !== null && $has_documents) {
+    $find = $conn->prepare(
+      'SELECT document_id FROM research_documents WHERE project_id = ? AND document_type = ? LIMIT 1'
+    );
+    if (!$find) return;
+    $find->bind_param('is', $project_id, $document_type);
+    if (!$find->execute()) {
+      $find->close();
+      return;
+    }
+    $sibling = $find->get_result()->fetch_assoc();
+    $find->close();
+    if (!$sibling) return;
+
+    $sets = ['remarks = ?'];
+    $params = [$remarks];
+    $types = 's';
+    if (in_array($status, ['submitted', 'approved', 'rejected'], true)) {
+      array_unshift($sets, 'status = ?');
+      array_unshift($params, $status);
+      $types = 's' . $types;
+    }
+    if ($doc_has_reviewed_by && in_array($status, ['approved', 'rejected', 'waived'], true)) {
+      $sets[] = 'reviewed_by = ?';
+      $params[] = $reviewed_by;
+      $types .= 'i';
+    }
+    if ($doc_has_reviewed_at) {
+      $sets[] = 'reviewed_at = NOW()';
+    }
+    $params[] = (int) $sibling['document_id'];
+    $types .= 'i';
+    $mirror = $conn->prepare(
+      'UPDATE research_documents SET ' . implode(', ', $sets) . ' WHERE document_id = ?'
+    );
+    if (!$mirror) return;
+    $bind = [];
+    foreach ($params as $key => $value) $bind[$key] = &$params[$key];
+    call_user_func_array([$mirror, 'bind_param'], array_merge([$types], $bind));
+    $mirror->execute();
+    $mirror->close();
+  }
+}
+
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -309,13 +421,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $set_clause = implode(', ', $extra_sets);
 
         if ($kind === 'doc') {
-            $types  = 's' . ($action === 'reject_doc' ? 's' : '') . 'ii';
+            $types  = 's' . ($action === 'reject_doc' ? 's' : '');
             $params = [$new_status];
             if ($action === 'reject_doc') {
                 $params[] = $reason;
             }
-            $params[] = $user_id;
+            if ($smil_doc_has_reviewed_by) {
+                $types .= 'i';
+                $params[] = $user_id;
+            }
             $params[] = $row_id;
+            $types .= 'i';
 
             $sql = "UPDATE research_documents SET $set_clause"
                  . ($smil_doc_has_reviewed_by ? '' : '')
@@ -333,6 +449,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } else {
             $rep_extra = [];
             $rep_extra[] = "status = ?";
+            if ($action === 'reject_rep') {
+              $rep_extra[] = "summary = ?";
+            }
             if ($smil_rep_has_reviewed_by) {
                 $rep_extra[] = "reviewed_by = ?";
             }
@@ -342,12 +461,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $rep_set = implode(', ', $rep_extra);
 
             $rep_params = [$new_status];
+            if ($action === 'reject_rep') {
+              $rep_params[] = $reason;
+            }
             if ($smil_rep_has_reviewed_by) {
                 $rep_params[] = $user_id;
             }
             $rep_params[] = $row_id;
 
-            $rep_types = 's' . ($smil_rep_has_reviewed_by ? 'i' : '') . 'i';
+            $rep_types = 's' . ($action === 'reject_rep' ? 's' : '')
+                   . ($smil_rep_has_reviewed_by ? 'i' : '') . 'i';
             $sql = "UPDATE research_reports SET $rep_set WHERE report_id = ?";
             $upd = $conn->prepare($sql);
             if (!$upd) {
@@ -365,6 +488,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $upd->close();
 
         if ($affected > 0) {
+            $mirror_remarks = $action === 'reject_doc' || $action === 'reject_rep'
+                ? $reason
+                : (string) ($row['remarks'] ?? '');
+            smil_mirror_sibling(
+                $conn,
+                $kind,
+                (int) $row['project_id'],
+                $doc_type,
+                $new_status,
+                $mirror_remarks,
+                $user_id,
+                $smil_doc_has_reviewed_by,
+                $smil_doc_has_reviewed_at,
+                $smil_rep_has_reviewed_by,
+                $smil_rep_has_reviewed_at,
+                $smil_has_documents,
+                $smil_has_reports
+            );
             // Notify the student
             if ($student_id > 0) {
                 createNotification(
@@ -407,7 +548,12 @@ if ($smil_has_documents) {
     if ($r) { $stat_pending += (int) ($r->fetch_assoc()['c'] ?? 0); $r->close(); }
 }
 if ($smil_has_reports) {
-    $r = $conn->query("SELECT COUNT(*) AS c FROM research_reports WHERE status = 'submitted'");
+  $r = $conn->query("SELECT COUNT(*) AS c FROM research_reports rr WHERE rr.status = 'submitted'
+             AND NOT EXISTS (
+               SELECT 1 FROM research_documents rd
+               WHERE rd.project_id = rr.project_id
+               AND rd.document_type IN ('progress_report','terminal_report')
+             )");
     if ($r) { $stat_pending += (int) ($r->fetch_assoc()['c'] ?? 0); $r->close(); }
 }
 
@@ -423,9 +569,11 @@ if ($smil_has_documents) {
 }
 if ($smil_has_reports) {
     if ($smil_rep_has_reviewed_at) {
-        $approved_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports WHERE status = 'approved' AND reviewed_at >= '$month_start'";
+        $approved_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports rr WHERE rr.status = 'approved' AND rr.reviewed_at >= '$month_start'
+          AND NOT EXISTS (SELECT 1 FROM research_documents rd WHERE rd.project_id = rr.project_id AND rd.document_type IN ('progress_report','terminal_report'))";
     } else {
-        $approved_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports WHERE status = 'approved'";
+        $approved_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports rr WHERE rr.status = 'approved'
+          AND NOT EXISTS (SELECT 1 FROM research_documents rd WHERE rd.project_id = rr.project_id AND rd.document_type IN ('progress_report','terminal_report'))";
     }
 }
 if (!empty($approved_sql_parts)) {
@@ -443,9 +591,11 @@ if ($smil_has_documents) {
 }
 if ($smil_has_reports) {
     if ($smil_rep_has_reviewed_at) {
-        $rejected_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports WHERE status = 'rejected' AND reviewed_at >= '$month_start'";
+        $rejected_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports rr WHERE rr.status = 'rejected' AND rr.reviewed_at >= '$month_start'
+          AND NOT EXISTS (SELECT 1 FROM research_documents rd WHERE rd.project_id = rr.project_id AND rd.document_type IN ('progress_report','terminal_report'))";
     } else {
-        $rejected_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports WHERE status = 'rejected'";
+        $rejected_sql_parts[] = "SELECT 'rep' AS kind FROM research_reports rr WHERE rr.status = 'rejected'
+          AND NOT EXISTS (SELECT 1 FROM research_documents rd WHERE rd.project_id = rr.project_id AND rd.document_type IN ('progress_report','terminal_report'))";
     }
 }
 if (!empty($rejected_sql_parts)) {
@@ -520,6 +670,11 @@ if ($filter === 'pending') {
               LEFT JOIN uploads        u  ON u.upload_id  = rd_link.upload_id
               LEFT JOIN users          usr ON usr.user_id = rd_link.submitted_by
              WHERE rr.status = 'submitted'
+               AND NOT EXISTS (
+                   SELECT 1 FROM research_documents rd
+                   WHERE rd.project_id = rr.project_id
+                     AND rd.document_type IN ('progress_report','terminal_report')
+               )
         ";
     }
 
@@ -596,6 +751,11 @@ if ($filter === 'pending') {
               LEFT JOIN uploads        u  ON u.upload_id  = rd_link.upload_id
               LEFT JOIN users          usr ON usr.user_id = rd_link.submitted_by
              WHERE rr.status IN ('approved','rejected')
+               AND NOT EXISTS (
+                   SELECT 1 FROM research_documents rd
+                   WHERE rd.project_id = rr.project_id
+                     AND rd.document_type IN ('progress_report','terminal_report')
+               )
                " . ($smil_rep_has_reviewed_at ? "AND rr.reviewed_at >= '$thirty_days_ago'" : "") . "
         ";
     }
