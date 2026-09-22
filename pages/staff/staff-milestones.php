@@ -37,14 +37,15 @@ function smil_se($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-// Status badge helper for the documents table (status enum: pending/submitted/approved/rejected/waived)
+// Status badge helper for the documents table
 function smil_doc_statusBadge(string $status): array {
     $map = [
-        'pending'   => ['status-pending',  'Pending'],
-        'submitted' => ['status-review',   'Submitted'],
-        'approved'  => ['status-approved', 'Approved'],
-        'rejected'  => ['status-pending',  'Rejected'],
-        'waived'    => ['status-draft',    'Waived'],
+        'pending'      => ['status-pending',  'Pending'],
+        'submitted'    => ['status-review',   'Submitted'],
+        'under_review' => ['status-review',   'Under Review'],
+        'approved'     => ['status-approved', 'Approved'],
+        'rejected'     => ['status-pending',  'Rejected'],
+        'waived'       => ['status-draft',    'Waived'],
     ];
     return $map[$status] ?? ['status-draft', ucwords(str_replace('_', ' ', $status))];
 }
@@ -66,7 +67,7 @@ function smil_rep_statusBadge(string $status): array {
 function smil_milestone_label(string $kind, string $type): string {
     if ($kind === 'doc') {
         $map = [
-            'mou'                  => 'MOU',
+            'mou'                  => 'Memorandum of Research Undertaking (MOU)',
             'nda'                  => 'NDA',
             'progress_report'      => 'Midway Progress Report',
             'terminal_report'      => 'Terminal Report',
@@ -345,9 +346,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $kind_label  = smil_milestone_label($kind === 'doc' ? 'doc' : 'rep', $doc_type);
         $current     = strtolower((string) ($row['status'] ?? ''));
 
-        // Only rows currently in 'submitted' can be acted on (unless the status
-        // is already terminal — in that case the action would be a no-op).
-        if (!in_array($current, ['submitted'], true) && !in_array($action, ['noop', 'complete_project'], true)) {
+        // Final decisions may be made while a row is newly submitted or already
+        // under review. The acknowledgement action itself remains submitted-only.
+        $decision_actions = [
+            'approve_doc', 'reject_doc', 'waive_doc',
+            'approve_rep', 'reject_rep',
+        ];
+        $actionable_statuses = in_array($action, $decision_actions, true)
+            ? ['submitted', 'under_review']
+            : ['submitted'];
+        if (!in_array($current, $actionable_statuses, true)
+            && !in_array($action, ['noop', 'complete_project'], true)) {
             $_SESSION['module_error'] = 'This milestone has already been processed (status: ' . $current . ').';
             header('Location: ' . $redirect);
             exit;
@@ -598,11 +607,11 @@ $stat_approved  = 0;
 $stat_rejected  = 0;
 
 if ($smil_has_documents) {
-    $r = $conn->query("SELECT COUNT(*) AS c FROM research_documents WHERE status = 'submitted'");
+    $r = $conn->query("SELECT COUNT(*) AS c FROM research_documents WHERE status IN ('submitted','under_review')");
     if ($r) { $stat_pending += (int) ($r->fetch_assoc()['c'] ?? 0); $r->close(); }
 }
 if ($smil_has_reports) {
-  $r = $conn->query("SELECT COUNT(*) AS c FROM research_reports rr WHERE rr.status = 'submitted'
+  $r = $conn->query("SELECT COUNT(*) AS c FROM research_reports rr WHERE rr.status IN ('submitted','under_review')
              AND NOT EXISTS (
                SELECT 1 FROM research_documents rd
                WHERE rd.project_id = rr.project_id
@@ -664,7 +673,7 @@ if (!empty($rejected_sql_parts)) {
 $rows = [];
 
 if ($filter === 'pending') {
-    // PENDING = status = 'submitted'
+    // PENDING = awaiting a final decision, including acknowledged reviews.
     $union_parts = [];
 
     if ($smil_has_documents) {
@@ -691,7 +700,7 @@ if ($filter === 'pending') {
               JOIN research_projects  rp  ON rp.project_id = rd.project_id" . $rp_deleted_filter_aliased . "
               LEFT JOIN uploads        u  ON u.upload_id  = rd.upload_id
               LEFT JOIN users          usr ON usr.user_id = rd.submitted_by
-             WHERE rd.status = 'submitted'
+             WHERE rd.status IN ('submitted','under_review')
         ";
     }
 
@@ -723,7 +732,7 @@ if ($filter === 'pending') {
               LEFT JOIN research_documents rd_link ON rd_link.document_id = rr.document_id
               LEFT JOIN uploads        u  ON u.upload_id  = rd_link.upload_id
               LEFT JOIN users          usr ON usr.user_id = rd_link.submitted_by
-             WHERE rr.status = 'submitted'
+             WHERE rr.status IN ('submitted','under_review')
                AND NOT EXISTS (
                    SELECT 1 FROM research_documents rd
                    WHERE rd.project_id = rr.project_id
@@ -1209,7 +1218,7 @@ renderStaffShell(
                 [$b_class, $b_label] = smil_rep_statusBadge($status);
             }
 
-            $is_pending = ($status === 'submitted');
+            $is_actionable = in_array($status, ['submitted', 'under_review'], true);
           ?>
             <tr>
               <td>
@@ -1259,7 +1268,7 @@ renderStaffShell(
                 <?php endif; ?>
               </td>
               <td>
-                <?php if ($is_pending): ?>
+                <?php if ($is_actionable): ?>
                   <div class="row-actions">
                     <form method="POST" style="display: inline;">
                       <?php echo csrfField(); ?>
@@ -1277,7 +1286,7 @@ renderStaffShell(
                               onclick="openWaiveModal(<?php echo (int) $row_id; ?>, '<?php echo smil_se(addslashes($label)); ?>', '<?php echo smil_se($kind); ?>')">
                         ⤴ Waive
                       </button>
-                    <?php else: ?>
+                    <?php elseif ($status === 'submitted'): ?>
                       <form method="POST" style="display: inline;">
                         <?php echo csrfField(); ?>
                         <input type="hidden" name="action" value="mark_review">

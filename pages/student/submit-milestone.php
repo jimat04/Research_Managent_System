@@ -3,7 +3,7 @@
  * Student — Submit Milestone Document
  *
  * Lets a student submit Research-Manual milestone documents/reports:
- *   - MOU  (Memorandum of Understanding)        → research_documents
+ *   - MOU  (Memorandum of Research Undertaking) → research_documents
  *   - NDA  (Non-Disclosure Agreement)          → research_documents
  *   - Midway Progress Report                    → research_reports
  *   - Terminal Report                           → research_reports
@@ -195,13 +195,15 @@ if (!$project && !empty($projects)) {
 // $slots: keyed by slot id; each has display label + storage target.
 $slots = [
     'mou' => [
-        'label'        => 'Memorandum of Understanding (MOU)',
-        'doc_type'     => 'mou',
-        'report_type'  => null,
-        'description'  => 'A signed agreement between EARIST and the partner institution/agency where the research will be conducted.',
-        'doc_row'      => null,
-        'report_row'   => null,
-        'upload_row'   => null,
+        'label'            => 'Memorandum of Research Undertaking (MOU)',
+        'doc_type'         => 'mou',
+        'report_type'      => null,
+        'visible_statuses' => ['approved', 'ongoing'],
+        'visibility_error' => 'The Memorandum of Research Undertaking can only be submitted after final approval or while the project is ongoing.',
+        'description'      => 'A signed agreement between EARIST and the partner institution/agency where the research will be conducted.',
+        'doc_row'          => null,
+        'report_row'       => null,
+        'upload_row'       => null,
     ],
     'nda' => [
         'label'        => 'Non-Disclosure Agreement (NDA)',
@@ -213,22 +215,26 @@ $slots = [
         'upload_row'   => null,
     ],
     'midway' => [
-        'label'        => 'Midway Progress Report',
-        'doc_type'     => 'progress_report',
-        'report_type'  => 'midway_progress',
-        'description'  => 'Status update on data gathering, preliminary findings, and any issues encountered halfway through implementation.',
-        'doc_row'      => null,
-        'report_row'   => null,
-        'upload_row'   => null,
+        'label'            => 'Midway Progress Report',
+        'doc_type'         => 'progress_report',
+        'report_type'      => 'midway_progress',
+        'visible_statuses' => ['ongoing'],
+        'visibility_error' => 'The Midway Progress Report can only be submitted while the project is ongoing.',
+        'description'      => 'Status update on data gathering, preliminary findings, and any issues encountered halfway through implementation.',
+        'doc_row'          => null,
+        'report_row'       => null,
+        'upload_row'       => null,
     ],
     'terminal' => [
-        'label'        => 'Terminal Report',
-        'doc_type'     => 'terminal_report',
-        'report_type'  => 'terminal',
-        'description'  => 'Final written report covering all five chapters, conclusions, and recommendations, submitted before the defense.',
-        'doc_row'      => null,
-        'report_row'   => null,
-        'upload_row'   => null,
+        'label'            => 'Terminal Report',
+        'doc_type'         => 'terminal_report',
+        'report_type'      => 'terminal',
+        'visible_statuses' => ['ongoing', 'progress_report', 'terminal_review'],
+        'visibility_error' => 'The Terminal Report can only be submitted while the project is ongoing or in progress-report or terminal-review status.',
+        'description'      => 'Final written report covering all five chapters, conclusions, and recommendations, submitted before the defense.',
+        'doc_row'          => null,
+        'report_row'       => null,
+        'upload_row'       => null,
     ],
     'bound' => [
         'label'            => 'Final Bound Report (bound copy + CD)',
@@ -236,6 +242,7 @@ $slots = [
         'storage_doc_type' => $bound_storage_doc_type,
         'report_type'      => null,
         'visible_statuses' => ['completed', 'archived'],
+        'visibility_error' => 'The Final Bound Report can only be submitted after the project is completed or archived.',
         'description'      => 'Final bound copy with the accompanying CD, submitted after terminal-report revisions are complete.',
         'doc_row'          => null,
         'report_row'       => null,
@@ -357,7 +364,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $slots[$slot_key],
             (string) ($post_project_row['status'] ?? '')
         )) {
-            $errors[] = 'The Final Bound Report can only be submitted after the project is completed or archived.';
+            $errors[] = (string) ($slots[$slot_key]['visibility_error']
+                ?? 'This milestone is not available for the project\'s current status.');
         } else {
             $slot = $slots[$slot_key];
             $project_id = $post_project;
