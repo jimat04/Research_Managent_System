@@ -512,8 +512,261 @@ $archive_labels = [
   .pub-empty { font-size: 12px; color: var(--text-muted, #94A3B8); font-style: italic; }
   .pub-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 
+  /* FINAL-STAGE WORKSPACE */
+  .archive-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr);
+    gap: 40px;
+    align-items: end;
+    min-height: 260px;
+    padding: 42px 46px 62px;
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 82% 14%, rgba(217, 164, 65, .24), transparent 30%),
+      radial-gradient(circle at 8% 110%, rgba(13, 148, 136, .2), transparent 34%),
+      #101827;
+    color: #fff;
+    box-shadow: 0 24px 55px rgba(30, 41, 59, .16);
+  }
+  .archive-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: .18;
+    background-image: repeating-linear-gradient(115deg, transparent 0 28px, rgba(255,255,255,.08) 29px 30px);
+    mask-image: linear-gradient(to right, transparent, #000 55%);
+  }
+  .archive-kicker,
+  .section-kicker,
+  .stat-index,
+  .project-overline {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .archive-kicker { color: #e8bd67; margin-bottom: 12px; }
+  .archive-hero h1 {
+    max-width: 650px;
+    margin: 0;
+    font-size: clamp(32px, 4vw, 52px);
+    line-height: 1.02;
+    letter-spacing: -.045em;
+    text-wrap: balance;
+  }
+  .archive-hero-copy p {
+    max-width: 610px;
+    margin: 18px 0 0;
+    color: #b9c3d3;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .archive-route { display: grid; gap: 2px; }
+  .archive-route > div {
+    display: grid;
+    grid-template-columns: 34px 88px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 13px 15px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.055);
+    backdrop-filter: blur(8px);
+  }
+  .archive-route > div:first-child { border-radius: 13px 13px 5px 5px; }
+  .archive-route > div:last-child { border-radius: 5px 5px 13px 13px; }
+  .archive-route span { color: #e8bd67; font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .archive-route strong { font-size: 13px; }
+  .archive-route small { color: #aab5c6; font-size: 12px; }
+
+  .stats-grid {
+    position: relative;
+    z-index: 2;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: -32px 22px 34px;
+  }
+  .stat-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 138px;
+    padding: 20px 22px;
+    border: 0;
+    border-radius: 15px;
+    box-shadow: 0 14px 32px rgba(30, 41, 59, .1);
+  }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    right: -30px;
+    bottom: -46px;
+    width: 100px;
+    height: 100px;
+    border: 18px solid var(--metric-accent, #64748b);
+    border-radius: 50%;
+    opacity: .08;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 18px 38px rgba(30, 41, 59, .14); }
+  .stat-card-colloquium { --metric-accent: #2563eb; }
+  .stat-card-published { --metric-accent: #7c3aed; }
+  .stat-card-archived { --metric-accent: #059669; }
+  .stat-card-completed { --metric-accent: #d09a2d; }
+  .stat-index { color: var(--metric-accent); margin-bottom: 22px; }
+  .stat-number { color: #111827; font-size: 36px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+  .stat-label { color: #667085; font-size: 12px; }
+
+  .publication-card { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .publication-card > .card-header {
+    margin-bottom: 14px;
+    padding: 24px 26px;
+    border: 1px solid #e3e8ef;
+    border-radius: 18px;
+    background: #fff;
+  }
+  .section-kicker { color: #9a6b13; margin-bottom: 5px; }
+  .card-title { font-size: 23px; letter-spacing: -.025em; }
+  .card-sub { max-width: 700px; line-height: 1.6; }
+  .project-count {
+    padding: 7px 11px;
+    border-radius: 8px;
+    background: #fff7e6;
+    color: #845b0d;
+    font: 700 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .publication-table-wrap { overflow: visible; border: 0; border-radius: 0; }
+  .publication-table,
+  .publication-table tbody { display: block; }
+  .publication-table thead { display: none; }
+  .publication-table tbody { display: grid; gap: 16px; }
+  .publication-table .publication-project {
+    display: grid;
+    grid-template-columns: minmax(230px, .82fr) repeat(3, minmax(220px, 1fr));
+    overflow: hidden;
+    border: 1px solid #dfe5ed;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(30, 41, 59, .07);
+    transition: transform .22s ease, box-shadow .22s ease;
+  }
+  .publication-table .publication-project:hover { transform: translateY(-2px); box-shadow: 0 17px 36px rgba(30, 41, 59, .11); }
+  .publication-table .publication-project > td {
+    min-width: 0 !important;
+    padding: 22px;
+    border: 0;
+    border-left: 1px solid #e8ecf2;
+    background: #fbfcfe;
+  }
+  .publication-table .publication-project > td:first-child { border-left: 0; }
+  .publication-table .publication-project > td.project-identity {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #172033;
+    color: #fff;
+  }
+  .project-overline { color: #d6aa52; margin-bottom: 13px; }
+  .project-title a {
+    color: #fff;
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 1.35;
+    letter-spacing: -.015em;
+    text-decoration: none;
+  }
+  .project-title a:hover { color: #f0ca7b; }
+  .project-owner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: #aeb9ca; font-size: 12px; }
+  .project-progress { overflow: hidden; height: 4px; margin-top: 24px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .project-progress span { display: block; height: 100%; border-radius: inherit; background: #d6aa52; }
+  .project-progress-label { margin-top: 7px; color: #8491a5; font-size: 11px; }
+  .stage-cell::before {
+    content: attr(data-stage);
+    display: block;
+    margin-bottom: 14px;
+    color: #697586;
+    font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .stage-cell.stage-complete { background: #f5fbf8 !important; }
+  .stage-cell.stage-complete::before { color: #087a55; }
+  .publication-table .pub-edit {
+    gap: 11px;
+    margin-top: 15px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .publication-table .pub-edit-row { display: grid; grid-template-columns: 1fr; gap: 5px; align-items: stretch; }
+  .publication-table .pub-edit-row .label { min-width: 0; color: #7c8797; font-size: 10px; }
+  .publication-table .pub-edit-row select,
+  .publication-table .pub-edit-row input[type="text"],
+  .publication-table .pub-edit-row input[type="datetime-local"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 39px;
+    border-color: #d9e0e9;
+    background: #fff;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .publication-table .pub-edit-row select:focus,
+  .publication-table .pub-edit-row input:focus {
+    outline: 0;
+    border-color: #ab7c23;
+    box-shadow: 0 0 0 3px rgba(171, 124, 35, .13);
+  }
+  .publication-table .pub-meta { margin-top: 7px; color: #748094; line-height: 1.45; }
+  .publication-table .pub-actions { margin-top: 2px; }
+  .publication-table .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    min-height: 38px;
+    border-color: #d8dee7;
+    background: #fff;
+    color: #263246;
+  }
+  .publication-table .btn-secondary:hover { border-color: #a97920; background: #fff8e8; color: #754f09; transform: translateY(-1px); }
+  .publication-table .btn-secondary:active { transform: translateY(0); }
+  .publication-table .btn-secondary:focus-visible { outline: 3px solid rgba(171, 124, 35, .2); outline-offset: 2px; }
+
+  .archive-library-card { margin-top: 38px; border-color: #dfe5ed; box-shadow: 0 12px 34px rgba(30, 41, 59, .07); }
+  .archive-library-card .filter-bar { padding: 12px; border-radius: 13px; background: #f5f7fa; }
+  .archive-library-card .search-input,
+  .archive-library-card .filter-select { min-height: 42px; background: #fff; }
+  .archive-library-card .table-wrap { border-radius: 14px; }
+
+  @media (max-width: 1180px) {
+    .archive-hero { grid-template-columns: 1fr; gap: 28px; }
+    .archive-route { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .archive-route > div { grid-template-columns: 28px 1fr; }
+    .archive-route small { grid-column: 2; }
+    .publication-table .publication-project { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .publication-table .project-identity { grid-column: 1 / -1; }
+  }
   @media (max-width: 768px) {
-    .stats-grid { grid-template-columns: 1fr; }
+    .archive-hero { min-height: 0; padding: 30px 24px 52px; border-radius: 18px; }
+    .archive-hero h1 { font-size: 34px; }
+    .archive-route { grid-template-columns: 1fr; }
+    .archive-route > div { grid-template-columns: 30px 82px 1fr; }
+    .archive-route small { grid-column: auto; }
+    .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: -25px 12px 30px; }
+    .stat-card { min-height: 124px; padding: 17px; }
+    .stat-index { margin-bottom: 15px; }
+    .publication-card > .card-header { padding: 20px; }
+    .publication-table .publication-project { grid-template-columns: 1fr; }
+    .publication-table .project-identity { grid-column: auto; }
+    .publication-table .publication-project > td { border-left: 0; border-top: 1px solid #e8ecf2; }
+    .publication-table .publication-project > td:first-child { border-top: 0; }
+    .archive-library-card { padding: 22px 18px; }
+  }
+  @media (max-width: 460px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-left: 6px; margin-right: 6px; }
+    .stat-card { padding: 15px; }
+    .stat-number { font-size: 30px; }
+    .archive-route > div { grid-template-columns: 28px 74px minmax(0, 1fr); padding: 11px; }
   }
 </style>
 <?php
@@ -521,26 +774,43 @@ $archive_labels = [
 renderAdminShell(
     $user,
     'admin-archive',
-    'Research Archive',
-    'Archive management, plus the publication & colloquium tracking writers for the Research Manual 2015.'
+    'Publication & Colloquium',
+    'Move completed research from presentation to publication and institutional archive.'
 );
 ?>
 
+    <section class="archive-hero">
+      <div class="archive-hero-copy">
+        <div class="archive-kicker">Research lifecycle · Final stage</div>
+        <h1>Bring finished research into the public record.</h1>
+        <p>Coordinate the colloquium, journal outcome, and permanent archive from one focused workspace.</p>
+      </div>
+      <div class="archive-route" aria-label="Publication workflow">
+        <div><span>01</span><strong>Present</strong><small>Research colloquium</small></div>
+        <div><span>02</span><strong>Publish</strong><small>Journal tracking</small></div>
+        <div><span>03</span><strong>Preserve</strong><small>Institutional archive</small></div>
+      </div>
+    </section>
+
     <!-- STATS -->
     <div class="stats-grid">
-      <div class="stat-card">
+      <div class="stat-card stat-card-colloquium">
+        <div class="stat-index">01 · Present</div>
         <div class="stat-number"><?php echo arch_se($colloquium_ready); ?></div>
         <div class="stat-label">Awaiting Colloquium</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-published">
+        <div class="stat-index">02 · Publish</div>
         <div class="stat-number"><?php echo arch_se($published_count); ?></div>
         <div class="stat-label">Published</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-archived">
+        <div class="stat-index">03 · Preserve</div>
         <div class="stat-number"><?php echo arch_se($total_archived); ?></div>
         <div class="stat-label">Archived</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-completed">
+        <div class="stat-index">Ready queue</div>
         <div class="stat-number"><?php echo arch_se($total_completed); ?></div>
         <div class="stat-label">Completed (awaiting)</div>
       </div>
@@ -554,16 +824,16 @@ renderAdminShell(
     <?php endif; ?>
 
     <!-- PUBLICATION & COLLOQUIUM -->
-    <div class="card">
+    <div class="card publication-card">
       <div class="card-header">
         <div>
-          <div class="card-title">🗂️ Publication &amp; Colloquium</div>
+          <div class="section-kicker">Active pipeline</div>
+          <div class="card-title">Publication &amp; Colloquium</div>
           <p class="card-sub">
-            Manage the final Research Manual 2015 milestones (colloquium, journal submission, and archive)
-            for completed projects. Saving creates the publication record if it doesn't exist yet.
+            Advance each completed project through presentation, journal publication, and long-term preservation.
           </p>
         </div>
-        <div style="font-size: 13px; color: var(--text-secondary, #64748B); font-weight: 500;">
+        <div class="project-count">
           <?php echo (int) count($pub_list); ?> project<?php echo count($pub_list) !== 1 ? 's' : ''; ?>
         </div>
       </div>
@@ -580,8 +850,8 @@ renderAdminShell(
           <p style="margin: 6px 0 0 0; font-size: 13px;">Projects appear here when they reach the completed or archived stage.</p>
         </div>
       <?php else: ?>
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap publication-table-wrap">
+          <table class="publication-table">
             <thead>
               <tr>
                 <th style="min-width: 240px;">Title / Student</th>
@@ -602,6 +872,9 @@ renderAdminShell(
                 $arch_state    = (string) ($row['archive_status'] ?? '');
                 $remarks       = (string) ($row['remarks'] ?? '');
                 $has_row       = $row['pub_updated_at'] !== null;
+                $closed_stages = ($col_state === 'presented' ? 1 : 0)
+                    + ($jour_state === 'published' ? 1 : 0)
+                    + ($arch_state === 'archived' ? 1 : 0);
 
                 // Status → badge color (read-side display only)
                 $col_class  = 'badge-slate';
@@ -627,22 +900,27 @@ renderAdminShell(
                     if ($ts) $col_date_input = date('Y-m-d\TH:i', $ts);
                 }
               ?>
-                <tr>
-                  <td>
-                    <div style="font-weight: 600; color: #111827;">
+                <tr class="publication-project">
+                  <td class="project-identity">
+                    <div class="project-overline">Project <?php echo arch_se(str_pad((string) $p_id, 2, '0', STR_PAD_LEFT)); ?></div>
+                    <div class="project-title">
                       <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $p_id; ?>"
-                         style="color: #111827; text-decoration: none;">
+                         >
                         <?php echo arch_se($row['title']); ?>
                       </a>
                     </div>
-                    <div style="font-size: 12px; color: #64748B; margin-top: 2px;">
-                      🎒 <?php echo arch_se($pname); ?>
-                      · <span class="badge <?php echo $proj_status === 'archived' ? 'badge-archived' : 'badge-completed'; ?>">
+                    <div class="project-owner">
+                      <?php echo arch_se($pname); ?>
+                      <span class="badge <?php echo $proj_status === 'archived' ? 'badge-archived' : 'badge-completed'; ?>">
                           <?php echo arch_se(ucfirst($proj_status)); ?>
-                        </span>
+                      </span>
                     </div>
+                    <div class="project-progress" aria-label="<?php echo $closed_stages; ?> of 3 final milestones complete">
+                      <span style="width: <?php echo (int) round(($closed_stages / 3) * 100); ?>%;"></span>
+                    </div>
+                    <div class="project-progress-label"><?php echo $closed_stages; ?>/3 milestones closed</div>
                   </td>
-                  <td style="min-width: 280px;">
+                  <td class="stage-cell <?php echo $col_state === 'presented' ? 'stage-complete' : ''; ?>" data-stage="01 · Colloquium">
                     <span class="badge <?php echo $col_class; ?>">
                       <?php echo arch_se($colloquium_labels[$col_state] ?? 'Not scheduled'); ?>
                     </span>
@@ -683,7 +961,7 @@ renderAdminShell(
                       </div>
                     </form>
                   </td>
-                  <td style="min-width: 260px;">
+                  <td class="stage-cell <?php echo $jour_state === 'published' ? 'stage-complete' : ''; ?>" data-stage="02 · Journal">
                     <span class="badge <?php echo $jour_class; ?>">
                       <?php echo arch_se($journal_labels[$jour_state] ?? 'Not submitted'); ?>
                     </span>
@@ -718,7 +996,7 @@ renderAdminShell(
                       </div>
                     </form>
                   </td>
-                  <td style="min-width: 200px;">
+                  <td class="stage-cell <?php echo $arch_state === 'archived' ? 'stage-complete' : ''; ?>" data-stage="03 · Archive">
                     <span class="badge <?php echo $arch_class; ?>">
                       <?php echo arch_se($archive_labels[$arch_state] ?? 'Not archived'); ?>
                     </span>
@@ -764,9 +1042,13 @@ renderAdminShell(
     </div>
 
     <!-- ARCHIVE CARD -->
-    <div class="card">
+    <div class="card archive-library-card">
       <div class="card-header">
-        <div class="card-title">Archived Projects</div>
+        <div>
+          <div class="section-kicker">Permanent collection</div>
+          <div class="card-title">Archived Projects</div>
+          <p class="card-sub">Search the institutional record by title, researcher, or department.</p>
+        </div>
       </div>
 
       <!-- FILTERS -->

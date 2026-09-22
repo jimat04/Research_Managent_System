@@ -72,7 +72,7 @@ $ch_deleted = fstu_has_column($conn, 'chapters', 'deleted_at') ? ' AND deleted_a
 // Filters
 // ------------------------------------------------------------------
 $status_filter = (string) ($_GET['status'] ?? 'all');
-$allowed_statuses = ['draft', 'proposal', 'in_progress', 'for_defense', 'completed', 'archived'];
+$allowed_statuses = ['draft', 'proposal', 'submitted', 'under_review', 'approved', 'in_progress', 'ongoing', 'for_defense', 'completed', 'archived'];
 if (!in_array($status_filter, $allowed_statuses, true)) {
     $status_filter = 'all';
 }
@@ -299,7 +299,7 @@ $stat_total      = count($advisees);
 $stat_active     = 0;
 $stat_attention  = count($needs_attention_ids);
 
-$active_set = ['proposal', 'in_progress', 'for_defense'];
+$active_set = ['proposal', 'submitted', 'under_review', 'approved', 'in_progress', 'ongoing', 'for_defense'];
 $seen_projects = [];
 foreach ($projects_by_student as $uid => $list) {
     foreach ($list as $p) {
@@ -333,7 +333,11 @@ function fstu_status_badge($status) {
     $map = [
         'draft'       => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
         'proposal'    => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Proposal'],
-        'in_progress' => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'In Progress'],
+        'submitted'   => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Submitted'],
+        'under_review'=> ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Under Review'],
+        'approved'    => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Approved'],
+        'in_progress' => ['#1D4ED8', 'rgba(29,78,216,0.10)',  'rgba(29,78,216,0.25)',  'In Progress'],
+        'ongoing'     => ['#0F766E', 'rgba(15,118,110,0.10)', 'rgba(15,118,110,0.25)', 'Ongoing'],
         'for_defense' => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'For Defense'],
         'completed'   => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Completed'],
         'archived'    => ['#475569', 'rgba(71,85,105,0.10)',  'rgba(71,85,105,0.25)',  'Archived'],
@@ -563,11 +567,81 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
     .fstu-head { flex-direction: column; }
     .fstu-project { flex-direction: column; align-items: flex-start; }
   }
+
+  /* Faculty advisee workspace */
+  .fstu-brief { position:relative; isolation:isolate; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr); gap:42px; overflow:hidden; margin-bottom:20px; padding:36px 40px; border:1px solid rgba(29,78,216,.32); border-radius:20px; background:radial-gradient(circle at 91% 8%,rgba(96,165,250,.4),transparent 31%),linear-gradient(135deg,#172554,#1e3a8a 56%,#1d4ed8); color:#fff; box-shadow:0 22px 48px rgba(30,64,175,.16); }
+  .fstu-brief::after { content:''; position:absolute; z-index:-1; right:-78px; bottom:-126px; width:280px; height:280px; border:1px solid rgba(255,255,255,.12); border-radius:50%; box-shadow:0 0 0 38px rgba(255,255,255,.03),0 0 0 80px rgba(255,255,255,.02); }
+  .fstu-brief-copy { align-self:center; }
+  .fstu-eyebrow { margin:0 0 10px; color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+  .fstu-brief h2 { max-width:680px; margin:0 0 12px; color:#fff; font-size:clamp(28px,3vw,40px); line-height:1.08; letter-spacing:-.045em; }
+  .fstu-brief-copy > p:last-of-type { max-width:64ch; margin:0; color:rgba(255,255,255,.76); font-size:14px; line-height:1.7; }
+  .fstu-brief-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+  .fstu-brief-action { display:inline-flex; min-height:41px; align-items:center; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; }
+  .fstu-brief-action.primary { background:#fff; color:#1d4ed8; }
+  .fstu-brief-action.primary:hover { background:#eff6ff; transform:translateY(-1px); }
+  .fstu-brief-action.secondary { border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.08); color:#fff; }
+  .fstu-brief-action.secondary:hover { background:rgba(255,255,255,.15); }
+  .fstu-priority { align-self:stretch; display:grid; align-content:center; padding-left:32px; border-left:1px solid rgba(255,255,255,.2); }
+  .fstu-priority-label { color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+  .fstu-priority strong { display:block; margin:10px 0 5px; color:#fff; font-size:42px; line-height:1; font-variant-numeric:tabular-nums; }
+  .fstu-priority p { margin:0; color:rgba(255,255,255,.72); font-size:12px; line-height:1.55; }
+  .fstu-stats { grid-template-columns:repeat(3,1fr); gap:0; overflow:hidden; margin-bottom:28px; border:1px solid #E5E7EB; border-radius:16px; background:#fff; }
+  .fstu-stat { min-width:0; border:0; border-radius:0; padding:19px 22px; box-shadow:none; }
+  .fstu-stat + .fstu-stat { border-left:1px solid #E5E7EB; }
+  .fstu-stat:first-child { background:#eff6ff; }
+  .fstu-stat:hover { background:rgba(29,78,216,.055); box-shadow:none; transform:none; }
+  .fstu-stat-num { font-size:30px; letter-spacing:-.045em; }
+  .fstu-stat-icon { display:grid; width:34px; height:34px; place-items:center; border-radius:9px; background:rgba(29,78,216,.08); font-size:16px; opacity:1; }
+  .fstu-list-head { display:flex; align-items:end; justify-content:space-between; gap:18px; margin:0 0 14px; }
+  .fstu-list-head h2 { margin:0 0 4px; font-size:20px; }
+  .fstu-list-head p { margin:0; color:#64748B; font-size:13px; }
+  .fstu-result-count { flex:none; color:#1d4ed8; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .fstu-filters { padding:18px 20px; border-color:rgba(29,78,216,.14); background:linear-gradient(145deg,#fff,#f8fbff); }
+  .fstu-search-field { flex:1 1 280px; min-width:240px; }
+  .fstu-search-field input { width:100%; }
+  .fstu-list { display:grid; gap:14px; }
+  .fstu-card { position:relative; margin:0; padding:23px 24px 24px; box-shadow:0 5px 18px rgba(30,64,175,.045); }
+  .fstu-card:hover { box-shadow:0 14px 34px rgba(30,64,175,.095); transform:translateY(-1px); }
+  .fstu-card.attn { border-color:rgba(234,88,12,.35); border-left:4px solid #EA580C; background:linear-gradient(100deg,rgba(255,247,237,.9),#fff 32%); }
+  .fstu-identity { display:flex; min-width:0; flex:1 1 360px; gap:14px; align-items:flex-start; }
+  .fstu-avatar { display:grid; width:44px; height:44px; flex:0 0 44px; place-items:center; border-radius:12px; background:linear-gradient(145deg,#1d4ed8,#4338ca); color:#fff; font-size:13px; font-weight:750; box-shadow:0 8px 18px rgba(29,78,216,.18); }
+  .fstu-identity-copy { min-width:0; }
+  .fstu-name { margin:1px 0 5px; font-size:17px; font-weight:700; }
+  .fstu-attn-pill { border-radius:6px; }
+  .fstu-projects { gap:9px; }
+  .fstu-project { padding:13px 14px; border-color:#E2E8F0; border-radius:11px; background:#F8FAFC; }
+  .fstu-project:hover { border-color:rgba(29,78,216,.18); background:#f5f8ff; }
+  .fstu-project-title { font-weight:650; }
+  .fstu-project-id { margin-top:3px; color:#94A3B8; font-size:11px; }
+  .fstu-progress-stack { display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .fstu-progress-bar { width:100px; }
+  .fstu-last-activity { margin-top:11px; }
+  .fstu-no-projects { padding:10px 0; }
+  .fstu-limit-note { margin-top:14px; color:#94A3B8; font-size:12px; text-align:center; }
+  @media (max-width:900px) { .fstu-brief { grid-template-columns:1fr; gap:26px; } .fstu-priority { padding:22px 0 0; border-top:1px solid rgba(255,255,255,.2); border-left:0; } }
+  @media (max-width:640px) { .fstu-brief { padding:28px 22px; } .fstu-brief-actions { display:grid; } .fstu-brief-action { justify-content:center; } .fstu-stats { grid-template-columns:1fr; } .fstu-stat + .fstu-stat { border-top:1px solid #E5E7EB; border-left:0; } .fstu-list-head { align-items:flex-start; flex-direction:column; } .fstu-search-field { min-width:100%; } .fstu-actions { width:100%; } .fstu-actions .btn { flex:1; justify-content:center; } .fstu-card { padding:20px 18px; } .fstu-head { gap:16px; } .fstu-actions-row,.fstu-actions-row .btn { width:100%; } .fstu-actions-row .btn { justify-content:center; } .fstu-project-side { width:100%; justify-content:space-between; } }
 </style>
 
 <?php if (!empty($errors)): ?>
   <div class="fstu-error"><?php echo fstu_se(implode(' ', $errors)); ?></div>
 <?php endif; ?>
+
+<section class="fstu-brief" aria-labelledby="fstu-workspace-title">
+  <div class="fstu-brief-copy">
+    <p class="fstu-eyebrow">Advisement workspace</p>
+    <h2 id="fstu-workspace-title"><?php echo $stat_attention > 0 ? 'See which advisees need you next.' : 'Your advisees are moving forward.'; ?></h2>
+    <p>Monitor each student’s research progress, spot revision needs, and open a conversation while the project context is still visible.</p>
+    <div class="fstu-brief-actions">
+      <a class="fstu-brief-action primary" href="faculty-review.php">Open chapter reviews</a>
+      <a class="fstu-brief-action secondary" href="faculty-submissions.php">View assigned research</a>
+    </div>
+  </div>
+  <div class="fstu-priority">
+    <span class="fstu-priority-label">Need attention</span>
+    <strong><?php echo (int) $stat_attention; ?></strong>
+    <p>advisee<?php echo $stat_attention === 1 ? '' : 's'; ?> with chapter revisions to follow up</p>
+  </div>
+</section>
 
 <div class="fstu-stats">
   <div class="fstu-stat">
@@ -587,6 +661,14 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
   </div>
 </div>
 
+<div class="fstu-list-head">
+  <div>
+    <h2>Advisee directory</h2>
+    <p>Search students and filter their projects by workflow status.</p>
+  </div>
+  <span class="fstu-result-count"><?php echo count($advisees); ?> student<?php echo count($advisees) === 1 ? '' : 's'; ?></span>
+</div>
+
 <form class="fstu-filters" method="get" action="">
   <div class="fstu-field">
     <label for="fstu-status">Project status</label>
@@ -594,13 +676,17 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
       <option value="all"        <?php echo $status_filter === 'all'        ? 'selected' : ''; ?>>All statuses</option>
       <option value="draft"       <?php echo $status_filter === 'draft'       ? 'selected' : ''; ?>>Draft</option>
       <option value="proposal"    <?php echo $status_filter === 'proposal'    ? 'selected' : ''; ?>>Proposal</option>
+      <option value="submitted"   <?php echo $status_filter === 'submitted'   ? 'selected' : ''; ?>>Submitted</option>
+      <option value="under_review" <?php echo $status_filter === 'under_review' ? 'selected' : ''; ?>>Under review</option>
+      <option value="approved"    <?php echo $status_filter === 'approved'    ? 'selected' : ''; ?>>Approved</option>
       <option value="in_progress" <?php echo $status_filter === 'in_progress' ? 'selected' : ''; ?>>In progress</option>
+      <option value="ongoing"     <?php echo $status_filter === 'ongoing'     ? 'selected' : ''; ?>>Ongoing</option>
       <option value="for_defense" <?php echo $status_filter === 'for_defense' ? 'selected' : ''; ?>>For defense</option>
       <option value="completed"   <?php echo $status_filter === 'completed'   ? 'selected' : ''; ?>>Completed</option>
       <option value="archived"    <?php echo $status_filter === 'archived'    ? 'selected' : ''; ?>>Archived</option>
     </select>
   </div>
-  <div class="fstu-field" style="flex:1 1 240px;min-width:240px;">
+  <div class="fstu-field fstu-search-field">
     <label for="fstu-q">Search name or email</label>
     <input id="fstu-q" type="text" name="q" maxlength="120"
            placeholder="e.g. Dela Cruz, juan, jdelacruz@rms.edu.ph…"
@@ -631,6 +717,7 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
     </div>
   </div>
 <?php else: ?>
+  <div class="fstu-list">
   <?php foreach ($advisees as $a):
       $sid         = (int) $a['user_id'];
       $needs_attn  = isset($needs_attention_ids[$sid]);
@@ -651,10 +738,14 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
       $program    = (string) ($a['program']    ?? '');
       $year_level = (string) ($a['year_level'] ?? '');
       $email      = (string) ($a['email']      ?? '');
+      $student_initials = strtoupper(substr((string) $a['first_name'], 0, 1) . substr((string) $a['last_name'], 0, 1));
+      if ($student_initials === '') { $student_initials = 'ST'; }
   ?>
-    <div class="fstu-card <?php echo $needs_attn ? 'attn' : ''; ?>">
+    <article class="fstu-card <?php echo $needs_attn ? 'attn' : ''; ?>">
       <div class="fstu-head">
-        <div style="min-width:0;flex:1 1 280px;">
+        <div class="fstu-identity">
+          <div class="fstu-avatar" aria-hidden="true"><?php echo fstu_se($student_initials); ?></div>
+          <div class="fstu-identity-copy">
           <div class="fstu-name">
             🎒 <?php echo fstu_se(trim($a['first_name'] . ' ' . $a['last_name'])); ?>
             <?php if ($needs_attn): ?>
@@ -676,7 +767,8 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
             <?php endif; ?>
           </div>
         </div>
-        <div class="fstu-actions-row" style="margin-top:0;">
+        </div>
+        <div class="fstu-actions-row">
           <a class="btn btn-primary btn-sm"
              href="<?php echo fstu_se(SITE_URL . 'pages/shared/messages.php?to=' . $sid); ?>">
             ✉️ Message
@@ -685,7 +777,7 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
       </div>
 
       <?php if (!$plist): ?>
-        <div class="fstu-meta" style="padding:6px 0;">No projects to show under the current filter.</div>
+        <div class="fstu-meta fstu-no-projects">No projects to show under the current filter.</div>
       <?php else: ?>
         <div class="fstu-projects">
           <?php
@@ -701,11 +793,11 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
             <div class="fstu-project">
               <div class="fstu-project-title">
                 <?php echo fstu_se((string) $p['title']); ?>
-                <div style="font-size:12px;color:#94A3B8;">Project #<?php echo $pid; ?></div>
+                <div class="fstu-project-id">Project #<?php echo $pid; ?></div>
               </div>
               <div class="fstu-project-side">
                 <?php echo fstu_status_badge((string) $p['status']); ?>
-                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                <div class="fstu-progress-stack">
                   <div class="fstu-progress"><?php echo $done; ?>/<?php echo $total; ?> approved</div>
                   <div class="fstu-progress-bar" aria-hidden="true">
                     <div class="fstu-progress-fill" style="width: <?php echo $pct; ?>%;"></div>
@@ -718,15 +810,16 @@ renderFacultyShell($user, 'faculty-students.php', 'My Students', $subtitle);
             <div class="fstu-meta">+ <?php echo (int) $more; ?> more project<?php echo $more === 1 ? '' : 's'; ?> not shown</div>
           <?php endif; ?>
         </div>
-        <div class="fstu-meta" style="margin-top:10px;">
+        <div class="fstu-meta fstu-last-activity">
           🕓 Last activity <?php echo fstu_se(fstu_relative_time($latest_ts)); ?>
         </div>
       <?php endif; ?>
-    </div>
+    </article>
   <?php endforeach; ?>
+  </div>
 
   <?php if (count($advisees) >= 200): ?>
-    <div style="text-align:center;margin-top:14px;font-size:13px;color:#94A3B8;">
+    <div class="fstu-limit-note">
       Showing the 200 most recent. Refine the search to narrow the list.
     </div>
   <?php endif; ?>

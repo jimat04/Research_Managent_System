@@ -23,6 +23,8 @@
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
+require_once __DIR__ . '/logout-transition.php';
+
 function renderAdminShell($user, $current_page, $page_title, $page_subtitle = '') {
     // Normalise the user object — admin-contact builds a $user without first_name/last_name,
     // only a 'name'. Everything downstream relies on $shell_user only.
@@ -65,6 +67,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/admin/admin-dashboard.php', 'Dashboard', '📊', true],
+            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',  '&#128197;', true],
         ],
         'User Management' => [
             [SITE_URL . 'pages/admin/admin-users.php',       'User Management', '👥', true],
@@ -207,6 +210,7 @@ function renderAdminShellClose() {
     </div><!-- /.admin-page-content -->
   </main>
 </div><!-- /.admin-dashboard -->
+<?php renderLogoutTransition(); ?>
 <script>
 (() => {
   const button = document.querySelector('.admin-mobile-menu-btn');

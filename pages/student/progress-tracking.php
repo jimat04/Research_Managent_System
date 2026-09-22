@@ -596,7 +596,26 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
     .ptrack-page-header { flex-direction: column; }
     .ptrack-switcher select { min-width: 0; width: 100%; }
   }
+
+  .student-page-content{background-color:#EEEAF8;background-image:radial-gradient(circle at 88% 3%,rgba(91,30,188,.13),transparent 27%),radial-gradient(circle at 7% 47%,rgba(37,99,235,.07),transparent 24%),linear-gradient(180deg,#F4F1FA 0%,#ECE8F5 100%)}
+  .student-topbar{background:rgba(255,255,255,.93);backdrop-filter:blur(14px)}
+  .ptrack-page{--purple:#5B1EBC;--ink:#140D1E;--muted:#6D6279;--line:#DED5E8;max-width:1160px;margin:0 auto;padding-bottom:44px;color:var(--ink)}
+  .ptrack-page-header{position:relative;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:42px;overflow:hidden;margin-bottom:22px;padding:38px 40px;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:radial-gradient(circle at 91% 8%,rgba(220,198,255,.25),transparent 28%),radial-gradient(circle at 8% 118%,rgba(43,110,230,.24),transparent 32%),linear-gradient(135deg,#291050 0%,#4C188F 57%,#6C2CC7 100%);color:#fff;box-shadow:0 22px 52px rgba(54,24,103,.22)}.ptrack-page-header::after{content:'';position:absolute;right:-75px;bottom:-150px;width:300px;height:300px;border:46px solid rgba(255,255,255,.055);border-radius:50%;pointer-events:none}.ptrack-page-header>div,.ptrack-switcher{position:relative;z-index:1}.ptrack-kicker{margin:0 0 11px;color:#DCCBFF;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.ptrack-page-title{max-width:670px;margin:0 0 14px;color:#fff;font-size:clamp(29px,3.2vw,44px);font-weight:750;letter-spacing:-.045em;line-height:1.08;text-wrap:balance}.ptrack-page-sub{max-width:59ch;color:#E8E0F3;font-size:14px;line-height:1.65}.ptrack-switcher{display:grid;align-content:center;gap:8px;padding-left:34px;border-left:1px solid rgba(255,255,255,.24)}.ptrack-switcher label{color:#D9CDE9;font-size:10px;font-weight:750;letter-spacing:.05em;text-transform:uppercase}.ptrack-switcher select{width:100%;min-width:0;min-height:46px;padding:10px 13px;border:1px solid rgba(255,255,255,.23);border-radius:11px;background:rgba(255,255,255,.12);color:#fff;font:650 12px 'Inter',sans-serif;backdrop-filter:blur(7px)}.ptrack-switcher select option{background:#351064;color:#fff}.ptrack-switcher select:focus{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.17)}
+  .ptrack-card{margin-bottom:20px;padding:26px 27px 29px;border-color:#D9D0E4;border-radius:19px;background:rgba(255,255,255,.96);box-shadow:0 13px 34px rgba(45,24,76,.07)}.ptrack-card-title{color:#24162F;font-size:18px;letter-spacing:-.025em}.ptrack-card-sub{max-width:78ch;color:#756A80;font-size:11px;line-height:1.6}.ptrack-overall{position:relative;overflow:hidden;padding:24px 28px;border:0;background:linear-gradient(105deg,#F8F3FD 0%,#EDE3F9 100%);box-shadow:inset 4px 0 0 #5B1EBC,0 12px 30px rgba(45,24,76,.07)}.ptrack-overall::after{content:'';position:absolute;right:-42px;top:-66px;width:150px;height:150px;border:24px solid rgba(91,30,188,.055);border-radius:50%}.ptrack-overall .ptrack-row,.ptrack-overall .ptrack-progress{position:relative;z-index:1}.ptrack-overall .ptrack-row>div:last-child{color:#5B1EBC!important;font-size:36px!important;font-weight:750!important;letter-spacing:-.045em;font-variant-numeric:tabular-nums}.ptrack-progress{height:9px;margin-top:18px;background:#DED4E8}.ptrack-progress-bar{background:linear-gradient(90deg,#4A168F,#6F2BC2);box-shadow:0 3px 10px rgba(91,30,188,.2)}
+  .ptrack-primary-grid{display:grid;grid-template-columns:minmax(310px,.78fr) minmax(0,1.22fr);gap:20px;align-items:start}.ptrack-primary-grid>.ptrack-card{height:100%}.ptrack-workflow-card{border-top:4px solid #5B1EBC}.ptrack-chapters-card{border-top:4px solid #07855F}.ptrack-timeline{padding-left:34px}.ptrack-timeline::before{left:14px;width:2px;background:#E2D8EC}.ptrack-stage{padding:13px 9px 13px 10px;border-radius:10px}.ptrack-stage+.ptrack-stage{border-top:1px dashed #E3DBEA}.ptrack-stage.current{margin:4px 0;padding:15px 13px;background:#F4EDFC}.ptrack-dot{left:-28px;top:15px;width:24px;height:24px;border-color:#D8CDE2;background:#FBF9FD;color:#8C8197;font-size:10px}.ptrack-stage.done .ptrack-dot{border-color:#07855F;background:#07855F}.ptrack-stage.current .ptrack-dot{border-color:#5B1EBC;background:#5B1EBC;box-shadow:0 0 0 5px rgba(91,30,188,.12)}.ptrack-stage-title{color:#2A1E34;font-size:12px;font-weight:750}.ptrack-stage-desc{margin-top:3px;color:#796E83;font-size:10px;line-height:1.5}.ptrack-stage-meta{color:#9A8FA4;font-size:9px}.ptrack-stage.current .ptrack-stage-title::after{padding:3px 7px;border-radius:6px;font-size:8px;letter-spacing:.04em;text-transform:uppercase}
+  .ptrack-chapters{gap:9px}.ptrack-chapter{align-items:center;padding:13px 14px;border-color:#E2D9E9;border-radius:13px;background:#FBFAFC;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.ptrack-chapter:hover{z-index:1;border-color:#BDA8CE;box-shadow:0 9px 22px rgba(45,24,76,.08);transform:translateY(-1px)}.ptrack-chapter-num{width:39px;height:42px;border-radius:11px;background:#70647B;font-size:13px}.ptrack-chapter-name{color:#291E33;font-size:12px;font-weight:750}.ptrack-chapter-meta{color:#82778C;font-size:9px}.ptrack-chapter-feedback{margin-top:9px;padding:10px 11px;border-left-color:#7C3AED;border-radius:8px;background:#F5F0FA;color:#3D2B4C;font-size:10px}.ptrack-chapter-feedback .who{font-size:8px}.ptrack-chapter .ptrack-link{flex:0 0 auto}
+  .ptrack-milestones-card{border-top:4px solid #C55408}.ptrack-milestone-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ptrack-milestone{height:100%;margin:0;padding:17px;border-color:#E1D8E8;border-radius:14px;background:#FBFAFC}.ptrack-milestone-head{margin-bottom:12px}.ptrack-milestone-name{color:#2B1F35;font-size:12px;font-weight:750}.ptrack-milestone-sub{color:#8A7F93;font-size:9px;line-height:1.45}.ptrack-milestone-row{color:#3C3045;font-size:10px}.ptrack-empty-mini{padding:11px;border-radius:9px;background:#F3EFF6;color:#84788E!important;font-size:9px!important;font-style:normal}.ptrack-badge{padding:4px 8px;border-radius:7px;font-size:9px;font-weight:750}.ptrack-actions-card{padding:19px 21px;border-top:4px solid #2563EB}.ptrack-actions-card .ptrack-card-title{font-size:14px}.ptrack-btn{min-height:42px;padding:10px 16px;border:1px solid transparent;border-radius:10px;font-size:11px;font-weight:700}.ptrack-btn-primary{background:#5B1EBC}.ptrack-btn-primary:hover{background:#491598;box-shadow:0 9px 18px rgba(91,30,188,.2)}.ptrack-btn-secondary{border-color:#D8D0E3;background:#fff;color:#281B35}.ptrack-btn-secondary:hover{border-color:#B9AACA;background:#F5F0FA;color:#4B168F}.ptrack-link{display:inline-flex;align-items:center;color:#5B1EBC;font-size:10px;font-weight:750;text-decoration:none}.ptrack-link:hover{color:#40107F;text-decoration:none}.ptrack-page a:focus-visible,.ptrack-page select:focus-visible,.ptrack-page button:focus-visible{outline:3px solid rgba(91,30,188,.25);outline-offset:3px}.ptrack-empty{padding:60px 28px;border-color:#D9D0E4;background:radial-gradient(circle at 50% 13%,rgba(91,30,188,.1),transparent 38%),#FBF9FD;box-shadow:0 15px 36px rgba(45,24,76,.08)}.ptrack-empty .ico{display:grid;width:72px;height:72px;margin:0 auto 18px;place-items:center;border-radius:21px;background:#EEE4FA;font-size:31px}.ptrack-empty h3{font-size:22px;letter-spacing:-.03em}.ptrack-empty p{max-width:530px;margin-right:auto;margin-left:auto;color:#766A81;line-height:1.65}
+  .ptrack-switcher label{color:#EEE6FA!important}.ptrack-switcher select:not(:disabled){appearance:none;-webkit-appearance:none;overflow:hidden;padding:11px 44px 11px 14px!important;border-color:rgba(255,255,255,.45);background-color:#F8F3FD!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%235B1EBC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:16px!important;color:#24162F!important;-webkit-text-fill-color:#24162F!important;text-overflow:ellipsis;white-space:nowrap;box-shadow:0 8px 20px rgba(24,7,52,.1)}.ptrack-switcher select:not(:disabled):hover{border-color:#D7C6E8;background-color:#fff!important}.ptrack-switcher select:not(:disabled):focus{border-color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.17),0 8px 20px rgba(24,7,52,.12)}.ptrack-switcher select:not(:disabled) option{background:#fff!important;color:#24162F!important;-webkit-text-fill-color:#24162F!important}
+  .ptrack-switcher-label{color:#EEE6FA;font-size:10px;font-weight:750;letter-spacing:.05em;text-transform:uppercase}.ptrack-project-menu{min-width:0}.ptrack-project-menu summary{display:grid;grid-template-columns:minmax(0,1fr) 18px;align-items:center;gap:12px;min-height:48px;padding:11px 14px 11px 16px;border:1px solid rgba(255,255,255,.45);border-radius:11px;background:#F8F3FD;color:#24162F;font-size:12px;font-weight:700;line-height:1.35;cursor:pointer;box-shadow:0 8px 20px rgba(24,7,52,.1);list-style:none;transition:background .2s ease,border-color .2s ease,box-shadow .2s ease}.ptrack-project-menu summary::-webkit-details-marker{display:none}.ptrack-project-menu summary>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ptrack-project-menu summary:hover{border-color:#fff;background:#fff}.ptrack-project-chevron{width:9px;height:9px;justify-self:center;border-right:2px solid #5B1EBC;border-bottom:2px solid #5B1EBC;transform:translateY(-2px) rotate(45deg);transition:transform .2s ease}.ptrack-project-menu[open] .ptrack-project-chevron{transform:translateY(2px) rotate(225deg)}.ptrack-project-options{display:grid;gap:5px;max-height:238px;margin-top:8px;padding:7px;overflow-y:auto;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#F8F3FD;box-shadow:0 14px 30px rgba(24,7,52,.2)}.ptrack-project-options a{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 12px;border-radius:8px;color:#352641;font-size:11px;font-weight:650;line-height:1.4;text-decoration:none;transition:background .18s ease,color .18s ease}.ptrack-project-options a:hover{background:#EDE2F8;color:#4B168F}.ptrack-project-options a.is-active{background:#5B1EBC;color:#fff}.ptrack-project-check{display:grid;width:20px;height:20px;place-items:center;border-radius:6px;background:rgba(255,255,255,.18);font-size:10px}.ptrack-project-menu summary:focus-visible{outline:3px solid rgba(255,255,255,.3);outline-offset:3px}
+  @keyframes ptrackEnter{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
+  @media(prefers-reduced-motion:no-preference){.ptrack-page-header,.ptrack-overall,.ptrack-primary-grid,.ptrack-milestones-card,.ptrack-actions-card,.ptrack-empty{animation:ptrackEnter .48s cubic-bezier(.16,1,.3,1) both}.ptrack-overall{animation-delay:.05s}.ptrack-primary-grid{animation-delay:.1s}.ptrack-milestones-card{animation-delay:.15s}.ptrack-actions-card{animation-delay:.2s}}
+  @media(max-width:980px){.ptrack-primary-grid{grid-template-columns:1fr}.ptrack-primary-grid>.ptrack-card{height:auto}.ptrack-milestone-grid{grid-template-columns:1fr}}
+  @media(max-width:760px){.ptrack-page-header{grid-template-columns:1fr;padding:30px 24px}.ptrack-switcher{padding:22px 0 0;border-top:1px solid rgba(255,255,255,.24);border-left:0}.ptrack-overall .ptrack-row{align-items:flex-start;flex-direction:column}.ptrack-card{padding:23px 20px 26px}.ptrack-chapter{align-items:flex-start;flex-wrap:wrap}.ptrack-chapter .ptrack-link{margin-left:53px}.ptrack-actions-card .ptrack-row{display:grid;grid-template-columns:1fr 1fr}.ptrack-actions-card .ptrack-btn-primary{grid-column:1/-1}}
+  @media(max-width:500px){.ptrack-page-header{padding:27px 21px}.ptrack-actions-card .ptrack-row{grid-template-columns:1fr}.ptrack-actions-card .ptrack-btn-primary{grid-column:auto}.ptrack-btn{width:100%;justify-content:center}.ptrack-chapter .ptrack-link{width:auto;margin-left:53px}.ptrack-milestone-head{align-items:flex-start;flex-direction:column}}
+  @media(prefers-reduced-motion:reduce){.ptrack-page *{animation:none!important;transition:none!important}}
 </style>
+
+<main class="ptrack-page">
 
 <?php if (empty($projects)): ?>
   <!-- NO PROJECTS YET -->
@@ -610,26 +629,34 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
 <?php else: ?>
 
   <!-- PAGE HEADER + PROJECT SWITCHER -->
-  <div class="ptrack-page-header">
+  <header class="ptrack-page-header">
     <div>
-      <h2 class="ptrack-page-title">Progress Tracking</h2>
-      <p class="ptrack-page-sub">Where you are in the Research Manual 2015 workflow.</p>
+      <p class="ptrack-kicker">Research journey</p>
+      <h2 class="ptrack-page-title"><?php echo ptrack_se((string) ($project['title'] ?? 'Progress tracking')); ?></h2>
+      <p class="ptrack-page-sub">Follow the project from proposal review through chapters, milestones, and archive.</p>
     </div>
-    <form method="get" class="ptrack-switcher">
-      <label for="project_id" style="font-size: 13px; color: #64748B; font-weight: 500;">Project:</label>
-      <select id="project_id" name="project_id" onchange="this.form.submit()">
-        <?php foreach ($projects as $p): ?>
-          <option value="<?php echo (int) $p['project_id']; ?>" <?php echo ((int) $p['project_id'] === (int) ($project['project_id'] ?? 0)) ? 'selected' : ''; ?>>
-            <?php echo ptrack_se($p['title']); ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-      <noscript><button class="ptrack-btn ptrack-btn-primary" type="submit">View</button></noscript>
-    </form>
-  </div>
+    <div class="ptrack-switcher">
+      <span class="ptrack-switcher-label">Viewing project</span>
+      <details class="ptrack-project-menu">
+        <summary>
+          <span><?php echo ptrack_se((string) ($project['title'] ?? 'Choose a project')); ?></span>
+          <span class="ptrack-project-chevron" aria-hidden="true"></span>
+        </summary>
+        <nav class="ptrack-project-options" aria-label="Choose a research project">
+          <?php foreach ($projects as $p): ?>
+            <?php $is_active_project = (int) $p['project_id'] === (int) ($project['project_id'] ?? 0); ?>
+            <a href="<?php echo SITE_URL; ?>pages/student/progress-tracking.php?project_id=<?php echo (int) $p['project_id']; ?>" class="<?php echo $is_active_project ? 'is-active' : ''; ?>" <?php echo $is_active_project ? 'aria-current="page"' : ''; ?>>
+              <span><?php echo ptrack_se($p['title']); ?></span>
+              <?php if ($is_active_project): ?><span class="ptrack-project-check" aria-hidden="true">&#10003;</span><?php endif; ?>
+            </a>
+          <?php endforeach; ?>
+        </nav>
+      </details>
+    </div>
+  </header>
 
   <?php if (!$project): ?>
-    <div class="ptrack-card">
+    <div class="ptrack-card ptrack-overall">
       <div style="text-align: center; color: #94A3B8; padding: 32px 0;">
         <div style="font-size: 48px; margin-bottom: 12px;">🔍</div>
         <p style="margin: 0; color: #111827; font-weight: 600;">Project not found</p>
@@ -640,7 +667,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
   <?php else: ?>
 
     <!-- OVERALL COMPLETION -->
-    <div class="ptrack-card">
+    <div class="ptrack-card ptrack-overall">
       <div class="ptrack-row" style="justify-content: space-between;">
         <div>
           <h3 class="ptrack-card-title" style="margin-bottom: 4px;">Overall Completion</h3>
@@ -664,7 +691,8 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
     </div>
 
     <!-- WORKFLOW TIMELINE -->
-    <div class="ptrack-card">
+    <div class="ptrack-primary-grid">
+    <div class="ptrack-card ptrack-workflow-card">
       <h3 class="ptrack-card-title">Research Workflow</h3>
       <p class="ptrack-card-sub">Each stage reflects the EARIST Research Manual 2015. Current stage is highlighted based on your project's status (<?php echo ptrack_se(ptrack_status_label((string) $project['status'])); ?>).</p>
       <div class="ptrack-timeline">
@@ -692,7 +720,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
     </div>
 
     <!-- CHAPTER PROGRESS -->
-    <div class="ptrack-card">
+    <div class="ptrack-card ptrack-chapters-card">
       <h3 class="ptrack-card-title">Chapter Progress</h3>
       <p class="ptrack-card-sub"><?php echo (int) $completion['chapter_done']; ?> of 5 chapters approved · latest adviser feedback shown when available.</p>
       <?php
@@ -759,12 +787,14 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
         <?php endforeach; ?>
       </div>
     </div>
+    </div>
 
     <!-- RESEARCH MANUAL MILESTONES -->
-    <div class="ptrack-card">
+    <div class="ptrack-card ptrack-milestones-card">
       <h3 class="ptrack-card-title">Research Manual Milestones</h3>
       <p class="ptrack-card-sub">Required documents from the EARIST Research Manual 2015. Some sections depend on workflow-tracking tables — empty groups just mean no entries yet.</p>
 
+      <div class="ptrack-milestone-grid">
       <?php
       // Render the 5 logical milestone groups
       $rendered_groups = 0;
@@ -882,10 +912,11 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
         </div>
         <?php $rendered_groups++; ?>
       <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- QUICK ACTIONS -->
-    <div class="ptrack-card">
+    <div class="ptrack-card ptrack-actions-card">
       <h3 class="ptrack-card-title" style="margin-bottom: 12px;">Quick Actions</h3>
       <div class="ptrack-row">
         <a class="ptrack-btn ptrack-btn-primary" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $project['project_id']; ?>">📄 View Project</a>
@@ -899,5 +930,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
 
   <?php endif; ?>
 <?php endif; ?>
+
+</main>
 
 <?php renderStudentShellClose(); ?>

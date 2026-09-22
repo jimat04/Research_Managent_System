@@ -41,7 +41,18 @@ $category_stmt = $conn->prepare('SELECT category_id, category_name FROM research
 $categories = archive_fetch_all($category_stmt);
 $category_stmt->close();
 
-$year_stmt = $conn->prepare('SELECT ay_id, label, semester FROM academic_years ORDER BY label DESC, FIELD(semester, \'1st\', \'2nd\', \'Summer\')');
+$year_stmt = $conn->prepare(
+    "SELECT DISTINCT ay.ay_id, ay.label, ay.semester
+     FROM academic_years ay
+     INNER JOIN research_projects rp ON rp.ay_id = ay.ay_id
+     WHERE ay.semester IN ('1st', '2nd')
+       AND ay.label <= COALESCE(
+           (SELECT MAX(current_ay.label) FROM academic_years current_ay WHERE current_ay.is_active = 1),
+           ay.label
+       )
+       AND rp.status IN ('completed', 'archived'){$deleted_filter}
+     ORDER BY ay.label DESC, FIELD(ay.semester, '1st', '2nd')"
+);
 $academic_years = archive_fetch_all($year_stmt);
 $year_stmt->close();
 
@@ -50,6 +61,8 @@ $query = "
         rp.project_id,
         rp.title,
         rp.abstract,
+        rp.research_area,
+        rp.status,
         rp.updated_at,
         rc.category_name,
         ay.label AS academic_year,
@@ -132,17 +145,31 @@ $is_logged_in = isLoggedIn();
         .archive-filter .form-control::placeholder { color: var(--text-muted); }
         .archive-filter select.form-control option { color: var(--text-dark); }
         .archive-reset { color: var(--primary); font-size: 0.85rem; font-weight: 600; padding-bottom: 12px; }
-        .archive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; }
-        .archive-card { display: flex; flex-direction: column; height: 100%; }
-        .archive-card .card-body { display: flex; flex-direction: column; flex: 1; }
+        .archive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; align-items: start; }
+        .archive-card { display: flex; flex-direction: column; min-width: 0; height: 100%; transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease; }
+        .archive-card:hover { transform: translateY(-3px); border-color: rgba(91, 30, 188, .28); box-shadow: 0 18px 42px rgba(45, 20, 84, .12); }
+        .archive-card.is-expanded { grid-column: 1 / -1; height: auto; transform: none; border-color: rgba(91, 30, 188, .34); box-shadow: 0 22px 52px rgba(45, 20, 84, .14); }
+        .archive-card .card-body { position: relative; display: flex; flex-direction: column; flex: 1; cursor: pointer; outline: none; }
+        .archive-card .card-body:focus-visible { box-shadow: inset 0 0 0 3px rgba(91, 30, 188, .22); }
         .archive-card-title { color: var(--primary-dark); font-size: 1.1rem; line-height: 1.35; margin-bottom: 12px; }
-        .archive-card-title a:hover { color: var(--secondary); }
         .archive-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
         .archive-badge { background: rgba(91, 30, 188, 0.1); color: var(--primary); border-radius: 50px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; }
         .archive-year { color: var(--text-muted); font-size: 0.78rem; }
         .archive-author { color: var(--text-light); font-size: 0.85rem; margin-bottom: 14px; }
         .archive-abstract { color: var(--text-light); font-size: 0.9rem; line-height: 1.65; margin-bottom: 20px; }
-        .archive-published { color: var(--text-muted); font-size: 0.78rem; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+        .archive-published { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text-muted); font-size: 0.78rem; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+        .archive-expand-label { color: var(--primary); font-weight: 700; white-space: nowrap; }
+        .archive-expand-label::after { content: '+'; display: inline-grid; width: 20px; height: 20px; margin-left: 7px; place-items: center; border-radius: 6px; background: rgba(91,30,188,.1); font-size: .9rem; transition: transform .2s ease, background .2s ease; }
+        .archive-card.is-expanded .archive-expand-label::after { content: '\2212'; transform: rotate(180deg); background: rgba(91,30,188,.16); }
+        .archive-card.is-expanded .archive-abstract { display: none; }
+        .archive-expanded[hidden] { display: none; }
+        .archive-expanded { margin: 4px 0 22px; padding: 24px; border: 1px solid rgba(91,30,188,.14); border-radius: 14px; background: linear-gradient(145deg, #fbf9ff, #fff); cursor: text; }
+        .archive-expanded h3 { margin: 0 0 11px; color: var(--primary-dark); font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+        .archive-full-abstract { width: 100%; max-width: none; margin: 0; color: var(--text-light); font-size: .94rem; line-height: 1.8; text-align: justify; text-align-last: left; white-space: pre-wrap; }
+        .archive-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 24px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; background: var(--border); }
+        .archive-detail { min-width: 0; padding: 15px 16px; background: #fff; }
+        .archive-detail span { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .archive-detail strong { display: block; color: var(--text-dark); font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
         .archive-empty { max-width: 700px; margin: 0 auto; text-align: center; padding: 56px 32px; }
         .archive-empty-icon { display: block; font-size: 2.5rem; margin-bottom: 12px; }
         @media (max-width: 1000px) {
@@ -153,7 +180,12 @@ $is_logged_in = isLoggedIn();
             .archive-hero .hero-container { grid-template-columns: 1fr; }
             .archive-visual { display: none; }
             .archive-filter .card-body, .archive-grid { grid-template-columns: 1fr; }
+            .archive-card.is-expanded { grid-column: auto; }
+            .archive-detail-grid { grid-template-columns: 1fr; }
             .archive-filter .btn, .archive-reset { width: 100%; text-align: center; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .archive-card, .archive-expand-label::after { transition: none; }
         }
     </style>
 </head>
@@ -181,7 +213,7 @@ $is_logged_in = isLoggedIn();
 
     <section class="hero archive-hero">
         <div class="hero-container">
-            <div class="hero-content">
+            <div class="hero-content hero-entrance">
                 <h1>Research <span class="highlight">Archive</span></h1>
                 <p>Browse completed and published research from EARIST students and faculty.</p>
                 <div class="hero-actions">
@@ -197,7 +229,7 @@ $is_logged_in = isLoggedIn();
         </div>
     </section>
 
-    <section class="section archive-section">
+    <section class="section archive-section" data-reveal>
         <div class="card archive-filter">
             <div class="card-header">
                 <div>
@@ -250,17 +282,30 @@ $is_logged_in = isLoggedIn();
                     $abstract_length = function_exists('mb_strlen') ? mb_strlen($abstract) : strlen($abstract);
                     $lead_name = trim(($project['lead_first_name'] ?? '') . ' ' . ($project['lead_last_name'] ?? ''));
                     $published_year = date('Y', strtotime($project['updated_at']));
+                    $detail_id = 'archive-details-' . (int) $project['project_id'];
                     ?>
-                    <article class="card archive-card">
-                        <div class="card-body">
-                            <h2 class="archive-card-title"><a href="#"> <?php echo archive_escape($project['title']); ?></a></h2>
+                    <article class="card archive-card" data-archive-card data-research-title="<?php echo archive_escape($project['title']); ?>">
+                        <div class="card-body" role="button" tabindex="0" aria-expanded="false" aria-controls="<?php echo archive_escape($detail_id); ?>" aria-label="Read full record for <?php echo archive_escape($project['title']); ?>">
+                            <h2 class="archive-card-title"><?php echo archive_escape($project['title']); ?></h2>
                             <div class="archive-meta">
                                 <span class="archive-badge"><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></span>
-                                <span class="archive-year"><?php echo archive_escape($project['academic_year'] ?: 'Academic year unavailable'); ?></span>
+                                <span class="archive-year"><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Academic year unavailable'); ?></span>
                             </div>
                             <p class="archive-author"><strong>Lead author:</strong> <?php echo archive_escape($lead_name ?: 'Author unavailable'); ?><?php if ((int) $project['co_member_count'] > 0): ?> + <?php echo archive_escape($project['co_member_count']); ?> co-author<?php echo (int) $project['co_member_count'] === 1 ? '' : 's'; ?><?php endif; ?></p>
                             <p class="archive-abstract"><?php echo archive_escape($abstract ? $abstract_preview . ($abstract_length > 150 ? '…' : '') : 'No abstract available.'); ?></p>
-                            <div class="archive-published">Year published: <?php echo archive_escape($published_year); ?></div>
+                            <div class="archive-expanded" id="<?php echo archive_escape($detail_id); ?>" hidden>
+                                <h3>Complete abstract</h3>
+                                <p class="archive-full-abstract"><?php echo archive_escape($abstract ?: 'No abstract available.'); ?></p>
+                                <div class="archive-detail-grid" aria-label="Research information">
+                                    <div class="archive-detail"><span>Research area</span><strong><?php echo archive_escape($project['research_area'] ?: 'Not specified'); ?></strong></div>
+                                    <div class="archive-detail"><span>Category</span><strong><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></strong></div>
+                                    <div class="archive-detail"><span>Academic period</span><strong><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Unavailable'); ?></strong></div>
+                                    <div class="archive-detail"><span>Lead author</span><strong><?php echo archive_escape($lead_name ?: 'Author unavailable'); ?></strong></div>
+                                    <div class="archive-detail"><span>Research team</span><strong><?php echo (int) $project['co_member_count'] > 0 ? archive_escape($project['co_member_count']) . ' co-author' . ((int) $project['co_member_count'] === 1 ? '' : 's') : 'Lead author only'; ?></strong></div>
+                                    <div class="archive-detail"><span>Repository status</span><strong><?php echo archive_escape(ucfirst((string) $project['status'])); ?></strong></div>
+                                </div>
+                            </div>
+                            <div class="archive-published"><span>Year published: <?php echo archive_escape($published_year); ?></span><span class="archive-expand-label">Read full record</span></div>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -301,5 +346,52 @@ $is_logged_in = isLoggedIn();
         </div>
         <div class="footer-bottom">© 2024 Research Management System. All rights reserved.</div>
     </footer>
+    <script>
+    (() => {
+        const cards = [...document.querySelectorAll('[data-archive-card]')];
+
+        function setExpanded(card, expanded) {
+            const body = card.querySelector('.card-body');
+            const details = card.querySelector('.archive-expanded');
+            const label = card.querySelector('.archive-expand-label');
+            if (!body || !details) return;
+
+            card.classList.toggle('is-expanded', expanded);
+            body.setAttribute('aria-expanded', String(expanded));
+            body.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Read'} full record for ${card.dataset.researchTitle}`);
+            details.hidden = !expanded;
+            if (label) label.textContent = expanded ? 'Close record' : 'Read full record';
+
+            if (expanded) {
+                window.requestAnimationFrame(() => {
+                    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
+                });
+            }
+        }
+
+        function toggleCard(card) {
+            const shouldExpand = !card.classList.contains('is-expanded');
+            cards.forEach((otherCard) => {
+                if (otherCard !== card) setExpanded(otherCard, false);
+            });
+            setExpanded(card, shouldExpand);
+        }
+
+        cards.forEach((card) => {
+            const body = card.querySelector('.card-body');
+            body.addEventListener('click', (event) => {
+                if (event.target.closest('.archive-expanded')) return;
+                toggleCard(card);
+            });
+            body.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                toggleCard(card);
+            });
+        });
+    })();
+    </script>
+<script src="../js/public-motion.js" defer></script>
 </body>
 </html>

@@ -59,10 +59,22 @@ renderFacultyShell($user, 'faculty-my-reviews', 'My CREC/EREC Reviews', 'Proposa
 ?>
 
 <?php if ($saved): ?>
-  <div class="alert alert-success" style="margin-bottom:16px;">Review submitted successfully. Research Staff has been notified.</div>
+  <div class="alert alert-success myrev-alert">Review submitted successfully. Research Staff has been notified.</div>
 <?php endif; ?>
 
-<div class="card">
+<section class="myrev-summary" aria-label="Evaluation summary">
+  <div class="myrev-summary-copy">
+    <span class="myrev-kicker">Institutional evaluation</span>
+    <h2><?php echo $pending_count > 0 ? 'Continue your assigned evaluations.' : 'Your evaluation queue is clear.'; ?></h2>
+    <p>Score CREC and EREC proposals using OVPREIS Form No. 3. Completed evaluations remain available for review and editing.</p>
+  </div>
+  <div class="myrev-metrics">
+    <div><strong><?php echo $pending_count; ?></strong><span>Pending</span></div>
+    <div><strong><?php echo count($reviews) - $pending_count; ?></strong><span>Completed</span></div>
+  </div>
+</section>
+
+<div class="card myrev-card">
   <div class="card-header">
     <div>
       <div class="card-title">Assigned Reviews</div>
@@ -74,8 +86,8 @@ renderFacultyShell($user, 'faculty-my-reviews', 'My CREC/EREC Reviews', 'Proposa
   <?php elseif (!$reviews): ?>
     <p>No CREC/EREC proposals are assigned to you yet. When Research Staff assigns you on the CREC Review page, the proposal appears here and you get a notification.</p>
   <?php else: ?>
-  <div class="table-responsive">
-    <table style="width:100%;border-collapse:collapse;">
+  <div class="table-responsive myrev-table-wrap">
+    <table class="myrev-table table-mobile-stack">
       <thead>
         <tr>
           <th style="text-align:left;padding:10px;border-bottom:2px solid #E5E7EB;">Research</th>
@@ -96,14 +108,14 @@ renderFacultyShell($user, 'faculty-my-reviews', 'My CREC/EREC Reviews', 'Proposa
           }
       ?>
         <tr>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;font-weight:500;"><?php echo myrev_se($r['title']); ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo myrev_se($r['student_name'] ?? '—'); ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo strtoupper(myrev_se($r['review_level'])); ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo myrev_se(ucwords(str_replace('_', ' ', (string) $r['status']))); ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $total === null ? '<em style="color:#64748B;">pending</em>' : '<strong>' . $total . '/80</strong>'; ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $r['recommendation'] ? ucfirst(myrev_se($r['recommendation'])) : '—'; ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo date('M d, Y', strtotime($r['assigned_at'])); ?></td>
-          <td style="padding:10px;border-bottom:1px solid #E5E7EB;"><a class="btn btn-primary btn-sm" href="faculty-score-review.php?id=<?php echo (int) $r['review_id']; ?>"><?php echo $total === null ? 'Score' : 'Edit'; ?></a></td>
+          <td data-label="Research" style="padding:10px;border-bottom:1px solid #E5E7EB;font-weight:500;"><?php echo myrev_se($r['title']); ?></td>
+          <td data-label="Student" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo myrev_se($r['student_name'] ?? '—'); ?></td>
+          <td data-label="Level" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo strtoupper(myrev_se($r['review_level'])); ?></td>
+          <td data-label="Project status" style="padding:10px;border-bottom:1px solid #E5E7EB;"><span class="myrev-status myrev-status--<?php echo myrev_se(str_replace('_', '-', strtolower((string) $r['status']))); ?>"><?php echo myrev_se(ucwords(str_replace('_', ' ', (string) $r['status']))); ?></span></td>
+          <td data-label="Score" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $total === null ? '<em style="color:#64748B;">pending</em>' : '<strong>' . $total . '/80</strong>'; ?></td>
+          <td data-label="Recommendation" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $r['recommendation'] ? '<span class="myrev-recommendation myrev-recommendation--' . myrev_se(strtolower((string) $r['recommendation'])) . '">' . ucfirst(myrev_se($r['recommendation'])) . '</span>' : '—'; ?></td>
+          <td data-label="Assigned" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo date('M d, Y', strtotime($r['assigned_at'])); ?></td>
+          <td data-label="Action" style="padding:10px;border-bottom:1px solid #E5E7EB;"><a class="btn btn-primary btn-sm" href="faculty-score-review.php?id=<?php echo (int) $r['review_id']; ?>"><?php echo $total === null ? 'Score' : 'Edit'; ?></a></td>
         </tr>
       <?php endforeach; ?>
       </tbody>

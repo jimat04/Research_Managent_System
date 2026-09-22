@@ -66,7 +66,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         <!-- HERO SECTION -->
         <section class="hero about-hero">
             <div class="about-hero-container">
-                <div class="about-hero-content">
+                <div class="about-hero-content hero-entrance">
                     <div class="section-tag" style="background: rgba(91,30,188,0.2); color: #c4a9ff; border: 1px solid rgba(196,169,255,0.3); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
                         📖 Institutional Overview
                     </div>
@@ -107,7 +107,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- ABOUT THE SYSTEM -->
-        <section class="section" style="background: #fff; padding: 70px 0;">
+        <section class="section" style="background: #fff; padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1000px; margin: 0 auto; padding: 0 20px; text-align: center;">
                 <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
                     About The Platform
@@ -118,7 +118,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- MISSION & VISION -->
-        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;">
+        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1150px; margin: 0 auto; padding: 0 20px; display: flex; flex-wrap: wrap; gap: 32px; justify-content: center;">
                 <div class="feature-card" style="flex: 1 1 340px; min-width: 280px; text-align: center; border-radius: 16px; padding: 36px 30px;">
                     <div class="feature-icon" style="margin: 0 auto 16px; font-size: 2.2rem;">🎯</div>
@@ -134,7 +134,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- KEY FEATURES -->
-        <section class="section" style="background: #fff; padding: 70px 0;">
+        <section class="section" style="background: #fff; padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
                 <div class="section-header" style="text-align: center; margin-bottom: 48px;">
                     <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
@@ -157,7 +157,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- WHO CAN USE THE SYSTEM -->
-        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;">
+        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
                 <div class="section-header" style="text-align: center; margin-bottom: 48px;">
                     <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
@@ -212,7 +212,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- BENEFITS -->
-        <section class="section" style="background: #fff; padding: 70px 0;">
+        <section class="section" style="background: #fff; padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
                 <div class="section-header" style="text-align: center; margin-bottom: 48px;">
                     <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
@@ -233,7 +233,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- EARIST RESEARCH MANUAL -->
-        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;">
+        <section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 70px 0;" data-reveal>
             <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
                 <div class="section-header" style="text-align: center; margin-bottom: 36px;">
                     <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
@@ -257,7 +257,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- STATISTICS -->
-        <section style="background: linear-gradient(135deg, #3D0F8A 0%, #5B1EBC 50%, #0F6CBD 100%); padding: 70px 40px; color: white;">
+        <section style="background: linear-gradient(135deg, #3D0F8A 0%, #5B1EBC 50%, #0F6CBD 100%); padding: 70px 40px; color: white;" data-reveal>
             <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 32px; text-align: center;">
                 <div>
                     <div style="font-family: 'Poppins', sans-serif; font-size: 2.5rem; font-weight: 800;"> <?php echo htmlspecialchars((string) $stat_total_research, ENT_QUOTES, 'UTF-8'); ?><span style="font-size:0.5em;">+</span></div>
@@ -291,7 +291,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
         </section>
 
         <!-- CALL TO ACTION -->
-        <section class="section" style="background: #fff; padding: 80px 0;">
+        <section class="section" style="background: #fff; padding: 80px 0;" data-reveal>
             <div class="container" style="max-width: 900px; margin: 0 auto; text-align: center; padding: 0 20px;">
                 <div class="section-tag" style="background: rgba(91,30,188,0.08); color: var(--primary); border: 1px solid rgba(91,30,188,0.2); padding: 4px 16px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: inline-block;">
                     🚀 Get Started
@@ -346,6 +346,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                 © 2024 Research Management System. All rights reserved.
             </div>
         </footer>
+<script src="../js/public-motion.js" defer></script>
 </body>
 </html>
 

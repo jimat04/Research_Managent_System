@@ -52,12 +52,12 @@ function sdef_type_label(string $type): string {
 
 function sdef_statusBadge(string $status): array {
     $map = [
-        'scheduled'    => ['status-review',   'Scheduled'],
-        'rescheduled'  => ['status-pending',  'Rescheduled'],
-        'done'         => ['status-approved', 'Done'],
-        'cancelled'    => ['status-draft',    'Cancelled'],
+        'scheduled'    => ['status-scheduled',   'Scheduled'],
+        'rescheduled'  => ['status-rescheduled', 'Rescheduled'],
+        'done'         => ['status-done',         'Done'],
+        'cancelled'    => ['status-cancelled',    'Cancelled'],
     ];
-    return $map[$status] ?? ['status-draft', ucwords(str_replace('_', ' ', $status))];
+    return $map[$status] ?? ['status-cancelled', ucwords(str_replace('_', ' ', $status))];
 }
 
 function sdef_format_dt(?string $dt): string {
@@ -580,6 +580,10 @@ if ($sdef_has_table) {
 }
 
 // ── project dropdown (active projects, search-friendly) ──────────────────
+$visible_defenses = count($rows);
+$filter_labels = ['upcoming' => 'Upcoming defenses', 'past' => 'Past defenses', 'all' => 'Complete defense record'];
+$current_filter_label = $filter_labels[$filter] ?? 'Defense schedule';
+
 $active_projects = [];
 if ($sdef_has_table) {
     $sql = "
@@ -601,7 +605,7 @@ if ($sdef_has_table) {
 }
 
 $page_title = 'Defense Schedule';
-$page_subtitle = 'Schedule proposal, pre-oral, and final defenses for active research projects.';
+$page_subtitle = 'Coordinate proposal, pre-oral, and final defense schedules.';
 
 if ($role === 'admin') {
     renderAdminShell($user, 'staff-defense.php', $page_title, $page_subtitle);
@@ -861,12 +865,58 @@ if ($role === 'admin') {
     td, th { padding: 12px; font-size: 13px; }
   }
 </style>
+<style>
+  .defense-workspace { --ink:#182033; --gold:#d3a348; --line:#dfe5ed; --muted:#667085; max-width:1480px; margin:0 auto; color:var(--ink); }
+  .defense-hero { position:relative; isolation:isolate; display:grid; grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr); gap:48px; min-height:340px; padding:52px 56px 60px; overflow:hidden; border-radius:24px 24px 8px 8px; background:radial-gradient(circle at 84% 12%,rgba(211,163,72,.2),transparent 28%),linear-gradient(135deg,#172033 0%,#1d2940 58%,#263149 100%); color:#fff; box-shadow:0 26px 60px rgba(24,32,51,.17); }
+  .defense-hero::after { content:''; position:absolute; inset:0; z-index:-1; opacity:.16; background-image:repeating-linear-gradient(90deg,transparent 0,transparent 67px,rgba(255,255,255,.1) 68px); pointer-events:none; }
+  .defense-kicker,.board-eyebrow,.metric-index { font:700 11px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.14em; text-transform:uppercase; }
+  .defense-kicker { margin-bottom:18px; color:#e8bd67; }
+  .defense-hero h2 { max-width:780px; margin:0; font-size:clamp(38px,4.6vw,66px); line-height:.98; letter-spacing:-.055em; text-wrap:balance; }
+  .defense-hero-copy>p { max-width:620px; margin:24px 0 0; color:#bdc7d7; font-size:15px; line-height:1.75; }
+  .hero-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
+  .hero-note { display:inline-flex; align-items:center; gap:8px; margin-top:18px; color:#9eabbf; font-size:12px; }
+  .hero-note::before { content:''; width:7px; height:7px; border-radius:50%; background:#70bd91; box-shadow:0 0 0 5px rgba(112,189,145,.12); }
+  .defense-snapshot { align-self:end; display:grid; gap:2px; }
+  .snapshot-row { display:grid; grid-template-columns:42px 1fr auto; align-items:center; gap:12px; padding:14px 16px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.065); }
+  .snapshot-row:first-child { border-radius:14px 14px 5px 5px; }.snapshot-row:last-child{border-radius:5px 5px 14px 14px}
+  .snapshot-code { color:#e8bd67; font:700 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace; }.snapshot-label{color:#d5dce8;font-size:13px}.snapshot-value{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+
+  .defense-metrics { position:relative; z-index:2; display:grid; grid-template-columns:1.2fr repeat(3,1fr); gap:2px; margin:-22px 22px 0; }
+  .defense-metric { position:relative; min-height:142px; padding:24px 24px 21px; overflow:hidden; border:1px solid #e3e8ef; background:#fff; }
+  .defense-metric:first-child{border-radius:16px 5px 5px 16px}.defense-metric:last-child{border-radius:5px 16px 16px 5px}.defense-metric::after{content:'';position:absolute;right:-20px;bottom:-32px;width:76px;height:76px;border:17px solid var(--metric-accent,#64748b);border-radius:50%;opacity:.08}
+  .metric-week{--metric-accent:#8b6528;background:#fcfaf5}.metric-scheduled{--metric-accent:#315b8c}.metric-done{--metric-accent:#347451}.metric-record{--metric-accent:#705487}.metric-index{margin-bottom:24px;color:var(--metric-accent)}.metric-value{font-size:34px;font-weight:720;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.metric-label{margin-top:8px;color:var(--muted);font-size:13px;font-weight:600}
+
+  .schedule-board { margin-top:38px; overflow:hidden; border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 14px 38px rgba(31,42,63,.07); }
+  .board-header { display:flex; justify-content:space-between; align-items:end; gap:24px; padding:30px 32px 24px; }
+  .board-eyebrow{margin-bottom:9px;color:#9a7228}.board-title{margin:0;color:var(--ink);font-size:25px;line-height:1.1;letter-spacing:-.025em}.board-copy{max-width:680px;margin:9px 0 0;color:var(--muted);font-size:13px;line-height:1.6}
+  .board-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 32px; border-top:1px solid #edf0f4; border-bottom:1px solid #e5e9ef; background:#f5f7fa; }
+  .defense-workspace .filter-bar { display:flex; gap:3px; width:max-content; margin:0; padding:3px; border:1px solid #e1e6ec; border-radius:9px; background:#eaedf1; }
+  .defense-workspace .filter-tab { min-height:36px; padding:9px 14px; border-radius:6px; color:#667085; font-size:12px; font-weight:650; text-decoration:none; transition:background .2s ease,color .2s ease,box-shadow .2s ease; }
+  .defense-workspace .filter-tab:hover{color:#182033}.defense-workspace .filter-tab.active{background:#fff;color:#182033;box-shadow:0 1px 4px rgba(24,32,51,.09)}.defense-workspace .filter-tab .count{margin-left:5px;padding:2px 6px;border-radius:5px;background:#dce1e7;color:#4b5565;font-size:10px}.defense-workspace .filter-tab.active .count{background:#f4e7c8;color:#79591f}
+
+  .defense-workspace .btn,.modal .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:9px 16px; border:1px solid transparent; border-radius:8px; font-family:inherit; font-size:13px; font-weight:650; line-height:1.2; text-decoration:none; cursor:pointer; transition:transform .2s ease,border-color .2s ease,background .2s ease,color .2s ease,box-shadow .2s ease; }
+  .defense-workspace .btn:hover,.modal .btn:hover{transform:translateY(-1px)}.defense-workspace .btn:active,.modal .btn:active{transform:translateY(0) scale(.98)}.defense-workspace .btn:focus-visible,.modal .btn:focus-visible{outline:3px solid rgba(211,163,72,.28);outline-offset:2px}
+  .defense-workspace .btn-primary,.modal .btn-primary{border-color:#d3a348;background:#d3a348;color:#182033;box-shadow:0 8px 20px rgba(211,163,72,.16)}.defense-workspace .btn-primary:hover,.modal .btn-primary:hover{border-color:#dfb45f;background:#dfb45f}.defense-workspace .btn-secondary,.modal .btn-secondary{border-color:#dce2e9;background:#fff;color:#344054}.defense-workspace .btn-secondary:hover,.modal .btn-secondary:hover{border-color:#b9c2ce;background:#f7f8fa}.defense-workspace .btn-success{border-color:#cce4d6;background:#f3faf6;color:#27704a}.defense-workspace .btn-success:hover{border-color:#91c5a7;background:#e7f5ed}.defense-workspace .btn-danger,.modal .btn-danger{border-color:#f0d4cc;background:#fff8f6;color:#a7432f}.defense-workspace .btn-danger:hover,.modal .btn-danger:hover{border-color:#d99a8b;background:#faebe7}.defense-workspace .btn-warn,.modal .btn-warn{border-color:#ead1c4;background:#fff5f0;color:#9f4c2d}.defense-workspace .btn-warn:hover,.modal .btn-warn:hover{border-color:#d89c83;background:#fae9e1}.defense-workspace .btn-sm{min-height:34px;padding:7px 11px;font-size:12px}.hero-action{min-height:45px!important;padding-inline:18px!important}.hero-action-primary{background:#d3a348!important;color:#182033!important}.hero-action-secondary{border-color:rgba(255,255,255,.18)!important;background:rgba(255,255,255,.055)!important;color:#fff!important}.hero-action-secondary:hover{border-color:#e8bd67!important;background:rgba(255,255,255,.1)!important}
+
+  .defense-workspace .table-wrap { overflow-x:auto; border:0; border-radius:0; }.defense-table{width:100%;min-width:1120px;border-collapse:collapse}.defense-table thead{background:#fafbfc}.defense-table th{padding:12px 16px;border:0;color:#7a8494;font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.11em;text-align:left;text-transform:uppercase}.defense-table th:first-child,.defense-table td:first-child{padding-left:32px}.defense-table th:last-child,.defense-table td:last-child{padding-right:32px}.defense-table td{padding:18px 16px;border-top:1px solid #edf0f4;color:#475467;font-size:13px;vertical-align:middle}.defense-table tbody tr{transition:background .2s ease}.defense-table tbody tr:hover{background:#fbfaf7}
+  .defense-workspace .badge-type,.defense-workspace .badge-status{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid transparent;border-radius:6px;font-size:11px;font-weight:680;white-space:nowrap}.defense-workspace .badge-status::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.65}.defense-workspace .badge-type{border-color:#d8e5f0;background:#edf4fa;color:#315b8c;letter-spacing:.04em}.defense-workspace .badge-type.pre_oral{border-color:#e7dcec;background:#f5f0f7;color:#705487}.defense-workspace .badge-type.final{border-color:#eadaba;background:#faf4e8;color:#8b6528}.defense-workspace .status-scheduled{border-color:#d8e5f0;background:#edf4fa;color:#315b8c}.defense-workspace .status-rescheduled{border-color:#eadaba;background:#faf4e8;color:#8b6528}.defense-workspace .status-done{border-color:#d4ebdc;background:#edf8f1;color:#347451}.defense-workspace .status-cancelled{border-color:#ecd6d1;background:#faf0ed;color:#9b4f3c}
+  .defense-title{display:block;max-width:410px;color:#20293b;font-size:14px;font-weight:680;line-height:1.4;text-decoration:none;text-wrap:pretty}.defense-title:hover{color:#8a6424}.defense-ref{margin-top:5px;color:#8a94a3;font:600 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace}.venue{margin-top:7px;color:#596579;font-size:12px}.venue::before{content:'@';margin-right:5px;color:#9a7228;font-weight:700}.defense-workspace .remarks{max-width:410px;margin-top:7px;color:#7a8494;line-height:1.45}.owner-name{color:#20293b;font-weight:650}.owner-id{margin-top:4px;color:#8490a1;font:600 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace}.schedule-date{color:#20293b;font-weight:650;white-space:nowrap;font-variant-numeric:tabular-nums}.defense-workspace .meta{color:#8490a1}.defense-workspace .row-actions{min-width:285px}.no-action{color:#8b95a5;font-size:12px;font-style:italic}
+  .defense-empty{padding:56px 24px;text-align:center}.empty-mark{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 14px;border:1px solid #e3d4b4;border-radius:14px;background:#fbf6eb;color:#8b6528;font:700 14px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.defense-empty strong{display:block;color:#344054;font-size:16px}.defense-empty p{max-width:520px;margin:7px auto 0;color:#8490a1;font-size:13px;line-height:1.55}.defense-workspace .alert{display:flex;align-items:center;gap:10px;margin:0 0 22px;padding:14px 16px;border-radius:10px}.alert-mark{display:grid;place-items:center;width:25px;height:25px;border-radius:7px;background:rgba(255,255,255,.65);font-weight:800}
+
+  .modal{z-index:1000;padding:24px;background:rgba(12,18,29,.68);backdrop-filter:blur(7px)}.modal-content{max-height:calc(100dvh - 48px);border:1px solid rgba(255,255,255,.6);border-radius:18px;box-shadow:0 30px 80px rgba(9,15,27,.3);animation:modal-rise .25s cubic-bezier(.2,.8,.2,1) both}.modal-header{position:relative;padding:26px 30px 23px;overflow:hidden;border:0;background:#182033;color:#fff}.modal-header::after{content:'';position:absolute;right:-42px;top:-72px;width:170px;height:170px;border:30px solid rgba(211,163,72,.17);border-radius:50%}.modal-header h3{position:relative;z-index:1;color:#fff;font-size:23px;letter-spacing:-.025em}.modal-close{position:relative;z-index:2;color:#fff}.modal-close:hover{background:rgba(255,255,255,.1)}.modal-body{padding:26px 30px}.modal-footer{padding:20px 30px 26px}.modal-footer .btn-secondary{border:2px solid #182033;background:#fff;color:#000;font-weight:700}.modal-footer .btn-secondary:hover{background:#182033;color:#fff}.modal .form-label,.modal .form-help{color:#000!important}.modal .form-help{font-weight:600}.modal .form-control{min-height:44px;border-color:#d9e0e8;border-radius:9px;color:#000!important}.modal .form-control:focus{border-color:#bc8e37;box-shadow:0 0 0 3px rgba(211,163,72,.16)}
+  @keyframes modal-rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+  @media(max-width:1040px){.defense-hero{grid-template-columns:1fr;gap:32px}.defense-snapshot{grid-template-columns:repeat(3,1fr)}.snapshot-row{grid-template-columns:34px 1fr}.snapshot-value{grid-column:2}}
+  @media(max-width:768px){.defense-hero{min-height:0;padding:30px 24px 50px;border-radius:18px 18px 7px 7px}.defense-hero h2{font-size:38px}.defense-snapshot{grid-template-columns:1fr}.snapshot-row{grid-template-columns:36px 1fr auto}.snapshot-value{grid-column:auto}.defense-metrics{grid-template-columns:repeat(4,minmax(150px,1fr));margin:-18px 12px 0;overflow-x:auto}.defense-metric{min-width:150px}.board-header{align-items:stretch;padding:25px 20px 20px;flex-direction:column}.board-toolbar{align-items:stretch;padding:14px 20px 18px;flex-direction:column}.defense-workspace .filter-bar{width:100%;overflow-x:auto}.defense-workspace .filter-tab{flex:1;text-align:center;white-space:nowrap}.board-toolbar>.btn{width:100%}.defense-table{min-width:0}.defense-table thead{display:none}.defense-table tbody{display:grid;gap:12px;padding:16px;background:#f6f8fa}.defense-table tbody tr{display:block;overflow:hidden;border:1px solid #e0e5eb;border-radius:12px;background:#fff}.defense-table tbody td{display:grid;grid-template-columns:92px minmax(0,1fr);width:100%;padding:12px 14px;border-top:1px solid #edf0f4;text-align:left;overflow-wrap:anywhere}.defense-table tbody td:first-child{padding:16px 14px;border-top:0}.defense-table tbody td:last-child{padding:14px}.defense-table tbody td::before{content:attr(data-label);margin:2px 12px 0 0;color:#8a94a3;font:700 9px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase}.defense-table tbody td:first-child::before{display:none}.defense-workspace .row-actions{min-width:0}.row-actions .btn,.row-actions form{flex:1 1 auto}.row-actions form .btn{width:100%}.modal{padding:12px}.modal-content{max-height:calc(100dvh - 24px)}.modal-header,.modal-body,.modal-footer{padding-left:22px;padding-right:22px}}
+  @media(prefers-reduced-motion:reduce){.defense-workspace .btn,.defense-table tbody tr{transition:none}.modal-content{animation:none}}
+</style>
+
+<div class="defense-workspace">
 
 <?php if (isset($_SESSION['module_success'])): ?>
-  <div class="alert alert-success">✓ <?php echo sdef_se($_SESSION['module_success']); unset($_SESSION['module_success']); ?></div>
+  <div class="alert alert-success"><span class="alert-mark" aria-hidden="true">&#10003;</span><?php echo sdef_se($_SESSION['module_success']); unset($_SESSION['module_success']); ?></div>
 <?php endif; ?>
 <?php if (isset($_SESSION['module_error'])): ?>
-  <div class="alert alert-error">✕ <?php echo sdef_se($_SESSION['module_error']); unset($_SESSION['module_error']); ?></div>
+  <div class="alert alert-error"><span class="alert-mark" aria-hidden="true">&#215;</span><?php echo sdef_se($_SESSION['module_error']); unset($_SESSION['module_error']); ?></div>
 <?php endif; ?>
 
 <?php if (!$sdef_has_table): ?>
@@ -875,47 +925,57 @@ if ($role === 'admin') {
   </div>
 <?php endif; ?>
 
-<!-- Stat row -->
-<div class="stat-row">
-  <div class="stat-card upcoming">
-    <div class="icon">⏰</div>
+<section class="defense-hero" aria-labelledby="defense-command-title">
+  <div class="defense-hero-copy">
+    <div class="defense-kicker">Defense operations &middot; Institute calendar</div>
+    <h2 id="defense-command-title">Make every defense day feel deliberate.</h2>
+    <p>Coordinate proposal, pre-oral, and final defenses with a clear view of timing, venue, project ownership, and schedule status.</p>
+    <div class="hero-actions">
+      <button type="button" class="btn hero-action hero-action-primary" onclick="openScheduleModal()" <?php echo !$sdef_has_table ? 'disabled' : ''; ?>>Schedule a defense <span aria-hidden="true">&#8594;</span></button>
+      <a class="btn hero-action hero-action-secondary" href="#defense-board">Open schedule board</a>
+    </div>
+    <div class="hero-note">All affected proponents, members, and advisers receive schedule updates.</div>
+  </div>
+
+  <div class="defense-snapshot" aria-label="Defense schedule snapshot">
+    <div class="snapshot-row"><span class="snapshot-code">01</span><span class="snapshot-label">Next seven days</span><strong class="snapshot-value"><?php echo sdef_se($stat_upcoming_week); ?></strong></div>
+    <div class="snapshot-row"><span class="snapshot-code">02</span><span class="snapshot-label">Active schedule</span><strong class="snapshot-value"><?php echo sdef_se($stat_total_sched); ?></strong></div>
+    <div class="snapshot-row"><span class="snapshot-code">03</span><span class="snapshot-label">Completed this term</span><strong class="snapshot-value"><?php echo sdef_se($stat_done_term); ?></strong></div>
+  </div>
+</section>
+
+<section class="defense-metrics" aria-label="Defense schedule totals">
+  <article class="defense-metric metric-week"><div class="metric-index">Immediate</div><div class="metric-value"><?php echo sdef_se($stat_upcoming_week); ?></div><div class="metric-label">Due this week</div></article>
+  <article class="defense-metric metric-scheduled"><div class="metric-index">Calendar</div><div class="metric-value"><?php echo sdef_se($stat_total_sched); ?></div><div class="metric-label">Scheduled ahead</div></article>
+  <article class="defense-metric metric-done"><div class="metric-index">Term record</div><div class="metric-value"><?php echo sdef_se($stat_done_term); ?></div><div class="metric-label">Completed this term</div></article>
+  <article class="defense-metric metric-record"><div class="metric-index">History</div><div class="metric-value"><?php echo sdef_se($stat_total_overall); ?></div><div class="metric-label">All defense records</div></article>
+</section>
+
+<section class="schedule-board" id="defense-board" aria-labelledby="defense-board-title">
+  <div class="board-header">
     <div>
-      <div class="num"><?php echo sdef_se($stat_upcoming_week); ?></div>
-      <div class="lbl">Upcoming This Week</div>
+      <div class="board-eyebrow">Schedule board</div>
+      <h3 class="board-title" id="defense-board-title"><?php echo sdef_se($current_filter_label); ?></h3>
+      <p class="board-copy"><?php echo sdef_se($visible_defenses); ?> defense record<?php echo $visible_defenses === 1 ? '' : 's'; ?> in this view. Manage active schedules or review the completed record.</p>
     </div>
   </div>
-  <div class="stat-card scheduled">
-    <div class="icon">🗓️</div>
-    <div>
-      <div class="num"><?php echo sdef_se($stat_total_sched); ?></div>
-      <div class="lbl">Total Scheduled</div>
-    </div>
-  </div>
-  <div class="stat-card done">
-    <div class="icon">✅</div>
-    <div>
-      <div class="num"><?php echo sdef_se($stat_done_term); ?></div>
-      <div class="lbl">Completed This Term</div>
-    </div>
-  </div>
-</div>
 
 <!-- Toolbar -->
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;">
+<div class="board-toolbar">
   <div class="filter-bar">
     <a class="filter-tab <?php echo $filter === 'upcoming' ? 'active' : ''; ?>"
-       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=upcoming">
+       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=upcoming#defense-board">
       Upcoming
       <?php if ($stat_total_sched > 0): ?>
         <span class="count"><?php echo sdef_se($stat_total_sched); ?></span>
       <?php endif; ?>
     </a>
     <a class="filter-tab <?php echo $filter === 'past' ? 'active' : ''; ?>"
-       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=past">
+       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=past#defense-board">
       Past
     </a>
     <a class="filter-tab <?php echo $filter === 'all' ? 'active' : ''; ?>"
-       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=all">
+       href="<?php echo SITE_URL; ?>pages/staff/staff-defense.php?filter=all#defense-board">
       All
       <?php if ($stat_total_overall > 0): ?>
         <span class="count"><?php echo sdef_se($stat_total_overall); ?></span>
@@ -923,35 +983,33 @@ if ($role === 'admin') {
     </a>
   </div>
 
-  <button type="button" class="btn btn-primary" onclick="openScheduleModal()">
-    + Schedule Defense
+  <button type="button" class="btn btn-primary" onclick="openScheduleModal()"<?php echo !$sdef_has_table ? ' disabled' : ''; ?>>
+    Schedule defense
   </button>
 </div>
 
 <!-- List -->
-<div class="card">
+<div class="defense-list">
   <?php if (!$sdef_has_table): ?>
-    <div class="empty-state">
-      <div class="empty-state-icon">🗓️</div>
-      <p>Defense scheduling is not available.</p>
+    <div class="defense-empty">
+      <div class="empty-mark" aria-hidden="true">N/A</div>
+      <strong>Defense scheduling is unavailable</strong>
     </div>
   <?php elseif (empty($rows)): ?>
-    <div class="empty-state">
-      <div class="empty-state-icon">📭</div>
+    <div class="defense-empty">
+      <div class="empty-mark" aria-hidden="true">00</div>
       <?php if ($filter === 'upcoming'): ?>
-        <p>No upcoming defenses.</p>
-        <p style="font-size: 13px; margin-top: 8px; color: #94A3B8;">
-          Click <strong>+ Schedule Defense</strong> to add a proposal, pre-oral, or final defense.
-        </p>
+        <strong>No upcoming defenses</strong>
+        <p>Schedule a proposal, pre-oral, or final defense when the next project is ready.</p>
       <?php elseif ($filter === 'past'): ?>
-        <p>No past or completed defenses yet.</p>
+        <strong>No past defenses yet</strong>
       <?php else: ?>
-        <p>No defenses scheduled yet.</p>
+        <strong>No defense records yet</strong>
       <?php endif; ?>
     </div>
   <?php else: ?>
     <div class="table-wrap">
-      <table>
+      <table class="defense-table">
         <thead>
           <tr>
             <th style="width: 150px;">Type</th>
@@ -977,60 +1035,60 @@ if ($role === 'admin') {
 
             [$b_class, $b_label] = sdef_statusBadge($status);
             $is_active  = in_array($status, ['scheduled', 'rescheduled'], true);
-            $is_terminal = in_array($status, ['done', 'cancelled'], true);
             $type_class = $type;
           ?>
             <tr>
-              <td>
+              <td data-label="Type">
                 <span class="badge-type <?php echo sdef_se($type_class); ?>"><?php echo sdef_se(sdef_type_label($type)); ?></span>
               </td>
-              <td style="max-width: 320px;">
+              <td data-label="Project">
                 <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo (int) $proj_id; ?>"
-                   style="color: #111827; font-weight: 600; text-decoration: none;">
+                   class="defense-title">
                   <?php echo sdef_se($project_title); ?>
                 </a>
+                <div class="defense-ref">PROJECT #<?php echo (int) $proj_id; ?></div>
                 <?php if ($venue !== ''): ?>
-                  <div class="meta">📍 <?php echo sdef_se($venue); ?></div>
+                  <div class="venue"><?php echo sdef_se($venue); ?></div>
                 <?php endif; ?>
                 <?php if ($remarks !== ''): ?>
-                  <div class="remarks"><?php echo sdef_se(mb_substr($remarks, 0, 220) . (mb_strlen($remarks) > 220 ? '…' : '')); ?></div>
+                  <div class="remarks"><?php echo sdef_se(mb_substr($remarks, 0, 220) . (mb_strlen($remarks) > 220 ? '...' : '')); ?></div>
                 <?php endif; ?>
               </td>
-              <td>
-                <div style="font-weight: 500; color: #111827;"><?php echo sdef_se($owner_name !== '' ? $owner_name : '—'); ?></div>
+              <td data-label="Proponent">
+                <div class="owner-name"><?php echo sdef_se($owner_name !== '' ? $owner_name : '—'); ?></div>
                 <?php if ($owner_sid !== ''): ?>
-                  <div style="font-size: 12px; color: #64748B;">🎒 <?php echo sdef_se($owner_sid); ?></div>
+                  <div class="owner-id"><?php echo sdef_se($owner_sid); ?></div>
                 <?php endif; ?>
               </td>
-              <td style="font-size: 13px; color: #111827; white-space: nowrap;">
-                <?php echo sdef_se(sdef_format_dt($sched_dt)); ?>
+              <td data-label="Schedule">
+                <div class="schedule-date"><?php echo sdef_se(sdef_format_dt($sched_dt)); ?></div>
                 <?php if ($is_active): ?>
                   <div class="meta"><?php echo sdef_se(sdef_relative_time($sched_dt)); ?></div>
                 <?php endif; ?>
               </td>
-              <td>
+              <td data-label="Status">
                 <span class="badge-status <?php echo sdef_se($b_class); ?>"><?php echo sdef_se($b_label); ?></span>
               </td>
-              <td>
+              <td data-label="Actions">
                 <?php if ($is_active): ?>
                   <div class="row-actions">
-                    <form method="POST" style="display: inline;">
+                    <form method="POST">
                       <?php echo csrfField(); ?>
                       <input type="hidden" name="action" value="mark_done">
                       <input type="hidden" name="defense_id" value="<?php echo (int) $defense_id; ?>">
-                      <button type="submit" class="btn btn-success btn-sm" title="Mark this defense as completed">✓ Done</button>
+                      <button type="submit" class="btn btn-success btn-sm" title="Mark this defense as completed">Mark done</button>
                     </form>
                     <button type="button" class="btn btn-warn btn-sm"
-                            onclick="openRescheduleModal(<?php echo (int) $defense_id; ?>, '<?php echo sdef_se(addslashes(sdef_type_label($type))); ?>', '<?php echo sdef_se(addslashes(sdef_format_dt($sched_dt))); ?>')">
-                      ↻ Reschedule
+                            onclick='openRescheduleModal(<?php echo (int) $defense_id; ?>, <?php echo json_encode(sdef_type_label($type), JSON_HEX_APOS | JSON_HEX_QUOT); ?>, <?php echo json_encode(sdef_format_dt($sched_dt), JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>
+                      Reschedule
                     </button>
                     <button type="button" class="btn btn-danger btn-sm"
-                            onclick="openCancelModal(<?php echo (int) $defense_id; ?>, '<?php echo sdef_se(addslashes(sdef_type_label($type))); ?>')">
-                      ✕ Cancel
+                            onclick='openCancelModal(<?php echo (int) $defense_id; ?>, <?php echo json_encode(sdef_type_label($type), JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>
+                      Cancel
                     </button>
                   </div>
                 <?php else: ?>
-                  <span style="font-size: 12px; color: #94A3B8;">No further action</span>
+                  <span class="no-action">No further action</span>
                 <?php endif; ?>
               </td>
             </tr>
@@ -1040,17 +1098,18 @@ if ($role === 'admin') {
     </div>
   <?php endif; ?>
 </div>
+</section>
 
 <!-- Schedule modal -->
-<div id="scheduleModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
-  <div class="modal-content">
+<div id="scheduleModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="scheduleModalTitle">
+  <div class="modal-content" tabindex="-1">
     <form method="POST" id="scheduleForm">
       <?php echo csrfField(); ?>
       <input type="hidden" name="action" value="schedule">
 
       <div class="modal-header">
-        <h3 id="scheduleModalTitle">🗓️ Schedule Defense</h3>
-        <button type="button" class="modal-close" onclick="closeScheduleModal()" aria-label="Close">×</button>
+        <h3 id="scheduleModalTitle">Schedule a defense</h3>
+        <button type="button" class="modal-close" onclick="closeScheduleModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -1093,7 +1152,7 @@ if ($role === 'admin') {
         <div class="form-group" style="margin-bottom: 0;">
           <label class="form-label" for="remarks">Remarks</label>
           <textarea id="remarks" name="remarks" class="form-control" rows="3"
-                    placeholder="Optional notes (panel, instructions, special accommodations)…"></textarea>
+                    placeholder="Optional notes (panel, instructions, special accommodations)..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -1105,16 +1164,16 @@ if ($role === 'admin') {
 </div>
 
 <!-- Cancel modal -->
-<div id="cancelModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle">
-  <div class="modal-content">
+<div id="cancelModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="cancelModalTitle">
+  <div class="modal-content" tabindex="-1">
     <form method="POST" id="cancelForm">
       <?php echo csrfField(); ?>
       <input type="hidden" name="action" value="cancel">
       <input type="hidden" name="defense_id" id="cancel_defense_id" value="">
 
       <div class="modal-header">
-        <h3 id="cancelModalTitle">✕ Cancel Defense</h3>
-        <button type="button" class="modal-close" onclick="closeCancelModal()" aria-label="Close">×</button>
+        <h3 id="cancelModalTitle">Cancel defense</h3>
+        <button type="button" class="modal-close" onclick="closeCancelModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <p style="margin: 0 0 16px; font-size: 14px; color: #64748B;">
@@ -1124,7 +1183,7 @@ if ($role === 'admin') {
           <label class="form-label" for="cancel_reason">Reason <span style="color: #EF4444;">*</span></label>
           <textarea id="cancel_reason" name="reason" class="form-control" rows="3" minlength="5" required
                     placeholder="Why is this defense being cancelled? (min. 5 characters)"></textarea>
-          <span class="form-help">The reason will be saved to the remarks and sent as a notification to the student and adviser.</span>
+          <span class="form-help">The reason will be saved to the remarks and sent as a notification to the proponent and adviser.</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -1136,16 +1195,16 @@ if ($role === 'admin') {
 </div>
 
 <!-- Reschedule modal -->
-<div id="rescheduleModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
-  <div class="modal-content">
+<div id="rescheduleModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="rescheduleModalTitle">
+  <div class="modal-content" tabindex="-1">
     <form method="POST" id="rescheduleForm">
       <?php echo csrfField(); ?>
       <input type="hidden" name="action" value="reschedule">
       <input type="hidden" name="defense_id" id="resched_defense_id" value="">
 
       <div class="modal-header">
-        <h3 id="rescheduleModalTitle">↻ Reschedule Defense</h3>
-        <button type="button" class="modal-close" onclick="closeRescheduleModal()" aria-label="Close">×</button>
+        <h3 id="rescheduleModalTitle">Reschedule defense</h3>
+        <button type="button" class="modal-close" onclick="closeRescheduleModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <p style="margin: 0 0 16px; font-size: 14px; color: #64748B;">
@@ -1172,6 +1231,23 @@ if ($role === 'admin') {
 </div>
 
 <script>
+  let lastFocusedElement = null;
+
+  function showDefenseModal(modal, focusTarget) {
+    lastFocusedElement = document.activeElement;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => focusTarget.focus(), 50);
+  }
+
+  function hideDefenseModal(modal) {
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (lastFocusedElement) lastFocusedElement.focus();
+  }
+
   // Schedule modal
   const scheduleModal   = document.getElementById('scheduleModal');
   const scheduleForm    = document.getElementById('scheduleForm');
@@ -1183,10 +1259,9 @@ if ($role === 'admin') {
 
   function openScheduleModal() {
     scheduleForm.reset();
-    scheduleModal.style.display = 'flex';
-    setTimeout(() => scheduleProject.focus(), 50);
+    showDefenseModal(scheduleModal, scheduleProject);
   }
-  function closeScheduleModal() { scheduleModal.style.display = 'none'; }
+  function closeScheduleModal() { hideDefenseModal(scheduleModal); }
 
   // Cancel modal
   const cancelModal  = document.getElementById('cancelModal');
@@ -1200,10 +1275,9 @@ if ($role === 'admin') {
     cancelLabel.textContent = label;
     cancelReason.value      = '';
     cancelReason.classList.remove('invalid');
-    cancelModal.style.display = 'flex';
-    setTimeout(() => cancelReason.focus(), 50);
+    showDefenseModal(cancelModal, cancelReason);
   }
-  function closeCancelModal() { cancelModal.style.display = 'none'; }
+  function closeCancelModal() { hideDefenseModal(cancelModal); }
 
   // Reschedule modal
   const reschedModal    = document.getElementById('rescheduleModal');
@@ -1220,10 +1294,9 @@ if ($role === 'admin') {
     reschedOld.textContent   = 'Previous: ' + oldDt;
     reschedDate.value        = '';
     reschedReason.value      = '';
-    reschedModal.style.display = 'flex';
-    setTimeout(() => reschedDate.focus(), 50);
+    showDefenseModal(reschedModal, reschedDate);
   }
-  function closeRescheduleModal() { reschedModal.style.display = 'none'; }
+  function closeRescheduleModal() { hideDefenseModal(reschedModal); }
 
   // Close on Escape
   document.addEventListener('keydown', (e) => {
@@ -1235,9 +1308,14 @@ if ($role === 'admin') {
   });
 
   // Close on backdrop click
-  [scheduleModal, cancelModal, reschedModal].forEach((m) => {
-    m.addEventListener('click', (e) => {
-      if (e.target === m) m.style.display = 'none';
+  const modalClosers = new Map([
+    [scheduleModal, closeScheduleModal],
+    [cancelModal, closeCancelModal],
+    [reschedModal, closeRescheduleModal]
+  ]);
+  modalClosers.forEach((closeModal, modal) => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
     });
   });
 
@@ -1294,6 +1372,7 @@ if ($role === 'admin') {
   reschedDate.addEventListener('input',  () => reschedDate.classList.remove('invalid'));
   reschedDate.addEventListener('change', () => reschedDate.classList.remove('invalid'));
 </script>
+</div>
 
 <?php
 if ($role === 'admin') {

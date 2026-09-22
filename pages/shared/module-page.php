@@ -341,6 +341,7 @@ if ($role === 'student') {
     </div>
   </main>
 </div>
+<?php renderLogoutTransition(); ?>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     if (window.lucide) {

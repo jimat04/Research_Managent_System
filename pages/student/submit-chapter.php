@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/file-uploader.php';
 
 requireRole('student');
 
@@ -455,7 +456,7 @@ renderStudentShell(
 );
 ?>
 
-<link rel="stylesheet" href="<?php echo SITE_URL; ?>css/style.css">
+<link rel="stylesheet" href="<?php echo SITE_URL; ?>css/file-uploader.css">
 
 <style>
   .alert {
@@ -657,16 +658,65 @@ renderStudentShell(
     margin-bottom: 12px;
     opacity: 0.6;
   }
+
+  .student-page-content{background-color:#EEEAF8;background-image:radial-gradient(circle at 88% 3%,rgba(91,30,188,.13),transparent 27%),radial-gradient(circle at 7% 47%,rgba(37,99,235,.07),transparent 24%),linear-gradient(180deg,#F4F1FA 0%,#ECE8F5 100%)}
+  .student-topbar{background:rgba(255,255,255,.93);backdrop-filter:blur(14px)}
+  .chapter-page{--purple:#5B1EBC;--ink:#140D1E;--muted:#6D6279;--line:#DED5E8;max-width:1160px;margin:0 auto;padding-bottom:44px;color:var(--ink)}
+  .chapter-breadcrumbs{display:flex;align-items:center;gap:10px;margin-bottom:18px!important}.chapter-breadcrumbs a{color:#4B168F!important;font-size:12px!important;font-weight:750;text-decoration:none!important}.chapter-breadcrumbs a:hover{color:#741FD1!important}.chapter-breadcrumbs span{color:#A397AE!important}
+  .chapter-hero{position:relative;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(285px,.7fr);gap:42px;overflow:hidden;margin-bottom:24px;padding:38px 40px;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:radial-gradient(circle at 91% 8%,rgba(220,198,255,.25),transparent 28%),radial-gradient(circle at 8% 118%,rgba(43,110,230,.24),transparent 32%),linear-gradient(135deg,#291050 0%,#4C188F 57%,#6C2CC7 100%);color:#fff;box-shadow:0 22px 52px rgba(54,24,103,.22)}.chapter-hero::after{content:'';position:absolute;right:-75px;bottom:-150px;width:300px;height:300px;border:46px solid rgba(255,255,255,.055);border-radius:50%;pointer-events:none}.chapter-hero-copy,.chapter-hero-guide{position:relative;z-index:1}.chapter-eyebrow{margin:0 0 11px;color:#DCCBFF;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.chapter-hero h1{max-width:650px;margin:0;font-size:clamp(31px,3.4vw,47px);font-weight:750;letter-spacing:-.045em;line-height:1.06;text-wrap:balance}.chapter-hero-description{max-width:60ch;margin:17px 0 0;color:#E8E0F3;font-size:15px;line-height:1.7}.chapter-hero-guide{align-content:center;padding-left:33px;border-left:1px solid rgba(255,255,255,.24)}.chapter-guide-label{margin:0 0 13px;color:#D9CDE9;font-size:11px;font-weight:700}.chapter-guide-steps{display:grid;gap:9px;margin:0;padding:0;list-style:none}.chapter-guide-steps li{display:grid;grid-template-columns:27px 1fr;align-items:center;gap:9px;color:#F4EFFF;font-size:11px;font-weight:650}.chapter-guide-steps span{display:grid;width:27px;height:27px;place-items:center;border:1px solid rgba(255,255,255,.24);border-radius:8px;background:rgba(255,255,255,.1);font-size:10px}.chapter-guide-steps .is-current span{border-color:#fff;background:#fff;color:#4B168F}.chapter-guide-steps .is-current{color:#fff}
+  .chapter-page>h1,.chapter-page>h1+p{display:none}.chapter-page .alert{margin-bottom:18px;padding:17px 19px;border-radius:15px;font-size:12px;line-height:1.55}.chapter-page .alert-success{border-color:#A7DDC8;background:#EDFBF5;color:#087A59}.chapter-page .alert-error{border-color:#F1B5B5;background:#FFF1F1;color:#A82323}.chapter-page .alert ul{margin:0;padding-left:18px}
+  .chapter-page .picker-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.chapter-page .picker-item{position:relative;overflow:hidden;min-height:154px;padding:22px 23px;border-color:#D9D0E4;border-radius:17px;background:rgba(255,255,255,.96);box-shadow:0 10px 28px rgba(45,24,76,.06);transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease}.chapter-page .picker-item::after{content:'→';position:absolute;right:21px;bottom:18px;color:#5B1EBC;font-size:17px;font-weight:700;transition:transform .22s ease}.chapter-page .picker-item:hover{border-color:#A985D1;box-shadow:0 16px 35px rgba(61,27,106,.12);transform:translateY(-3px)}.chapter-page .picker-item:hover::after{transform:translateX(3px)}.chapter-page .picker-item-head{margin-bottom:17px}.chapter-page .picker-item-title{max-width:90%;color:#24162F;font-size:16px;letter-spacing:-.02em}.chapter-page .picker-item-meta{margin-top:7px;color:#766A81;font-size:11px;line-height:1.5}.chapter-page .picker-item-sub{margin-top:8px;padding-right:25px;color:#8C8196;font-size:10px}.chapter-page .picker-num{width:42px;height:42px;border-radius:13px;background:#5B1EBC;font-size:15px;box-shadow:0 8px 16px rgba(91,30,188,.18)}.chapter-page .badge{padding:4px 9px;border-radius:8px;font-size:10px;font-weight:700}.chapter-page .picker-empty{padding:58px 30px;border-color:#D9D0E4;background:radial-gradient(circle at 50% 15%,rgba(91,30,188,.09),transparent 38%),#FBF9FD;text-align:center}.chapter-page .picker-empty .ico{display:grid;width:70px;height:70px;margin:0 auto 18px;place-items:center;border-radius:21px;background:#EEE4FA;font-size:31px;opacity:1}.chapter-page .picker-empty h3{color:#25172F!important;font-size:21px;letter-spacing:-.025em}.chapter-page .picker-empty p{max-width:520px;margin-right:auto!important;margin-left:auto!important;color:#766A81!important;line-height:1.65}
+  .chapter-page form{display:grid;gap:18px}.chapter-page form>.card{overflow:hidden;margin:0!important;padding:0;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.96);box-shadow:0 12px 32px rgba(45,24,76,.07)}.chapter-page form>.card:nth-of-type(1){border-top:4px solid #5B1EBC}.chapter-page form>.card:nth-of-type(2){border-top:4px solid #07855F}.chapter-page form>.card:nth-of-type(3){border-top:4px solid #C55408}.chapter-page form>.card .card-header{margin:0;padding:22px 27px 17px;border-bottom:1px solid #EEE8F4}.chapter-page form>.card .card-title{display:flex;align-items:center;gap:12px;color:#201529;font-size:19px;letter-spacing:-.025em}.chapter-page form>.card .card-title::before{display:grid;width:34px;height:34px;place-items:center;border-radius:11px;background:#EEE6FB;color:#5B1EBC;font-size:11px;font-weight:800}.chapter-page form>.card:nth-of-type(1) .card-title::before{content:'01'}.chapter-page form>.card:nth-of-type(2) .card-title::before{content:'02';background:#E3F7EF;color:#07855F}.chapter-page form>.card:nth-of-type(3) .card-title::before{content:'03';background:#FFF0E4;color:#C55408}.chapter-page form>.card .card-body{padding:25px 27px 28px}.chapter-page form>.card:first-of-type .card-body{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0}.chapter-page form>.card:first-of-type .card-body>div{min-height:72px;padding:10px 18px;border-left:1px solid #EAE3EF}.chapter-page form>.card:first-of-type .card-body>div:first-child{padding-left:0;border-left:0}.chapter-page form>.card:first-of-type strong{display:block;margin-bottom:7px;color:#857A90;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.07em}.chapter-page form>.card:first-of-type strong+div{color:#2B2035;font-size:12px;font-weight:650;line-height:1.45}
+  .chapter-page .form-group{margin-bottom:26px}.chapter-page .form-group:last-child{margin-bottom:0}.chapter-page .form-label{margin-bottom:9px;color:#281B33;font-size:12px;font-weight:750}.chapter-page textarea.form-control{min-height:190px;padding:15px 16px;border-color:#D8D0E3;border-radius:12px;background:#FCFBFD;color:#1D1425;font-size:13px;line-height:1.65}.chapter-page textarea.form-control:hover{border-color:#BFAECF}.chapter-page .form-control:focus{border-color:#5B1EBC;background:#fff;box-shadow:0 0 0 4px rgba(91,30,188,.1)}.chapter-page .form-control:disabled{cursor:not-allowed;background:#F1EEF4;color:#7D7386}.chapter-page .text-muted{display:block;margin-top:7px;color:#857A90;font-size:10px;line-height:1.5}.chapter-page input[type=file].form-control{min-height:112px;padding:24px;border:2px dashed #D3BDEB;border-radius:15px;background:#F8F3FD;color:#665672}.chapter-page input[type=file].form-control::file-selector-button{margin-right:14px;padding:10px 15px;border:0;border-radius:9px;background:#5B1EBC;color:#fff;font:700 11px 'Inter',sans-serif;cursor:pointer;transition:background .2s ease}.chapter-page input[type=file].form-control::file-selector-button:hover{background:#491598}.chapter-page form>.card:nth-of-type(3) .card-body>div{padding:13px 14px;border:1px solid #D9CBE7;border-radius:12px;background:#F8F3FC;color:#493658;font-size:12px}.chapter-page form>.card:nth-of-type(3) a{color:#5B1EBC;font-weight:700}
+  .chapter-page form>div:last-child:not(.card){margin-top:3px;padding:18px 20px;border:1px solid #D8CBE8;border-radius:17px;background:rgba(255,255,255,.96);box-shadow:0 12px 30px rgba(45,24,76,.08)}.chapter-page .btn{min-height:43px;padding:10px 17px;border:1px solid transparent;border-radius:10px;font:700 12px/1 'Inter',sans-serif}.chapter-page .btn-primary{background:#5B1EBC;color:#fff}.chapter-page .btn-primary:hover{transform:translateY(-1px);background:#491598;box-shadow:0 9px 18px rgba(91,30,188,.21)}.chapter-page .btn-secondary{border-color:#D8D0E3;background:#fff;color:#281B35}.chapter-page .btn-secondary:hover{border-color:#B9AACA;background:#F5F0FA;color:#4B168F}.chapter-page .btn:active,.chapter-page .picker-item:active{transform:translateY(1px)}.chapter-page a:focus-visible,.chapter-page button:focus-visible,.chapter-page textarea:focus-visible,.chapter-page input:focus-visible{outline:3px solid rgba(91,30,188,.24);outline-offset:3px}
+  .chapter-page .rms-file-uploader{margin:0}.chapter-page .rms-uploader-label{color:#281B33;font-size:12px;font-weight:750}.chapter-page .rms-uploader-description{color:#857A90;font-size:10px}.chapter-page .rms-uploader-dropzone{padding:40px 24px;border-color:#D3BDEB;border-radius:15px;background:#F8F3FD}.chapter-page .rms-uploader-dropzone:hover{border-color:#5B1EBC;background:#F1E9FB}.chapter-page .rms-uploader-file-item{border-color:#D9CBE7;border-radius:12px}.chapter-page .rms-uploader-prompt{color:#281B33}.chapter-page .rms-uploader-formats{color:#857A90}
+  @keyframes chapterEnter{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:no-preference){.chapter-hero,.chapter-page .alert,.chapter-page .picker-item,.chapter-page form>.card,.chapter-page form>div:last-child{animation:chapterEnter .48s cubic-bezier(.16,1,.3,1) both}.chapter-page .picker-item:nth-child(2),.chapter-page form>.card:nth-of-type(2){animation-delay:.05s}.chapter-page .picker-item:nth-child(3),.chapter-page form>.card:nth-of-type(3){animation-delay:.1s}.chapter-page .picker-item:nth-child(4){animation-delay:.15s}.chapter-page .picker-item:nth-child(5){animation-delay:.2s}}
+  @media(max-width:760px){.chapter-hero{grid-template-columns:1fr;padding:30px 24px}.chapter-hero-guide{padding:22px 0 0;border-top:1px solid rgba(255,255,255,.24);border-left:0}.chapter-page form>.card:first-of-type .card-body{grid-template-columns:1fr 1fr}.chapter-page form>.card:first-of-type .card-body>div:nth-child(odd){padding-left:0;border-left:0}.chapter-page form>.card .card-header,.chapter-page form>.card .card-body{padding-right:20px;padding-left:20px}.chapter-page form>div:last-child:not(.card){display:grid!important;grid-template-columns:1fr 1fr}.chapter-page form>div:last-child:not(.card) .btn-primary{grid-column:1/-1}.chapter-page .picker-grid{grid-template-columns:1fr}}
+  @media(max-width:500px){.chapter-hero{padding:27px 21px}.chapter-guide-steps{grid-template-columns:1fr}.chapter-page form>.card:first-of-type .card-body{grid-template-columns:1fr}.chapter-page form>.card:first-of-type .card-body>div{padding:12px 0;border-bottom:1px solid #EAE3EF;border-left:0}.chapter-page form>.card:first-of-type .card-body>div:last-child{border-bottom:0}.chapter-page form>div:last-child:not(.card){grid-template-columns:1fr}.chapter-page form>div:last-child:not(.card) .btn-primary{grid-column:auto}.chapter-page .btn{width:100%}}
+  @media(prefers-reduced-motion:reduce){.chapter-page *{animation:none!important;transition:none!important}}
 </style>
 
-<div style="margin-bottom: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+<main class="chapter-page">
+<nav class="chapter-breadcrumbs" aria-label="Breadcrumb" style="margin-bottom: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
   <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to My Research</a>
   <?php if ($project): ?><span style="color: #64748B;">/</span><a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Back to Project</a><?php endif; ?>
   <?php if ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>
     <span style="color: #64748B;">/</span>
     <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php" style="color: #5B1EBC; text-decoration: none; font-size: 14px;">← Switch project</a>
   <?php endif; ?>
-</div>
+</nav>
+
+<section class="chapter-hero" aria-labelledby="chapter-workspace-title">
+  <div class="chapter-hero-copy">
+    <p class="chapter-eyebrow">
+      <?php if ($sch_picker_mode === 'project'): ?>Chapter submission · Step 1
+      <?php elseif ($sch_picker_mode === 'chapter'): ?>Chapter submission · Step 2
+      <?php else: ?>Chapter writing workspace<?php endif; ?>
+    </p>
+    <h1 id="chapter-workspace-title">
+      <?php if ($sch_picker_mode === 'project'): ?>Choose the research you want to continue.
+      <?php elseif ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>Select the chapter you’re ready to work on.
+      <?php elseif ($sch_picker_mode === 'chapter'): ?>That project is not available.
+      <?php elseif ($invalid_chapter): ?>Choose a valid research chapter.
+      <?php elseif (!$project): ?>We could not open this project.
+      <?php else: ?>Build Chapter <?php echo (int) $chapter_number; ?> with a clear review path.<?php endif; ?>
+    </h1>
+    <p class="chapter-hero-description">
+      <?php if ($sch_picker_mode === 'project'): ?>Start with a project you own or collaborate on, then select one of its five chapters.
+      <?php elseif ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>Choose from the five-part EARIST research structure for <?php echo htmlspecialchars((string) $sch_resolved_project['title']); ?>.
+      <?php elseif ($project): ?>Write directly in the workspace or attach a formatted document, then save a draft or send it for faculty review.
+      <?php else: ?>Return to your research list and choose another project to continue.<?php endif; ?>
+    </p>
+  </div>
+  <div class="chapter-hero-guide">
+    <p class="chapter-guide-label">Chapter submission flow</p>
+    <ol class="chapter-guide-steps">
+      <li class="<?php echo $sch_picker_mode === 'project' ? 'is-current' : ''; ?>"><span>01</span> Choose a project</li>
+      <li class="<?php echo $sch_picker_mode === 'chapter' ? 'is-current' : ''; ?>"><span>02</span> Select a chapter</li>
+      <li class="<?php echo $sch_picker_mode === '' && $project && !$invalid_chapter ? 'is-current' : ''; ?>"><span>03</span> Write or upload</li>
+    </ol>
+  </div>
+</section>
 
 <?php if ($sch_picker_mode === 'project'): ?>
   <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;">Choose a project</h1>
@@ -776,7 +826,7 @@ renderStudentShell(
   <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;"><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></h1>
   <p style="margin: 0 0 20px; color: #64748B;"><?php echo htmlspecialchars($project['title']); ?> · <?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge">Not Started</span><?php endif; ?> · Version <?php echo (int) ($chapter['version'] ?? 1); ?></p>
 
-  <?php if ($success): ?><div class="alert alert-success"><strong>Success!</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+  <?php if ($success): ?><div class="alert alert-success"><strong>Chapter updated.</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
   <?php if (!empty($errors)): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
 
   <form method="post" enctype="multipart/form-data">
@@ -796,7 +846,20 @@ renderStudentShell(
     </div></div>
 
     <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter File</div></div><div class="card-body" style="display: block;">
-      <input type="file" name="chapter_file" accept=".pdf,.doc,.docx" class="form-control" <?php echo $can_edit_chapter ? '' : 'disabled'; ?>><small class="text-muted">Accepted formats: PDF, DOC, DOCX. Max 10MB. Upload your formatted chapter document if you prefer to submit a file instead of typing content above.</small>
+      <?php echo renderFileUploader([
+          'inputName' => 'chapter_file',
+          'accept' => '.pdf,.doc,.docx',
+          'maxSize' => 10000,
+          'folderTarget' => 'chapters',
+          'label' => 'Upload formatted chapter',
+          'description' => 'Drag and drop a PDF, DOC, or DOCX file, or click to browse',
+          'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
+          'required' => false,
+          'disabled' => !$can_edit_chapter,
+          'projectId' => $project_id,
+          'chapterId' => $chapter['chapter_id'] ?? null
+      ]); ?>
+      <small class="text-muted">A document is optional when saving a draft. Add written content or a file before submitting for review.</small>
       <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><?php if ($can_edit_chapter): ?><div style="color: #64748B; font-size: 13px;">Uploading a new file will replace this.</div><?php endif; ?></div><?php endif; ?>
     </div></div>
 
@@ -816,5 +879,10 @@ renderStudentShell(
     </div>
   </form>
 <?php endif; ?>
+
+</main>
+
+<script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
+<script src="../../js/app-forms.js" defer></script>
 
 <?php renderStudentShellClose(); ?>

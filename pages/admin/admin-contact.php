@@ -99,6 +99,9 @@ $total_messages = $stmt->get_result()->fetch_assoc()['count'];
 $stmt->close();
 
 $total_pages = ceil($total_messages / $per_page);
+$visible_messages = count($messages);
+$all_messages = array_sum(array_map('intval', $status_counts));
+$current_status_label = ucfirst($status_filter);
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -148,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $stmt->close();
 
                         logActivity("Replied to contact message from {$contact['name']}", 'contact_management');
-                        $success = 'Email reply sent successfully!';
+                        $success = 'Email reply sent.';
                     } else {
                         $error = 'Failed to send email reply. Please try again.';
                     }
@@ -194,168 +197,115 @@ function cm_escape($value) {
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-// Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
-?>
-<style>
-  .alert { padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; }
-  .alert-success { background: #DCFCE7; color: #15803d; border: 1px solid #BBF7D0; }
-  .alert-error { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
-
-  .card {
-    background: var(--bg-card, #FFFFFF);
-    border: 1px solid var(--border, #E5E7EB);
-    border-radius: 20px;
-    padding: 32px;
-    margin-bottom: 24px;
-  }
-
-  .form-control {
-    width: 100%;
-    padding: 12px 16px;
-    border: 1px solid var(--border, #E5E7EB);
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: inherit;
-  }
-
-  .form-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-    font-size: 14px;
-  }
-
-  .form-group { margin-bottom: 20px; }
-
-  .form-check {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-
-  .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
-  }
-
-  .btn-primary { background: var(--gold, #C8A44D); color: white; }
-  .btn-primary:hover { background: #B39340; }
-  .btn-secondary { background: var(--border, #E5E7EB); color: var(--text-primary, #111827); }
-  .btn-secondary:hover { background: #D1D5DB; }
-  .btn-sm { padding: 8px 16px; font-size: 13px; }
-
-  .search-bar { margin-bottom: 24px; display: flex; gap: 12px; }
-  .search-bar input { flex: 1; max-width: 400px; }
-  .status-tabs { margin-bottom: 24px; display: flex; gap: 8px; border-bottom: 2px solid var(--border, #E5E7EB); padding-bottom: 0; flex-wrap: wrap; }
-  .status-tab { padding: 12px 20px; text-decoration: none; color: var(--text-primary, #111827); border-bottom: 3px solid transparent; margin-bottom: -2px; font-weight: 400; transition: all 0.2s; }
-  .status-tab.active { border-bottom-color: var(--primary, #C8A44D); font-weight: 600; color: var(--primary, #C8A44D); }
-  .status-tab:hover { background: rgba(0,0,0,0.02); }
-  .message-card { padding: 24px; border-bottom: 1px solid var(--border, #E5E7EB); transition: background 0.2s; }
-  .message-card:hover { background: rgba(0,0,0,0.01); }
-  .message-card:last-child { border-bottom: none; }
-  .message-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; gap: 16px; }
-  .message-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-  .concern-badge { background: var(--gold, #C8A44D); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; white-space: nowrap; }
-  .message-body { background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px; line-height: 1.6; }
-  .notes-box { background: #e3f2fd; padding: 16px; border-radius: 8px; border-left: 3px solid var(--gold, #C8A44D); margin-bottom: 16px; }
-  .message-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 9999; align-items: center; justify-content: center; }
-  .modal.active { display: flex; }
-  .modal-content { background: #fff; border-radius: 12px; width: 90%; max-width: 700px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
-  .modal-header { padding: 24px; border-bottom: 1px solid var(--border, #E5E7EB); display: flex; justify-content: space-between; align-items: center; }
-  .modal-close { background: none; border: none; font-size: 2rem; cursor: pointer; color: var(--text-secondary, #64748B); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
-  .modal-close:hover { background: rgba(0, 0, 0, 0.05); }
-  .modal-body { padding: 24px; overflow-y: auto; flex: 1; }
-  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border, #E5E7EB); display: flex; justify-content: flex-end; gap: 8px; }
-  .empty-state { padding: 80px 24px; text-align: center; color: var(--text-secondary, #64748B); }
-  .empty-state-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
-
-  @media (max-width: 768px) {
-    .message-meta { font-size: 0.85rem; }
-    .message-actions { flex-direction: column; }
-    .message-actions button { width: 100%; }
-  }
-</style>
-<?php
-
 renderAdminShell(
     $user,
     'admin-contact',
     'Contact Messages',
-    'Manage inquiries from the public contact form.'
+    'Manage public inquiries and document each response.'
 );
+
+// Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
 ?>
+<style>
+  html{scroll-behavior:smooth}.contact-workspace{--contact-ink:#192235;--contact-gold:#d2a248;--contact-line:#dfe5ed;--contact-muted:#687386;max-width:1480px;margin:0 auto;color:var(--contact-ink)}
+  .contact-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:46px;min-height:320px;padding:50px 54px 58px;overflow:hidden;border-radius:24px 24px 8px 8px;background:radial-gradient(circle at 84% 14%,rgba(210,162,72,.2),transparent 29%),linear-gradient(135deg,#172033,#202d45 64%,#27344b);color:#fff;box-shadow:0 24px 58px rgba(24,34,53,.16)}.contact-hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.16;background-image:repeating-linear-gradient(90deg,transparent 0,transparent 67px,rgba(255,255,255,.1) 68px);pointer-events:none}.contact-kicker,.contact-stat-code,.inbox-eyebrow{font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.15em;text-transform:uppercase}.contact-kicker{margin-bottom:17px;color:#e9bf6e}.contact-hero h2{max-width:760px;margin:0;font-size:clamp(39px,4.4vw,64px);line-height:.98;letter-spacing:-.054em;text-wrap:balance}.contact-hero-copy>p{max-width:610px;margin:23px 0 0;color:#bdc8d8;font-size:15px;line-height:1.72;text-wrap:pretty}.contact-hero-note{display:inline-flex;align-items:center;gap:9px;margin-top:24px;color:#aeb9ca;font-size:12px}.contact-hero-note::before{content:'';width:7px;height:7px;border-radius:50%;background:<?php echo ($status_counts['pending'] ?? 0) > 0 ? '#e2ad4c' : '#70bd91'; ?>;box-shadow:0 0 0 5px rgba(255,255,255,.07)}
+  .contact-stats{align-self:end;display:grid;gap:2px}.contact-stat{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:12px;padding:14px 16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06)}.contact-stat:first-child{border-radius:14px 14px 5px 5px}.contact-stat:last-child{border-radius:5px 5px 14px 14px}.contact-stat-code{color:#e9bf6e}.contact-stat-label{color:#d4dce8;font-size:13px}.contact-stat-value{font-size:24px;font-weight:720;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .contact-commandbar{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;margin:-18px 22px 0;padding:13px 15px;border:1px solid var(--contact-line);border-radius:13px;background:#f8fafc;box-shadow:0 12px 30px rgba(25,34,53,.08)}.search-bar{display:flex;gap:9px;margin:0}.search-bar .form-control{flex:1;min-width:0}.status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e0e5ec;border-radius:9px;background:#e9edf2}.status-tab{display:inline-flex;align-items:center;gap:7px;min-height:37px;padding:9px 13px;border-radius:6px;color:#657083;font-size:12px;font-weight:680;text-decoration:none;white-space:nowrap;transition:background .2s ease,color .2s ease,box-shadow .2s ease}.status-tab:hover{color:#182033}.status-tab.active{background:#fff;color:#182033;box-shadow:0 1px 4px rgba(24,32,51,.1)}.status-count{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:5px;background:#d8dde4;color:#556174;font:720 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.status-tab.active .status-count{background:#eadab9;color:#79571f}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid transparent;border-radius:8px;background:none;color:inherit;font-family:inherit;font-size:12px;font-weight:680;line-height:1.2;text-decoration:none;cursor:pointer;transition:transform .2s ease,background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}.btn:hover{transform:translateY(-1px)}.btn:active{transform:translateY(0) scale(.98)}.btn:focus-visible,.status-tab:focus-visible,.form-control:focus-visible{outline:3px solid rgba(210,162,72,.28);outline-offset:2px}.btn-primary{border-color:var(--contact-gold);background:var(--contact-gold);color:#182033;box-shadow:0 7px 17px rgba(210,162,72,.14)}.btn-primary:hover{border-color:#dfb45f;background:#dfb45f}.btn-secondary{border-color:#d8dfe8;background:#fff;color:#344054}.btn-secondary:hover{border-color:#b3bdca;background:#f7f8fa}.btn-success{border-color:#cfe5d7;background:#f1f9f4;color:#2d704c}.btn-success:hover{border-color:#9ac9ac;background:#e7f5ed}.btn-danger{border-color:#ead6d1;background:#fff8f6;color:#984633}.btn-danger:hover{border-color:#d39a8d;background:#faece8}.btn-sm{min-height:34px;padding:7px 10px;font-size:11px}
+  .form-control{width:100%;min-height:42px;padding:9px 13px;border:1px solid #d8dfe7;border-radius:8px;background:#fff;color:#000!important;font-family:inherit;font-size:13px;line-height:1.45}.form-control:focus{outline:0;border-color:#b88731;box-shadow:0 0 0 3px rgba(210,162,72,.16)}.form-label{display:block;margin-bottom:7px;color:#000;font-size:12px;font-weight:700}.form-group{margin-bottom:18px}.form-check{display:flex;align-items:center;gap:8px;margin-bottom:4px;color:#000;font-size:13px;font-weight:600}
+  .alert{display:flex;align-items:center;gap:10px;margin:0 0 19px;padding:13px 16px;border:1px solid #d9e6de;border-radius:10px;background:#f3faf6;color:#245d40;font-size:13px;font-weight:600}.alert-error{border-color:#edd8d2;background:#fff6f3;color:#93432f}.alert-mark{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,.72);font-weight:800}
+  .contact-inbox{margin-top:34px;overflow:hidden;border:1px solid var(--contact-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.065)}.inbox-header{display:flex;align-items:end;justify-content:space-between;gap:18px;padding:28px 31px 23px;border-bottom:1px solid #e8ecf1}.inbox-eyebrow{margin-bottom:8px;color:#987027}.inbox-title{margin:0;color:#1c2639;font-size:25px;line-height:1.1;letter-spacing:-.03em}.inbox-copy{max-width:650px;margin:8px 0 0;color:var(--contact-muted);font-size:13px;line-height:1.55}.inbox-count{color:#8a95a5;font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
+  .message-card{position:relative;padding:25px 30px 27px;border-bottom:1px solid #edf0f4;background:#fff;transition:background .2s ease}.message-card:last-child{border-bottom:0}.message-card:hover{background:#fbfaf7}.message-header{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:16px;align-items:start;margin-bottom:17px}.sender-avatar{display:grid;place-items:center;width:44px;height:44px;border:1px solid #e0d2b5;border-radius:11px;background:#f8f1e3;color:#805c21;font:750 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.message-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.sender-name{color:#202a3d;font-size:15px;font-weight:690}.sender-email{color:#6e798b;font-size:12px;overflow-wrap:anywhere}.concern-badge{display:inline-flex;padding:4px 7px;border:1px solid #d8e3ed;border-radius:5px;background:#f0f5fa;color:#315b8c;font-size:9px;font-weight:750;letter-spacing:.055em;text-transform:uppercase}.message-date{margin-top:7px;color:#929cab;font-size:11px}.message-id{color:#8a95a5;font:650 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}.message-body{max-width:900px;margin:0 0 18px 64px;padding:17px 19px;border-left:3px solid #d6b36b;background:#f8f9fb;color:#344054;font-size:13px;line-height:1.68;overflow-wrap:anywhere}.notes-box{max-width:900px;margin:0 0 18px 64px;padding:16px 18px;border:1px solid #d8e6e1;border-radius:9px;background:#f2f8f6;color:#355b54;font-size:12px;line-height:1.6}.notes-title{margin-bottom:7px;color:#254c44;font-weight:720}.notes-handler{margin-top:10px;color:#6e827d;font-size:11px}.message-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:64px}
+  .empty-state{padding:72px 28px;text-align:center}.empty-state-icon{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 16px;border:1px solid #e3d4b4;border-radius:14px;background:#fbf6eb;color:#876225;font:750 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.empty-title{color:#273247;font-size:18px;font-weight:690}.empty-copy{max-width:520px;margin:7px auto 0;color:#7a8596;font-size:13px;line-height:1.58}.empty-copy a{color:#805c21;font-weight:680}.pagination{display:flex;justify-content:center;align-items:center;gap:12px;padding:18px 22px;border-top:1px solid #edf0f4;background:#fafbfc}.page-label{color:#758093;font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace}
+  .modal{display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:24px;background:rgba(12,18,29,.68);backdrop-filter:blur(7px)}.modal.active{display:flex}.modal-content{display:flex;flex-direction:column;width:min(680px,100%);max-height:calc(100dvh - 48px);overflow:hidden;border:1px solid rgba(255,255,255,.6);border-radius:18px;background:#fff;box-shadow:0 30px 80px rgba(9,15,27,.3);animation:contact-modal-rise .25s cubic-bezier(.2,.8,.2,1) both}.modal-header{position:relative;display:flex;align-items:center;justify-content:space-between;padding:26px 30px 23px;overflow:hidden;background:#182033;color:#fff}.modal-header::after{content:'';position:absolute;right:-42px;top:-72px;width:170px;height:170px;border:30px solid rgba(210,162,72,.17);border-radius:50%}.modal-header h3{position:relative;z-index:1;margin:0;color:#fff;font-size:23px;letter-spacing:-.025em}.modal-close{position:relative;z-index:2;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:8px;background:none;color:#fff;font-size:25px;cursor:pointer}.modal-close:hover{background:rgba(255,255,255,.1)}.modal-body{flex:1;overflow-y:auto;padding:26px 30px}.modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:20px 30px 26px;border-top:1px solid #e8ecf1}.recipient-summary{margin-bottom:20px;padding:15px 17px;border:1px solid #e0e5ec;border-radius:9px;background:#f7f9fb}.recipient-label{color:#707b8e;font-size:11px;font-weight:680}.recipient-person{margin-top:5px;color:#202a3d;font-size:14px}.recipient-email{color:#6e798b}.form-help{margin-top:7px;color:#000;font-size:11px;font-weight:600;line-height:1.5}@keyframes contact-modal-rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+  @media(max-width:1040px){.contact-hero{grid-template-columns:1fr;gap:30px}.contact-stats{grid-template-columns:repeat(3,1fr)}.contact-stat{grid-template-columns:32px 1fr}.contact-stat-value{grid-column:2}.contact-commandbar{grid-template-columns:1fr}.status-tabs{width:max-content;max-width:100%;overflow-x:auto}}
+  @media(max-width:700px){.contact-hero{min-height:0;padding:30px 24px 48px;border-radius:18px 18px 7px 7px}.contact-hero h2{font-size:39px}.contact-stats{grid-template-columns:1fr}.contact-stat{grid-template-columns:34px 1fr auto}.contact-stat-value{grid-column:auto}.contact-commandbar{margin:-17px 12px 0}.search-bar{display:grid;grid-template-columns:1fr 1fr}.search-bar .form-control{grid-column:1/-1}.status-tabs{width:100%}.status-tab{flex:1;justify-content:center}.inbox-header{align-items:flex-start;flex-direction:column;padding:24px 20px 20px}.message-card{padding:21px 19px 23px}.message-header{grid-template-columns:42px minmax(0,1fr)}.sender-avatar{width:40px;height:40px}.message-id{grid-column:2}.message-body,.notes-box,.message-actions{margin-left:0}.message-actions,.message-actions .btn{width:100%}.pagination{flex-wrap:wrap}.modal{padding:12px}.modal-content{max-height:calc(100dvh - 24px)}.modal-header,.modal-body,.modal-footer{padding-left:22px;padding-right:22px}}
+  @media(prefers-reduced-motion:reduce){.btn,.message-card{transition:none}.modal-content{animation:none}}
+</style>
+<div class="contact-workspace">
+  <?php if ($error): ?>
+    <div class="alert alert-error"><span class="alert-mark" aria-hidden="true">&times;</span><?php echo cm_escape($error); ?></div>
+  <?php endif; ?>
+  <?php if ($success): ?>
+    <div class="alert"><span class="alert-mark" aria-hidden="true">&#10003;</span><?php echo cm_escape($success); ?></div>
+  <?php endif; ?>
 
-        <?php if ($error): ?>
-            <div class="alert alert-error" style="margin-bottom: 20px;">
-                <span style="color: #dc2626;">✕</span> <?php echo cm_escape($error); ?>
-            </div>
-        <?php endif; ?>
+  <section class="contact-hero" aria-labelledby="contact-hero-title">
+    <div class="contact-hero-copy">
+      <div class="contact-kicker">Public correspondence &middot; Institute response desk</div>
+      <h2 id="contact-hero-title">Turn every inquiry into a clear next step.</h2>
+      <p>Review public questions, reply by email, and preserve a complete resolution record for the institute.</p>
+      <div class="contact-hero-note"><?php echo (int) ($status_counts['pending'] ?? 0); ?> pending message<?php echo (int) ($status_counts['pending'] ?? 0) === 1 ? '' : 's'; ?> currently need attention.</div>
+    </div>
+    <div class="contact-stats" aria-label="Contact message totals">
+      <div class="contact-stat"><span class="contact-stat-code">01</span><span class="contact-stat-label">Pending</span><strong class="contact-stat-value"><?php echo (int) ($status_counts['pending'] ?? 0); ?></strong></div>
+      <div class="contact-stat"><span class="contact-stat-code">02</span><span class="contact-stat-label">Resolved</span><strong class="contact-stat-value"><?php echo (int) ($status_counts['resolved'] ?? 0); ?></strong></div>
+      <div class="contact-stat"><span class="contact-stat-code">03</span><span class="contact-stat-label">All inquiries</span><strong class="contact-stat-value"><?php echo (int) $all_messages; ?></strong></div>
+    </div>
+  </section>
 
-        <?php if ($success): ?>
-            <div class="alert alert-success" style="margin-bottom: 20px;">
-                <span style="color: #15803d;">✓</span> <?php echo cm_escape($success); ?>
-            </div>
-        <?php endif; ?>
+  <div class="contact-commandbar">
+    <form method="GET" action="admin-contact.php#contact-inbox" class="search-bar" role="search">
+      <input type="hidden" name="status" value="<?php echo cm_escape($status_filter); ?>">
+      <input type="text" name="search" class="form-control" aria-label="Search contact messages" placeholder="Search name, email, or message..." value="<?php echo cm_escape($search); ?>">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <?php if ($search): ?><a href="?status=<?php echo cm_escape($status_filter); ?>#contact-inbox" class="btn btn-secondary">Clear</a><?php endif; ?>
+    </form>
 
-        <!-- Search Bar -->
-        <form method="GET" class="search-bar">
-            <input type="hidden" name="status" value="<?php echo cm_escape($status_filter); ?>">
-            <input type="text" name="search" class="form-control" placeholder="Search by name, email, or message..." value="<?php echo cm_escape($search); ?>">
-            <button type="submit" class="btn btn-primary">Search</button>
-            <?php if ($search): ?>
-                <a href="?status=<?php echo cm_escape($status_filter); ?>" class="btn btn-secondary">Clear</a>
-            <?php endif; ?>
-        </form>
-
-        <!-- Status Filter Tabs -->
-        <div class="status-tabs">
+    <nav class="status-tabs" aria-label="Contact message status">
             <?php foreach ($valid_statuses as $status): ?>
-                <a href="?status=<?php echo $status; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>"
-                   class="status-tab <?php echo $status_filter === $status ? 'active' : ''; ?>">
-                    <?php echo ucfirst($status); ?> (<?php echo $status_counts[$status]; ?>)
+                <a href="?status=<?php echo $status; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>#contact-inbox"
+                   class="status-tab <?php echo $status_filter === $status ? 'active' : ''; ?>"
+                   aria-current="<?php echo $status_filter === $status ? 'page' : 'false'; ?>">
+                    <?php echo ucfirst($status); ?> <span class="status-count"><?php echo (int) $status_counts[$status]; ?></span>
                 </a>
             <?php endforeach; ?>
-        </div>
+    </nav>
+  </div>
 
         <!-- Messages List -->
-        <div class="card">
+        <section class="contact-inbox" id="contact-inbox" aria-labelledby="contact-inbox-title">
+          <header class="inbox-header">
+            <div>
+              <div class="inbox-eyebrow"><?php echo cm_escape($current_status_label); ?> queue</div>
+              <h3 class="inbox-title" id="contact-inbox-title">Public inquiries</h3>
+              <p class="inbox-copy"><?php echo $search ? 'Results matching “' . cm_escape($search) . '” in this queue.' : 'Newest first. Keep replies and resolution notes attached to the original inquiry.'; ?></p>
+            </div>
+            <span class="inbox-count"><?php echo (int) $visible_messages; ?> SHOWN</span>
+          </header>
             <?php if (empty($messages)): ?>
                 <div class="empty-state">
-                    <div class="empty-state-icon">📭</div>
-                    <p style="font-size: 1.1rem; margin-bottom: 8px;">No <?php echo $status_filter; ?> messages</p>
-                    <p style="font-size: 0.9rem;">
+                    <div class="empty-state-icon" aria-hidden="true">00</div>
+                    <div class="empty-title">No <?php echo cm_escape($status_filter); ?> messages</div>
+                    <p class="empty-copy">
                         <?php if ($search): ?>
-                            Try adjusting your search terms or <a href="?status=<?php echo cm_escape($status_filter); ?>">clear filters</a>.
+                            Try adjusting your search terms or <a href="?status=<?php echo cm_escape($status_filter); ?>#contact-inbox">clear filters</a>.
                         <?php else: ?>
                             Messages from the public contact form will appear here.
                         <?php endif; ?>
                     </p>
                 </div>
             <?php else: ?>
-                <?php foreach ($messages as $msg): ?>
-                    <div class="message-card">
+                <?php foreach ($messages as $msg):
+                    $name_parts = preg_split('/\s+/', trim((string) $msg['name'])) ?: [];
+                    $initials = $name_parts
+                        ? mb_strtoupper(mb_substr($name_parts[0], 0, 1) . (count($name_parts) > 1 ? mb_substr($name_parts[count($name_parts) - 1], 0, 1) : ''))
+                        : '?';
+                ?>
+                    <article class="message-card">
                         <div class="message-header">
-                            <div style="flex: 1;">
+                            <div class="sender-avatar" aria-hidden="true"><?php echo cm_escape($initials); ?></div>
+                            <div>
                                 <div class="message-meta">
-                                    <strong style="font-size: 1.1rem;"><?php echo cm_escape($msg['name']); ?></strong>
-                                    <span style="color: var(--text-secondary, #64748B);"><?php echo cm_escape($msg['email']); ?></span>
+                                    <strong class="sender-name"><?php echo cm_escape($msg['name']); ?></strong>
+                                    <span class="sender-email"><?php echo cm_escape($msg['email']); ?></span>
                                     <span class="concern-badge"><?php echo cm_escape($msg['concern_type']); ?></span>
                                 </div>
-                                <div style="color: var(--text-secondary, #64748B); font-size: 0.85rem;">
-                                    📅 Received: <?php echo date('F j, Y \a\t g:i A', strtotime($msg['created_at'])); ?>
+                                <div class="message-date">
+                                    Received <?php echo date('F j, Y \a\t g:i A', strtotime($msg['created_at'])); ?>
                                 </div>
                             </div>
+                            <span class="message-id">INQUIRY #<?php echo (int) $msg['contact_id']; ?></span>
                         </div>
 
                         <div class="message-body">
@@ -364,10 +314,10 @@ renderAdminShell(
 
                         <?php if ($msg['status'] !== 'pending' && $msg['notes']): ?>
                             <div class="notes-box">
-                                <strong style="font-size: 0.9rem;">📝 Staff Notes / Reply:</strong>
-                                <div style="margin-top: 8px;"><?php echo nl2br(cm_escape($msg['notes'])); ?></div>
+                                <div class="notes-title">Staff notes / reply</div>
+                                <div><?php echo nl2br(cm_escape($msg['notes'])); ?></div>
                                 <?php if ($msg['resolved_by_name']): ?>
-                                    <div style="margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary, #64748B);">
+                                    <div class="notes-handler">
                                         Handled by <?php echo cm_escape($msg['resolved_by_name']); ?>
                                         on <?php echo date('M j, Y', strtotime($msg['resolved_at'])); ?>
                                     </div>
@@ -377,74 +327,74 @@ renderAdminShell(
 
                         <div class="message-actions">
                             <?php if ($msg['status'] === 'pending'): ?>
-                                <button class="btn btn-primary btn-sm" onclick="openReplyModal(<?php echo $msg['contact_id']; ?>, '<?php echo cm_escape($msg['name']); ?>', '<?php echo cm_escape($msg['email']); ?>')">
-                                    ✉️ Reply via Email
+                                <button type="button" class="btn btn-primary btn-sm" onclick='openReplyModal(<?php echo (int) $msg['contact_id']; ?>, <?php echo json_encode((string) $msg['name'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>, <?php echo json_encode((string) $msg['email'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>
+                                    Reply by email
                                 </button>
-                                <button class="btn btn-sm" style="background: #16A34A; color: white;" onclick="openResolveModal(<?php echo $msg['contact_id']; ?>)">
-                                    ✓ Mark Resolved
+                                <button type="button" class="btn btn-success btn-sm" onclick="openResolveModal(<?php echo (int) $msg['contact_id']; ?>)">
+                                    Mark resolved
                                 </button>
-                                <button class="btn btn-secondary btn-sm" onclick="archiveMessage(<?php echo $msg['contact_id']; ?>)">
-                                    🗄️ Archive
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="archiveMessage(<?php echo (int) $msg['contact_id']; ?>)">
+                                    Archive
                                 </button>
                             <?php elseif ($msg['status'] === 'resolved'): ?>
-                                <button class="btn btn-secondary btn-sm" onclick="reopenMessage(<?php echo $msg['contact_id']; ?>)">
-                                    🔄 Reopen
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="reopenMessage(<?php echo (int) $msg['contact_id']; ?>)">
+                                    Reopen
                                 </button>
-                                <button class="btn btn-secondary btn-sm" onclick="archiveMessage(<?php echo $msg['contact_id']; ?>)">
-                                    🗄️ Archive
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="archiveMessage(<?php echo (int) $msg['contact_id']; ?>)">
+                                    Archive
                                 </button>
                             <?php elseif ($msg['status'] === 'archived'): ?>
-                                <button class="btn btn-secondary btn-sm" onclick="reopenMessage(<?php echo $msg['contact_id']; ?>)">
-                                    🔄 Reopen
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="reopenMessage(<?php echo (int) $msg['contact_id']; ?>)">
+                                    Reopen
                                 </button>
                             <?php endif; ?>
                         </div>
-                    </div>
+                    </article>
                 <?php endforeach; ?>
 
                 <!-- Pagination -->
                 <?php if ($total_pages > 1): ?>
-                    <div style="padding: 20px; border-top: 1px solid var(--border, #E5E7EB); display: flex; justify-content: center; gap: 12px; align-items: center;">
+                    <nav class="pagination" aria-label="Contact message pages">
                         <?php if ($page > 1): ?>
-                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page - 1; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>" class="btn btn-sm btn-secondary">← Previous</a>
+                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page - 1; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>#contact-inbox" class="btn btn-sm btn-secondary">&larr; Previous</a>
                         <?php endif; ?>
 
-                        <span style="padding: 8px 16px; color: var(--text-secondary, #64748B);">
-                            Page <?php echo $page; ?> of <?php echo $total_pages; ?>
+                        <span class="page-label">
+                            PAGE <?php echo (int) $page; ?> OF <?php echo (int) $total_pages; ?>
                         </span>
 
                         <?php if ($page < $total_pages): ?>
-                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page + 1; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>" class="btn btn-sm btn-secondary">Next →</a>
+                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page + 1; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>#contact-inbox" class="btn btn-sm btn-secondary">Next &rarr;</a>
                         <?php endif; ?>
-                    </div>
+                    </nav>
                 <?php endif; ?>
             <?php endif; ?>
-        </div>
+        </section>
 
 <!-- Reply Modal -->
-<div id="replyModal" class="modal">
-        <div class="modal-content">
+<div id="replyModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="reply-modal-title">
+        <div class="modal-content" tabindex="-1">
             <form method="POST">
                 <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="reply">
                 <input type="hidden" name="contact_id" id="reply_contact_id">
 
                 <div class="modal-header">
-                    <h3 style="margin: 0; font-size: 1.25rem;">✉️ Reply via Email</h3>
-                    <button type="button" class="modal-close" onclick="closeReplyModal()">&times;</button>
+                    <h3 id="reply-modal-title">Reply by email</h3>
+                    <button type="button" class="modal-close" onclick="closeReplyModal()" aria-label="Close reply dialog">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                        <strong style="font-size: 0.9rem; color: var(--text-secondary, #64748B);">Replying to:</strong>
-                        <div style="margin-top: 4px;">
-                            <strong id="reply_recipient_name"></strong> (<span id="reply_recipient_email" style="color: var(--text-secondary, #64748B);"></span>)
+                    <div class="recipient-summary">
+                        <div class="recipient-label">REPLYING TO</div>
+                        <div class="recipient-person">
+                            <strong id="reply_recipient_name"></strong> <span class="recipient-email">(<span id="reply_recipient_email"></span>)</span>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Your Reply Message</label>
-                        <textarea name="reply_message" class="form-control" rows="8" required placeholder="Type your response here..."></textarea>
-                        <div style="font-size: 0.85rem; color: var(--text-secondary, #64748B); margin-top: 8px;">
+                        <label class="form-label" for="reply_message">Your reply message</label>
+                        <textarea id="reply_message" name="reply_message" class="form-control" rows="8" required placeholder="Type your response here..."></textarea>
+                        <div class="form-help">
                             This message will be sent via email and saved as internal notes.
                         </div>
                     </div>
@@ -456,57 +406,80 @@ renderAdminShell(
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeReplyModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Send Email Reply</button>
+                    <button type="submit" class="btn btn-primary">Send email reply</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- Resolve Modal -->
-    <div id="resolveModal" class="modal">
-        <div class="modal-content">
+    <div id="resolveModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="resolve-modal-title">
+        <div class="modal-content" tabindex="-1">
             <form method="POST">
                 <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="resolve">
                 <input type="hidden" name="contact_id" id="resolve_contact_id">
 
                 <div class="modal-header">
-                    <h3 style="margin: 0; font-size: 1.25rem;">✓ Mark as Resolved</h3>
-                    <button type="button" class="modal-close" onclick="closeResolveModal()">&times;</button>
+                    <h3 id="resolve-modal-title">Mark as resolved</h3>
+                    <button type="button" class="modal-close" onclick="closeResolveModal()" aria-label="Close resolution dialog">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="form-label">Resolution Notes (optional)</label>
-                        <textarea name="notes" class="form-control" rows="4" placeholder="Add internal notes about how this was resolved..."></textarea>
+                        <label class="form-label" for="resolution_notes">Resolution notes (optional)</label>
+                        <textarea id="resolution_notes" name="notes" class="form-control" rows="4" placeholder="Add internal notes about how this was resolved..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeResolveModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Mark as Resolved</button>
+                    <button type="submit" class="btn btn-primary">Mark as resolved</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
+    const replyModal = document.getElementById('replyModal');
+    const resolveModal = document.getElementById('resolveModal');
+    let lastContactFocus = null;
+
+    function showContactModal(modal, focusTarget) {
+        lastContactFocus = document.activeElement;
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        window.setTimeout(() => focusTarget.focus(), 50);
+    }
+
+    function hideContactModal(modal) {
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        if (lastContactFocus) lastContactFocus.focus();
+    }
+
     function openReplyModal(contactId, name, email) {
         document.getElementById('reply_contact_id').value = contactId;
         document.getElementById('reply_recipient_name').textContent = name;
         document.getElementById('reply_recipient_email').textContent = email;
-        document.getElementById('replyModal').classList.add('active');
+        const replyField = document.getElementById('reply_message');
+        replyField.value = '';
+        showContactModal(replyModal, replyField);
     }
 
     function closeReplyModal() {
-        document.getElementById('replyModal').classList.remove('active');
+        hideContactModal(replyModal);
     }
 
     function openResolveModal(contactId) {
         document.getElementById('resolve_contact_id').value = contactId;
-        document.getElementById('resolveModal').classList.add('active');
+        const notesField = document.getElementById('resolution_notes');
+        notesField.value = '';
+        showContactModal(resolveModal, notesField);
     }
 
     function closeResolveModal() {
-        document.getElementById('resolveModal').classList.remove('active');
+        hideContactModal(resolveModal);
     }
 
     function archiveMessage(contactId) {
@@ -532,8 +505,8 @@ renderAdminShell(
     // Close modals on escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            closeReplyModal();
-            closeResolveModal();
+            if (replyModal.classList.contains('active')) closeReplyModal();
+            if (resolveModal.classList.contains('active')) closeResolveModal();
         }
     });
 
@@ -541,12 +514,13 @@ renderAdminShell(
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', function(e) {
             if (e.target === modal) {
-                closeReplyModal();
-                closeResolveModal();
+                if (modal === replyModal) closeReplyModal();
+                if (modal === resolveModal) closeResolveModal();
             }
         });
     });
     </script>
+</div>
 
 <?php
 renderAdminShellClose();

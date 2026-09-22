@@ -232,10 +232,11 @@ function profile_flash($type) {
     if (!empty($_SESSION[$key])) {
         $message = (string) $_SESSION[$key];
         unset($_SESSION[$key]);
-        $color = $type === 'error' ? '#ef4444' : '#22c55e';
-        echo '<div style="margin-bottom:20px;padding:14px 18px;border-left:4px solid ' . $color .
-             ';background:#fff;color:#334155;border-radius:10px;">' .
-             htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</div>';
+        $class = $type === 'error' ? 'profile-alert-error' : 'profile-alert-success';
+        $mark = $type === 'error' ? '!' : 'OK';
+        echo '<div class="profile-alert ' . $class . '" role="' . ($type === 'error' ? 'alert' : 'status') . '">' .
+             '<span class="profile-alert-mark">' . $mark . '</span><span>' .
+             htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</span></div>';
     }
 }
 
@@ -257,12 +258,12 @@ if ($role === 'admin') {
 
 // Display labels for the role badge.
 $role_labels = [
-    'student'        => '🎒 Student',
-    'faculty'        => '🎓 Faculty Adviser',
-    'research_staff' => '📋 Research Staff',
-    'admin'          => '🛡️ Administrator',
+    'student'        => 'Student',
+    'faculty'        => 'Faculty',
+    'research_staff' => 'Research Staff',
+    'admin'          => 'Administrator',
 ];
-$role_label = $role_labels[$role] ?? htmlspecialchars(ucwords(str_replace('_', ' ', $role)), ENT_QUOTES, 'UTF-8');
+$role_label = $role_labels[$role] ?? ucwords(str_replace('_', ' ', $role));
 
 // Year-level options (matches the ENUM in migration 002).
 $year_level_options = ['', '1st', '2nd', '3rd', '4th', 'Graduate', 'Masters', 'Doctorate'];
@@ -277,87 +278,62 @@ $form_year_level    = $user_row['year_level']    ?? '';
 $form_specialization = $user_row['specialization'] ?? '';
 $form_academic_rank = $user_row['academic_rank'] ?? '';
 $form_office        = $user_row['office']        ?? '';
-
-profile_flash('success');
-profile_flash('error');
+$profile_name = trim((string) $form_first_name . ' ' . (string) $form_last_name);
+$profile_name = $profile_name !== '' ? $profile_name : 'RMS User';
+$profile_initials = mb_strtoupper(mb_substr((string) $form_first_name, 0, 1) . mb_substr((string) $form_last_name, 0, 1));
+$profile_initials = $profile_initials !== '' ? $profile_initials : 'RU';
+$member_since = date('M Y', strtotime((string) ($user_row['created_at'] ?? 'now')));
+$profileTheme = match ($role) {
+    'admin' => ['accent' => '#F57C00', 'deep' => '#9A3F00', 'tint' => '#FFF4E8', 'highlight' => '#FED7AA', 'rgb' => '245,124,0'],
+    'research_staff' => ['accent' => '#0D9488', 'deep' => '#065F58', 'tint' => '#E9F8F5', 'highlight' => '#99F6E4', 'rgb' => '13,148,136'],
+    'faculty' => ['accent' => '#1D4ED8', 'deep' => '#172554', 'tint' => '#EAF0FF', 'highlight' => '#BFDBFE', 'rgb' => '29,78,216'],
+    default => ['accent' => '#5B1EBC', 'deep' => '#32106E', 'tint' => '#F3EDFF', 'highlight' => '#DDD6FE', 'rgb' => '91,30,188'],
+};
 ?>
 
 <style>
-  .profile-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 24px;
-    max-width: 820px;
-  }
-
-  .profile-info-row {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid #E5E7EB;
-    font-size: 14px;
-  }
-  .profile-info-row:last-child { border-bottom: none; }
-  .profile-info-label {
-    color: #64748B;
-    font-weight: 500;
-  }
-  .profile-info-value {
-    color: #111827;
-    font-weight: 500;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-  .form-grid .full { grid-column: 1 / -1; }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
-  }
-  .form-group label {
-    font-size: 13px;
-    font-weight: 500;
-    color: #111827;
-  }
-  .form-group input,
-  .form-group select {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid #E5E7EB;
-    border-radius: 10px;
-    font-size: 14px;
-    background: #fff;
-    color: #111827;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: #5B1EBC;
-    box-shadow: 0 0 0 3px rgba(91, 30, 188, 0.15);
-  }
-  .form-group input[disabled] {
-    background: #F8FAFC;
-    color: #64748B;
-    cursor: not-allowed;
-  }
-  .form-help {
-    font-size: 12px;
-    color: #94A3B8;
-  }
-
-  @media (max-width: 640px) {
-    .profile-info-row { grid-template-columns: 1fr; }
-    .form-grid { grid-template-columns: 1fr; }
-  }
+  html{scroll-behavior:smooth}.profile-workspace{--profile-ink:#192235;--profile-gold:<?= htmlspecialchars($profileTheme['accent'], ENT_QUOTES, 'UTF-8') ?>;--profile-accent:<?= htmlspecialchars($profileTheme['accent'], ENT_QUOTES, 'UTF-8') ?>;--profile-deep:<?= htmlspecialchars($profileTheme['deep'], ENT_QUOTES, 'UTF-8') ?>;--profile-tint:<?= htmlspecialchars($profileTheme['tint'], ENT_QUOTES, 'UTF-8') ?>;--profile-highlight:<?= htmlspecialchars($profileTheme['highlight'], ENT_QUOTES, 'UTF-8') ?>;--profile-rgb:<?= htmlspecialchars($profileTheme['rgb'], ENT_QUOTES, 'UTF-8') ?>;--profile-muted:#687386;--profile-line:#dfe5ed;max-width:1380px;margin:0 auto;color:var(--profile-ink)}
+  .profile-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(310px,.8fr);gap:50px;min-height:335px;padding:52px 56px 64px;overflow:hidden;border-radius:24px 24px 8px 8px;background:radial-gradient(circle at 83% 14%,rgba(210,162,72,.21),transparent 29%),linear-gradient(135deg,#172033,#202e46 66%,#29364c);color:#fff;box-shadow:0 24px 58px rgba(24,34,53,.16)}.profile-hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.15;background-image:repeating-linear-gradient(90deg,transparent 0,transparent 67px,rgba(255,255,255,.1) 68px);pointer-events:none}.profile-kicker,.identity-code,.card-index,.profile-role{font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.15em;text-transform:uppercase}.profile-kicker{margin-bottom:21px;color:#e9bf6e}.hero-identity{display:flex;align-items:center;gap:23px}.profile-monogram{display:grid;place-items:center;flex:0 0 82px;height:82px;border:1px solid rgba(255,255,255,.18);border-radius:22px 22px 8px 22px;background:rgba(255,255,255,.09);color:#f0c97e;font-size:25px;font-weight:750;letter-spacing:-.04em;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}.profile-hero h2{max-width:760px;margin:0;color:#fff;font-size:clamp(38px,4.2vw,61px);line-height:.98;letter-spacing:-.055em;text-wrap:balance}.profile-role{display:inline-flex;margin-top:14px;padding:6px 8px;border:1px solid rgba(233,191,110,.25);border-radius:5px;background:rgba(233,191,110,.08);color:#e9bf6e}.profile-hero-email{margin:17px 0 0;color:#b9c4d4;font-size:14px;overflow-wrap:anywhere}.identity-readout{align-self:end;display:grid;gap:2px}.identity-row{display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:12px;padding:16px 18px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06)}.identity-row:first-child{border-radius:14px 14px 5px 5px}.identity-row:last-child{border-radius:5px 5px 14px 14px}.identity-code{color:#e9bf6e}.identity-label{color:#d4dce8;font-size:12px}.identity-value{color:#fff;font-size:15px;font-weight:680;text-align:right;overflow-wrap:anywhere}
+  .profile-alert{display:flex;align-items:flex-start;gap:12px;margin:26px 0 0;padding:14px 17px;border:1px solid;border-radius:10px;font-size:13px;line-height:1.55}.profile-alert-mark{display:grid;place-items:center;flex:0 0 24px;height:24px;border-radius:7px;font-size:10px;font-weight:800}.profile-alert-success{border-color:#cde7d8;background:#f0f8f3;color:#276446}.profile-alert-success .profile-alert-mark{background:#dcefe3}.profile-alert-error{border-color:#edcaca;background:#fff4f4;color:#9a3535}.profile-alert-error .profile-alert-mark{background:#f7dddd}
+  .profile-grid{display:grid;grid-template-columns:minmax(280px,.72fr) minmax(0,1.28fr);gap:24px;margin-top:36px;align-items:start}.profile-workspace .card{margin:0;overflow:hidden;border:1px solid var(--profile-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.06)}.profile-workspace .card:first-child{position:sticky;top:24px;grid-row:1 / span 2}.profile-workspace .card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0;padding:27px 28px 22px;border-bottom:1px solid #edf0f4;background:#fff}.card-index{margin-bottom:9px;color:#987027}.profile-workspace .card-title{margin:0;color:#1c2639;font-size:24px;font-weight:720;line-height:1.13;letter-spacing:-.03em}.profile-workspace .card-subtitle{max-width:620px;margin:9px 0 0;color:var(--profile-muted);font-size:13px;line-height:1.6}.profile-workspace .card-body{padding:6px 28px 28px}
+  .profile-info-row{display:grid;grid-template-columns:minmax(108px,.76fr) minmax(0,1fr);gap:16px;padding:15px 0;border-bottom:1px solid #edf0f4;font-size:13px}.profile-info-row:last-child{border-bottom:0}.profile-info-label{color:#8791a0;font:700 9px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase}.profile-info-value{color:#263247;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+  .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.form-grid .full{grid-column:1/-1}.form-group{display:flex;flex-direction:column;gap:7px;margin-bottom:17px}.form-group label{color:#000;font-size:12px;font-weight:680}.form-group input,.form-group select{width:100%;min-height:44px;padding:10px 13px;border:1px solid #d7dee7;border-radius:8px;background:#fff;color:#000!important;font-family:inherit;font-size:13px;line-height:1.45;transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}.form-group input::placeholder{color:#8b95a4}.form-group input:focus,.form-group select:focus{outline:0;border-color:#b88731;box-shadow:0 0 0 3px rgba(210,162,72,.16)}.form-group input[disabled]{border-color:#e3e7ec;background:#f4f6f8;color:#596579!important;cursor:not-allowed}.form-help{color:#8791a0;font-size:11px;line-height:1.45}.form-actions{display:flex;gap:10px;margin-top:5px;padding-top:19px;border-top:1px solid #edf0f4}.profile-workspace .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 16px;border:1px solid transparent;border-radius:8px;background:none;color:inherit;font-family:inherit;font-size:12px;font-weight:700;line-height:1.2;text-decoration:none;cursor:pointer;transition:transform .2s ease,background .2s ease,border-color .2s ease,box-shadow .2s ease}.profile-workspace .btn:hover{transform:translateY(-1px)}.profile-workspace .btn:active{transform:translateY(0) scale(.98)}.profile-workspace .btn:focus-visible{outline:3px solid rgba(210,162,72,.28);outline-offset:2px}.profile-workspace .btn-primary{border-color:var(--profile-gold);background:var(--profile-gold);color:#182033}.profile-workspace .btn-primary:hover{border-color:#dfb45f;background:#dfb45f;box-shadow:0 9px 22px rgba(159,117,42,.18)}.security-note{display:flex;gap:11px;margin:0 0 20px;padding:13px 14px;border-radius:9px;background:#f5f7fa;color:#5b6779;font-size:11px;line-height:1.55}.security-note::before{content:'08';color:#987027;font:700 10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+  @media(max-width:980px){.profile-hero{grid-template-columns:1fr;gap:30px}.identity-readout{grid-template-columns:repeat(3,1fr)}.identity-row{grid-template-columns:31px 1fr}.identity-value{grid-column:2;text-align:left}.profile-grid{grid-template-columns:1fr}.profile-workspace .card:first-child{position:static;grid-row:auto}}
+  @media(max-width:640px){.profile-hero{min-height:0;padding:31px 24px 38px;border-radius:18px 18px 7px 7px}.hero-identity{align-items:flex-start;flex-direction:column}.profile-monogram{flex-basis:68px;width:68px;height:68px;border-radius:18px 18px 7px 18px}.profile-hero h2{font-size:39px}.identity-readout{grid-template-columns:1fr}.identity-row{grid-template-columns:34px 1fr auto}.identity-value{grid-column:auto;text-align:right}.profile-grid{margin-top:27px}.profile-workspace .card-header{padding:23px 20px 19px}.profile-workspace .card-body{padding:5px 20px 22px}.profile-info-row,.form-grid{grid-template-columns:1fr}.profile-info-row{gap:5px}.form-actions .btn{width:100%}}
+  .profile-workspace .profile-hero{background:radial-gradient(circle at 83% 14%,rgba(255,255,255,.2),transparent 29%),linear-gradient(135deg,var(--profile-deep),var(--profile-accent));box-shadow:0 24px 58px rgba(var(--profile-rgb),.15)}
+  .profile-workspace .profile-kicker,.profile-workspace .profile-monogram,.profile-workspace .profile-role,.profile-workspace .identity-code{color:var(--profile-highlight)}
+  .profile-workspace .profile-role{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.09)}
+  .profile-workspace .card-index{color:var(--profile-accent)}
+  .profile-workspace .form-group input:focus,.profile-workspace .form-group select:focus{border-color:var(--profile-accent);box-shadow:0 0 0 3px rgba(var(--profile-rgb),.12)}
+  .profile-workspace .btn:focus-visible{outline-color:rgba(var(--profile-rgb),.28)}
+  .profile-workspace .btn-primary{border-color:var(--profile-accent);background:var(--profile-accent);color:#fff}
+  .profile-workspace .btn-primary:hover{filter:brightness(1.08);box-shadow:0 9px 22px rgba(var(--profile-rgb),.18)}
+  .profile-workspace .security-note::before{color:var(--profile-accent)}
+  @media(prefers-reduced-motion:reduce){.profile-workspace .btn,.form-group input,.form-group select{transition:none}}
 </style>
+
+<div class="profile-workspace">
+  <section class="profile-hero" aria-labelledby="profile-hero-title">
+    <div class="profile-hero-copy">
+      <div class="profile-kicker">Personal record &middot; RMS identity</div>
+      <div class="hero-identity">
+        <div class="profile-monogram" aria-hidden="true"><?php echo htmlspecialchars($profile_initials, ENT_QUOTES, 'UTF-8'); ?></div>
+        <div>
+          <h2 id="profile-hero-title"><?php echo htmlspecialchars($profile_name, ENT_QUOTES, 'UTF-8'); ?></h2>
+          <span class="profile-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span>
+        </div>
+      </div>
+      <p class="profile-hero-email"><?php echo htmlspecialchars((string) ($user_row['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+    </div>
+    <div class="identity-readout" aria-label="Account overview">
+      <div class="identity-row"><span class="identity-code">01</span><span class="identity-label">Account status</span><strong class="identity-value"><?php echo htmlspecialchars(ucfirst((string) ($user_row['status'] ?? 'active')), ENT_QUOTES, 'UTF-8'); ?></strong></div>
+      <div class="identity-row"><span class="identity-code">02</span><span class="identity-label">Member since</span><strong class="identity-value"><?php echo htmlspecialchars($member_since, ENT_QUOTES, 'UTF-8'); ?></strong></div>
+      <div class="identity-row"><span class="identity-code">03</span><span class="identity-label">Account ID</span><strong class="identity-value">#<?php echo number_format($user_id); ?></strong></div>
+    </div>
+  </section>
+
+  <?php profile_flash('success'); ?>
+  <?php profile_flash('error'); ?>
 
 <div class="profile-grid">
 
@@ -365,6 +341,7 @@ profile_flash('error');
   <div class="card">
     <div class="card-header">
       <div>
+        <div class="card-index">01 &middot; Identity</div>
         <div class="card-title">Account Information</div>
         <div class="card-subtitle">Your basic account details. Email and role cannot be changed.</div>
       </div>
@@ -382,7 +359,7 @@ profile_flash('error');
       </div>
       <div class="profile-info-row">
         <div class="profile-info-label">Role</div>
-        <div class="profile-info-value"><?php echo $role_label; ?></div>
+        <div class="profile-info-value"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
       </div>
       <div class="profile-info-row">
         <div class="profile-info-label">Status</div>
@@ -443,6 +420,7 @@ profile_flash('error');
   <div class="card">
     <div class="card-header">
       <div>
+        <div class="card-index">02 &middot; Personal details</div>
         <div class="card-title">Edit Profile</div>
         <div class="card-subtitle">Update your name, contact details, and role-specific information.</div>
       </div>
@@ -523,7 +501,7 @@ profile_flash('error');
           <?php endif; ?>
         </div>
 
-        <div style="display:flex; gap:12px; margin-top:8px;">
+        <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save changes</button>
         </div>
       </form>
@@ -534,11 +512,13 @@ profile_flash('error');
   <div class="card">
     <div class="card-header">
       <div>
+        <div class="card-index">03 &middot; Account security</div>
         <div class="card-title">Change Password</div>
         <div class="card-subtitle">Choose a new password with at least 8 characters.</div>
       </div>
     </div>
     <div class="card-body">
+      <div class="security-note">Changing your password signs in with the new credential on your next session. Use at least eight characters and do not reuse your current password.</div>
       <form method="post" autocomplete="off">
         <?php echo csrfField(); ?>
         <input type="hidden" name="action" value="change_password">
@@ -559,13 +539,14 @@ profile_flash('error');
           </div>
         </div>
 
-        <div style="display:flex; gap:12px; margin-top:8px;">
+        <div class="form-actions">
           <button type="submit" class="btn btn-primary">Update password</button>
         </div>
       </form>
     </div>
   </div>
 
+</div>
 </div>
 
 <?php

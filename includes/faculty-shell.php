@@ -23,6 +23,8 @@
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
+require_once __DIR__ . '/logout-transition.php';
+
 function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = '') {
     global $conn;
 
@@ -167,6 +169,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/faculty/faculty-dashboard.php', 'Dashboard', '📊', true, 0],
+            [SITE_URL . 'pages/shared/calendar.php',             'Calendar',  '&#128197;', true, 0],
         ],
         'Advisement' => [
             [SITE_URL . 'pages/faculty/faculty-submissions.php', 'My Submissions',    '📥', true, 0],
@@ -186,6 +189,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true, 0],
+            [SITE_URL . 'pages/shared/settings.php',         'Settings', '⚙️', true, 0],
         ],
     ];
 
@@ -198,13 +202,16 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
             return true;
         }
         $href_basename = basename(str_replace('\\', '/', (string) $href));
-        return $current_basename !== '' && $current_basename === $href_basename;
+        $current_slug = pathinfo($current_basename, PATHINFO_FILENAME);
+        $href_slug = pathinfo($href_basename, PATHINFO_FILENAME);
+        return $current_slug !== '' && $current_slug === $href_slug;
     };
 
     // Absolute asset/logout URLs (SITE_URL has a trailing slash).
     $url_style   = SITE_URL . 'css/style.css';
     $url_shell   = SITE_URL . 'css/faculty-shell.css';
     $url_logout  = SITE_URL . 'public/logout.php';
+    $page_class  = 'faculty-page--' . preg_replace('/[^a-z0-9-]+/', '-', strtolower(pathinfo($current_basename, PATHINFO_FILENAME)));
     ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -214,16 +221,9 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Faculty — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
-  <style>
-    .faculty-role-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-    .faculty-role-pill { display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 11px; font-weight: 600; line-height: 1.35; white-space: nowrap; }
-    .faculty-role-pill--adviser { color: #1d4ed8; background: #dbeafe; }
-    .faculty-role-pill--crec { color: #92400e; background: #fef3c7; }
-    .faculty-role-pill--erec { color: #6b21a8; background: #f3e8ff; }
-    .faculty-role-pill--eligible { color: #475569; background: #e2e8f0; }
-  </style>
 </head>
-<body>
+<body class="faculty-role <?php echo htmlspecialchars($page_class, ENT_QUOTES, 'UTF-8'); ?>">
+<a class="faculty-skip-link" href="#faculty-content">Skip to main content</a>
 <div class="faculty-dashboard">
   <!-- SIDEBAR -->
   <aside class="faculty-sidebar">
@@ -310,7 +310,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
       </div>
     </header>
 
-    <div class="faculty-page-content">
+    <div class="faculty-page-content" id="faculty-content" tabindex="-1">
     <?php
 }
 
@@ -323,6 +323,7 @@ function renderFacultyShellClose() {
     </div><!-- /.faculty-page-content -->
   </main>
 </div><!-- /.faculty-dashboard -->
+<?php renderLogoutTransition(); ?>
 <script>
 (() => {
   const button = document.querySelector('.faculty-mobile-menu-btn');

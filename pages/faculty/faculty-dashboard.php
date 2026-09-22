@@ -104,11 +104,43 @@ renderFacultyShell(
 ?>
 
 <style>
+  .faculty-command-brief {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+    gap: 48px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    padding: 38px 40px;
+    border: 1px solid rgba(29, 78, 216, .22);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 92% 8%, rgba(96, 165, 250, .42), transparent 32%),
+      linear-gradient(135deg, #172554 0%, #1e3a8a 52%, #1d4ed8 100%);
+    color: #fff;
+    box-shadow: 0 24px 54px rgba(30, 64, 175, .18);
+  }
+  .faculty-command-brief::after { content: ''; position: absolute; z-index: -1; right: -54px; bottom: -92px; width: 260px; height: 260px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 34px rgba(255,255,255,.035), 0 0 0 72px rgba(255,255,255,.025); }
+  .faculty-brief-eyebrow { margin: 0 0 10px; color: #bfdbfe; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .faculty-brief-copy h2 { max-width: 660px; margin: 0 0 12px; color: #fff; font-size: clamp(28px, 3vw, 42px); line-height: 1.08; letter-spacing: -.045em; }
+  .faculty-brief-copy > p:last-of-type { max-width: 62ch; margin: 0; color: rgba(255,255,255,.76); font-size: 15px; line-height: 1.7; }
+  .faculty-brief-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .faculty-brief-action { display: inline-flex; align-items: center; min-height: 42px; padding: 9px 17px; border-radius: 10px; font-size: 13px; font-weight: 700; text-decoration: none; }
+  .faculty-brief-action.primary { background: #fff; color: #1d4ed8; }
+  .faculty-brief-action.primary:hover { background: #eff6ff; transform: translateY(-1px); }
+  .faculty-brief-action.secondary { border: 1px solid rgba(255,255,255,.26); background: rgba(255,255,255,.08); color: #fff; }
+  .faculty-brief-action.secondary:hover { background: rgba(255,255,255,.15); }
+  .faculty-brief-focus { align-self: stretch; padding: 4px 0 4px 32px; border-left: 1px solid rgba(255,255,255,.18); }
+  .faculty-brief-focus-label { color: #bfdbfe; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .faculty-brief-focus strong { display: block; margin: 10px 0 6px; color: #fff; font-size: 42px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .faculty-brief-focus p { margin: 0; color: rgba(255,255,255,.7); font-size: 13px; line-height: 1.55; }
+
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 24px;
-    margin-bottom: 48px;
+    margin-bottom: 24px;
   }
 
   .stat-card {
@@ -116,13 +148,19 @@ renderFacultyShell(
     border: 1px solid #E5E7EB;
     border-radius: 20px;
     padding: 24px;
-    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
   }
 
   .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    border-color: rgba(29,78,216,.2);
+    box-shadow: 0 12px 30px rgba(29,78,216,0.10);
   }
+  .stat-card:first-child { color: #fff; border-color: #1d4ed8; background: linear-gradient(145deg, #1d4ed8, #4338ca); }
+  .stat-card:first-child .stat-label { color: rgba(255,255,255,.74); }
+  .stat-card:first-child .stat-icon { opacity: .48; }
 
   .stat-header {
     display: flex;
@@ -160,6 +198,7 @@ renderFacultyShell(
     border: 1px solid #E5E7EB;
     border-radius: 20px;
     padding: 32px;
+    transition: border-color .25s, box-shadow .25s, transform .25s;
   }
 
   .bento-card.span-8 { grid-column: span 8; }
@@ -347,7 +386,7 @@ renderFacultyShell(
   .progress-fill.blue { background: #2563EB; }
   .progress-fill.green { background: #16A34A; }
   .progress-fill.orange { background: #EA580C; }
-  .progress-fill.purple { background: #7C3AED; }
+  .progress-fill.purple { background: #4338ca; }
 
   .empty-state {
     text-align: center;
@@ -366,6 +405,7 @@ renderFacultyShell(
   }
 
   @media (max-width: 1200px) {
+    .faculty-command-brief { grid-template-columns: minmax(0,1fr) minmax(240px,.55fr); gap: 30px; }
     .bento-card.span-8,
     .bento-card.span-4 {
       grid-column: span 12;
@@ -373,6 +413,8 @@ renderFacultyShell(
   }
 
   @media (max-width: 768px) {
+    .faculty-command-brief { grid-template-columns: 1fr; padding: 30px 24px; }
+    .faculty-brief-focus { padding: 22px 0 0; border-top: 1px solid rgba(255,255,255,.18); border-left: 0; }
     .stats-grid {
       grid-template-columns: 1fr;
     }
@@ -382,6 +424,23 @@ renderFacultyShell(
     }
   }
 </style>
+
+<section class="faculty-command-brief" aria-labelledby="faculty-priority-title">
+  <div class="faculty-brief-copy">
+    <p class="faculty-brief-eyebrow">Faculty research workspace</p>
+    <h2 id="faculty-priority-title"><?php echo $stat_pending > 0 ? 'Your review queue needs attention.' : 'Your advisees are up to date.'; ?></h2>
+    <p>Review submitted chapters, guide student revisions, and keep institutional evaluations moving from one focused workspace.</p>
+    <div class="faculty-brief-actions">
+      <a class="faculty-brief-action primary" href="faculty-review.php"><?php echo $stat_pending > 0 ? 'Open review queue' : 'View advised projects'; ?></a>
+      <a class="faculty-brief-action secondary" href="faculty-students.php">View my students</a>
+    </div>
+  </div>
+  <div class="faculty-brief-focus">
+    <div class="faculty-brief-focus-label">Current priority</div>
+    <strong><?php echo $stat_pending; ?></strong>
+    <p>chapter<?php echo $stat_pending === 1 ? '' : 's'; ?> waiting for your feedback<br><?php echo $stat_students; ?> active advisee<?php echo $stat_students === 1 ? '' : 's'; ?></p>
+  </div>
+</section>
 
 <!-- STATS GRID -->
 <div class="stats-grid">
@@ -440,7 +499,7 @@ renderFacultyShell(
 
     <?php if ($assigned->num_rows > 0): ?>
       <div class="table-wrap">
-        <table>
+        <table class="table-mobile-stack">
           <thead>
             <tr>
               <th>Research Title</th>
@@ -459,15 +518,15 @@ renderFacultyShell(
               $count++;
             ?>
               <tr>
-                <td style="font-weight: 500;"><?php echo htmlspecialchars($proj['title'], ENT_QUOTES, 'UTF-8'); ?></td>
-                <td><?php echo htmlspecialchars($proj['student_first_name'] . ' ' . $proj['student_last_name'], ENT_QUOTES, 'UTF-8'); ?></td>
-                <td><?php echo date('M d, Y', strtotime($proj['created_at'])); ?></td>
-                <td>
+                <td data-label="Research title" style="font-weight: 500;"><?php echo htmlspecialchars($proj['title'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td data-label="Student"><?php echo htmlspecialchars($proj['student_first_name'] . ' ' . $proj['student_last_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td data-label="Submitted"><?php echo date('M d, Y', strtotime($proj['created_at'])); ?></td>
+                <td data-label="Status">
                   <span class="badge-status status-under-review">
                     <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $proj['status'])), ENT_QUOTES, 'UTF-8'); ?>
                   </span>
                 </td>
-                <td>
+                <td data-label="Action">
                   <a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=<?php echo (int)$proj['project_id']; ?>">Review</a>
                 </td>
               </tr>

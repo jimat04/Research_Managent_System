@@ -100,6 +100,16 @@ if ($project_id > 0) {
     }
 }
 
+$is_project_student = ($role === 'student' && $has_access === true);
+$back_links = [
+    'student' => ['pages/student/my-research.php', 'Back to My Research'],
+    'faculty' => ['pages/faculty/faculty-submissions.php', 'Back to My Submissions'],
+    'research_staff' => ['pages/staff/staff-submissions.php', 'Back to Submissions'],
+    'admin' => ['pages/admin/admin-research.php', 'Back to Research Management'],
+];
+[$back_path, $back_label] = $back_links[$role] ?? $back_links['student'];
+$back_url = SITE_URL . $back_path;
+
 // Fetch chapters
 $chapters = [];
 $approved_count = 0;
@@ -350,6 +360,12 @@ $detail_title = $has_access && $project ? $project['title'] : 'Research project'
 $detail_subtitle = $has_access && $project
     ? ($project['category_name'] ?? 'Uncategorized') . ' • ' . ($project['ay_label'] ?? 'N/A') . ' • ' . ($project['semester'] ?? '')
     : 'Project details';
+$researchTheme = match ($role) {
+    'admin' => ['accent' => '#F57C00', 'deep' => '#9A3F00', 'tint' => '#FFF4E8', 'highlight' => '#FED7AA', 'rgb' => '245,124,0'],
+    'research_staff' => ['accent' => '#0D9488', 'deep' => '#065F58', 'tint' => '#E9F8F5', 'highlight' => '#99F6E4', 'rgb' => '13,148,136'],
+    'faculty' => ['accent' => '#1D4ED8', 'deep' => '#172554', 'tint' => '#EAF0FF', 'highlight' => '#BFDBFE', 'rgb' => '29,78,216'],
+    default => ['accent' => '#5B1EBC', 'deep' => '#32106E', 'tint' => '#F3EDFF', 'highlight' => '#DDD6FE', 'rgb' => '91,30,188'],
+};
 
 if ($role === 'admin') {
     $referrer_path = parse_url((string) ($_SERVER['HTTP_REFERER'] ?? ''), PHP_URL_PATH);
@@ -365,40 +381,63 @@ if ($role === 'admin') {
     renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
 }
 ?>
+<style>
+  .research-project-page{--research-accent:<?= htmlspecialchars($researchTheme['accent'],ENT_QUOTES,'UTF-8') ?>;--research-deep:<?= htmlspecialchars($researchTheme['deep'],ENT_QUOTES,'UTF-8') ?>;--research-tint:<?= htmlspecialchars($researchTheme['tint'],ENT_QUOTES,'UTF-8') ?>;--research-highlight:<?= htmlspecialchars($researchTheme['highlight'],ENT_QUOTES,'UTF-8') ?>;--research-rgb:<?= htmlspecialchars($researchTheme['rgb'],ENT_QUOTES,'UTF-8') ?>;max-width:1320px;margin:0 auto;color:#0f172a}
+  .research-breadcrumb{margin-bottom:14px}.research-back{display:inline-flex;align-items:center;gap:8px;color:#64748b!important;font-size:11px!important;font-weight:750;text-decoration:none!important;transition:color .18s ease,transform .18s ease}.research-back:hover{color:var(--research-accent)!important;transform:translateX(-2px)}
+  .research-project-page .card{overflow:hidden;margin-bottom:20px!important;border:1px solid #e2e8f0;border-radius:17px;background:#fff;box-shadow:0 12px 32px rgba(15,23,42,.05)}
+  .research-project-page .research-summary{position:relative;padding:0!important;border-color:rgba(var(--research-rgb),.35);background:radial-gradient(circle at 88% 5%,rgba(255,255,255,.2),transparent 31%),linear-gradient(135deg,var(--research-deep),var(--research-accent));box-shadow:0 20px 44px rgba(var(--research-rgb),.15)}
+  .research-summary::after{content:"";position:absolute;right:-70px;bottom:-120px;width:290px;height:290px;border:1px solid rgba(255,255,255,.14);border-radius:50%}
+  .research-project-page .research-summary-body{position:relative;z-index:1;display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:34px!important;align-items:end!important;padding:34px 38px!important}
+  .research-kicker{display:block;margin-bottom:10px;color:var(--research-highlight);font-size:10px;font-weight:850;letter-spacing:.13em;text-transform:uppercase}
+  .research-summary h1{max-width:850px;margin:0;color:#fff;font-size:clamp(27px,3vw,40px);line-height:1.1;letter-spacing:-.035em}
+  .research-status-line{margin-top:18px}.research-summary .badge{border-color:rgba(255,255,255,.2)!important;background:rgba(255,255,255,.13)!important;color:#fff!important}
+  .research-summary-meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;color:rgba(255,255,255,.76)!important;font-size:11px!important;line-height:1.55!important}.research-summary-meta span{color:inherit!important}.research-summary-meta strong{color:#fff}
+  .research-progress-summary{min-width:220px;padding:18px 20px;border:1px solid rgba(255,255,255,.2);border-radius:14px;background:rgba(255,255,255,.1);backdrop-filter:blur(8px)}.research-progress-summary strong{display:block;color:#fff;font-size:29px;line-height:1}.research-progress-summary span{display:block;margin-top:7px;color:var(--research-highlight);font-size:11px;font-weight:700}
+  .research-project-page .card-header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:22px 25px 18px;border-bottom:1px solid #edf1f5;background:#fff}.research-project-page .card-title{color:#0f172a;font-size:17px;font-weight:760;letter-spacing:-.015em}.research-project-page .card-body{padding:22px 25px;color:#475569;font-size:12px;line-height:1.65}
+  .research-project-page .research-abstract .card-body>div{color:#475569!important;font-size:13px;line-height:1.78!important;text-align:left!important}
+  .research-project-page .research-chapters .card-body>div,.research-project-page .research-team .card-body>div{gap:0!important}.research-project-page .research-chapters .card-body>div>div,.research-project-page .research-team .card-body>div>div{padding:14px 0!important;border:0!important;border-bottom:1px solid #edf1f5!important;border-radius:0!important;background:#fff!important}.research-project-page .research-chapters .card-body>div>div:last-child,.research-project-page .research-team .card-body>div>div:last-child{border-bottom:0!important}
+  .research-project-page .research-chapters .card-body>div>div>div:first-child>div:first-child,.research-project-page .research-team .card-body>div>div>div:first-child>div:first-child{color:#0f172a!important;font-size:12px;font-weight:750!important}
+  .research-project-page .btn{border-radius:8px;font-size:10px;font-weight:800}.research-project-page .btn-primary,.research-project-page .btn-accent{border-color:var(--research-accent)!important;background:var(--research-accent)!important;color:#fff!important}.research-project-page .btn-secondary:hover{border-color:rgba(var(--research-rgb),.3)!important;background:var(--research-tint)!important;color:var(--research-accent)!important}
+  .research-project-page .table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:11px}.research-project-page table{width:100%;border-collapse:collapse}.research-project-page table th{padding:11px 13px;background:#f1f5f9;color:#475569;font-size:9px;font-weight:800;letter-spacing:.055em;text-transform:uppercase}.research-project-page table td{padding:13px;color:#475569;font-size:10px;border-top:1px solid #e2e8f0}.research-project-page table tr:hover td{background:var(--research-tint)}
+  .research-project-page .research-empty{display:grid;justify-items:center;padding:60px 25px!important;text-align:center}.research-empty-mark{display:grid;place-items:center;width:52px;height:52px;margin-bottom:16px;border-radius:15px;background:var(--research-tint);color:var(--research-accent);font-size:20px;font-weight:850}.research-project-page .research-empty h3{color:#0f172a!important;font-size:18px!important}.research-project-page .research-empty p{max-width:480px;color:#64748b!important;font-size:12px!important;line-height:1.6!important}
+  @media(max-width:760px){.research-project-page .research-summary-body{grid-template-columns:1fr;padding:28px 23px!important}.research-progress-summary{min-width:0;width:100%;box-sizing:border-box}.research-project-page .card-header{align-items:flex-start;flex-direction:column;padding:20px}.research-project-page .card-body{padding:19px 20px}.research-project-page .research-chapters .card-body>div>div,.research-project-page .research-team .card-body>div>div{align-items:flex-start!important;flex-direction:column!important;gap:10px!important}}
+</style>
+<div class="research-project-page">
       <!-- BREADCRUMB -->
-      <div style="margin-bottom: 20px;">
-        <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" style="color: var(--primary); text-decoration: none; font-size: 14px;">← Back to My Research</a>
+      <div class="research-breadcrumb">
+        <a class="research-back" href="<?php echo htmlspecialchars($back_url, ENT_QUOTES, 'UTF-8'); ?>">← <?php echo htmlspecialchars($back_label, ENT_QUOTES, 'UTF-8'); ?></a>
       </div>
 
       <?php if (!$has_access || !$project): ?>
         <!-- ACCESS DENIED / NOT FOUND -->
-        <div class="card" style="text-align: center; padding: 60px 40px;">
-          <div style="font-size: 48px; margin-bottom: 16px;">❌</div>
+        <div class="card research-empty">
+          <div class="research-empty-mark" aria-hidden="true">!</div>
           <h3 style="margin: 0 0 8px 0; color: var(--text-dark);">Project not found or you don't have access</h3>
           <p style="margin: 0 0 24px 0; color: var(--text-light); font-size: 14px;">
             The research project you're looking for doesn't exist or you don't have permission to view it.
           </p>
-          <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">Go back to My Research</a>
+          <a href="<?php echo htmlspecialchars($back_url, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary"><?php echo htmlspecialchars($back_label, ENT_QUOTES, 'UTF-8'); ?></a>
         </div>
 
       <?php else: ?>
         <!-- STATUS + ACTIONS CARD -->
-        <div class="card" style="margin-bottom: 20px;">
-          <div class="card-body" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
+        <div class="card research-summary">
+          <div class="card-body research-summary-body">
             <div style="flex: 1;">
-              <div style="margin-bottom: 12px;">
+              <span class="research-kicker">Research project · #<?php echo (int) $project_id; ?></span>
+              <h1><?php echo htmlspecialchars((string) $project['title'], ENT_QUOTES, 'UTF-8'); ?></h1>
+              <div class="research-status-line">
                 <?php $status = isset($project['status']) ? $project['status'] : 'draft'; $badge = isset($status_badges[$status]) ? $status_badges[$status] : $status_badges['draft']; ?>
                 <span class="<?php echo htmlspecialchars($badge['class']); ?>" <?php echo !empty($badge['style']) ? 'style="' . htmlspecialchars($badge['style']) . '"' : ''; ?>>
                   <?php echo ucwords(str_replace('_', ' ', $status)); ?>
                 </span>
               </div>
-              <div style="color: var(--text-light); font-size: 13px; line-height: 1.5;">
-                📅 Created: <?php echo date('M d, Y', strtotime($project['created_at'])); ?><br>
-                🔄 Last updated: <?php echo date('M d, Y', strtotime($project['updated_at'])); ?><br>
-                👤 Lead: <?php echo htmlspecialchars($project['first_name'] . ' ' . $project['last_name']); ?>
+              <div class="research-summary-meta">
+                <span>Created <strong><?php echo date('M d, Y', strtotime($project['created_at'])); ?></strong></span>
+                <span>Updated <strong><?php echo date('M d, Y', strtotime($project['updated_at'])); ?></strong></span>
+                <span>Lead <strong><?php echo htmlspecialchars($project['first_name'] . ' ' . $project['last_name']); ?></strong></span>
                 <?php if (!empty($previous_advisers)): ?>
-                  <br>
-                  <span style="color: var(--text-light);">
+                  <span>
                     Previous adviser(s):
                     <?php foreach ($previous_advisers as $index => $previous_adviser):
                       $previous_name = trim(($previous_adviser['first_name'] ?? '') . ' ' . ($previous_adviser['last_name'] ?? ''));
@@ -412,18 +451,18 @@ if ($role === 'admin') {
                 <?php endif; ?>
               </div>
             </div>
-
+            <div class="research-progress-summary"><strong><?php echo (int) $approved_count; ?>/5</strong><span>Chapters approved</span></div>
           </div>
         </div>
 
         <!-- ABSTRACT CARD -->
-        <div class="card" style="margin-bottom: 20px;">
+        <div class="card research-abstract">
           <div class="card-header">
             <div class="card-title">Abstract</div>
           </div>
           <div class="card-body">
             <?php if (!empty($project['abstract'])): ?>
-              <div style="white-space: pre-wrap; color: var(--text-dark); line-height: 1.6;">
+              <div style="white-space: pre-wrap; color: var(--text-dark); line-height: 1.6; text-align: justify; text-justify: inter-word;">
                 <?php echo htmlspecialchars($project['abstract'], ENT_QUOTES, 'UTF-8'); ?>
               </div>
             <?php else: ?>
@@ -433,7 +472,7 @@ if ($role === 'admin') {
         </div>
 
         <!-- CHAPTERS CARD -->
-        <div class="card" style="margin-bottom: 20px;">
+        <div class="card research-chapters">
           <div class="card-header">
             <div>
               <div class="card-title">Chapters</div>
@@ -446,11 +485,13 @@ if ($role === 'admin') {
           <div class="card-body">
             <?php if (empty($chapters)): ?>
               <div style="color: var(--text-light); text-align: center; padding: 24px;">
-                No chapters submitted yet. Start with Chapter 1.
+                No chapters submitted yet.<?php echo $is_project_student ? ' Start with Chapter 1.' : ''; ?>
               </div>
-              <div style="display: flex; justify-content: center; gap: 8px;">
-                <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
-              </div>
+              <?php if ($is_project_student): ?>
+                <div style="display: flex; justify-content: center; gap: 8px;">
+                  <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
+                </div>
+              <?php endif; ?>
             <?php else: ?>
               <div style="display: flex; flex-direction: column; gap: 12px;">
                 <?php for ($i = 1; $i <= 5; $i++): ?>
@@ -477,19 +518,21 @@ if ($role === 'admin') {
                         <?php endif; ?>
                       </div>
                     </div>
-                    <div>
-                      <?php if (!isset($chapters[$i])): ?>
-                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
-                      <?php elseif ($chapters[$i]['status'] === 'draft'): ?>
-                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
-                      <?php elseif ($chapters[$i]['status'] === 'revision_required'): ?>
-                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
-                      <?php elseif (in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
-                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
-                      <?php elseif ($chapters[$i]['status'] === 'approved'): ?>
-                        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
-                      <?php endif; ?>
-                    </div>
+                    <?php if ($is_project_student): ?>
+                      <div>
+                        <?php if (!isset($chapters[$i])): ?>
+                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
+                        <?php elseif ($chapters[$i]['status'] === 'draft'): ?>
+                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
+                        <?php elseif ($chapters[$i]['status'] === 'revision_required'): ?>
+                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
+                        <?php elseif (in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
+                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
+                        <?php elseif ($chapters[$i]['status'] === 'approved'): ?>
+                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
+                        <?php endif; ?>
+                      </div>
+                    <?php endif; ?>
                   </div>
                 <?php endfor; ?>
               </div>
@@ -498,7 +541,7 @@ if ($role === 'admin') {
         </div>
 
         <!-- RESEARCH TEAM CARD -->
-        <div class="card" style="margin-bottom: 20px;">
+        <div class="card research-team">
           <div class="card-header">
             <div class="card-title">Research Team</div>
           </div>
@@ -529,7 +572,7 @@ if ($role === 'admin') {
         </div>
 
         <!-- RECENT UPLOADS CARD -->
-        <div class="card" style="margin-bottom: 20px;">
+        <div class="card research-documents">
           <div class="card-header">
             <div>
               <div class="card-title">Recent Documents</div>
@@ -573,7 +616,7 @@ if ($role === 'admin') {
         </div>
 
         <!-- MANUAL MILESTONES CARD -->
-        <div class="card" style="margin-bottom: 20px;">
+        <div class="card research-milestones">
           <div class="card-header">
             <div>
               <div class="card-title">Manual Milestones</div>
@@ -694,7 +737,7 @@ if ($role === 'admin') {
         </div>
 
         <!-- ACTIVITY CARD (PLACEHOLDER) -->
-        <div class="card">
+        <div class="card research-activity">
           <div class="card-header">
             <div class="card-title">Activity</div>
           </div>
@@ -705,6 +748,8 @@ if ($role === 'admin') {
         </div>
 
 <?php endif; ?>
+
+</div>
 
 <?php
 if ($role === 'admin') {

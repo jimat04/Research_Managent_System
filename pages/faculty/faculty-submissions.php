@@ -360,8 +360,8 @@ function fsub_role_badge($role_kind, $review_level = null) {
     $label = '📋 ' . fsub_se($level) . ' Reviewer';
     return '<span style="display:inline-block;font-size:12px;font-weight:500;'
          . 'padding:3px 10px;border-radius:9999px;'
-         . 'background:rgba(91,30,188,0.10);color:#5B1EBC;'
-         . 'border:1px solid rgba(91,30,188,0.25);">'
+         . 'background:rgba(67,56,202,0.10);color:#4338CA;'
+         . 'border:1px solid rgba(67,56,202,0.24);">'
          . $label . '</span>';
 }
 
@@ -555,11 +555,92 @@ renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle
       margin-bottom: 4px;
     }
   }
+
+  /* Faculty assignment workspace */
+  .fsub-brief {
+    position: relative; isolation: isolate; display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(270px, .65fr);
+    gap: 42px; overflow: hidden; margin-bottom: 20px; padding: 36px 40px;
+    border: 1px solid rgba(29,78,216,.32); border-radius: 20px;
+    background: radial-gradient(circle at 91% 8%, rgba(96,165,250,.4), transparent 31%), linear-gradient(135deg,#172554,#1e3a8a 56%,#1d4ed8);
+    color: #fff; box-shadow: 0 22px 48px rgba(30,64,175,.16);
+  }
+  .fsub-brief::after { content:''; position:absolute; z-index:-1; right:-78px; bottom:-126px; width:280px; height:280px; border:1px solid rgba(255,255,255,.12); border-radius:50%; box-shadow:0 0 0 38px rgba(255,255,255,.03),0 0 0 80px rgba(255,255,255,.02); }
+  .fsub-brief-copy { align-self: center; }
+  .fsub-eyebrow { margin:0 0 10px; color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+  .fsub-brief h2 { max-width:680px; margin:0 0 12px; color:#fff; font-size:clamp(28px,3vw,40px); line-height:1.08; letter-spacing:-.045em; }
+  .fsub-brief-copy > p:last-of-type { max-width:64ch; margin:0; color:rgba(255,255,255,.76); font-size:14px; line-height:1.7; }
+  .fsub-brief-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+  .fsub-brief-action { display:inline-flex; min-height:41px; align-items:center; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; }
+  .fsub-brief-action.primary { background:#fff; color:#1d4ed8; }
+  .fsub-brief-action.primary:hover { background:#eff6ff; transform:translateY(-1px); }
+  .fsub-brief-action.secondary { border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.08); color:#fff; }
+  .fsub-brief-action.secondary:hover { background:rgba(255,255,255,.15); }
+  .fsub-priority { align-self:stretch; display:grid; align-content:center; padding-left:32px; border-left:1px solid rgba(255,255,255,.2); }
+  .fsub-priority-label { color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+  .fsub-priority strong { display:block; margin:10px 0 5px; color:#fff; font-size:42px; line-height:1; font-variant-numeric:tabular-nums; }
+  .fsub-priority p { margin:0; color:rgba(255,255,255,.72); font-size:12px; line-height:1.55; }
+
+  .fsub-stats { grid-template-columns:repeat(4,1fr); gap:0; overflow:hidden; margin-bottom:20px; border:1px solid #E5E7EB; border-radius:16px; background:#fff; }
+  .fsub-stat { min-width:0; border:0; border-radius:0; padding:19px 22px; box-shadow:none; }
+  .fsub-stat + .fsub-stat { border-left:1px solid #E5E7EB; }
+  .fsub-stat:first-child { background:#eff6ff; }
+  .fsub-stat:hover { box-shadow:none; background:rgba(29,78,216,.055); transform:none; }
+  .fsub-stat-num { font-size:30px; letter-spacing:-.045em; }
+  .fsub-stat-icon { display:grid; width:34px; height:34px; place-items:center; border-radius:9px; background:rgba(29,78,216,.08); font-size:16px; opacity:1; }
+  .fsub-list-head { display:flex; align-items:end; justify-content:space-between; gap:18px; margin:30px 0 14px; }
+  .fsub-list-head h2 { margin:0 0 4px; font-size:20px; }
+  .fsub-list-head p { margin:0; color:#64748B; font-size:13px; }
+  .fsub-result-count { flex:none; color:#1d4ed8; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .fsub-filters { padding:18px 20px; border-color:rgba(29,78,216,.14); background:linear-gradient(145deg,#fff,#f8fbff); }
+  .fsub-search-field { flex:1 1 280px; min-width:240px; }
+  .fsub-search-field input { width:100%; }
+  .fsub-table-wrap { border-radius:16px; box-shadow:0 10px 30px rgba(30,64,175,.055); }
+  .fsub-table thead th { position:static; padding-block:13px; background:#EFF4FA; color:#475569; font-size:10px; font-weight:750; letter-spacing:.055em; }
+  .fsub-table tbody td { padding-block:18px; vertical-align:middle; }
+  .fsub-title { font-size:14px; font-weight:650; }
+  .fsub-progress-fill { background:linear-gradient(90deg,#1d4ed8,#4338ca); }
+  .fsub-table .btn { white-space:nowrap; }
+  @media (max-width: 980px) {
+    .fsub-brief { grid-template-columns:1fr; gap:26px; }
+    .fsub-priority { padding:22px 0 0; border-top:1px solid rgba(255,255,255,.2); border-left:0; }
+    .fsub-stats { grid-template-columns:repeat(2,1fr); }
+    .fsub-stat:nth-child(3) { border-left:0; }
+    .fsub-stat:nth-child(n+3) { border-top:1px solid #E5E7EB; }
+  }
+  @media (max-width: 640px) {
+    .fsub-brief { padding:28px 22px; }
+    .fsub-brief-actions { display:grid; }
+    .fsub-brief-action { justify-content:center; }
+    .fsub-stats { grid-template-columns:1fr; }
+    .fsub-stat + .fsub-stat { border-top:1px solid #E5E7EB; border-left:0; }
+    .fsub-list-head { align-items:start; flex-direction:column; }
+    .fsub-search-field { min-width:100%; }
+    .fsub-actions { width:100%; }
+    .fsub-actions .btn { flex:1; justify-content:center; }
+  }
 </style>
 
 <?php if (!empty($errors)): ?>
   <div class="fsub-error"><?php echo fsub_se(implode(' ', $errors)); ?></div>
 <?php endif; ?>
+
+<section class="fsub-brief" aria-labelledby="fsub-workspace-title">
+  <div class="fsub-brief-copy">
+    <p class="fsub-eyebrow">Assigned research workspace</p>
+    <h2 id="fsub-workspace-title"><?php echo $stat_pending > 0 ? 'Move your priority reviews forward.' : 'Your assigned research is up to date.'; ?></h2>
+    <p>See every project where you serve as adviser or institutional reviewer, then open the right review action without losing context.</p>
+    <div class="fsub-brief-actions">
+      <a class="fsub-brief-action primary" href="faculty-review.php">Open chapter reviews</a>
+      <a class="fsub-brief-action secondary" href="faculty-my-reviews.php">CREC/EREC evaluations</a>
+    </div>
+  </div>
+  <div class="fsub-priority">
+    <span class="fsub-priority-label">Needs attention</span>
+    <strong><?php echo (int) $stat_pending; ?></strong>
+    <p>assigned project<?php echo $stat_pending === 1 ? '' : 's'; ?> currently in a review or revision stage</p>
+  </div>
+</section>
 
 <div class="fsub-stats">
   <div class="fsub-stat">
@@ -584,6 +665,14 @@ renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle
   </div>
 </div>
 
+<div class="fsub-list-head">
+  <div>
+    <h2>Assigned research</h2>
+    <p>Filter by workflow status or search by research title.</p>
+  </div>
+  <span class="fsub-result-count"><?php echo count($rows); ?> result<?php echo count($rows) === 1 ? '' : 's'; ?></span>
+</div>
+
 <form class="fsub-filters" method="get" action="">
   <div class="fsub-field">
     <label for="fsub-status">Status</label>
@@ -596,7 +685,7 @@ renderFacultyShell($user, 'faculty-submissions.php', 'My Submissions', $subtitle
       <?php endforeach; ?>
     </select>
   </div>
-  <div class="fsub-field" style="flex:1 1 240px;min-width:240px;">
+  <div class="fsub-field fsub-search-field">
     <label for="fsub-q">Search title</label>
     <input id="fsub-q" type="text" name="q" maxlength="120"
            placeholder="e.g. machine learning, bamboo, e-learning…"

@@ -621,7 +621,43 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
       margin-bottom: 4px;
     }
   }
+
+  .student-page-content{background-color:#EEEAF8;background-image:radial-gradient(circle at 88% 3%,rgba(91,30,188,.13),transparent 27%),radial-gradient(circle at 7% 47%,rgba(37,99,235,.07),transparent 24%),linear-gradient(180deg,#F4F1FA 0%,#ECE8F5 100%)}
+  .student-topbar{background:rgba(255,255,255,.93);backdrop-filter:blur(14px)}
+  .mydoc-page{--purple:#5B1EBC;--ink:#140D1E;--muted:#6D6279;--line:#DED5E8;max-width:1160px;margin:0 auto;padding-bottom:44px;color:var(--ink)}
+  .mydoc-hero{position:relative;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(270px,.75fr);gap:42px;overflow:hidden;margin-bottom:24px;padding:38px 40px;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:radial-gradient(circle at 90% 8%,rgba(220,198,255,.25),transparent 28%),radial-gradient(circle at 8% 115%,rgba(43,110,230,.23),transparent 32%),linear-gradient(135deg,#291050 0%,#4C188F 57%,#6C2CC7 100%);color:#fff;box-shadow:0 22px 52px rgba(54,24,103,.22)}
+  .mydoc-hero::after{content:'';position:absolute;right:-72px;bottom:-148px;width:300px;height:300px;border:46px solid rgba(255,255,255,.055);border-radius:50%;pointer-events:none}.mydoc-hero-copy,.mydoc-hero-side{position:relative;z-index:1}.mydoc-eyebrow{margin:0 0 11px;color:#DCCBFF;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.mydoc-hero h1{max-width:620px;margin:0;font-size:clamp(31px,3.4vw,47px);font-weight:750;letter-spacing:-.045em;line-height:1.06;text-wrap:balance}.mydoc-hero-copy p:last-child{max-width:58ch;margin:17px 0 0;color:#E8E0F3;font-size:15px;line-height:1.7}.mydoc-hero-side{display:grid;grid-template-columns:1fr 1fr;align-content:center;gap:10px;padding-left:34px;border-left:1px solid rgba(255,255,255,.24)}.mydoc-hero-metric{padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:13px;background:rgba(255,255,255,.09);backdrop-filter:blur(6px)}.mydoc-hero-value{font-size:24px;font-weight:750;font-variant-numeric:tabular-nums}.mydoc-hero-label{margin-top:3px;color:#DED2EB;font-size:10px}.mydoc-hero-action{grid-column:1/-1;display:inline-flex;min-height:42px;align-items:center;justify-content:center;gap:8px;margin-top:2px;border-radius:11px;background:#fff;color:#40117D;font-size:12px;font-weight:750;text-decoration:none;transition:transform .2s ease,box-shadow .2s ease}.mydoc-hero-action:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(25,8,55,.22)}
+  .mydoc-stats{grid-template-columns:repeat(4,1fr);gap:0;overflow:hidden;margin-bottom:20px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(45,24,76,.07)}.mydoc-stat{position:relative;min-height:104px;padding:21px 22px;border:0;border-right:1px solid #E8E1EF;border-radius:0;box-shadow:inset 0 3px 0 #5B1EBC}.mydoc-stat:last-child{border-right:0}.mydoc-stat.blue{background:#F2F6FF;box-shadow:inset 0 3px 0 #2563EB}.mydoc-stat.violet{background:#F7F1FF;box-shadow:inset 0 3px 0 #7C3AED}.mydoc-stat.slate{background:#F5F7FA;box-shadow:inset 0 3px 0 #64748B}.mydoc-stat:hover{z-index:1;transform:none;box-shadow:inset 0 3px 0 currentColor,0 10px 24px rgba(45,24,76,.1)}.mydoc-stat-icon{float:none;position:absolute;top:21px;right:20px;display:grid;width:35px;height:35px;place-items:center;border-radius:11px;background:#EEE5FA;font-size:17px;opacity:1}.mydoc-stat-num{font-size:29px;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.mydoc-stat-lbl{max-width:150px;margin-top:7px;color:#5F536C;font-size:11px;line-height:1.35}
+  .mydoc-filters{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,1.3fr) auto;gap:14px;margin-bottom:22px;padding:18px 20px;border-color:#D9CCE7;border-radius:17px;background:rgba(255,255,255,.94);box-shadow:0 10px 28px rgba(45,24,76,.06)}.mydoc-field{gap:7px}.mydoc-field label{color:#5F536C;font-size:11px;font-weight:750}.mydoc-field select{width:100%;min-width:0;min-height:43px;padding:9px 12px;border-color:#D8D0E3;background:#FCFBFD;color:#24182F;font-size:12px;font-weight:550}.mydoc-field select:hover{border-color:#BAA9CB}.mydoc-actions{gap:8px}.mydoc-actions .btn{min-height:43px}.mydoc-actions .btn-secondary{background:#F5F0FA;color:#4B168F;border-color:#D7C9E5}
+  .mydoc-group{margin-bottom:20px;border-color:#D9D0E4;border-radius:18px;box-shadow:0 13px 34px rgba(45,24,76,.07)}.mydoc-group-head{padding:19px 22px;background:linear-gradient(90deg,#F8F4FC 0%,#FBFAFD 68%,#F1E9FA 100%);border-bottom-color:#E4DBEC}.mydoc-group-title{font-size:16px;letter-spacing:-.02em}.mydoc-group-title .mydoc-link{color:#2D134C}.mydoc-group-title .mydoc-link:hover{color:#5B1EBC;text-decoration:none}.mydoc-group-sub{margin-top:5px;color:#7C7088;font-size:11px}.mydoc-table thead th{padding:12px 16px;background:#FCFBFD;color:#7D7288;font-size:10px;letter-spacing:.07em}.mydoc-table tbody td{padding:16px;color:#241A2E;border-top-color:#EEE8F3;font-size:12px;vertical-align:middle}.mydoc-table tbody tr{transition:background .2s ease}.mydoc-table tbody tr:hover{background:#FAF7FD}.mydoc-file-cell{display:flex;align-items:center;gap:12px;min-width:220px}.mydoc-file-tile{display:grid;flex:0 0 auto;width:42px;height:46px;place-items:center;border:1px solid #D6C7E7;border-radius:11px;background:#F3ECFB;color:#5B1EBC;font-size:9px;font-weight:800;letter-spacing:.04em}.mydoc-file-name{margin:0 0 4px;font-size:12px;line-height:1.4;word-break:break-word}.mydoc-file-name .mydoc-link{color:#2C2036;font-weight:700}.mydoc-file-name .mydoc-link:hover{color:#5B1EBC;text-decoration:none}.mydoc-file-meta{color:#91869B;font-size:10px}.mydoc-link{font-weight:700}.mydoc-table td:last-child .mydoc-link{display:inline-flex;min-height:34px;align-items:center;justify-content:center;padding:8px 12px;border:1px solid #D8C8E8;border-radius:9px;background:#F6F0FB;color:#4B168F;white-space:nowrap}.mydoc-table td:last-child .mydoc-link:hover{border-color:#5B1EBC;background:#5B1EBC;color:#fff;text-decoration:none}.mydoc-missing{font-size:10px}
+  .mydoc-empty,.mydoc-no-results{padding:58px 24px;background:radial-gradient(circle at 50% 15%,rgba(91,30,188,.09),transparent 38%),#FBF9FD}.mydoc-empty-icon{display:grid;width:70px;height:70px;margin:0 auto 18px;place-items:center;border-radius:21px;background:#EEE4FA;font-size:31px}.mydoc-empty-title,.mydoc-no-results-title{color:#25172F;font-size:20px;font-weight:750;letter-spacing:-.025em}.mydoc-empty-sub{color:#766A81;line-height:1.65}.mydoc-error{border-color:#F1B5B5;border-radius:15px;background:#FFF1F1;box-shadow:0 10px 26px rgba(153,27,27,.06)}
+  .mydoc-page .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:10px 17px;border:1px solid transparent;border-radius:10px;font:700 12px/1 'Inter',sans-serif;text-decoration:none;cursor:pointer;transition:transform .2s ease,box-shadow .2s ease,background .2s ease,color .2s ease}.mydoc-page .btn-primary{background:#5B1EBC;color:#fff}.mydoc-page .btn-primary:hover{transform:translateY(-1px);background:#491598;box-shadow:0 9px 18px rgba(91,30,188,.2)}.mydoc-page .btn-secondary{border-color:#D8D0E3;background:#fff;color:#281B35}.mydoc-page a:focus-visible,.mydoc-page button:focus-visible,.mydoc-page select:focus-visible{outline:3px solid rgba(91,30,188,.24);outline-offset:3px}
+  @keyframes mydocEnter{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:no-preference){.mydoc-hero,.mydoc-stats,.mydoc-filters,.mydoc-group,.mydoc-error{animation:mydocEnter .48s cubic-bezier(.16,1,.3,1) both}.mydoc-stats{animation-delay:.05s}.mydoc-filters{animation-delay:.1s}.mydoc-group{animation-delay:.14s}}
+  @media(max-width:900px){.mydoc-stats{grid-template-columns:1fr 1fr}.mydoc-stat:nth-child(2){border-right:0}.mydoc-stat:nth-child(-n+2){border-bottom:1px solid #E8E1EF}.mydoc-filters{grid-template-columns:1fr 1fr}.mydoc-actions{grid-column:1/-1}}
+  @media(max-width:720px){.mydoc-hero{grid-template-columns:1fr;padding:30px 24px}.mydoc-hero-side{padding:22px 0 0;border-top:1px solid rgba(255,255,255,.24);border-left:0}.mydoc-filters{grid-template-columns:1fr}.mydoc-actions{grid-column:auto}.mydoc-actions .btn{flex:1}.mydoc-table tbody tr{padding:9px 0}.mydoc-table tbody td{padding:8px 18px}.mydoc-table tbody td::before{margin-bottom:6px}.mydoc-file-cell{min-width:0}.mydoc-table td:last-child .mydoc-link{width:100%}}
+  @media(max-width:480px){.mydoc-stats{grid-template-columns:1fr}.mydoc-stat{border-right:0;border-bottom:1px solid #E8E1EF}.mydoc-stat:nth-child(3){border-bottom:1px solid #E8E1EF}.mydoc-hero{padding:27px 21px}.mydoc-group-head{align-items:flex-start;flex-direction:column}.mydoc-actions{flex-direction:column}.mydoc-actions .btn{width:100%}}
+  @media(prefers-reduced-motion:reduce){.mydoc-page *{animation:none!important;transition:none!important}}
 </style>
+
+<main class="mydoc-page">
+  <section class="mydoc-hero" aria-labelledby="mydoc-title">
+    <div class="mydoc-hero-copy">
+      <p class="mydoc-eyebrow">Student document library</p>
+      <h1 id="mydoc-title">Every research file, easy to find.</h1>
+      <p>Review proposals, chapters, revisions, and final materials across all of your active research projects.</p>
+    </div>
+    <div class="mydoc-hero-side" aria-label="Document summary">
+      <div class="mydoc-hero-metric">
+        <div class="mydoc-hero-value"><?php echo (int) $stat_total; ?></div>
+        <div class="mydoc-hero-label">Stored files</div>
+      </div>
+      <div class="mydoc-hero-metric">
+        <div class="mydoc-hero-value"><?php echo count($projects); ?></div>
+        <div class="mydoc-hero-label">Research projects</div>
+      </div>
+      <a class="mydoc-hero-action" href="<?php echo mydoc_se(SITE_URL . 'pages/student/submit-research.php'); ?>">Submit new research <span aria-hidden="true">&rarr;</span></a>
+    </div>
+  </section>
 
 <?php if (!empty($errors)): ?>
   <div class="mydoc-error"><?php echo mydoc_se(implode(' ', $errors)); ?></div>
@@ -696,7 +732,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
   <?php endif; ?>
   <div class="mydoc-actions">
     <button type="submit" class="btn btn-primary">Apply</button>
-    <a class="btn btn-secondary" href="my-documents.php">Reset</a>
+    <a class="btn btn-secondary" href="<?php echo mydoc_se(SITE_URL . 'pages/student/my-documents.php'); ?>">Reset</a>
   </div>
 </form>
 
@@ -784,20 +820,25 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
         ?>
           <tr>
             <td data-label="File">
-              <div class="mydoc-file-name">
-                <?php if ($download !== '' && $exists): ?>
-                  <a class="mydoc-link" href="<?php echo mydoc_se($download); ?>" target="_blank" rel="noopener">
-                    <?php echo mydoc_se($original !== '' ? $original : (string) $r['file_name']); ?>
-                  </a>
-                <?php else: ?>
-                  <span><?php echo mydoc_se($original !== '' ? $original : (string) $r['file_name']); ?></span>
-                <?php endif; ?>
-              </div>
-              <div class="mydoc-file-meta">
-                <?php echo mydoc_se($ext); ?>
-                <?php if ($r['mime_type']): ?>
-                  &middot; <?php echo mydoc_se((string) $r['mime_type']); ?>
-                <?php endif; ?>
+              <div class="mydoc-file-cell">
+                <span class="mydoc-file-tile" aria-hidden="true"><?php echo mydoc_se($ext); ?></span>
+                <div>
+                  <div class="mydoc-file-name">
+                    <?php if ($download !== '' && $exists): ?>
+                      <a class="mydoc-link" href="<?php echo mydoc_se($download); ?>" target="_blank" rel="noopener">
+                        <?php echo mydoc_se($original !== '' ? $original : (string) $r['file_name']); ?>
+                      </a>
+                    <?php else: ?>
+                      <span><?php echo mydoc_se($original !== '' ? $original : (string) $r['file_name']); ?></span>
+                    <?php endif; ?>
+                  </div>
+                  <div class="mydoc-file-meta">
+                    <?php echo mydoc_se($ext); ?>
+                    <?php if ($r['mime_type']): ?>
+                      &middot; <?php echo mydoc_se((string) $r['mime_type']); ?>
+                    <?php endif; ?>
+                  </div>
+                </div>
               </div>
             </td>
             <td data-label="Type"><?php echo mydoc_type_badge($type, $type_to_label); ?></td>
@@ -838,5 +879,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
 <?php endif; /* end of "rows" */ ?>
 
 <?php endif; /* end of "empty projects" */ ?>
+
+</main>
 
 <?php renderStudentShellClose(); ?>

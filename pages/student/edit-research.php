@@ -792,7 +792,7 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
   </div>
 <?php else: ?>
 
-<form method="POST" enctype="multipart/form-data">
+<form method="POST" enctype="multipart/form-data" class="form-guard">
   <?php echo csrfField(); ?>
   <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
 
@@ -1044,5 +1044,6 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
 <?php endif; ?>
 
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
+<script src="../../js/app-forms.js" defer></script>
 
 <?php renderStudentShellClose(); ?>

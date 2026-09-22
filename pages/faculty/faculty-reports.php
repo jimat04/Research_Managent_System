@@ -510,20 +510,16 @@ if (!empty($project_ids)) {
 // ------------------------------------------------------------------
 function frep_status_badge($status) {
     $map = [
-        'draft'       => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
-        'proposal'    => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Proposal'],
-        'in_progress' => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'In Progress'],
-        'for_defense' => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'For Defense'],
-        'completed'   => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Completed'],
-        'archived'    => ['#475569', 'rgba(71,85,105,0.10)',  'rgba(71,85,105,0.25)',  'Archived'],
+        'draft'       => 'Draft',
+        'proposal'    => 'Proposal',
+        'in_progress' => 'In Progress',
+        'for_defense' => 'For Defense',
+        'completed'   => 'Completed',
+        'archived'    => 'Archived',
     ];
-    $row = $map[$status] ?? $map['draft'];
-    [$fg, $bg, $bd, $label] = $row;
-    return '<span style="display:inline-block;font-size:12px;font-weight:500;'
-         . 'padding:3px 10px;border-radius:9999px;'
-         . 'background:' . $bg . ';color:' . $fg . ';'
-         . 'border:1px solid ' . $bd . ';">'
-         . frep_se($label) . '</span>';
+    $safeStatus = array_key_exists($status, $map) ? $status : 'draft';
+    return '<span class="frep-status frep-status--' . frep_se($safeStatus) . '">'
+         . frep_se($map[$safeStatus]) . '</span>';
 }
 
 function frep_relative_time($ts) {
@@ -558,298 +554,241 @@ $subtitle = $stat_total_advised === 0
 renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
 ?>
 
-<style>
-  .frep-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 28px;
-  }
-  .frep-stat {
-    background: #ffffff;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 20px 22px;
-    transition: box-shadow 0.2s, transform 0.2s;
-  }
-  .frep-stat:hover {
-    box-shadow: 0 4px 14px rgba(29,78,216,0.10);
-    transform: translateY(-1px);
-  }
-  .frep-stat-num {
-    font-size: 28px;
-    font-weight: 700;
-    color: #111827;
-    line-height: 1.1;
-  }
-  .frep-stat-lbl {
-    font-size: 13px;
-    color: #64748B;
-    font-weight: 500;
-    margin-top: 6px;
-  }
-  .frep-stat-icon {
-    float: right;
-    font-size: 22px;
-    opacity: 0.55;
-  }
 
-  .frep-section {
-    background: #ffffff;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 22px 24px;
+<style>
+  .frep-page {
+    --frep-blue: #1d4ed8;
+    --frep-indigo: #4338ca;
+    --frep-deep: #172554;
+    --frep-soft: #eff6ff;
+    --frep-line: #e2e8f0;
+    --frep-muted: #64748b;
+    max-width: 1320px;
+    margin: 0 auto;
+    color: #0f172a;
+  }
+  .frep-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 36px;
+    align-items: end;
+    overflow: hidden;
+    margin-bottom: 18px;
+    padding: 34px 38px;
+    border: 1px solid rgba(29, 78, 216, .35);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 88% 7%, rgba(96, 165, 250, .45), transparent 31%),
+      linear-gradient(135deg, var(--frep-deep), #1e40af 62%, var(--frep-blue));
+    box-shadow: 0 20px 44px rgba(30, 64, 175, .16);
+  }
+  .frep-hero::after {
+    content: "";
+    position: absolute;
+    right: -75px;
+    bottom: -125px;
+    width: 300px;
+    height: 300px;
+    border: 1px solid rgba(255, 255, 255, .15);
+    border-radius: 50%;
+  }
+  .frep-hero-copy, .frep-hero-summary { position: relative; z-index: 1; }
+  .frep-kicker {
+    display: block;
+    margin-bottom: 9px;
+    color: #bfdbfe;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+  .frep-hero h1 {
+    max-width: 720px;
+    margin: 0;
+    color: #fff;
+    font-size: clamp(28px, 3vw, 40px);
+    line-height: 1.08;
+    letter-spacing: -.035em;
+  }
+  .frep-hero p {
+    max-width: 670px;
+    margin: 13px 0 0;
+    color: rgba(255, 255, 255, .76);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .frep-hero-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(116px, 1fr));
+    min-width: 270px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .1);
+    backdrop-filter: blur(8px);
+  }
+  .frep-hero-metric { padding: 19px 18px; }
+  .frep-hero-metric + .frep-hero-metric { border-left: 1px solid rgba(255, 255, 255, .17); }
+  .frep-hero-metric strong { display: block; color: #fff; font-size: 29px; line-height: 1; }
+  .frep-hero-metric span { display: block; margin-top: 7px; color: #bfdbfe; font-size: 11px; font-weight: 700; }
+
+  .frep-page .frep-stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
     margin-bottom: 24px;
   }
-  .frep-section-head {
-    display: flex;
-    gap: 12px;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
+  .frep-page .frep-stat {
+    position: relative;
+    min-width: 0;
+    padding: 17px 18px 16px;
+    border: 1px solid var(--frep-line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .04);
   }
-  .frep-section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #111827;
+  .frep-page .frep-stat::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 18px;
+    width: 32px;
+    height: 3px;
+    border-radius: 0 0 5px 5px;
+    background: var(--frep-blue);
   }
-  .frep-section-sub {
-    font-size: 13px;
-    color: #64748B;
-  }
+  .frep-page .frep-stat:hover { border-color: rgba(29, 78, 216, .24); box-shadow: 0 12px 28px rgba(30, 64, 175, .09); transform: translateY(-1px); }
+  .frep-page .frep-stat-icon { display: none; }
+  .frep-page .frep-stat-num { color: #0f172a; font-size: 25px; font-weight: 780; letter-spacing: -.035em; }
+  .frep-page .frep-stat-lbl { min-height: 34px; margin-top: 7px; color: var(--frep-muted); font-size: 11px; font-weight: 650; line-height: 1.5; }
 
-  /* Status breakdown */
-  .frep-bar-list { display: flex; flex-direction: column; gap: 12px; }
-  .frep-bar-row {
+  .frep-analytics-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 18px; align-items: stretch; margin-bottom: 24px; }
+  .frep-page .frep-section {
+    margin-bottom: 24px;
+    padding: 25px 27px;
+    border: 1px solid var(--frep-line);
+    border-radius: 17px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .05);
+  }
+  .frep-analytics-grid .frep-section { height: 100%; box-sizing: border-box; margin-bottom: 0; }
+  .frep-page .frep-section-head { align-items: flex-end; margin-bottom: 22px; }
+  .frep-page .frep-section-title { color: #0f172a; font-size: 17px; font-weight: 760; letter-spacing: -.015em; }
+  .frep-page .frep-section-sub { margin-top: 4px; color: var(--frep-muted); font-size: 11px; line-height: 1.5; }
+
+  .frep-page .frep-bar-list { gap: 15px; }
+  .frep-page .frep-bar-row { grid-template-columns: 106px minmax(80px, 1fr) 70px; gap: 11px; }
+  .frep-page .frep-bar-label { color: #334155; font-size: 11px; font-weight: 720; }
+  .frep-page .frep-bar-track { height: 7px; background: #eef2f7; }
+  .frep-page .frep-bar-fill { min-width: 0; }
+  .frep-page .frep-bar-count { color: #334155; font-size: 11px; font-weight: 720; }
+
+  .frep-page .frep-filters {
     display: grid;
-    grid-template-columns: 130px 1fr 110px;
-    align-items: center;
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(120px, 1fr)) auto;
+    gap: 10px;
+    align-items: end;
+    margin: -5px 0 22px;
+    padding: 13px;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #f8fafc;
   }
-  .frep-bar-label {
-    font-size: 13px;
-    color: #111827;
-    font-weight: 500;
-  }
-  .frep-bar-track {
-    height: 10px;
-    background: #F1F5F9;
-    border-radius: 9999px;
-    overflow: hidden;
-  }
-  .frep-bar-fill {
-    height: 100%;
-    border-radius: 9999px;
-    transition: width 0.3s ease;
-    min-width: 2px;
-  }
-  .frep-bar-count {
-    font-size: 13px;
-    color: #475569;
-    font-weight: 500;
-    text-align: right;
-  }
+  .frep-page .frep-field { gap: 5px; }
+  .frep-page .frep-field label { color: #64748b; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+  .frep-page .frep-field input { min-width: 0; width: 100%; box-sizing: border-box; min-height: 38px; padding: 8px 10px; border-color: #cbd5e1; border-radius: 9px; font-size: 11px; }
+  .frep-page .frep-field input:focus { border-color: var(--frep-blue); outline: 0; box-shadow: 0 0 0 3px rgba(29, 78, 216, .1); }
+  .frep-page .frep-actions { gap: 6px; }
+  .frep-page .frep-actions .btn { min-height: 38px; padding: 8px 11px; border-radius: 9px; font-size: 10px; font-weight: 800; }
+  .frep-page .frep-activity-totals { gap: 13px; margin-bottom: 17px; }
+  .frep-page .frep-activity-total { color: #475569; font-size: 10px; font-weight: 700; }
+  .frep-page .frep-activity-swatch { width: 7px; height: 7px; }
+  .frep-page .frep-activity-row { grid-template-columns: 62px minmax(80px, 1fr) 64px; gap: 10px; margin-bottom: 12px; }
+  .frep-page .frep-activity-month { color: #334155; font-size: 10px; font-weight: 720; }
+  .frep-page .frep-activity-track { height: 12px; border-radius: 4px; background: #eef2f7; }
+  .frep-page .frep-activity-count { color: #334155; font-size: 10px; font-weight: 720; }
 
-  /* Activity */
-  .frep-activity-totals {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
-  .frep-activity-total {
+  .frep-page .frep-table-wrap { border-color: var(--frep-line); border-radius: 12px; box-shadow: none; }
+  .frep-page .frep-table thead th { padding: 12px 14px; border-bottom-color: var(--frep-line); background: #f1f5f9; color: #475569; font-size: 9px; font-weight: 800; letter-spacing: .065em; }
+  .frep-page .frep-table tbody td { padding: 15px 14px; border-top-color: var(--frep-line); color: #334155; font-size: 11px; vertical-align: middle; }
+  .frep-page .frep-table tbody tr:hover { background: var(--frep-soft); }
+  .frep-page .frep-title { margin-bottom: 4px; color: #0f172a; font-size: 12px; font-weight: 750; line-height: 1.45; }
+  .frep-page .frep-title-sub { color: #94a3b8; font-size: 9px; font-weight: 700; }
+  .frep-page .frep-students { color: #64748b; font-size: 11px; line-height: 1.5; }
+  .frep-page .frep-progress { color: #334155; font-size: 10px; font-weight: 720; }
+  .frep-page .frep-progress-bar { width: min(130px, 100%); height: 5px; margin-top: 7px; }
+  .frep-page .frep-progress-fill { background: linear-gradient(90deg, var(--frep-blue), #60a5fa); }
+  .frep-status, .frep-review-level, .frep-recommendation {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #475569;
-    font-weight: 500;
-  }
-  .frep-activity-swatch {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 9999px;
-  }
-  .frep-activity-row {
-    display: grid;
-    grid-template-columns: 90px 1fr 90px;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .frep-activity-month {
-    font-size: 13px;
-    color: #111827;
-    font-weight: 500;
-  }
-  .frep-activity-track {
-    height: 18px;
-    background: #F1F5F9;
-    border-radius: 9999px;
-    overflow: hidden;
-    display: flex;
-  }
-  .frep-activity-seg-approved {
-    height: 100%;
-    background: #16A34A;
-    transition: width 0.3s ease;
-  }
-  .frep-activity-seg-revisions {
-    height: 100%;
-    background: #EA580C;
-    transition: width 0.3s ease;
-  }
-  .frep-activity-count {
-    font-size: 13px;
-    color: #475569;
-    text-align: right;
-    font-weight: 500;
-  }
-
-  /* Filters */
-  .frep-filters {
-    background: #ffffff;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 16px 18px;
-    margin-bottom: 20px;
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
-  .frep-field { display: flex; flex-direction: column; gap: 4px; }
-  .frep-field label {
-    font-size: 12px;
-    font-weight: 500;
-    color: #64748B;
-  }
-  .frep-field input {
-    font-family: inherit;
-    font-size: 14px;
-    padding: 8px 12px;
-    border: 1px solid #E5E7EB;
-    border-radius: 10px;
-    background: #fff;
-    color: #111827;
-    min-width: 160px;
-  }
-  .frep-field input:focus {
-    outline: 2px solid rgba(29,78,216,0.30);
-    outline-offset: 1px;
-    border-color: #1d4ed8;
-  }
-  .frep-actions { display: flex; gap: 8px; align-items: flex-end; }
-  .frep-actions .btn-secondary { text-decoration: none; }
-
-  /* Per-project table */
-  .frep-table-wrap {
-    background: #ffffff;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    overflow: hidden;
-  }
-  .frep-table { width: 100%; border-collapse: collapse; }
-  .frep-table thead th {
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    color: #64748B;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    padding: 14px 18px;
-    background: #F8FAFC;
-    border-bottom: 1px solid #E5E7EB;
-  }
-  .frep-table tbody td {
-    padding: 16px 18px;
-    font-size: 14px;
-    border-top: 1px solid #E5E7EB;
-    color: #111827;
-    vertical-align: top;
-  }
-  .frep-table tbody tr:first-child td { border-top: none; }
-  .frep-table tbody tr:hover { background: #F8FAFC; }
-  .frep-title {
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 4px;
-    line-height: 1.3;
-  }
-  .frep-title-sub {
-    color: #94A3B8;
-    font-size: 12px;
-  }
-  .frep-students { color: #64748B; font-size: 13px; }
-  .frep-progress {
-    font-size: 13px;
-    color: #111827;
-    font-weight: 500;
-  }
-  .frep-progress-bar {
-    margin-top: 6px;
-    height: 6px;
-    background: #F1F5F9;
     border-radius: 999px;
-    overflow: hidden;
-    width: 140px;
+    padding: 5px 9px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .025em;
+    white-space: nowrap;
   }
-  .frep-progress-fill {
-    height: 100%;
-    background: #16A34A;
-    border-radius: 999px;
-    transition: width 0.2s;
-  }
+  .frep-status--draft, .frep-status--archived { background: #e2e8f0; color: #475569; }
+  .frep-status--proposal { background: #dbeafe; color: #1d4ed8; }
+  .frep-status--in_progress { background: #ede9fe; color: #6d28d9; }
+  .frep-status--for_defense { background: #ffedd5; color: #c2410c; }
+  .frep-status--completed { background: #dcfce7; color: #15803d; }
+  .frep-review-level { background: #dbeafe; color: var(--frep-blue); }
+  .frep-recommendation { padding-left: 0; background: transparent; }
+  .frep-recommendation--approve { color: #15803d; }
+  .frep-recommendation--revise { color: #c2410c; }
+  .frep-recommendation--reject { color: #dc2626; }
+  .frep-recommendation--none { color: #64748b; }
 
-  .frep-empty {
-    text-align: center;
-    padding: 64px 24px;
-    color: #64748B;
-  }
-  .frep-empty-icon { font-size: 56px; line-height: 1; margin-bottom: 12px; }
-  .frep-empty-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 6px;
-  }
-  .frep-empty-sub { font-size: 14px; color: #64748B; }
+  .frep-page .frep-empty { padding: 46px 22px; }
+  .frep-page .frep-empty-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 15px; border-radius: 15px; background: var(--frep-soft); color: var(--frep-blue); font-size: 0; }
+  .frep-page .frep-empty-icon::after { content: "↗"; font-size: 22px; font-weight: 800; }
+  .frep-page .frep-empty-title { color: #0f172a; font-size: 17px; font-weight: 760; }
+  .frep-page .frep-empty-sub { max-width: 540px; margin: 0 auto; color: var(--frep-muted); font-size: 12px; line-height: 1.65; }
+  .frep-page > .card { overflow: hidden; border: 1px solid var(--frep-line); border-radius: 17px; background: #fff; box-shadow: 0 12px 32px rgba(15, 23, 42, .05); }
+  .frep-page .frep-error { margin-bottom: 14px; padding: 12px 15px; border-radius: 11px; font-size: 12px; }
 
-  .frep-error {
-    background: #FEF2F2;
-    color: #991B1B;
-    border: 1px solid #FECACA;
-    padding: 14px 18px;
-    border-radius: 12px;
-    margin-bottom: 16px;
+  @media (max-width: 1080px) {
+    .frep-page .frep-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .frep-analytics-grid { grid-template-columns: 1fr; }
   }
-
-  @media (max-width: 720px) {
-    .frep-bar-row,
-    .frep-activity-row {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
-    .frep-bar-count,
-    .frep-activity-count { text-align: left; }
-    .frep-table thead { display: none; }
-    .frep-table tbody td { display: block; padding: 10px 18px; }
-    .frep-table tbody tr { display: block; border-top: 1px solid #E5E7EB; }
-    .frep-table tbody tr:first-child { border-top: none; }
-    .frep-table tbody td::before {
-      content: attr(data-label);
-      display: block;
-      font-size: 11px;
-      font-weight: 600;
-      color: #94A3B8;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      margin-bottom: 4px;
-    }
+  @media (max-width: 760px) {
+    .frep-hero { grid-template-columns: 1fr; gap: 25px; padding: 29px 24px; }
+    .frep-hero-summary { width: min(100%, 360px); min-width: 0; }
+    .frep-page .frep-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .frep-page .frep-filters { grid-template-columns: 1fr; }
+    .frep-page .frep-actions, .frep-page .frep-actions .btn { width: 100%; }
+    .frep-page .frep-bar-row, .frep-page .frep-activity-row { grid-template-columns: 1fr; gap: 5px; }
+    .frep-page .frep-bar-count, .frep-page .frep-activity-count { text-align: left; }
+    .frep-page .frep-section { padding: 21px 18px; }
+    .frep-page .frep-table tbody tr { padding: 8px 0; }
+    .frep-page .frep-table tbody td { padding: 8px 15px; }
+  }
+  @media (max-width: 430px) {
+    .frep-page .frep-stats { grid-template-columns: 1fr; }
+    .frep-page .frep-stat-lbl { min-height: 0; }
   }
 </style>
+
+<div class="frep-page">
+  <section class="frep-hero" aria-labelledby="frep-hero-title">
+    <div class="frep-hero-copy">
+      <span class="frep-kicker">Faculty analytics</span>
+      <h1 id="frep-hero-title">Your research portfolio, at a glance.</h1>
+      <p>Track advised projects, chapter decisions, review activity, and student progress from one reporting workspace.</p>
+    </div>
+    <div class="frep-hero-summary" aria-label="Reporting summary">
+      <div class="frep-hero-metric">
+        <strong><?php echo (int) $stat_pending; ?></strong>
+        <span>Pending reviews</span>
+      </div>
+      <div class="frep-hero-metric">
+        <strong><?php echo (int) $stat_chapters_done; ?></strong>
+        <span>Chapter decisions</span>
+      </div>
+    </div>
+  </section>
 
 <?php if (!empty($errors)): ?>
   <div class="frep-error"><?php echo frep_se(implode(' ', $errors)); ?></div>
@@ -901,6 +840,7 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
 </div>
 
 <!-- Section: project status breakdown -->
+<div class="frep-analytics-grid">
 <div class="frep-section">
   <div class="frep-section-head">
     <div class="frep-section-title">Project status breakdown</div>
@@ -1020,6 +960,9 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
 </div>
 
 <!-- Section: per-project progress table -->
+<!-- Close the paired analytics workspace before the project tables. -->
+</div>
+
 <div class="frep-section">
   <div class="frep-section-head">
     <div class="frep-section-title">Per-project progress</div>
@@ -1110,9 +1053,7 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
                 : '—';
             $rec = (string) ($rev['recommendation'] ?? '');
             $rec_label = $rec === '' ? '—' : ucfirst($rec);
-            $rec_color = $rec === 'approve' ? '#16A34A'
-                       : ($rec === 'revise'  ? '#EA580C'
-                       : ($rec === 'reject'  ? '#EF4444' : '#64748B'));
+            $rec_class = in_array($rec, ['approve', 'revise', 'reject'], true) ? $rec : 'none';
         ?>
           <tr>
             <td data-label="Project">
@@ -1120,13 +1061,12 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
               <div class="frep-title-sub">Project #<?php echo (int) $rev['project_id']; ?></div>
             </td>
             <td data-label="Level">
-              <span style="font-size:12px;font-weight:500;color:#1d4ed8;background:rgba(29,78,216,0.08);
-                           padding:2px 8px;border-radius:9999px;">
+              <span class="frep-review-level">
                 <?php echo frep_se(strtoupper((string) ($rev['review_level'] ?? ''))); ?>
               </span>
             </td>
             <td data-label="Recommendation">
-              <span style="font-size:13px;font-weight:500;color:<?php echo frep_se($rec_color); ?>;">
+              <span class="frep-recommendation frep-recommendation--<?php echo frep_se($rec_class); ?>">
                 <?php echo frep_se($rec_label); ?>
               </span>
             </td>
@@ -1141,5 +1081,7 @@ renderFacultyShell($user, 'faculty-reports.php', 'Reports', $subtitle);
 <?php endif; ?>
 
 <?php endif; /* end of "has advised projects" guard */ ?>
+
+</div>
 
 <?php renderFacultyShellClose(); ?>

@@ -1024,6 +1024,8 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
                    type="file"
                    name="milestone_file"
                    accept=".pdf,.doc,.docx"
+                   data-accept=".pdf,.doc,.docx"
+                   data-max-bytes="10485760"
                    required>
             <div class="msub-help">Accepted formats: PDF, DOC, DOCX · Maximum size: 10 MB.</div>
           </div>
@@ -1068,5 +1070,7 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
   </div>
 
 <?php endif; ?>
+
+<script src="../../js/app-forms.js" defer></script>
 
 <?php renderStudentShellClose(); ?>

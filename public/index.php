@@ -209,7 +209,7 @@ if ($stat_rate === 0) $stat_rate = 95;
 <section class="hero" id="home">
   <div class="hero-container">
     <!-- Left Content -->
-    <div class="hero-content">
+    <div class="hero-content hero-entrance">
       <div class="hero-glow-badge">
         <span>📜</span> EARIST CAVITE CAMPUS
       </div>
@@ -236,15 +236,15 @@ if ($stat_rate === 0) $stat_rate = 95;
 
       <div class="hero-stats">
         <div class="hero-stat">
-          <div class="number"><?php echo number_format($stat_total_res ?: 1250); ?><span style="font-size:0.6em; color: var(--secondary-light);">+</span></div>
+          <div class="number" data-countup><?php echo number_format($stat_total_res ?: 1250); ?><span style="font-size:0.6em; color: var(--secondary-light);">+</span></div>
           <div class="label">Research Studies</div>
         </div>
         <div class="hero-stat">
-          <div class="number"><?php echo number_format($stat_users ?: 850); ?><span style="font-size:0.6em; color: var(--primary-light);">+</span></div>
+          <div class="number" data-countup><?php echo number_format($stat_users ?: 850); ?><span style="font-size:0.6em; color: var(--primary-light);">+</span></div>
           <div class="label">Active Researchers</div>
         </div>
         <div class="hero-stat">
-          <div class="number"><?php echo $stat_rate; ?><span style="font-size:0.6em; color: var(--success);">%</span></div>
+          <div class="number" data-countup><?php echo $stat_rate; ?><span style="font-size:0.6em; color: var(--success);">%</span></div>
           <div class="label">Completion Rate</div>
         </div>
       </div>
@@ -300,7 +300,7 @@ if ($stat_rate === 0) $stat_rate = 95;
 <!-- ════════════════════════════════════════════════════════════ -->
 <!-- RESEARCH MANUAL 2015: 5-STAGE WORKFLOW LIFECYCLE -->
 <!-- ════════════════════════════════════════════════════════════ -->
-<section class="section" style="background: #ffffff; padding: 80px 40px;">
+<section class="section" style="background: #ffffff; padding: 80px 40px;" data-reveal>
   <div class="section-header" style="text-align: center; margin-bottom: 50px;">
     <div class="section-tag">🔄 End-to-End Governance</div>
     <h2 class="section-title">The Official <span style="color: var(--primary);">Research Lifecycle</span></h2>
@@ -353,7 +353,7 @@ if ($stat_rate === 0) $stat_rate = 95;
 <!-- ════════════════════════════════════════════════════════════ -->
 <!-- CHAPTER STRUCTURE (5 CHAPTERS MANUAL STANDARD) -->
 <!-- ════════════════════════════════════════════════════════════ -->
-<section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 80px 40px;">
+<section class="section" style="background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); padding: 80px 40px;" data-reveal>
   <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: center;">
     <div>
       <div class="section-tag">📑 Standardized Structure</div>
@@ -413,7 +413,7 @@ if ($stat_rate === 0) $stat_rate = 95;
 <!-- ════════════════════════════════════════════════════════════ -->
 <!-- PLATFORM FEATURES -->
 <!-- ════════════════════════════════════════════════════════════ -->
-<section class="section" style="background: #ffffff; padding: 80px 40px;" id="features">
+<section class="section" style="background: #ffffff; padding: 80px 40px;" id="features" data-reveal>
   <div class="section-header" style="text-align: center; margin-bottom: 50px;">
     <div class="section-tag">✨ Capabilities</div>
     <h2 class="section-title">Built for Modern <span style="color: var(--primary);">Academic Research</span></h2>
@@ -462,22 +462,22 @@ if ($stat_rate === 0) $stat_rate = 95;
 <!-- ════════════════════════════════════════════════════════════ -->
 <!-- STATS BANNER -->
 <!-- ════════════════════════════════════════════════════════════ -->
-<section style="background: linear-gradient(135deg, #3D0F8A 0%, #5B1EBC 50%, #0F6CBD 100%); padding: 70px 40px; color: white;">
+<section style="background: linear-gradient(135deg, #3D0F8A 0%, #5B1EBC 50%, #0F6CBD 100%); padding: 70px 40px; color: white;" data-reveal>
   <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 36px; text-align: center;">
     <div>
-      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;"><?php echo number_format($stat_total_res ?: 1250); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
+      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;" data-countup><?php echo number_format($stat_total_res ?: 1250); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
       <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; margin-top: 4px;">Total Research Projects</div>
     </div>
     <div>
-      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;"><?php echo number_format($stat_users ?: 850); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
+      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;" data-countup><?php echo number_format($stat_users ?: 850); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
       <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; margin-top: 4px;">Registered Users</div>
     </div>
     <div>
-      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;"><?php echo number_format($stat_completed ?: 320); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
+      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;" data-countup><?php echo number_format($stat_completed ?: 320); ?><span style="font-size:0.5em; opacity: 0.8;">+</span></div>
       <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; margin-top: 4px;">Completed &amp; Archived</div>
     </div>
     <div>
-      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;"><?php echo $stat_rate; ?><span style="font-size:0.5em; opacity: 0.8;">%</span></div>
+      <div style="font-family: 'Poppins', sans-serif; font-size: 2.6rem; font-weight: 800;" data-countup><?php echo $stat_rate; ?><span style="font-size:0.5em; opacity: 0.8;">%</span></div>
       <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; margin-top: 4px;">Proposal Approval Rate</div>
     </div>
   </div>
@@ -486,7 +486,7 @@ if ($stat_rate === 0) $stat_rate = 95;
 <!-- ════════════════════════════════════════════════════════════ -->
 <!-- CALL TO ACTION -->
 <!-- ════════════════════════════════════════════════════════════ -->
-<section class="section" style="background: #ffffff; padding: 90px 40px; text-align: center;">
+<section class="section" style="background: #ffffff; padding: 90px 40px; text-align: center;" data-reveal>
   <div style="max-width: 850px; margin: 0 auto;">
     <div class="section-tag" style="margin-bottom: 20px;">🚀 Join The Platform</div>
     <h2 class="section-title" style="font-size: 2.5rem; margin-bottom: 16px;">Ready to Elevate Your <span style="color: var(--primary);">Research Journey</span>?</h2>
@@ -556,6 +556,6 @@ if ($stat_rate === 0) $stat_rate = 95;
   </div>
 </footer>
 
+<script src="../js/public-motion.js" defer></script>
 </body>
 </html>
-

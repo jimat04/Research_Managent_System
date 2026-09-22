@@ -1011,3 +1011,134 @@ tbody td p,
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
+/* Keep entered form values readable across every public and portal page. */
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(:disabled),
+textarea:not(:disabled),
+select:not(:disabled),
+.form-control:not(:disabled) {
+  color: #111827 !important;
+  caret-color: #111827;
+  -webkit-text-fill-color: #111827;
+}
+
+select:not(:disabled) option,
+.form-control:not(:disabled) option {
+  color: #111827 !important;
+  background: #ffffff !important;
+  -webkit-text-fill-color: #111827;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #111827 !important;
+  caret-color: #111827;
+}
+
+/* Form labels must remain legible on the light form surfaces used system-wide. */
+form label,
+form legend,
+.form-label {
+  color: #000000 !important;
+}
+
+/* PUBLIC MOTION */
+@keyframes publicFadeRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pageFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body { animation: pageFade .15s ease; }
+html:not(.motion-ready) body { animation: none; }
+body.page-leaving { opacity: 0; transition: opacity .15s ease; }
+
+.hero-entrance > * { opacity: 1; transform: none; }
+html.motion-ready .hero-entrance > * {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: publicFadeRise .46s ease forwards;
+}
+html.motion-ready .hero-entrance > *:nth-child(2) { animation-delay: .08s; }
+html.motion-ready .hero-entrance > *:nth-child(3) { animation-delay: .14s; }
+html.motion-ready .hero-entrance > *:nth-child(4) { animation-delay: .19s; }
+html.motion-ready .hero-entrance > *:nth-child(n + 5) { animation-delay: .23s; }
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .45s ease, transform .45s ease;
+}
+html:not(.motion-ready) [data-reveal],
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card) {
+  transition: transform .18s ease;
+}
+html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card):hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(35, 20, 70, .12);
+}
+
+html.motion-ready .btn { transition: transform .18s ease; }
+html.motion-ready .btn:hover { transform: scale(1.02); }
+
+html.motion-ready .nav-links a { position: relative; }
+html.motion-ready .nav-links a::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  left: 0;
+  height: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform .18s ease;
+}
+html.motion-ready .nav-links a:hover::after,
+html.motion-ready .nav-links a:focus-visible::after,
+html.motion-ready .nav-links a.active::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  body.page-leaving,
+  html.motion-ready .hero-entrance > *,
+  [data-reveal],
+  [data-reveal].is-visible,
+  html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card):hover,
+  html.motion-ready .btn:hover,
+  html.motion-ready .nav-links a::after {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+html.motion-off body,
+html.motion-off body.page-leaving,
+html.motion-off .hero-entrance > *,
+html.motion-off [data-reveal],
+html.motion-off [data-reveal].is-visible,
+html.motion-off :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card):hover,
+html.motion-off .btn:hover,
+html.motion-off .nav-links a::after {
+  animation: none !important;
+  transition: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}

@@ -23,6 +23,8 @@
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
+require_once __DIR__ . '/logout-transition.php';
+
 function renderStudentShell($user, $current_page, $page_title, $page_subtitle = '') {
     // Normalise the user object
     $shell_user = [
@@ -88,6 +90,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/student/student-dashboard.php', 'Dashboard', '📊', true, 0],
+            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',  '&#128197;', true, 0],
         ],
         'Research' => [
             [SITE_URL . 'pages/student/my-research.php',       'My Research',       '📁', true, 0],
@@ -102,10 +105,10 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
         ],
         'Resources' => [
             [SITE_URL . 'pages/shared/research-archive.php', 'Research Archive', '🗂️', true, 0],
-            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',         '📅', true, 0],
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
+            [SITE_URL . 'pages/shared/settings.php', 'Settings', '⚙️', true, 0],
         ],
     ];
 
@@ -225,6 +228,7 @@ function renderStudentShellClose() {
     </div><!-- /.student-page-content -->
   </main>
 </div><!-- /.student-dashboard -->
+<?php renderLogoutTransition(); ?>
 <script>
 (() => {
   const button = document.querySelector('.student-mobile-menu-btn');

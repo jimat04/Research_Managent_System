@@ -456,7 +456,7 @@ function frev_status_badge($status) {
     $map = [
         'draft'             => ['#64748B', 'rgba(100,116,139,0.10)', 'rgba(100,116,139,0.25)', 'Draft'],
         'submitted'         => ['#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)',  'Submitted'],
-        'under_review'      => ['#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)', 'Under Review'],
+        'under_review'      => ['#2563EB', 'rgba(37,99,235,0.10)', 'rgba(37,99,235,0.25)', 'Under Review'],
         'revision_required' => ['#EA580C', 'rgba(234,88,12,0.10)',  'rgba(234,88,12,0.25)',  'Needs Revision'],
         'approved'          => ['#16A34A', 'rgba(22,163,74,0.10)',  'rgba(22,163,74,0.25)',  'Approved'],
     ];
@@ -676,6 +676,55 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
   @media (max-width: 640px) {
     .frev-card-head { flex-direction: column; }
   }
+
+  /* Faculty review workspace */
+  .frev-brief { position:relative; isolation:isolate; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr); gap:42px; overflow:hidden; margin-bottom:20px; padding:36px 40px; border:1px solid rgba(29,78,216,.32); border-radius:20px; background:radial-gradient(circle at 91% 8%,rgba(96,165,250,.4),transparent 31%),linear-gradient(135deg,#172554,#1e3a8a 56%,#1d4ed8); color:#fff; box-shadow:0 22px 48px rgba(30,64,175,.16); }
+  .frev-brief::after { content:''; position:absolute; z-index:-1; right:-78px; bottom:-126px; width:280px; height:280px; border:1px solid rgba(255,255,255,.12); border-radius:50%; box-shadow:0 0 0 38px rgba(255,255,255,.03),0 0 0 80px rgba(255,255,255,.02); }
+  .frev-brief-copy { align-self:center; }
+  .frev-eyebrow { margin:0 0 10px; color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+  .frev-brief h2 { max-width:670px; margin:0 0 12px; color:#fff; font-size:clamp(28px,3vw,40px); line-height:1.08; letter-spacing:-.045em; }
+  .frev-brief-copy > p:last-of-type { max-width:62ch; margin:0; color:rgba(255,255,255,.76); font-size:14px; line-height:1.7; }
+  .frev-brief-link { display:inline-flex; min-height:41px; align-items:center; margin-top:22px; padding:9px 16px; border:1px solid rgba(255,255,255,.26); border-radius:10px; background:rgba(255,255,255,.09); color:#fff; font-size:13px; font-weight:700; text-decoration:none; }
+  .frev-brief-link:hover { background:rgba(255,255,255,.16); transform:translateY(-1px); }
+  .frev-priority { align-self:stretch; display:grid; align-content:center; padding-left:32px; border-left:1px solid rgba(255,255,255,.2); }
+  .frev-priority-label { color:#bfdbfe; font-size:10px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+  .frev-priority strong { display:block; margin:10px 0 5px; color:#fff; font-size:42px; line-height:1; font-variant-numeric:tabular-nums; }
+  .frev-priority p { margin:0; color:rgba(255,255,255,.72); font-size:12px; line-height:1.55; }
+  .frev-stats { grid-template-columns:repeat(3,1fr); gap:0; overflow:hidden; margin-bottom:28px; border:1px solid #E5E7EB; border-radius:16px; background:#fff; }
+  .frev-stat { min-width:0; border:0; border-radius:0; padding:19px 22px; box-shadow:none; }
+  .frev-stat + .frev-stat { border-left:1px solid #E5E7EB; }
+  .frev-stat:first-child { background:#eff6ff; }
+  .frev-stat:hover { background:rgba(29,78,216,.055); box-shadow:none; transform:none; }
+  .frev-stat-num { font-size:30px; letter-spacing:-.045em; }
+  .frev-stat-icon { display:grid; width:34px; height:34px; place-items:center; border-radius:9px; background:rgba(29,78,216,.08); font-size:16px; opacity:1; }
+  .frev-tabs { margin-bottom:14px; border:1px solid #E2E8F0; background:#fff; }
+  .frev-queue-label { display:flex; align-items:end; justify-content:space-between; gap:20px; margin:30px 0 12px; }
+  .frev-queue-label h2 { margin:0 0 4px; font-size:20px; }
+  .frev-queue-label p { margin:0; color:#64748B; font-size:13px; }
+  .frev-queue-count { color:#1d4ed8; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .frev-tab { min-height:38px; display:inline-flex; align-items:center; }
+  .frev-tab.is-active { background:#eff6ff; box-shadow:none; }
+  .frev-queue-head { display:flex; align-items:end; justify-content:space-between; gap:20px; margin:0 0 14px; }
+  .frev-queue-head h2 { margin:0 0 4px; font-size:20px; }
+  .frev-queue-head p { margin:0; color:#64748B; font-size:13px; }
+  .frev-queue-count { flex:none; color:#1d4ed8; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .frev-review-list { display:grid; gap:14px; }
+  .frev-card { position:relative; margin:0; padding:23px 24px 24px; border-radius:16px; box-shadow:0 5px 18px rgba(30,64,175,.045); }
+  .frev-card--pending { border-left:4px solid #1d4ed8; }
+  .frev-card:hover { box-shadow:0 14px 34px rgba(30,64,175,.095); transform:translateY(-1px); }
+  .frev-card-head { margin-bottom:16px; }
+  .frev-card-copy { min-width:0; flex:1 1 280px; }
+  .frev-card-state { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .frev-card-title { font-size:17px; font-weight:700; }
+  .frev-card-chapter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 14px; padding:12px 14px; border-radius:11px; background:#f8fafc; }
+  .frev-file { border-radius:7px; }
+  .frev-feedback { min-height:84px; padding:13px 14px; line-height:1.55; }
+  .frev-feedback-label { display:block; margin:0 0 7px; color:#475569; font-size:12px; font-weight:650; }
+  .frev-actions { margin-top:12px; }
+  .frev-actions .btn { min-width:150px; justify-content:center; }
+  .frev-limit-note { margin-top:14px; color:#94A3B8; font-size:12px; text-align:center; }
+  @media (max-width:900px) { .frev-brief { grid-template-columns:1fr; gap:26px; } .frev-priority { padding:22px 0 0; border-top:1px solid rgba(255,255,255,.2); border-left:0; } .frev-queue-head { align-items:flex-start; flex-direction:column; } }
+  @media (max-width:640px) { .frev-brief { padding:28px 22px; } .frev-stats { grid-template-columns:1fr; } .frev-stat + .frev-stat { border-top:1px solid #E5E7EB; border-left:0; } .frev-tabs { display:grid; width:100%; } .frev-tab { justify-content:center; } .frev-card { padding:20px 18px; } .frev-actions { display:grid; } .frev-actions .btn { width:100%; } }
 </style>
 
 <?php frev_flash('success'); frev_flash('error'); ?>
@@ -683,6 +732,20 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
 <?php if (!empty($errors)): ?>
   <div class="frev-error"><?php echo frev_se(implode(' ', $errors)); ?></div>
 <?php endif; ?>
+
+<section class="frev-brief" aria-labelledby="frev-workspace-title">
+  <div class="frev-brief-copy">
+    <p class="frev-eyebrow">Chapter review workspace</p>
+    <h2 id="frev-workspace-title"><?php echo $stat_awaiting > 0 ? 'Give each submission a clear next step.' : 'Your chapter review queue is clear.'; ?></h2>
+    <p>Read the submitted chapter, leave focused feedback, and record an approval or revision decision for your advisee.</p>
+    <a class="frev-brief-link" href="faculty-students.php">View my advisees</a>
+  </div>
+  <div class="frev-priority">
+    <span class="frev-priority-label">Awaiting review</span>
+    <strong><?php echo (int) $stat_awaiting; ?></strong>
+    <p>chapter<?php echo $stat_awaiting === 1 ? '' : 's'; ?> currently waiting for your decision</p>
+  </div>
+</section>
 
 <div class="frev-stats">
   <div class="frev-stat">
@@ -700,6 +763,14 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
     <div class="frev-stat-num"><?php echo (int) $stat_revisions; ?></div>
     <div class="frev-stat-lbl">Revisions requested (mo.)</div>
   </div>
+</div>
+
+<div class="frev-queue-head">
+  <div>
+    <h2><?php echo $tab === 'pending' ? 'Pending chapter reviews' : 'Recently reviewed chapters'; ?></h2>
+    <p><?php echo $tab === 'pending' ? 'Open a submission and record the next decision.' : 'Your latest completed chapter decisions.'; ?></p>
+  </div>
+  <span class="frev-queue-count"><?php echo count($rows); ?> item<?php echo count($rows) === 1 ? '' : 's'; ?></span>
 </div>
 
 <div class="frev-tabs" role="tablist">
@@ -733,6 +804,7 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
     </div>
   </div>
 <?php else: ?>
+  <div class="frev-review-list" id="review-list">
   <?php foreach ($rows as $r):
       $pid         = (int) $r['project_id'];
       $cid         = (int) $r['chapter_id'];
@@ -748,16 +820,16 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
       $file_path   = (string) ($r['chapter_file_path'] ?? '');
       $file_orig   = (string) ($r['chapter_file_original'] ?? '');
   ?>
-    <div class="frev-card">
+    <article class="frev-card<?php echo $tab === 'pending' ? ' frev-card--pending' : ''; ?>">
       <div class="frev-card-head">
-        <div style="min-width:0;flex:1 1 280px;">
+        <div class="frev-card-copy">
           <div class="frev-card-title"><?php echo frev_se($proj_title); ?></div>
           <div class="frev-card-meta">
             <span>🎒 <?php echo frev_se($students); ?></span>
             <span>📁 Project #<?php echo $pid; ?></span>
           </div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="frev-card-state">
           <?php echo frev_status_badge($status); ?>
           <?php if ($tab === 'pending'): ?>
             <span style="font-size:12px;color:#94A3B8;">Submitted <?php echo frev_se(frev_relative_time($submitted)); ?></span>
@@ -774,7 +846,7 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
         <?php endif; ?>
 
         <?php if ($file_path !== ''): ?>
-          <a class="frev-file" style="margin-left:10px;"
+          <a class="frev-file"
              href="<?php echo frev_se($file_path); ?>" target="_blank" rel="noopener">
             📄 <?php echo frev_se($file_orig !== '' ? $file_orig : 'View file'); ?>
           </a>
@@ -787,7 +859,8 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
         <form method="post" action="faculty-review.php?tab=pending">
           <?php echo csrfField(); ?>
           <input type="hidden" name="chapter_id" value="<?php echo $cid; ?>">
-          <textarea class="frev-feedback" name="feedback" maxlength="2000"
+          <label class="frev-feedback-label" for="frev-feedback-<?php echo $cid; ?>">Feedback for the student <span style="font-weight:500;color:#94A3B8;">(optional)</span></label>
+          <textarea class="frev-feedback" id="frev-feedback-<?php echo $cid; ?>" name="feedback" maxlength="2000"
                     placeholder="Optional feedback — visible to the student and stored in the chapter history…"></textarea>
           <div class="frev-actions">
             <button type="submit" name="action" value="approve" class="btn btn-primary">
@@ -811,15 +884,16 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
           <?php endif; ?>
         </div>
       <?php endif; ?>
-    </div>
+    </article>
   <?php endforeach; ?>
+  </div>
 
   <?php if ($tab === 'recent' && count($rows) >= 20): ?>
-    <div style="text-align:center;margin-top:14px;font-size:13px;color:#94A3B8;">
+    <div class="frev-limit-note">
       Showing the 20 most recent chapter reviews.
     </div>
   <?php elseif ($tab === 'pending' && count($rows) >= 100): ?>
-    <div style="text-align:center;margin-top:14px;font-size:13px;color:#94A3B8;">
+    <div class="frev-limit-note">
       Showing the 100 most urgent. Older items remain in the queue.
     </div>
   <?php endif; ?>

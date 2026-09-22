@@ -743,7 +743,7 @@ $links = [
     <!-- HERO SECTION -->
     <section class="features-hero-custom">
         <div class="hero-container" style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr); gap: 48px; align-items: center; width: 100%;">
-            <div class="hero-content">
+            <div class="hero-content hero-entrance">
                 <div class="hero-glow-badge">
                     <span>✨</span> Next-Generation Academic Suite
                 </div>
@@ -840,7 +840,7 @@ $links = [
     </div>
 
     <!-- MAIN ROLE-BASED FEATURE SHOWCASE -->
-    <section class="section features-bg" id="feature-catalog" style="padding: 70px 20px;">
+    <section class="section features-bg" id="feature-catalog" style="padding: 70px 20px;" data-reveal>
         <div class="section-header" style="text-align: center; max-width: 760px; margin: 0 auto 40px;">
             <div class="section-tag" style="background: rgba(91,30,188,0.1); color: var(--primary); font-weight: 700; display: inline-block; padding: 4px 16px; border-radius: 50px; font-size: 0.8rem; margin-bottom: 12px;">
                 🧩 Comprehensive Capabilities
@@ -1012,7 +1012,7 @@ $links = [
     </section>
 
     <!-- EARIST RESEARCH MANUAL ALIGNMENT -->
-    <section class="earist-alignment-banner">
+    <section class="earist-alignment-banner" data-reveal>
         <div class="earist-container">
             <div style="text-align: center; max-width: 800px; margin: 0 auto 30px;">
                 <span style="background: rgba(255,255,255,0.12); color: #c4a9ff; font-weight: 600; padding: 4px 16px; border-radius: 50px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px;">
@@ -1047,7 +1047,7 @@ $links = [
     </section>
 
     <!-- DEEP DIVE INTERACTIVE FEATURE SPOTLIGHTS -->
-    <section class="deep-dive-section">
+    <section class="deep-dive-section" data-reveal>
         <div class="deep-dive-container">
 
             <div class="section-header" style="text-align: center; max-width: 700px; margin: 0 auto 60px;">
@@ -1166,7 +1166,7 @@ $links = [
     </section>
 
     <!-- CALL TO ACTION BANNER -->
-    <section class="modern-cta-section">
+    <section class="modern-cta-section" data-reveal>
         <div class="cta-content-wrapper">
             <span style="background: rgba(255,255,255,0.15); padding: 6px 18px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 20px; display: inline-block;">
                 🚀 Transform Your Research Journey
@@ -1223,5 +1223,6 @@ $links = [
         </div>
         <div class="footer-bottom">© 2024 Research Management System. All rights reserved.</div>
     </footer>
+<script src="../js/public-motion.js" defer></script>
 </body>
 </html>

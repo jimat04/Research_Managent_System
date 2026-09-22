@@ -23,6 +23,8 @@
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
+require_once __DIR__ . '/logout-transition.php';
+
 function renderStaffShell($user, $current_page, $page_title, $page_subtitle = '') {
     // Normalise the user object
     $shell_user = [
@@ -140,6 +142,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/staff/staff-dashboard.php', 'Dashboard', '📊', true, 0],
+            [SITE_URL . 'pages/shared/calendar.php',        'Calendar',  '&#128197;', true, 0],
         ],
         'Processing' => [
             [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
@@ -159,6 +162,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true, 0],
+            [SITE_URL . 'pages/shared/settings.php',         'Settings', '⚙️', true, 0],
         ],
     ];
 
@@ -278,6 +282,7 @@ function renderStaffShellClose() {
     </div><!-- /.staff-page-content -->
   </main>
 </div><!-- /.staff-dashboard -->
+<?php renderLogoutTransition(); ?>
 <script>
 (() => {
   const button = document.querySelector('.staff-mobile-menu-btn');

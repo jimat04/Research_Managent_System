@@ -130,14 +130,14 @@ function contact_escape($value) {
 
     <section class="hero" style="min-height: 52vh;">
         <div class="hero-container" style="grid-template-columns: 1fr; text-align: center;">
-            <div class="hero-content" style="margin: 0 auto;">
+            <div class="hero-content hero-entrance" style="margin: 0 auto;">
                 <h1>Get in <span class="highlight">Touch</span></h1>
                 <p style="max-width: 650px; margin-left: auto; margin-right: auto;">We'd love to hear from you. Reach out to the RMS team or your department's research coordinator.</p>
             </div>
         </div>
     </section>
 
-    <section class="section contact-section">
+    <section class="section contact-section" data-reveal>
         <div class="contact-grid">
             <div class="card contact-card">
                 <div class="card-header">
@@ -250,5 +250,6 @@ function contact_escape($value) {
         </div>
         <div class="footer-bottom">© 2024 Research Management System. All rights reserved.</div>
     </footer>
+    <script src="../js/public-motion.js" defer></script>
 </body>
 </html>
