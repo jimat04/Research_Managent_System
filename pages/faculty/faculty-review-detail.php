@@ -33,6 +33,19 @@ if ($chapter_deleted_column_stmt) {
 $chapter_deleted_filter = $chapters_has_deleted_at ? ' AND deleted_at IS NULL' : '';
 $chapter_deleted_filter_aliased = $chapters_has_deleted_at ? ' AND c.deleted_at IS NULL' : '';
 
+// Review assignments are optional on legacy installs. When the table is not
+// available, project access falls back to assigned advisers only.
+$project_reviews_exists = false;
+$project_reviews_table_stmt = $conn->prepare("SHOW TABLES LIKE 'project_reviews'");
+if ($project_reviews_table_stmt) {
+    $project_reviews_table_stmt->execute();
+    $project_reviews_table_stmt->bind_result($project_reviews_table);
+    while ($project_reviews_table_stmt->fetch()) {
+        $project_reviews_exists = $project_reviews_table === 'project_reviews';
+    }
+    $project_reviews_table_stmt->close();
+}
+
 // Migration 008 adds comments.project_id and makes chapter_id nullable. Detect
 // both independently so project status changes remain safe on older schemas.
 $comments_has_project_id = false;
@@ -85,6 +98,9 @@ $chapter_titles = [
 
 $project = null;
 if ($project_id > 0) {
+    $reviewer_access_sql = $project_reviews_exists
+        ? ' OR EXISTS (SELECT 1 FROM project_reviews pr WHERE pr.project_id = rp.project_id AND pr.reviewer_id = ?)'
+        : '';
     $project_stmt = $conn->prepare("SELECT rp.*, rc.category_name, ay.label AS ay_label, ay.semester,
             CONCAT(owner.first_name, ' ', owner.last_name) AS student_name
         FROM research_projects rp
@@ -93,9 +109,13 @@ if ($project_id > 0) {
         LEFT JOIN users owner ON rp.created_by = owner.user_id
         WHERE rp.project_id = ? " . $rp_deleted_filter . "
         AND (EXISTS (SELECT 1 FROM project_advisers pa WHERE pa.project_id = rp.project_id AND pa.adviser_id = ?)
-            OR rp.status IN ('submitted', 'under_crec_review', 'under_erec_review', 'for_revision', 'progress_report', 'terminal_review'))");
+            " . $reviewer_access_sql . ")");
     if ($project_stmt) {
-        $project_stmt->bind_param('ii', $project_id, $user_id);
+        if ($project_reviews_exists) {
+            $project_stmt->bind_param('iii', $project_id, $user_id, $user_id);
+        } else {
+            $project_stmt->bind_param('ii', $project_id, $user_id);
+        }
         $project_stmt->execute();
         $project = $project_stmt->get_result()->fetch_assoc() ?: null;
         $project_stmt->close();
@@ -114,22 +134,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $action_success_message = '';
 
     if ($action === 'project_approve') {
-        $next_status = ['submitted' => 'under_crec_review', 'under_crec_review' => 'under_erec_review'];
-        if ($project['status'] === 'under_erec_review') {
-            $comment_text = 'Faculty recommendation: approve. Final endorsement remains subject to the EREC committee decision through the Research Staff office.';
-            $comment_type = 'approval';
-            $log_message = 'Recorded faculty approval recommendation for ' . $project['title'] . ' during EREC review';
-            $action_success_message = 'Your recommendation was recorded. Project endorsement is decided by EREC through the Research Staff office.';
-        } elseif (isset($next_status[$project['status']])) {
-            $new_status = $next_status[$project['status']];
-            $log_message = 'Approved ' . $project['title'];
-        } else {
-            $errors[] = 'This project cannot be approved from its current status.';
-        }
+        $comment_text = 'Faculty recommendation: approve. Advancement and endorsement remain subject to the committee decision through the Research Staff office.';
+        $comment_type = 'approval';
+        $log_message = 'Recorded faculty approval recommendation for ' . $project['title'] . ' while its status was ' . $project['status'];
+        $action_success_message = 'Your recommendation was recorded. Advancement and endorsement are decided by the committee through the Research Staff office.';
     } elseif ($action === 'project_request_revision') {
-        $comment_text = trim($_POST['reason'] ?? '');
-        if ($comment_text === '') $errors[] = 'A revision reason is required.';
-        else { $new_status = 'for_revision'; $comment_type = 'correction'; $log_message = 'Requested revision on ' . $project['title']; }
+        $adviser_check = $conn->prepare('SELECT 1 FROM project_advisers WHERE project_id = ? AND adviser_id = ? LIMIT 1');
+        if (!$adviser_check) {
+            $errors[] = 'Unable to verify your adviser assignment.';
+        } else {
+            $adviser_check->bind_param('ii', $project_id, $user_id);
+            $adviser_check->execute();
+            $is_project_adviser = (bool) $adviser_check->get_result()->fetch_row();
+            $adviser_check->close();
+
+            if (!$is_project_adviser) {
+                $errors[] = 'Only the project\'s current adviser may request a revision.';
+            } else {
+                $comment_text = trim($_POST['reason'] ?? '');
+                if ($comment_text === '') $errors[] = 'A revision reason is required.';
+                else { $new_status = 'for_revision'; $comment_type = 'correction'; $log_message = 'Requested revision on ' . $project['title']; }
+            }
+        }
     } elseif ($action === 'chapter_approve' || $action === 'chapter_revise') {
         $chapter_id = intval($_POST['chapter_id'] ?? 0);
         $comment_text = trim($_POST['chapter_comment'] ?? '');
@@ -329,7 +355,7 @@ renderFacultyShell(
         <div class="card" style="margin-bottom: 20px;"><div class="card-body"><div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap;"><div style="flex: 1; min-width: 240px;"><h2 style="margin: 0 0 10px;"><?php echo htmlspecialchars($project['title']); ?></h2><div style="color: var(--text-light); font-size: 14px;">Student: <?php echo htmlspecialchars($project['student_name'] ?: 'N/A'); ?> · <?php echo htmlspecialchars($project['category_name'] ?? 'Uncategorized'); ?> · <?php echo htmlspecialchars(($project['ay_label'] ?? 'N/A') . ' / ' . ($project['semester'] ?? 'N/A')); ?> · Submitted: <?php echo !empty($project['created_at']) ? date('M d, Y', strtotime($project['created_at'])) : 'N/A'; ?></div></div><span class="<?php echo htmlspecialchars($project_badge['class']); ?>" <?php echo $project_badge['style'] ? 'style="' . htmlspecialchars($project_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $project_status)); ?></span></div>
           <?php if ($project_status === 'for_revision'): ?><div class="alert alert-warning" style="margin: 18px 0 0;">This project has been returned for revision.</div><?php elseif (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><div class="alert alert-info" style="margin: 18px 0 0;">Awaiting review.</div><?php endif; ?>
           <?php if (!empty($project['abstract'])): ?><details style="margin-top: 18px;"><summary style="cursor: pointer; color: var(--primary);">Show abstract</summary><div style="white-space: pre-wrap; line-height: 1.6; margin-top: 10px;"><?php echo htmlspecialchars($project['abstract'], ENT_QUOTES, 'UTF-8'); ?></div></details><?php endif; ?>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px;"><button type="button" class="btn btn-warning" onclick="document.getElementById('revisionModal').style.display='block'">Request Revision</button><?php if (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_approve"><button class="btn btn-success"><?php echo $project_status === 'under_erec_review' ? 'Record Recommendation' : 'Approve'; ?></button></form><?php endif; ?><?php if ($proposal): ?><a class="btn btn-secondary" href="../../uploads/proposals/<?php echo rawurlencode($proposal['file_name']); ?>" target="_blank" rel="noopener">Download Proposal</a><?php else: ?><button class="btn btn-secondary" disabled>Download Proposal</button><?php endif; ?></div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px;"><button type="button" class="btn btn-warning" onclick="document.getElementById('revisionModal').style.display='block'">Request Revision</button><?php if (in_array($project_status, ['submitted', 'under_crec_review', 'under_erec_review'], true)): ?><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_approve"><button class="btn btn-success">Record Recommendation</button></form><?php endif; ?><?php if ($proposal): ?><a class="btn btn-secondary" href="../../uploads/proposals/<?php echo rawurlencode($proposal['file_name']); ?>" target="_blank" rel="noopener">Download Proposal</a><?php else: ?><button class="btn btn-secondary" disabled>Download Proposal</button><?php endif; ?></div>
         </div></div>
         <div id="revisionModal" class="card" style="display: none; margin-bottom: 20px;"><div class="card-header"><div class="card-title">Request Revision</div></div><div class="card-body"><form method="post"><?php echo csrfField(); ?><input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="action" value="project_request_revision"><textarea name="reason" class="form-control" rows="4" required placeholder="Explain what needs to be revised..."></textarea><div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;"><button type="button" class="btn btn-secondary" onclick="document.getElementById('revisionModal').style.display='none'">Cancel</button><button class="btn btn-warning">Request Revision</button></div></form></div></div><!-- @rms-ui: modal styling --></div>
         <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapters</div></div><div class="card-body"><div style="display: flex; flex-direction: column; gap: 12px;">

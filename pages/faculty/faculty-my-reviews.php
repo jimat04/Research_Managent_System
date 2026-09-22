@@ -30,9 +30,22 @@ if ($tbl_stmt) {
 
 $reviews = [];
 if ($project_reviews_exists) {
+    // Migration 007 completes the six-criterion /100 form. Retain the legacy
+    // four-criterion /80 display until both new columns are present.
+    $form3_columns = ['capability_score' => false, 'thrusts_score' => false];
+    foreach (array_keys($form3_columns) as $column) {
+        $column_result = $conn->query("SHOW COLUMNS FROM project_reviews LIKE '" . $column . "'");
+        if ($column_result) {
+            $form3_columns[$column] = $column_result->num_rows > 0;
+            $column_result->close();
+        }
+    }
+    $form3_full = $form3_columns['capability_score'] && $form3_columns['thrusts_score'];
+    $form3_extra_select = $form3_full ? ', pr.capability_score, pr.thrusts_score' : '';
+
     $stmt = $conn->prepare("
         SELECT pr.review_id, pr.review_level,
-               pr.methodology_score, pr.contribution_score, pr.applicability_score, pr.agenda_score,
+               pr.methodology_score, pr.contribution_score, pr.applicability_score, pr.agenda_score" . $form3_extra_select . ",
                pr.recommendation, pr.reviewed_at, pr.created_at AS assigned_at,
                rp.project_id, rp.title, rp.status,
                CONCAT(s.first_name, ' ', s.last_name) AS student_name
@@ -103,8 +116,12 @@ renderFacultyShell($user, 'faculty-my-reviews', 'My CREC/EREC Reviews', 'Proposa
       <tbody>
       <?php foreach ($reviews as $r):
           $total = null;
+          $max_score = !empty($form3_full) ? 100 : 80;
           if (!empty($r['reviewed_at'])) {
               $total = (int) $r['methodology_score'] + (int) $r['contribution_score'] + (int) $r['applicability_score'] + (int) $r['agenda_score'];
+              if (!empty($form3_full)) {
+                  $total += (int) $r['capability_score'] + (int) $r['thrusts_score'];
+              }
           }
       ?>
         <tr>
@@ -112,7 +129,7 @@ renderFacultyShell($user, 'faculty-my-reviews', 'My CREC/EREC Reviews', 'Proposa
           <td data-label="Student" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo myrev_se($r['student_name'] ?? '—'); ?></td>
           <td data-label="Level" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo strtoupper(myrev_se($r['review_level'])); ?></td>
           <td data-label="Project status" style="padding:10px;border-bottom:1px solid #E5E7EB;"><span class="myrev-status myrev-status--<?php echo myrev_se(str_replace('_', '-', strtolower((string) $r['status']))); ?>"><?php echo myrev_se(ucwords(str_replace('_', ' ', (string) $r['status']))); ?></span></td>
-          <td data-label="Score" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $total === null ? '<em style="color:#64748B;">pending</em>' : '<strong>' . $total . '/80</strong>'; ?></td>
+          <td data-label="Score" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $total === null ? '<em style="color:#64748B;">pending</em>' : '<strong>' . $total . '/' . $max_score . '</strong>'; ?></td>
           <td data-label="Recommendation" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo $r['recommendation'] ? '<span class="myrev-recommendation myrev-recommendation--' . myrev_se(strtolower((string) $r['recommendation'])) . '">' . ucfirst(myrev_se($r['recommendation'])) . '</span>' : '—'; ?></td>
           <td data-label="Assigned" style="padding:10px;border-bottom:1px solid #E5E7EB;"><?php echo date('M d, Y', strtotime($r['assigned_at'])); ?></td>
           <td data-label="Action" style="padding:10px;border-bottom:1px solid #E5E7EB;"><a class="btn btn-primary btn-sm" href="faculty-score-review.php?id=<?php echo (int) $r['review_id']; ?>"><?php echo $total === null ? 'Score' : 'Edit'; ?></a></td>
