@@ -12,7 +12,8 @@
  *                          (requires the same EREC review count and score gate)
  *   - Return for revision → status: under_crec_review → for_revision (reason required)
  *                          or under_erec_review → for_revision (reason required)
- *   - Reject              → status: under_crec_review → rejected (reason required)
+ *   - Reject              → status: under_crec_review/under_erec_review → rejected
+ *                          (reason required)
  *
  * Reviewer scores (OVPREIS Form No. 3) live in `project_reviews` and are entered
  * by the assigned faculty via the Faculty Review UI; this page only manages
@@ -383,6 +384,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             SELECT
                               COUNT(DISTINCT reviewer_id) AS assigned_count,
                               COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL THEN reviewer_id END) AS completed_count,
+                              COUNT(DISTINCT CASE
+                                WHEN reviewed_at IS NOT NULL AND recommendation = 'reject' THEN reviewer_id
+                              END) AS reject_count,
                               AVG(
                                 COALESCE(methodology_score,0) +
                                 COALESCE(contribution_score,0) +
@@ -398,10 +402,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $agg_stmt->close();
 
                         $completed = (int) ($agg['completed_count'] ?? 0);
+                        $reject_count = (int) ($agg['reject_count'] ?? 0);
                         $avg       = (float) ($agg['avg_score'] ?? 0);
 
                         if ($completed < 2) {
                             $_SESSION['module_error'] = 'Cannot endorse: at least 2 completed reviews are required (currently ' . $completed . ').';
+                        } elseif ($reject_count > 0) {
+                            $_SESSION['module_error'] = 'Cannot endorse: ' . $reject_count . ' completed review(s) recommend rejection. Return the proposal for revision or reject it instead.';
                         } elseif ($avg < $form3_threshold) {
                             $_SESSION['module_error'] = 'Cannot endorse: average score is ' . number_format($avg, 1) . '/' . $form3_max_score . ', below the ' . number_format($form3_threshold, 1) . '-point threshold.';
                         } else {
@@ -462,6 +469,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             SELECT
                               COUNT(DISTINCT reviewer_id) AS assigned_count,
                               COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL THEN reviewer_id END) AS completed_count,
+                              COUNT(DISTINCT CASE
+                                WHEN reviewed_at IS NOT NULL AND recommendation = 'reject' THEN reviewer_id
+                              END) AS reject_count,
                               AVG(
                                 COALESCE(methodology_score,0) +
                                 COALESCE(contribution_score,0) +
@@ -477,10 +487,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $agg_stmt->close();
 
                         $completed = (int) ($agg['completed_count'] ?? 0);
+                        $reject_count = (int) ($agg['reject_count'] ?? 0);
                         $avg = (float) ($agg['avg_score'] ?? 0);
 
                         if ($completed < 2) {
                             $_SESSION['module_error'] = 'Cannot endorse: at least 2 completed EREC reviews are required (currently ' . $completed . ').';
+                        } elseif ($reject_count > 0) {
+                            $_SESSION['module_error'] = 'Cannot endorse: ' . $reject_count . ' completed review(s) recommend rejection. Return the proposal for revision or reject it instead.';
                         } elseif ($avg < $form3_threshold) {
                             $_SESSION['module_error'] = 'Cannot endorse: EREC average score is ' . number_format($avg, 1) . '/' . $form3_max_score . ', below the ' . number_format($form3_threshold, 1) . '-point threshold.';
                         } else {
@@ -553,6 +566,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 'erec_return_revision'
                             );
                             $_SESSION['module_success'] = 'EREC returned the project for revision.';
+                        } else {
+                            $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
+                        }
+                    }
+
+                } elseif ($action === 'erec_reject') {
+                    $reason = trim((string) ($_POST['revision_reason'] ?? ''));
+                    if ($project_review_level !== 'erec') {
+                        $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
+                    } elseif (mb_strlen($reason) < 20) {
+                        $_SESSION['module_error'] = 'Disapproval reason is required (minimum 20 characters).';
+                    } else {
+                        $upd = $conn->prepare("
+                            UPDATE research_projects
+                               SET status = 'rejected', updated_at = NOW()
+                             WHERE project_id = ?
+                               AND status = 'under_erec_review'"
+                               . $rp_deleted_filter
+                        );
+                        $upd->bind_param('i', $project_id);
+                        $upd->execute();
+                        $affected = $upd->affected_rows;
+                        $upd->close();
+
+                        if ($affected > 0) {
+                            $notification_message = 'EREC returned "' . $title . '" with a recommendation of disapproval to the President. Reason: ' . $reason;
+                            foreach (crec_erec_recipients($conn, $project_id, $student_id) as $recipient_id) {
+                                createNotification(
+                                    $recipient_id,
+                                    'EREC recommended disapproval',
+                                    $notification_message,
+                                    'warning',
+                                    SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
+                                );
+                            }
+                            logActivity(
+                                'EREC recommended disapproval of project #' . $project_id . ' ("' . $title . '"): ' . $reason,
+                                'erec_reject'
+                            );
+                            $_SESSION['module_success'] = 'EREC recommendation of disapproval recorded.';
                         } else {
                             $_SESSION['module_error'] = 'Project is no longer in EREC review (it may have already been processed).';
                         }
@@ -691,6 +744,7 @@ if ($project_reviews_exists) {
               WHERE pa.project_id = rp.project_id AND pa.adviser_id IS NOT NULL) AS adviser_count,
             COALESCE(stats.assigned_count, 0)  AS assigned_count,
             COALESCE(stats.completed_count, 0) AS completed_count,
+            COALESCE(stats.reject_count, 0)    AS reject_count,
             stats.avg_score                   AS avg_score
         FROM research_projects rp
         LEFT JOIN users u  ON u.user_id = rp.created_by
@@ -711,6 +765,7 @@ if ($project_reviews_exists) {
                 review_level,
                 COUNT(DISTINCT reviewer_id) AS assigned_count,
                 COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL THEN reviewer_id END) AS completed_count,
+                COUNT(DISTINCT CASE WHEN reviewed_at IS NOT NULL AND recommendation = 'reject' THEN reviewer_id END) AS reject_count,
                 AVG(
                     COALESCE(methodology_score,0) +
                     COALESCE(contribution_score,0) +
@@ -749,6 +804,7 @@ if ($project_reviews_exists) {
               WHERE pa.project_id = rp.project_id AND pa.adviser_id IS NOT NULL) AS adviser_count,
             0 AS assigned_count,
             0 AS completed_count,
+            0 AS reject_count,
             NULL AS avg_score
         FROM research_projects rp
         LEFT JOIN users u  ON u.user_id = rp.created_by
@@ -1223,12 +1279,15 @@ $stage_sections = [
 
             $assigned  = (int) ($row['assigned_count'] ?? 0);
             $completed = (int) ($row['completed_count'] ?? 0);
+            $reject_count = (int) ($row['reject_count'] ?? 0);
             $avg       = $row['avg_score'] !== null ? (float) $row['avg_score'] : null;
 
-            $can_endorse = ($completed >= 2) && ($avg !== null) && ($avg >= $form3_threshold);
+            $can_endorse = ($completed >= 2) && ($reject_count === 0) && ($avg !== null) && ($avg >= $form3_threshold);
             $endorse_title = '';
             if ($completed < 2) {
                 $endorse_title = 'Needs at least 2 completed reviews (currently ' . $completed . ')';
+            } elseif ($reject_count > 0) {
+                $endorse_title = $reject_count . ' completed review(s) recommend rejection';
             } elseif ($avg === null || $avg < $form3_threshold) {
                 $endorse_title = 'Average score is below the ' . number_format($form3_threshold, 1) . '/' . $form3_max_score . ' threshold';
             } else {
@@ -1311,12 +1370,10 @@ $stage_sections = [
                           onclick="openReturnModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>', '<?php echo se($stage_key); ?>')">
                     ↩ Return
                   </button>
-                  <?php if (!$is_erec_stage): ?>
-                    <button type="button" class="btn btn-reject btn-sm"
-                            onclick="openRejectModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
-                      ✕ Reject
-                    </button>
-                  <?php endif; ?>
+                  <button type="button" class="btn btn-reject btn-sm"
+                          onclick="openRejectModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>', '<?php echo se($stage_key); ?>')">
+                    ✕ Reject
+                  </button>
                 </div>
               </td>
             </tr>
@@ -1406,11 +1463,11 @@ $stage_sections = [
   <div class="modal-content">
     <form method="POST" id="rejectForm">
       <?php echo csrfField(); ?>
-      <input type="hidden" name="action" value="crec_reject">
+      <input type="hidden" name="action" id="reject_action" value="crec_reject">
       <input type="hidden" name="project_id" id="reject_project_id" value="">
 
       <div class="modal-header">
-        <h3 id="rejectModalTitle">✕ Reject Proposal</h3>
+        <h3 id="rejectModalTitle">✕ Reject Proposal (CREC)</h3>
         <button type="button" class="modal-close" onclick="closeRejectModal()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
@@ -1421,12 +1478,12 @@ $stage_sections = [
           <label class="form-label" for="reject_reason">Reason <span style="color: #EF4444;">*</span></label>
           <textarea id="reject_reason" name="revision_reason" class="form-control" rows="4" minlength="10" required
                     placeholder="Explain why this proposal is being rejected (min. 10 characters)…"></textarea>
-          <span class="form-help">This message will be sent to the student as a notification.</span>
+          <span class="form-help" id="reject_help">This message will be sent to the student as a notification.</span>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeRejectModal()">Cancel</button>
-        <button type="submit" class="btn btn-reject">Reject Proposal</button>
+        <button type="submit" class="btn btn-reject" id="reject_submit">Reject Proposal</button>
       </div>
     </form>
   </div>
@@ -1643,11 +1700,28 @@ $stage_sections = [
   const rejectForm  = document.getElementById('rejectForm');
   const rejectTitle = document.getElementById('reject_title');
   const rejectPid   = document.getElementById('reject_project_id');
+  const rejectAction = document.getElementById('reject_action');
+  const rejectModalTitle = document.getElementById('rejectModalTitle');
   const rejectField = document.getElementById('reject_reason');
+  const rejectHelp = document.getElementById('reject_help');
+  const rejectSubmit = document.getElementById('reject_submit');
+  let rejectMinimumLength = 10;
 
-  function openRejectModal(projectId, title) {
+  function openRejectModal(projectId, title, stage) {
     rejectPid.value          = projectId;
     rejectTitle.textContent  = title;
+    const isErec = stage === 'erec';
+    rejectAction.value = isErec ? 'erec_reject' : 'crec_reject';
+    rejectMinimumLength = isErec ? 20 : 10;
+    rejectModalTitle.textContent = '✕ ' + (isErec ? 'Recommend Disapproval (EREC)' : 'Reject Proposal (CREC)');
+    rejectField.minLength = rejectMinimumLength;
+    rejectField.placeholder = isErec
+      ? 'Explain the recommendation of disapproval (min. 20 characters)…'
+      : 'Explain why this proposal is being rejected (min. 10 characters)…';
+    rejectHelp.textContent = isErec
+      ? 'This message will be sent to project stakeholders with EREC\'s recommendation to the President.'
+      : 'This message will be sent to the student as a notification.';
+    rejectSubmit.textContent = isErec ? 'Recommend Disapproval' : 'Reject Proposal';
     rejectField.value        = '';
     rejectField.classList.remove('invalid');
     rejectModal.style.display = 'flex';
@@ -1690,7 +1764,7 @@ $stage_sections = [
 
   rejectForm.addEventListener('submit', (e) => {
     const v = rejectField.value.trim();
-    if (v.length < 10) {
+    if (v.length < rejectMinimumLength) {
       e.preventDefault();
       rejectField.classList.add('invalid');
       rejectField.focus();
