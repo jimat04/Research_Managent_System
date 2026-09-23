@@ -37,13 +37,19 @@ A PHP and MySQL research management system for students, faculty advisers, resea
 
 5. Create a database named `rms_db` in phpMyAdmin.
 
-6. Import the main schema and seed data:
+6. Import the canonical fresh-install schema and seed data once:
 
    ```text
    database/schema/rms_db.sql
    ```
 
-   For an existing installation, apply the incremental scripts in `database/migrations/` instead.
+   This single import includes the complete current structure, required lookup
+   data, and demo accounts. No migrations are needed for a fresh installation.
+
+   The numbered scripts in `database/migrations/` are only the upgrade path for
+   pre-September-2026 legacy databases. The unnumbered
+   `database/migrations/rms_db_migration.sql` script is superseded and retained
+   only for legacy history; do not run it after importing the canonical schema.
 
 7. Open the app — the root `index.php` redirects to the public entry point:
 

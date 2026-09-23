@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $user_id = (int) ($_POST['user_id'] ?? 0);
             $current_status = $_POST['current_status'] ?? '';
 
-            // Prevent deactivating admin accounts
+            // Prevent suspending admin accounts
             $check_stmt = $conn->prepare("SELECT role, first_name, last_name, email, CONCAT(first_name, ' ', last_name) AS name FROM users WHERE user_id = ?");
             $check_stmt->bind_param('i', $user_id);
             $check_stmt->execute();
@@ -120,12 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                 if ($target_user['role'] === 'admin') {
                     $error = 'Cannot modify administrator accounts.';
                 } else {
-                    $new_status = ($current_status === 'active') ? 'inactive' : 'active';
+                    $new_status = ($current_status === 'active') ? 'suspended' : 'active';
                     $update_stmt = $conn->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE user_id = ?");
                     $update_stmt->bind_param('si', $new_status, $user_id);
 
                     if ($update_stmt->execute()) {
-                        $action_label = ($new_status === 'active') ? 'Activated' : 'Deactivated';
+                        $action_label = ($new_status === 'active') ? 'Activated' : 'Suspended';
                         logActivity("{$action_label} user: {$target_user['name']} (ID: {$user_id})", 'user_management');
 
                         // Send approval notification email when activating a pending account
@@ -488,7 +488,7 @@ $visible_users = $users->num_rows;
   .badge-staff { background: #faf4e8; border-color: #eadaba; color: #8b6528; }
   .badge-admin { background: #f7eeee; border-color: #ead8d8; color: #8b4a4a; }
   .badge-active { background: #edf8f1; border-color: #d4ebdc; color: #347451; }
-  .badge-inactive { background: #f3f5f7; border-color: #e3e7eb; color: #6b7280; }
+  .badge-suspended { background: #f3f5f7; border-color: #e3e7eb; color: #6b7280; }
   .badge-pending { background: #fff5e8; border-color: #f0ddbf; color: #a46027; }
 
   .empty-state { padding: 58px 24px !important; text-align: center; }
@@ -686,7 +686,7 @@ renderAdminShell(
           <option value="">All Statuses</option>
           <option value="active" <?php echo $status_filter === 'active' ? 'selected' : ''; ?>>Active</option>
           <option value="pending" <?php echo $status_filter === 'pending' ? 'selected' : ''; ?>>Pending</option>
-          <option value="inactive" <?php echo $status_filter === 'inactive' ? 'selected' : ''; ?>>Inactive</option>
+          <option value="suspended" <?php echo $status_filter === 'suspended' ? 'selected' : ''; ?>>Suspended</option>
         </select>
         <button type="submit" class="btn btn-secondary">Apply filters</button>
         <?php if (!empty($search) || !empty($role_filter) || !empty($status_filter)): ?>
@@ -755,10 +755,10 @@ renderAdminShell(
                     <?php
                     $status_badges = [
                       'active' => 'badge-active',
-                      'inactive' => 'badge-inactive',
+                      'suspended' => 'badge-suspended',
                       'pending' => 'badge-pending'
                     ];
-                    $status_class = $status_badges[$u['status']] ?? 'badge-inactive';
+                    $status_class = $status_badges[$u['status']] ?? 'badge-suspended';
                     ?>
                     <span class="badge <?php echo $status_class; ?>"><?php echo ucfirst($u['status']); ?></span>
                   </td>
@@ -769,7 +769,7 @@ renderAdminShell(
                       <button type="button" class="btn btn-secondary btn-sm" onclick='openEditModal(<?php echo json_encode($u, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Edit</button>
 
                       <?php if ($u['status'] === 'active'): ?>
-                        <button type="button" class="btn btn-sm btn-danger" onclick='confirmToggleStatus(<?php echo (int) $u['user_id']; ?>, "active", <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Deactivate</button>
+                        <button type="button" class="btn btn-sm btn-danger" onclick='confirmToggleStatus(<?php echo (int) $u['user_id']; ?>, "active", <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Suspend</button>
                       <?php else: ?>
                         <button type="button" class="btn btn-sm btn-success" onclick='confirmToggleStatus(<?php echo (int) $u['user_id']; ?>, <?php echo json_encode($u['status'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>, <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Activate</button>
                       <?php endif; ?>
@@ -1163,7 +1163,7 @@ function closeResetPasswordModal() {
 
 // TOGGLE STATUS
 function confirmToggleStatus(userId, currentStatus, userName) {
-  const action = (currentStatus === 'active') ? 'deactivate' : 'activate';
+  const action = (currentStatus === 'active') ? 'suspend' : 'activate';
   const message = `Are you sure you want to ${action} ${userName}?`;
 
   if (confirm(message)) {

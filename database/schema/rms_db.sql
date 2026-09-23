@@ -1,146 +1,52 @@
--- phpMyAdmin SQL Dump
--- version 5.2.1
--- https://www.phpmyadmin.net/
---
--- Host: 127.0.0.1
--- Generation Time: May 31, 2026 at 08:23 AM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
-
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
-SET time_zone = "+00:00";
-
+-- Canonical fresh-install schema - matches live DB as of 2026-09 including migrations 002-010.
+-- For LEGACY databases use the numbered migrations instead.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
-
---
--- Database: `rms_db`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `academic_years`
---
-
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+DROP TABLE IF EXISTS `academic_years`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `academic_years` (
-  `ay_id` int(10) UNSIGNED NOT NULL,
+  `ay_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `label` varchar(20) NOT NULL COMMENT 'e.g. 2024-2025',
   `semester` enum('1st','2nd','Summer') NOT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 0,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `academic_years`
---
-
-INSERT INTO `academic_years` (`ay_id`, `label`, `semester`, `is_active`, `created_at`) VALUES
-(1, '2023-2024', '1st', 0, '2026-05-30 17:49:59'),
-(2, '2023-2024', '2nd', 0, '2026-05-30 17:49:59'),
-(3, '2024-2025', '1st', 0, '2026-05-30 17:49:59'),
-(4, '2024-2025', '2nd', 1, '2026-05-30 17:49:59');
-
-
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`ay_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `activity_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `activity_log` (
-  `log_id` int(10) UNSIGNED NOT NULL,
-  `user_id` int(10) UNSIGNED DEFAULT NULL,
+  `log_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned DEFAULT NULL,
   `action` varchar(200) NOT NULL,
   `module` varchar(80) DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `activity_log`
---
-
-INSERT INTO `activity_log` (`log_id`, `user_id`, `action`, `module`, `ip_address`, `created_at`) VALUES
-(1, 4, 'User logged in', 'authentication', '::1', '2026-05-30 18:10:36'),
-(2, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:11:06'),
-(3, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:19'),
-(5, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:11:48'),
-(8, 4, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:08'),
-(9, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:18:16'),
-(10, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:18:31'),
-(12, 1, 'User logged out', 'authentication', '::1', '2026-05-30 18:23:21'),
-(15, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:58:48'),
-(16, 2, 'User logged out', 'authentication', '::1', '2026-05-30 18:58:50'),
-(17, 2, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:30'),
-(19, 1, 'User logged in', 'authentication', '::1', '2026-05-30 18:59:46'),
-(20, 1, 'User logged out', 'authentication', '::1', '2026-05-30 19:00:00');
-
---
--- Table structure for table `messages`
---
-
-CREATE TABLE `messages` (
-  `message_id` int(10) UNSIGNED NOT NULL,
-  `sender_id` int(10) UNSIGNED NOT NULL,
-  `recipient_id` int(10) UNSIGNED NOT NULL,
-  `subject` varchar(160) NOT NULL,
-  `message` text NOT NULL,
-  `is_read` tinyint(1) NOT NULL DEFAULT 0,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
-ALTER TABLE `messages`
-  ADD PRIMARY KEY (`message_id`),
-  ADD KEY `idx_recipient_read` (`recipient_id`,`is_read`),
-  ADD KEY `idx_sender` (`sender_id`);
-
--- --------------------------------------------------------
-
---
--- AUTO_INCREMENT for table `messages`
---
-
-ALTER TABLE `messages`
-  MODIFY `message_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
--- --------------------------------------------------------
-
---
--- Constraints for table `messages`
---
-
-ALTER TABLE `messages`
-  ADD CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
--- --------------------------------------------------------
---
--- Table structure for table `chapters`
---
-
-CREATE TABLE `chapters` (
-  `chapter_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `chapter_number` tinyint(3) UNSIGNED NOT NULL COMMENT '1-5',
-  `chapter_title` varchar(200) NOT NULL,
-  `status` enum('draft','submitted','under_review','revision_required','approved') NOT NULL DEFAULT 'draft',
-  `submitted_at` datetime DEFAULT NULL,
-  `approved_at` datetime DEFAULT NULL,
-  `approved_by` int(10) UNSIGNED DEFAULT NULL,
-  `version` tinyint(3) UNSIGNED NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `chapter_content`
---
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`log_id`),
+  KEY `idx_user` (`user_id`),
+  KEY `idx_created` (`created_at`),
+  KEY `idx_activity_user_created` (`user_id`,`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=935 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `chapter_content`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `chapter_content` (
-  `content_id` int(10) UNSIGNED NOT NULL,
-  `chapter_id` int(10) UNSIGNED NOT NULL,
+  `content_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `chapter_id` int(10) unsigned NOT NULL,
   `background` longtext DEFAULT NULL,
   `problem_statement` longtext DEFAULT NULL,
   `objectives` longtext DEFAULT NULL,
@@ -162,655 +68,550 @@ CREATE TABLE `chapter_content` (
   `summary_text` longtext DEFAULT NULL,
   `conclusions` longtext DEFAULT NULL,
   `recommendations` longtext DEFAULT NULL,
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `comments`
---
-
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`content_id`),
+  UNIQUE KEY `chapter_id` (`chapter_id`),
+  CONSTRAINT `fk_chapter_content_chapter_chapters` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `chapters`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `chapters` (
+  `chapter_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `chapter_number` tinyint(3) unsigned NOT NULL COMMENT '1-5',
+  `chapter_title` varchar(200) NOT NULL,
+  `status` enum('draft','submitted','under_review','revision_required','revised','approved','rejected') NOT NULL DEFAULT 'draft',
+  `submitted_at` datetime DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `approved_by` int(10) unsigned DEFAULT NULL,
+  `version` tinyint(3) unsigned NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  `research_id` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`chapter_id`),
+  UNIQUE KEY `uk_proj_chap` (`project_id`,`chapter_number`),
+  KEY `approved_by` (`approved_by`),
+  KEY `idx_chapters_research_status` (`research_id`,`status`),
+  KEY `idx_chapters_created_at` (`created_at`),
+  KEY `idx_chapters_deleted_at` (`deleted_at`),
+  CONSTRAINT `fk_chapters_project_projects` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chapters_research_projects` FOREIGN KEY (`research_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `comments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `comments` (
-  `comment_id` int(10) UNSIGNED NOT NULL,
-  `chapter_id` int(10) UNSIGNED NOT NULL,
-  `faculty_id` int(10) UNSIGNED NOT NULL,
+  `comment_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `chapter_id` int(10) unsigned DEFAULT NULL,
+  `project_id` int(10) unsigned DEFAULT NULL,
+  `faculty_id` int(10) unsigned DEFAULT NULL,
   `comment` text NOT NULL,
   `type` enum('general','suggestion','correction','approval') NOT NULL DEFAULT 'general',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `defense_schedule`
---
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  `parent_id` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`comment_id`),
+  KEY `chapter_id` (`chapter_id`),
+  KEY `faculty_id` (`faculty_id`),
+  KEY `idx_comments_user_created` (`user_id`,`created_at`),
+  KEY `idx_comments_parent` (`parent_id`),
+  KEY `idx_comments_deleted_at` (`deleted_at`),
+  KEY `idx_comments_project_id` (`project_id`),
+  CONSTRAINT `fk_comments_chapter_chapters` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_comments_faculty_users` FOREIGN KEY (`faculty_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_comments_parent_comments` FOREIGN KEY (`parent_id`) REFERENCES `comments` (`comment_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_comments_user_users` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `contact_messages`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_messages` (
+  `contact_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(160) NOT NULL,
+  `email` varchar(160) NOT NULL,
+  `concern_type` varchar(80) NOT NULL,
+  `message` text NOT NULL,
+  `status` enum('pending','resolved','archived') NOT NULL DEFAULT 'pending',
+  `resolved_by` int(10) unsigned DEFAULT NULL COMMENT 'user_id who resolved it',
+  `resolved_at` datetime DEFAULT NULL,
+  `notes` text DEFAULT NULL COMMENT 'internal notes by staff',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`contact_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_concern_type` (`concern_type`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `fk_resolved_by` (`resolved_by`),
+  CONSTRAINT `fk_contact_resolved_by` FOREIGN KEY (`resolved_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `defense_schedule`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `defense_schedule` (
-  `defense_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
+  `defense_id` int(10) unsigned NOT NULL,
+  `project_id` int(10) unsigned NOT NULL,
   `schedule_date` datetime NOT NULL,
   `venue` varchar(200) DEFAULT NULL,
   `type` enum('proposal','pre_oral','final') NOT NULL DEFAULT 'final',
   `status` enum('scheduled','done','cancelled','rescheduled') NOT NULL DEFAULT 'scheduled',
   `remarks` text DEFAULT NULL,
-  `created_by` int(10) UNSIGNED NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `departments`
---
-
+  `created_by` int(10) unsigned NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `research_id` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`defense_id`),
+  KEY `project_id` (`project_id`),
+  KEY `created_by` (`created_by`),
+  KEY `idx_defense_research_status` (`research_id`,`status`),
+  KEY `idx_defense_created_at` (`created_at`),
+  CONSTRAINT `fk_defense_schedule_research_projects` FOREIGN KEY (`research_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `departments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `departments` (
-  `dept_id` int(10) UNSIGNED NOT NULL,
+  `dept_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `dept_code` varchar(20) NOT NULL,
   `dept_name` varchar(150) NOT NULL,
-  `status` tinyint(1) NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `departments`
---
-
-INSERT INTO `departments` (`dept_id`, `dept_code`, `dept_name`, `status`) VALUES
-(1, 'CCS', 'College of Computer Studies', 1),
-(2, 'CAS', 'College of Arts and Sciences', 1),
-(3, 'COE', 'College of Engineering', 1),
-(4, 'CBA', 'College of Business Administration', 1);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `notifications`
---
-
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`dept_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `messages`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `messages` (
+  `message_id` int(10) unsigned NOT NULL,
+  `sender_id` int(10) unsigned NOT NULL,
+  `recipient_id` int(10) unsigned NOT NULL,
+  `subject` varchar(160) NOT NULL,
+  `message` text NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  KEY `idx_sender_system` (`sender_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `notifications` (
-  `notification_id` int(10) UNSIGNED NOT NULL,
-  `user_id` int(10) UNSIGNED NOT NULL,
+  `notification_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned NOT NULL,
   `title` varchar(160) NOT NULL,
   `message` text NOT NULL,
   `type` enum('info','success','warning','error') NOT NULL DEFAULT 'info',
   `link` varchar(255) DEFAULT NULL,
   `is_read` tinyint(1) NOT NULL DEFAULT 0,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `programs`
---
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `read_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`notification_id`),
+  KEY `idx_user_read` (`user_id`,`is_read`),
+  KEY `idx_notifications_read_at` (`user_id`,`read_at`),
+  KEY `idx_notifications_created_at` (`created_at`),
+  CONSTRAINT `fk_notifications_user_users` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=101 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `programs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `programs` (
-  `program_id` int(10) UNSIGNED NOT NULL,
-  `dept_id` int(10) UNSIGNED NOT NULL,
+  `program_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `dept_id` int(10) unsigned NOT NULL,
   `program_code` varchar(20) NOT NULL,
   `program_name` varchar(150) NOT NULL,
-  `status` tinyint(1) NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `programs`
---
-
-INSERT INTO `programs` (`program_id`, `dept_id`, `program_code`, `program_name`, `status`) VALUES
-(1, 1, 'BSIT', 'Bachelor of Science in Information Technology', 1),
-(2, 1, 'BSCS', 'Bachelor of Science in Computer Science', 1),
-(3, 1, 'BSIS', 'Bachelor of Science in Information Systems', 1),
-(4, 2, 'BSBio', 'Bachelor of Science in Biology', 1),
-(5, 3, 'BSCE', 'Bachelor of Science in Civil Engineering', 1);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `project_advisers`
---
-
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`program_id`),
+  KEY `dept_id` (`dept_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `project_advisers`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `project_advisers` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `adviser_id` int(10) UNSIGNED NOT NULL,
-  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `project_members`
---
-
+  `project_adviser_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `adviser_id` int(10) unsigned DEFAULT NULL,
+  `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`project_adviser_id`),
+  UNIQUE KEY `uk_proj_adv` (`project_id`,`adviser_id`),
+  KEY `adviser_id` (`adviser_id`),
+  CONSTRAINT `fk_project_advisers_adviser_users` FOREIGN KEY (`adviser_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `project_advisers_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `project_advisers_history` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `adviser_id` int(10) unsigned NOT NULL,
+  `role` varchar(60) DEFAULT NULL,
+  `assigned_at` datetime NOT NULL,
+  `removed_at` datetime NOT NULL,
+  `removed_by` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_pah_project` (`project_id`),
+  KEY `idx_pah_adviser` (`adviser_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `project_members`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `project_members` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `user_id` int(10) UNSIGNED NOT NULL,
-  `role` enum('lead','member') NOT NULL DEFAULT 'member'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `research_categories`
---
-
+  `project_member_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `user_id` int(10) unsigned NOT NULL,
+  `role` enum('lead','member') NOT NULL DEFAULT 'member',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`project_member_id`),
+  UNIQUE KEY `uk_proj_user` (`project_id`,`user_id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `project_reviews`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `project_reviews` (
+  `review_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `reviewer_id` int(10) unsigned NOT NULL COMMENT 'faculty users.user_id',
+  `review_level` enum('crec','erec') NOT NULL DEFAULT 'crec',
+  `methodology_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-20 (soundness of methodology)',
+  `contribution_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-20 (contribution to knowledge)',
+  `applicability_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-30 (applicability/marketability)',
+  `capability_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-10 (capability of proponent to carry out research project)',
+  `agenda_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-10 (alignment with college research agenda)',
+  `thrusts_score` tinyint(3) unsigned DEFAULT NULL COMMENT '0-10 (conformity to national research thrusts: DOST/CHED)',
+  `comments` text DEFAULT NULL,
+  `recommendation` enum('approve','revise','reject') DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`review_id`),
+  UNIQUE KEY `uk_project_reviewer_level` (`project_id`,`reviewer_id`,`review_level`),
+  KEY `idx_project` (`project_id`),
+  KEY `idx_reviewer` (`reviewer_id`),
+  CONSTRAINT `fk_reviews_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_reviews_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_author_snapshots`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `research_author_snapshots` (
+  `author_snapshot_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  `author_name` varchar(170) NOT NULL,
+  `program` varchar(120) DEFAULT NULL,
+  `author_role` enum('lead','member') NOT NULL DEFAULT 'member',
+  `display_order` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`author_snapshot_id`),
+  UNIQUE KEY `uk_research_author_snapshot` (`project_id`,`user_id`),
+  KEY `idx_research_author_program` (`program`),
+  KEY `idx_research_author_user` (`user_id`),
+  CONSTRAINT `fk_research_author_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_research_author_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_categories`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `research_categories` (
-  `category_id` int(10) UNSIGNED NOT NULL,
+  `category_id` int(10) unsigned NOT NULL,
   `category_name` varchar(120) NOT NULL,
   `description` text DEFAULT NULL,
-  `status` tinyint(1) NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `research_categories`
---
-
-INSERT INTO `research_categories` (`category_id`, `category_name`, `description`, `status`) VALUES
-(1, 'Applied Research', 'Research directed toward practical applications', 1),
-(2, 'Basic Research', 'Research aimed at expanding knowledge', 1),
-(3, 'Action Research', 'Research to solve a specific practical issue', 1),
-(4, 'Developmental Research', 'Research focused on developing new products/systems', 1),
-(5, 'Evaluation Research', 'Research that measures effectiveness of programs', 1);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `research_projects`
---
-
-CREATE TABLE `research_projects` (
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `category_id` int(10) UNSIGNED DEFAULT NULL,
-  `ay_id` int(10) UNSIGNED DEFAULT NULL,
-  `research_area` varchar(150) DEFAULT NULL,
-  `abstract` text DEFAULT NULL,
-  `status` enum('draft','proposal','in_progress','for_defense','completed','archived') NOT NULL DEFAULT 'draft',
-  `created_by` int(10) UNSIGNED NOT NULL COMMENT 'student user_id',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `uploads`
---
-
-CREATE TABLE `uploads` (
-  `upload_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `chapter_id` int(10) UNSIGNED DEFAULT NULL,
-  `uploaded_by` int(10) UNSIGNED NOT NULL,
-  `type` enum('proposal','chapter','defense','revision','manuscript','other') NOT NULL DEFAULT 'other',
-  `original_name` varchar(255) NOT NULL,
-  `file_name` varchar(255) NOT NULL,
-  `file_path` varchar(500) NOT NULL,
-  `file_size` int(10) UNSIGNED DEFAULT NULL,
-  `mime_type` varchar(80) DEFAULT NULL,
-  `upload_date` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `research_documents`
---
-
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`category_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `research_documents` (
-  `document_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `upload_id` int(10) UNSIGNED DEFAULT NULL,
+  `document_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `upload_id` int(10) unsigned DEFAULT NULL,
   `document_type` enum('proposal','revision_checklist','defense_material','mou','nda','progress_report','terminal_report','final_bound_report','publication_record','other') NOT NULL DEFAULT 'other',
   `status` enum('pending','submitted','approved','rejected','waived') NOT NULL DEFAULT 'pending',
   `remarks` text DEFAULT NULL,
-  `submitted_by` int(10) UNSIGNED DEFAULT NULL,
-  `reviewed_by` int(10) UNSIGNED DEFAULT NULL,
+  `submitted_by` int(10) unsigned DEFAULT NULL,
+  `reviewed_by` int(10) unsigned DEFAULT NULL,
   `submitted_at` datetime DEFAULT NULL,
   `reviewed_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `research_reports`
---
-
-CREATE TABLE `research_reports` (
-  `report_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
-  `document_id` int(10) UNSIGNED DEFAULT NULL,
-  `report_type` enum('midway_progress','terminal') NOT NULL,
-  `status` enum('draft','submitted','under_review','revision_required','approved','rejected') NOT NULL DEFAULT 'draft',
-  `summary` text DEFAULT NULL,
-  `due_date` date DEFAULT NULL,
-  `submitted_at` datetime DEFAULT NULL,
-  `reviewed_at` datetime DEFAULT NULL,
-  `reviewed_by` int(10) UNSIGNED DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `research_publication_tracking`
---
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`document_id`),
+  KEY `idx_research_documents_project_type` (`project_id`,`document_type`),
+  KEY `idx_research_documents_status` (`status`),
+  KEY `idx_research_documents_upload` (`upload_id`),
+  KEY `idx_research_documents_submitted_by` (`submitted_by`),
+  KEY `idx_research_documents_reviewed_by` (`reviewed_by`),
+  CONSTRAINT `fk_research_documents_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_research_documents_reviewed_by` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_research_documents_submitted_by` FOREIGN KEY (`submitted_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_research_documents_upload` FOREIGN KEY (`upload_id`) REFERENCES `uploads` (`upload_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_projects`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `research_projects` (
+  `project_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `category_id` int(10) unsigned DEFAULT NULL,
+  `ay_id` int(10) unsigned DEFAULT NULL,
+  `research_area` varchar(150) DEFAULT NULL,
+  `abstract` text DEFAULT NULL,
+  `status` enum('draft','proposal','submitted','under_review','under_crec_review','under_erec_review','for_revision','revision_required','rejected','approved','ongoing','progress_report','terminal_review','completed','archived') NOT NULL DEFAULT 'draft',
+  `created_by` int(10) unsigned NOT NULL COMMENT 'student user_id',
+  `student_id` int(10) unsigned DEFAULT NULL,
+  `adviser_id` int(10) unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`project_id`),
+  KEY `category_id` (`category_id`),
+  KEY `ay_id` (`ay_id`),
+  KEY `created_by` (`created_by`),
+  KEY `idx_status` (`status`),
+  KEY `idx_projects_student_status` (`student_id`,`status`),
+  KEY `idx_projects_adviser_status` (`adviser_id`,`status`),
+  KEY `idx_projects_created_at` (`created_at`),
+  KEY `idx_projects_deleted_at` (`deleted_at`),
+  CONSTRAINT `fk_research_projects_adviser_users` FOREIGN KEY (`adviser_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_research_projects_created_by_users` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE NO ACTION,
+  CONSTRAINT `fk_research_projects_student_users` FOREIGN KEY (`student_id`) REFERENCES `users` (`user_id`) ON DELETE NO ACTION
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_publication_tracking`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `research_publication_tracking` (
-  `publication_id` int(10) UNSIGNED NOT NULL,
-  `project_id` int(10) UNSIGNED NOT NULL,
+  `publication_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
   `colloquium_date` datetime DEFAULT NULL,
   `colloquium_status` enum('not_scheduled','scheduled','presented','cancelled') NOT NULL DEFAULT 'not_scheduled',
   `journal_status` enum('not_submitted','submitted','under_review','accepted','published','rejected') NOT NULL DEFAULT 'not_submitted',
   `journal_reference` varchar(255) DEFAULT NULL,
   `archive_status` enum('not_archived','ready','archived') NOT NULL DEFAULT 'not_archived',
   `remarks` text DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `users`
---
-
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`publication_id`),
+  UNIQUE KEY `uq_publication_project` (`project_id`),
+  KEY `idx_publication_colloquium_status` (`colloquium_status`),
+  KEY `idx_publication_journal_status` (`journal_status`),
+  KEY `idx_publication_archive_status` (`archive_status`),
+  CONSTRAINT `fk_publication_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `research_reports`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `research_reports` (
+  `report_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `document_id` int(10) unsigned DEFAULT NULL,
+  `report_type` enum('midway_progress','terminal') NOT NULL,
+  `status` enum('draft','submitted','under_review','revision_required','approved','rejected') NOT NULL DEFAULT 'draft',
+  `summary` text DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `reviewed_by` int(10) unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`report_id`),
+  KEY `idx_research_reports_project_type` (`project_id`,`report_type`),
+  KEY `idx_research_reports_status` (`status`),
+  KEY `idx_research_reports_document` (`document_id`),
+  KEY `idx_research_reports_reviewed_by` (`reviewed_by`),
+  CONSTRAINT `fk_research_reports_document` FOREIGN KEY (`document_id`) REFERENCES `research_documents` (`document_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_research_reports_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_research_reports_reviewed_by` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `uploads`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `uploads` (
+  `upload_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `chapter_id` int(10) unsigned DEFAULT NULL,
+  `uploaded_by` int(10) unsigned DEFAULT NULL,
+  `type` enum('proposal','chapter','defense','revision','manuscript','other') NOT NULL DEFAULT 'other',
+  `original_name` varchar(255) NOT NULL,
+  `file_name` varchar(255) NOT NULL,
+  `file_path` varchar(500) NOT NULL,
+  `file_size` int(10) unsigned DEFAULT NULL,
+  `mime_type` varchar(80) DEFAULT NULL,
+  `upload_date` timestamp NOT NULL DEFAULT current_timestamp(),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `research_id` int(10) unsigned DEFAULT NULL,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`upload_id`),
+  KEY `project_id` (`project_id`),
+  KEY `chapter_id` (`chapter_id`),
+  KEY `uploaded_by` (`uploaded_by`),
+  KEY `idx_uploads_research_created` (`research_id`,`created_at`),
+  KEY `idx_uploads_user_created` (`user_id`,`created_at`),
+  CONSTRAINT `fk_uploads_research_projects` FOREIGN KEY (`research_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_uploads_uploaded_by_users` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_uploads_user_users` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `users`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `users` (
-  `user_id` int(10) UNSIGNED NOT NULL,
-  `role` enum('student','faculty','admin') NOT NULL DEFAULT 'student',
+  `user_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `role` enum('student','faculty','research_staff','admin') NOT NULL DEFAULT 'student',
   `first_name` varchar(80) NOT NULL,
   `last_name` varchar(80) NOT NULL,
   `email` varchar(160) NOT NULL,
   `password` varchar(255) NOT NULL,
   `student_id` varchar(50) DEFAULT NULL COMMENT 'school ID / employee ID',
   `department` varchar(120) DEFAULT NULL,
+  `office` varchar(120) DEFAULT NULL COMMENT 'Office assignment for staff',
+  `specialization` varchar(120) DEFAULT NULL COMMENT 'Faculty field of expertise',
+  `academic_rank` enum('Instructor','Assistant Professor','Associate Professor','Professor','Dean','Director') DEFAULT NULL COMMENT 'Faculty academic rank',
+  `is_reviewer` tinyint(1) DEFAULT 0 COMMENT 'Can participate in CREC/EREC review',
   `program` varchar(120) DEFAULT NULL,
+  `year_level` enum('1st','2nd','3rd','4th','Graduate','Masters','Doctorate') DEFAULT NULL COMMENT 'Student year level',
   `contact` varchar(30) DEFAULT NULL,
   `avatar` varchar(255) DEFAULT NULL,
-  `status` enum('active','inactive','pending') NOT NULL DEFAULT 'pending',
+  `status` enum('active','pending','suspended') NOT NULL DEFAULT 'pending',
   `last_login` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `email` (`email`),
+  KEY `idx_role` (`role`),
+  KEY `idx_status` (`status`),
+  KEY `idx_users_deleted_at` (`deleted_at`),
+  KEY `idx_users_role_status` (`role`,`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
---
--- Dumping data for table `users`
---
-
-INSERT INTO `users` (`user_id`, `role`, `first_name`, `last_name`, `email`, `password`, `student_id`, `department`, `program`, `contact`, `avatar`, `status`, `last_login`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'System', 'Administrator', 'admin@rms.edu.ph', '$2y$12$1UzhJiJbBSdUw.3bEMUg/ub1Dx55.kgrVAQiphCfUKwe8ywCM9XCO', NULL, NULL, NULL, NULL, NULL, 'active', '2026-05-31 02:59:46', '2026-05-30 17:49:59', '2026-05-30 18:59:46'),
-(2, 'faculty', 'Maria', 'Santos', 'msantos@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 'active', '2026-05-31 02:59:30', '2026-05-30 17:49:59', '2026-05-30 18:59:30'),
-(3, 'faculty', 'Jose', 'Reyes', 'jreyes@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
-(4, 'student', 'Juan', 'Dela Cruz', 'jdelacruz@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00001', 'College of Computer Studies', 'BSIT', NULL, NULL, 'active', '2026-05-31 02:58:09', '2026-05-30 17:49:59', '2026-05-30 18:58:09'),
-(5, 'student', 'Anna', 'Reyes', 'areyes@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00002', 'College of Computer Studies', 'BSIT', NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
-(6, 'research_staff', 'EREC', 'Staff', 'EREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'EREC Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
-(7, 'research_staff', 'CREC', 'Staff', 'CREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'CREC Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
-(8, 'research_staff', 'ORS', 'Staff', 'ORS@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'Office of Research Services', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54'),
-(9, 'research_staff', 'Graduate', 'Staff', 'graduate@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, 'Graduate School Office', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54');
-
---
--- Indexes for dumped tables
---
-
---
--- Indexes for table `academic_years`
---
-ALTER TABLE `academic_years`
-  ADD PRIMARY KEY (`ay_id`);
-
---
--- Indexes for table `activity_log`
---
-ALTER TABLE `activity_log`
-  ADD PRIMARY KEY (`log_id`),
-  ADD KEY `idx_user` (`user_id`),
-  ADD KEY `idx_created` (`created_at`);
-
---
--- Indexes for table `chapters`
---
-ALTER TABLE `chapters`
-  ADD PRIMARY KEY (`chapter_id`),
-  ADD UNIQUE KEY `uk_proj_chap` (`project_id`,`chapter_number`),
-  ADD KEY `approved_by` (`approved_by`);
-
---
--- Indexes for table `chapter_content`
---
-ALTER TABLE `chapter_content`
-  ADD PRIMARY KEY (`content_id`),
-  ADD UNIQUE KEY `chapter_id` (`chapter_id`);
-
---
--- Indexes for table `comments`
---
-ALTER TABLE `comments`
-  ADD PRIMARY KEY (`comment_id`),
-  ADD KEY `chapter_id` (`chapter_id`),
-  ADD KEY `faculty_id` (`faculty_id`);
-
---
--- Indexes for table `defense_schedule`
---
-ALTER TABLE `defense_schedule`
-  ADD PRIMARY KEY (`defense_id`),
-  ADD KEY `project_id` (`project_id`),
-  ADD KEY `created_by` (`created_by`);
-
---
--- Indexes for table `departments`
---
-ALTER TABLE `departments`
-  ADD PRIMARY KEY (`dept_id`);
-
---
--- Indexes for table `notifications`
---
-ALTER TABLE `notifications`
-  ADD PRIMARY KEY (`notification_id`),
-  ADD KEY `idx_user_read` (`user_id`,`is_read`);
-
---
--- Indexes for table `programs`
---
-ALTER TABLE `programs`
-  ADD PRIMARY KEY (`program_id`),
-  ADD KEY `dept_id` (`dept_id`);
-
---
--- Indexes for table `project_advisers`
---
-ALTER TABLE `project_advisers`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uk_proj_adv` (`project_id`,`adviser_id`),
-  ADD KEY `adviser_id` (`adviser_id`);
-
---
--- Indexes for table `project_members`
---
-ALTER TABLE `project_members`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uk_proj_user` (`project_id`,`user_id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Indexes for table `research_categories`
---
-ALTER TABLE `research_categories`
-  ADD PRIMARY KEY (`category_id`);
-
---
--- Indexes for table `research_projects`
---
-ALTER TABLE `research_projects`
-  ADD PRIMARY KEY (`project_id`),
-  ADD KEY `category_id` (`category_id`),
-  ADD KEY `ay_id` (`ay_id`),
-  ADD KEY `created_by` (`created_by`),
-  ADD KEY `idx_status` (`status`);
-
---
--- Indexes for table `uploads`
---
-ALTER TABLE `uploads`
-  ADD PRIMARY KEY (`upload_id`),
-  ADD KEY `project_id` (`project_id`),
-  ADD KEY `chapter_id` (`chapter_id`),
-  ADD KEY `uploaded_by` (`uploaded_by`);
-
---
--- Indexes for table `research_documents`
---
-ALTER TABLE `research_documents`
-  ADD PRIMARY KEY (`document_id`),
-  ADD KEY `idx_research_documents_project_type` (`project_id`,`document_type`),
-  ADD KEY `idx_research_documents_status` (`status`),
-  ADD KEY `upload_id` (`upload_id`),
-  ADD KEY `submitted_by` (`submitted_by`),
-  ADD KEY `reviewed_by` (`reviewed_by`);
-
---
--- Indexes for table `research_reports`
---
-ALTER TABLE `research_reports`
-  ADD PRIMARY KEY (`report_id`),
-  ADD KEY `idx_research_reports_project_type` (`project_id`,`report_type`),
-  ADD KEY `idx_research_reports_status` (`status`),
-  ADD KEY `document_id` (`document_id`),
-  ADD KEY `reviewed_by` (`reviewed_by`);
-
---
--- Indexes for table `research_publication_tracking`
---
-ALTER TABLE `research_publication_tracking`
-  ADD PRIMARY KEY (`publication_id`),
-  ADD UNIQUE KEY `project_id` (`project_id`),
-  ADD KEY `idx_publication_colloquium_status` (`colloquium_status`),
-  ADD KEY `idx_publication_journal_status` (`journal_status`),
-  ADD KEY `idx_publication_archive_status` (`archive_status`);
-
---
--- Indexes for table `users`
---
-ALTER TABLE `users`
-  ADD PRIMARY KEY (`user_id`),
-  ADD UNIQUE KEY `email` (`email`),
-  ADD KEY `idx_role` (`role`),
-  ADD KEY `idx_status` (`status`);
-
---
--- AUTO_INCREMENT for dumped tables
---
-
---
--- AUTO_INCREMENT for table `academic_years`
---
-ALTER TABLE `academic_years`
-  MODIFY `ay_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
-
---
--- AUTO_INCREMENT for table `activity_log`
---
-ALTER TABLE `activity_log`
-  MODIFY `log_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
-
---
--- AUTO_INCREMENT for table `chapters`
---
-ALTER TABLE `chapters`
-  MODIFY `chapter_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `chapter_content`
---
-ALTER TABLE `chapter_content`
-  MODIFY `content_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `comments`
---
-ALTER TABLE `comments`
-  MODIFY `comment_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `defense_schedule`
---
-ALTER TABLE `defense_schedule`
-  MODIFY `defense_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `departments`
---
-ALTER TABLE `departments`
-  MODIFY `dept_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
-
---
--- AUTO_INCREMENT for table `notifications`
---
-ALTER TABLE `notifications`
-  MODIFY `notification_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `programs`
---
-ALTER TABLE `programs`
-  MODIFY `program_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
-
---
--- AUTO_INCREMENT for table `project_advisers`
---
-ALTER TABLE `project_advisers`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `project_members`
---
-ALTER TABLE `project_members`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `research_categories`
---
-ALTER TABLE `research_categories`
-  MODIFY `category_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
-
---
--- AUTO_INCREMENT for table `research_projects`
---
-ALTER TABLE `research_projects`
-  MODIFY `project_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `uploads`
---
-ALTER TABLE `uploads`
-  MODIFY `upload_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `research_documents`
---
-ALTER TABLE `research_documents`
-  MODIFY `document_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `research_reports`
---
-ALTER TABLE `research_reports`
-  MODIFY `report_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `research_publication_tracking`
---
-ALTER TABLE `research_publication_tracking`
-  MODIFY `publication_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `users`
---
-ALTER TABLE `users`
-  MODIFY `user_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
-
---
--- Constraints for dumped tables
---
-
---
--- Constraints for table `chapters`
---
-ALTER TABLE `chapters`
-  ADD CONSTRAINT `chapters_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `chapters_ibfk_2` FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
-
---
--- Constraints for table `chapter_content`
---
-ALTER TABLE `chapter_content`
-  ADD CONSTRAINT `chapter_content_ibfk_1` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `comments`
---
-ALTER TABLE `comments`
-  ADD CONSTRAINT `comments_ibfk_1` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `comments_ibfk_2` FOREIGN KEY (`faculty_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `defense_schedule`
---
-ALTER TABLE `defense_schedule`
-  ADD CONSTRAINT `defense_schedule_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `defense_schedule_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `notifications`
---
-ALTER TABLE `notifications`
-  ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `programs`
---
-ALTER TABLE `programs`
-  ADD CONSTRAINT `programs_ibfk_1` FOREIGN KEY (`dept_id`) REFERENCES `departments` (`dept_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `project_advisers`
---
-ALTER TABLE `project_advisers`
-  ADD CONSTRAINT `project_advisers_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `project_advisers_ibfk_2` FOREIGN KEY (`adviser_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `project_members`
---
-ALTER TABLE `project_members`
-  ADD CONSTRAINT `project_members_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `project_members_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `research_projects`
---
-ALTER TABLE `research_projects`
-  ADD CONSTRAINT `research_projects_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `research_categories` (`category_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `research_projects_ibfk_2` FOREIGN KEY (`ay_id`) REFERENCES `academic_years` (`ay_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `research_projects_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `uploads`
---
-ALTER TABLE `uploads`
-  ADD CONSTRAINT `uploads_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `uploads_ibfk_2` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `uploads_ibfk_3` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE;
-
---
--- Constraints for table `research_documents`
---
-ALTER TABLE `research_documents`
-  ADD CONSTRAINT `research_documents_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `research_documents_ibfk_2` FOREIGN KEY (`upload_id`) REFERENCES `uploads` (`upload_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `research_documents_ibfk_3` FOREIGN KEY (`submitted_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `research_documents_ibfk_4` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
-
---
--- Constraints for table `research_reports`
---
-ALTER TABLE `research_reports`
-  ADD CONSTRAINT `research_reports_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `research_reports_ibfk_2` FOREIGN KEY (`document_id`) REFERENCES `research_documents` (`document_id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `research_reports_ibfk_3` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
-
---
--- Constraints for table `research_publication_tracking`
---
-ALTER TABLE `research_publication_tracking`
-  ADD CONSTRAINT `research_publication_tracking_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE;
-COMMIT;
-
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- ---------------------------------------------------------------------------
+-- Required reference data and demo accounts
+-- ---------------------------------------------------------------------------
+
+INSERT INTO `research_categories` (`category_id`, `category_name`, `description`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'Applied Research', 'Research directed toward practical applications', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(2, 'Basic Research', 'Research aimed at expanding knowledge', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(3, 'Action Research', 'Research to solve a specific practical issue', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(4, 'Developmental Research', 'Research focused on developing new products/systems', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(5, 'Evaluation Research', 'Research that measures effectiveness of programs', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43');
+
+INSERT INTO `academic_years` (`ay_id`, `label`, `semester`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, '2023-2024', '1st', 0, '2026-05-31 01:49:59', '2026-09-01 09:53:43'),
+(3, '2024-2025', '1st', 0, '2026-05-31 01:49:59', '2026-09-01 09:53:43'),
+(8, '2025-2026', '2nd', 1, '2026-05-31 02:55:48', '2026-09-01 09:53:43'),
+(9, '2026-2027', '1st', 0, '2026-05-31 02:57:54', '2026-09-01 09:53:43');
+
+INSERT INTO `departments` (`dept_id`, `dept_code`, `dept_name`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'CAS', 'College of Arts and Sciences', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(2, 'CBA', 'College of Business Administration', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(3, 'BINTECH', 'College of Industrial Technology', 1, '2026-09-01 09:53:43', '2026-09-01 13:32:56'),
+(4, 'CHM', 'College of Hospitality Management', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(5, 'CED', 'College of Education', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(6, 'CPAC', 'College of Public Administration and Criminology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43');
+
+INSERT INTO `programs` (`program_id`, `dept_id`, `program_code`, `program_name`, `status`, `created_at`, `updated_at`) VALUES
+(1, 1, 'BSIT', 'Bachelor of Science in Information Technology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(2, 1, 'BSCS', 'Bachelor of Science in Computer Science', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(3, 2, 'BSBA-MKTG', 'Bachelor of Science in Business Administration – Marketing Management', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(4, 2, 'BSBA-HRDM', 'Bachelor of Science in Business Administration – Human Resource Development', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(5, 2, 'BSBA-FM', 'Bachelor of Science in Business Administration – Financial Management', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(6, 2, 'BSEntrep', 'Bachelor of Science in Entrepreneurship', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(7, 2, 'BSOA', 'Bachelor of Science in Office Administration', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(8, 3, 'BIT-Auto', 'Bachelor of Industrial Technology – Automotive Technology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(9, 3, 'BIT-Electrical', 'Bachelor of Industrial Technology – Electrical Technology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(10, 3, 'BIT-Electronics', 'Bachelor of Industrial Technology – Electronics Technology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(11, 3, 'BIT-DM', 'Bachelor of Industrial Technology – Drafting/Mechanical Technology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(12, 4, 'BSHM', 'Bachelor of Science in Hospitality Management', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(13, 5, 'BSEd', 'Bachelor of Secondary Education', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(14, 5, 'BTLEd', 'Bachelor of Technology and Livelihood Education', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(15, 6, 'BSCrim', 'Bachelor of Science in Criminology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43'),
+(16, 1, 'BSP', 'Bachelor of Science in Psychology', 1, '2026-09-01 09:53:43', '2026-09-01 09:53:43');
+
+INSERT INTO `users` (`user_id`, `role`, `first_name`, `last_name`, `email`, `password`, `student_id`, `department`, `office`, `specialization`, `academic_rank`, `is_reviewer`, `program`, `year_level`, `contact`, `avatar`, `status`, `last_login`, `created_at`, `updated_at`, `deleted_at`) VALUES
+(1, 'admin', 'System', 'Administrator', 'admin@rms.edu.ph', '$2y$12$1UzhJiJbBSdUw.3bEMUg/ub1Dx55.kgrVAQiphCfUKwe8ywCM9XCO', NULL, NULL, 'Research Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:59:46', NULL),
+(2, 'faculty', 'Maria', 'Santos', 'msantos@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, 'Instructor', 1, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:59:30', NULL),
+(3, 'faculty', 'Jose', 'Reyes', 'jreyes@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(4, 'student', 'Juan', 'Dela Cruz', 'jdelacruz@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00001', 'College of Computer Studies', NULL, NULL, NULL, 0, 'BSIT', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:58:09', NULL),
+(5, 'student', 'Anna', 'Reyes', 'areyes@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00002', 'College of Computer Studies', NULL, NULL, NULL, 0, 'BSIT', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(6, 'research_staff', 'EREC', 'Staff', 'EREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'EREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(7, 'research_staff', 'CREC', 'Staff', 'CREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'CREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(8, 'research_staff', 'ORS', 'Staff', 'ORS@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Office of Research Services', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(9, 'research_staff', 'Graduate', 'Staff', 'graduate@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Graduate School Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL);
+
+-- Best-effort restoration of the two message relationships from the original
+-- schema. The handler deliberately swallows DDL errors on engines that cannot
+-- add them, so the rest of a fresh installation remains usable.
+DELIMITER $$
+DROP PROCEDURE IF EXISTS `add_messages_foreign_keys`$$
+CREATE PROCEDURE `add_messages_foreign_keys`()
+BEGIN
+    DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE()
+           AND CONSTRAINT_NAME = 'messages_ibfk_1'
+    ) THEN
+        ALTER TABLE `messages`
+            ADD CONSTRAINT `messages_ibfk_1`
+            FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`)
+            ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE()
+           AND CONSTRAINT_NAME = 'messages_ibfk_2'
+    ) THEN
+        ALTER TABLE `messages`
+            ADD CONSTRAINT `messages_ibfk_2`
+            FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`)
+            ON DELETE CASCADE;
+    END IF;
+END$$
+CALL `add_messages_foreign_keys`()$$
+DROP PROCEDURE `add_messages_foreign_keys`$$
+DELIMITER ;
