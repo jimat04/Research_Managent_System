@@ -1,7 +1,7 @@
 # RMS Progress Audit Report
 
 **Audit Date:** September 6, 2026
-**Last updated:** September 6, 2026 (closeout — stubs & dead links resolved)
+**Last updated:** September 23, 2026 (post-closeout hardening round)
 **Auditor:** Claude (E2E walkthrough pass on live DB)
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
@@ -53,6 +53,20 @@
 | 8     | Profile, notifications, access control (403s), logs, reports                               | PASS                                     |
 
 Notes: ownership spot-check used project 1 which turned out to be same-owner (invalid fixture - retest with a non-member account); milestone badge fixture validated 3->2 after dedupe fix.
+
+---
+
+## 0.1 Post-Closeout Hardening Round (external audit response)
+
+An independent workflow audit against the Research Manual 2015 identified integrity gaps; all actionable findings were fixed and live-tested in the same session:
+
+| Commit  | Fix                                                                                                                                                                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| a070a2c | Faculty review access scoped to adviser / assigned reviewer only; all status transitions removed from faculty hands (recommendations recorded, not executed); Form 3 review list corrected to six-criterion /100.                                |
+| e0cde90 | Committee recommendations now bind endorsement (any completed reject recommendation blocks it); new EREC disapproval action (erec\_reject) with notifications and logging.                                                                       |
+| d93de56 | Milestone slots status-gated per the manual sequence (MOU: approved/ongoing; midway: ongoing; terminal: ongoing/late-stage; bound: completed/archived); under\_review dead end fixed; MOU renamed Memorandum of Research Undertaking per Form 7. |
+
+Remaining audit items (ORS consolidation stage, structured digital forms for Forms 1-2/4-9, incentives and awards Forms 8/10-12, stage-aware resubmission, archive prerequisites) are documented scope decisions - see the gaps list above.
 
 ---
 
