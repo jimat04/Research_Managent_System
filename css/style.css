@@ -1076,13 +1076,23 @@ html.motion-ready .hero-entrance > *:nth-child(n + 5) { animation-delay: .23s; }
   transform: translateY(16px);
   transition: opacity .45s ease, transform .45s ease;
 }
+html.motion-ready [data-reveal] {
+  transition: opacity .45s ease, transform .45s ease;
+}
 html:not(.motion-ready) [data-reveal],
 [data-reveal].is-visible {
   opacity: 1;
   transform: none;
 }
 
-html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card) {
+html.motion-ready [data-reveal-delay="1"].is-visible { transition-delay: .08s; }
+html.motion-ready [data-reveal-delay="2"].is-visible { transition-delay: .16s; }
+html.motion-ready [data-reveal-delay="3"].is-visible { transition-delay: .24s; }
+html.motion-ready [data-reveal-delay="4"].is-visible { transition-delay: .32s; }
+html.motion-ready [data-reveal-delay="5"].is-visible { transition-delay: .40s; }
+html.motion-ready [data-reveal-delay="6"].is-visible { transition-delay: .48s; }
+
+html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card):not([data-reveal]) {
   transition: transform .18s ease;
 }
 html.motion-ready :is(.card, .feature-card, .manual-card, .interactive-card, .workflow-step, .chapter-pill, .modern-feature-card, .alignment-card, .deep-dive-card, .archive-card, .research-card, .about-card, .value-card, .team-card):hover {
