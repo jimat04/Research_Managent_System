@@ -1049,7 +1049,9 @@ $links = [
     <!-- TOP NAVIGATION -->
     <nav class="navbar">
         <div class="nav-brand">
-            <div class="nav-logo">🔬</div>
+            <div class="nav-logo nav-logo-image">
+                <img src="../photos/rms-logo.png" alt="" width="42" height="42" aria-hidden="true">
+            </div>
             <div class="nav-brand-text">
                 <span class="brand-main">Research<br>Management</span>
                 <span class="brand-sub">System</span>
@@ -1552,7 +1554,7 @@ $links = [
         <div class="footer-grid">
             <div class="footer-col">
                 <h4 style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                    <span style="font-size: 1.4rem;">🔬</span>
+                    <img class="footer-brand-logo" src="../photos/rms-logo.png" alt="" width="30" height="30" aria-hidden="true">
                     <span style="font-family: 'Poppins', sans-serif;">RMS</span>
                 </h4>
                 <p style="color: #8B8FAD; font-size: 0.85rem; line-height: 1.6;">
