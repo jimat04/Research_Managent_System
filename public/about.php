@@ -221,7 +221,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     <h2 class="section-title" style="font-size: 2.2rem; color: var(--text-dark);">Why Choose <span style="color: var(--primary);">RMS</span>?</h2>
                     <p class="section-desc" style="color: var(--text-light); max-width: 600px; margin: 0 auto;">Key benefits engineered to simplify academic research governance</p>
                 </div>
-                <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                <div class="features-grid about-benefits-grid">
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">⚡</span> Faster Review Processing</div>
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">📋</span> Manual-Compliant Workflows</div>
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">🔐</span> Secure Role-Based Access</div>
@@ -258,7 +258,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
 
         <!-- STATISTICS -->
         <section style="background: linear-gradient(135deg, #3D0F8A 0%, #5B1EBC 50%, #0F6CBD 100%); padding: 70px 40px; color: white;" data-reveal>
-            <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 32px; text-align: center;">
+            <div class="about-stats-grid">
                 <div>
                     <div style="font-family: 'Poppins', sans-serif; font-size: 2.5rem; font-weight: 800;"> <?php echo htmlspecialchars((string) $stat_total_research, ENT_QUOTES, 'UTF-8'); ?><span style="font-size:0.5em;">+</span></div>
                     <div style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 4px;">Total Research</div>

@@ -145,6 +145,26 @@ $links = [
             border: 1px solid rgba(99, 102, 241, 0.3);
         }
 
+        .mockup-preview-label {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .mockup-sample-badge {
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #cbd5e1;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 3px 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+        }
+
         .mockup-item {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.06);
@@ -382,9 +402,237 @@ $links = [
             gap: 10px;
         }
 
+        .feature-detail-trigger {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        body.feature-modal-open {
+            overflow: hidden;
+        }
+
+        .feature-detail-modal {
+            width: min(720px, calc(100% - 32px));
+            max-height: min(86vh, 780px);
+            margin: auto;
+            padding: 0;
+            overflow: hidden;
+            border: 0;
+            border-radius: 24px;
+            background: #ffffff;
+            color: var(--text-dark);
+            box-shadow: 0 32px 90px rgba(15, 10, 45, 0.32);
+        }
+
+        .feature-detail-modal[open] {
+            animation: featureModalIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .feature-detail-modal::backdrop {
+            background: rgba(10, 8, 35, 0.62);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        @keyframes featureModalIn {
+            from { opacity: 0; transform: translateY(16px) scale(0.98); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .feature-detail-modal__scroll {
+            max-height: min(86vh, 780px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .feature-detail-modal__hero {
+            position: relative;
+            padding: 34px 72px 30px 34px;
+            overflow: hidden;
+            background: linear-gradient(135deg, #17113b 0%, #362071 58%, #174f83 100%);
+            color: #ffffff;
+        }
+
+        .feature-detail-modal__hero::after {
+            content: '';
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            right: -75px;
+            bottom: -135px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .feature-detail-modal__identity {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .feature-detail-modal__icon {
+            display: grid;
+            place-items: center;
+            width: 58px;
+            height: 58px;
+            flex: 0 0 58px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 17px;
+            background: rgba(255, 255, 255, 0.12);
+            font-size: 1.65rem;
+        }
+
+        .feature-detail-modal__role {
+            display: inline-flex;
+            margin-bottom: 7px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            color: #e8e3ff;
+            font-size: 0.68rem;
+            font-weight: 750;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .feature-detail-modal__title {
+            margin: 0;
+            color: #ffffff;
+            font-size: clamp(1.55rem, 3vw, 2.1rem);
+            line-height: 1.15;
+        }
+
+        .feature-detail-modal__close {
+            position: absolute;
+            z-index: 2;
+            top: 20px;
+            right: 20px;
+            display: grid;
+            place-items: center;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            font-size: 1.35rem;
+            cursor: pointer;
+        }
+
+        .feature-detail-modal__close:hover,
+        .feature-detail-modal__close:focus-visible {
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        .feature-detail-modal__body {
+            padding: 30px 34px 34px;
+        }
+
+        .feature-detail-modal__eyebrow {
+            margin-bottom: 8px;
+            color: var(--primary);
+            font-size: 0.72rem;
+            font-weight: 750;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .feature-detail-modal__description {
+            margin: 0 0 26px;
+            color: var(--text-light);
+            font-size: 1rem;
+            line-height: 1.75;
+        }
+
+        .feature-detail-modal__capabilities {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin: 0 0 26px;
+            padding: 0;
+            list-style: none;
+        }
+
+        .feature-detail-modal__capabilities li {
+            min-height: 92px;
+            padding: 16px;
+            border: 1px solid #e8e6f2;
+            border-radius: 14px;
+            background: #faf9ff;
+            color: #3c3654;
+            font-size: 0.86rem;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
+        .feature-detail-modal__capabilities li::before {
+            content: '✓';
+            display: block;
+            margin-bottom: 9px;
+            color: var(--success);
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .feature-detail-modal__use-case {
+            margin-bottom: 28px;
+            padding: 17px 18px;
+            border-left: 3px solid var(--primary);
+            border-radius: 0 12px 12px 0;
+            background: #f5f2ff;
+            color: #514a68;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .feature-detail-modal__actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding-top: 22px;
+            border-top: 1px solid #eceaf3;
+        }
+
+        .feature-detail-modal__workflow {
+            color: var(--primary);
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .feature-detail-modal__workflow:hover {
+            text-decoration: underline;
+        }
+
         /* Section Headings */
         .features-section-group {
             margin-bottom: 70px;
+        }
+
+        /* Five-card suites use a balanced 3 + 2 composition instead of
+           leaving a single card stranded at the lower-left of a four-column row. */
+        .features-grid--five {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .features-grid--five > .modern-feature-card {
+            grid-column: span 2;
+        }
+
+        .features-grid--five > .modern-feature-card:nth-last-child(2) {
+            grid-column: 2 / span 2;
+        }
+
+        .features-grid--five > .modern-feature-card:last-child {
+            grid-column: 4 / span 2;
         }
 
         .group-header {
@@ -430,6 +678,25 @@ $links = [
         .deep-dive-container {
             max-width: 1200px;
             margin: 0 auto;
+        }
+
+        .deep-dive-context-note {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 8px 13px;
+            border: 1px solid #ded7f5;
+            border-radius: 10px;
+            background: #faf8ff;
+            color: #625a78;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
+        .deep-dive-anchor-alias {
+            display: block;
+            scroll-margin-top: 96px;
         }
 
         .deep-dive-card {
@@ -681,6 +948,18 @@ $links = [
             .stat-bar-container {
                 grid-template-columns: repeat(2, 1fr);
             }
+            .features-grid--five {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .features-grid--five > .modern-feature-card,
+            .features-grid--five > .modern-feature-card:nth-last-child(2) {
+                grid-column: auto;
+            }
+            .features-grid--five > .modern-feature-card:last-child {
+                grid-column: 1 / -1;
+                width: calc((100% - 24px) / 2);
+                justify-self: center;
+            }
             .deep-dive-card, .deep-dive-card:nth-child(even) {
                 grid-template-columns: 1fr;
                 gap: 32px;
@@ -703,6 +982,14 @@ $links = [
             .stat-bar-container {
                 grid-template-columns: 1fr;
             }
+            .features-grid--five {
+                grid-template-columns: 1fr;
+            }
+            .features-grid--five > .modern-feature-card:last-child {
+                grid-column: auto;
+                width: auto;
+                justify-self: stretch;
+            }
             .stat-bar-item {
                 border-right: none;
                 border-bottom: 1px solid #f1f5f9;
@@ -713,6 +1000,47 @@ $links = [
             }
             .deep-feature-specs {
                 grid-template-columns: 1fr;
+            }
+            .feature-detail-modal__capabilities {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .feature-detail-modal {
+                width: 100%;
+                max-width: none;
+                max-height: 92dvh;
+                margin: auto 0 0;
+                border-radius: 24px 24px 0 0;
+            }
+            .feature-detail-modal__scroll {
+                max-height: 92dvh;
+            }
+            .feature-detail-modal__hero {
+                padding: 28px 58px 25px 22px;
+            }
+            .feature-detail-modal__identity {
+                align-items: flex-start;
+            }
+            .feature-detail-modal__body {
+                padding: 24px 22px 28px;
+            }
+            .feature-detail-modal__actions {
+                align-items: stretch;
+                flex-direction: column-reverse;
+            }
+            .feature-detail-modal__actions .btn,
+            .feature-detail-modal__workflow {
+                width: 100%;
+                justify-content: center;
+                text-align: center;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .feature-detail-modal[open] {
+                animation: none;
             }
         }
     </style>
@@ -764,7 +1092,7 @@ $links = [
                 </div>
             </div>
 
-            <!-- Live Mockup Visual -->
+            <!-- RMS Workflow Preview -->
             <div class="hero-mockup-card">
                 <div class="mockup-header">
                     <div class="mockup-dots">
@@ -772,7 +1100,10 @@ $links = [
                         <div class="mockup-dot dot-yellow"></div>
                         <div class="mockup-dot dot-green"></div>
                     </div>
-                    <div class="mockup-badge">Live System Feed</div>
+                    <div class="mockup-preview-label">
+                        <div class="mockup-badge">RMS Workflow Preview</div>
+                        <span class="mockup-sample-badge">Sample data</span>
+                    </div>
                 </div>
                 
                 <div class="mockup-item">
@@ -862,7 +1193,7 @@ $links = [
                     </div>
                     <span class="group-count-pill">5 Core Tools</span>
                 </div>
-                <div class="features-grid">
+                <div class="features-grid features-grid--five">
                     <?php
                     $student_features = [
                         ['icon' => '📄', 'title' => 'Multi-Stage Submission', 'desc' => 'Multi-step draft saving, executive abstracts, team author attribution, and thematic classification tags.', 'points' => ['Auto-save progress', 'Co-author linking', 'Abstract tagging'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
@@ -901,7 +1232,7 @@ $links = [
                     </div>
                     <span class="group-count-pill">5 Core Tools</span>
                 </div>
-                <div class="features-grid">
+                <div class="features-grid features-grid--five">
                     <?php
                     $review_features = [
                         ['icon' => '✅', 'title' => 'Consolidated Review Queue', 'desc' => 'Priority inbox sorting submitted manuscripts and revisions awaiting your evaluation.', 'points' => ['Filtered priority queue', 'One-click assessment', 'Batch review actions'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
@@ -978,7 +1309,7 @@ $links = [
                     </div>
                     <span class="group-count-pill">5 Core Tools</span>
                 </div>
-                <div class="features-grid">
+                <div class="features-grid features-grid--five">
                     <?php
                     $shared_features = [
                         ['icon' => '🔐', 'title' => 'Secure Authentication', 'desc' => 'Role-based access control with encrypted sessions for students, faculty, and administrators.', 'points' => ['Encrypted sessions', 'Role-based gates', 'Audit logging'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
@@ -1010,6 +1341,36 @@ $links = [
 
         </div>
     </section>
+
+    <dialog class="feature-detail-modal" id="featureDetailModal" aria-labelledby="featureDetailTitle" aria-describedby="featureDetailDescription">
+        <div class="feature-detail-modal__scroll">
+            <header class="feature-detail-modal__hero">
+                <button class="feature-detail-modal__close" type="button" aria-label="Close feature details">&times;</button>
+                <div class="feature-detail-modal__identity">
+                    <div class="feature-detail-modal__icon" id="featureDetailIcon" aria-hidden="true"></div>
+                    <div>
+                        <span class="feature-detail-modal__role" id="featureDetailRole"></span>
+                        <h2 class="feature-detail-modal__title" id="featureDetailTitle"></h2>
+                    </div>
+                </div>
+            </header>
+            <div class="feature-detail-modal__body">
+                <div class="feature-detail-modal__eyebrow">What this capability does</div>
+                <p class="feature-detail-modal__description" id="featureDetailDescription"></p>
+
+                <div class="feature-detail-modal__eyebrow">Core capabilities</div>
+                <ul class="feature-detail-modal__capabilities" id="featureDetailCapabilities"></ul>
+
+                <div class="feature-detail-modal__eyebrow">Where it fits</div>
+                <div class="feature-detail-modal__use-case" id="featureDetailUseCase"></div>
+
+                <div class="feature-detail-modal__actions">
+                    <a class="feature-detail-modal__workflow" id="featureDetailWorkflow" href="#">View related workflow &rarr;</a>
+                    <a class="btn btn-primary" href="<?php echo features_escape($links['login']); ?>">Access RMS Portal</a>
+                </div>
+            </div>
+        </div>
+    </dialog>
 
     <!-- EARIST RESEARCH MANUAL ALIGNMENT -->
     <section class="earist-alignment-banner" data-reveal>
@@ -1052,16 +1413,17 @@ $links = [
 
             <div class="section-header" style="text-align: center; max-width: 700px; margin: 0 auto 60px;">
                 <div class="section-tag" style="background: #F0EBFF; color: var(--primary); font-weight: 700; display: inline-block; padding: 4px 16px; border-radius: 50px; font-size: 0.8rem; margin-bottom: 12px;">
-                    🔍 Detailed Spotlight
+                    🔍 Detailed Spotlights
                 </div>
                 <h2 class="section-title" style="font-size: 2.2rem;">How RMS Powers Your Workflow</h2>
                 <p class="section-desc">Take a closer look at the key modules that keep academic teams focused and aligned.</p>
+                <p class="deep-dive-context-note"><span aria-hidden="true">ℹ️</span> Selected module highlights from RMS&rsquo;s complete five-stage research lifecycle.</p>
             </div>
 
             <!-- Spotlight 1: Submission Flow -->
             <div class="deep-dive-card" id="feature-submission">
                 <div class="deep-dive-info">
-                    <span class="deep-dive-pill">Stage 01 • Submission</span>
+                    <span class="deep-dive-pill">Spotlight 01 • Submission</span>
                     <h2>Frictionless Research Submission & Versioning</h2>
                     <p>Students can formulate proposals across structured forms, save drafts at any moment, bind co-authors, and upload chapters with verified file schemas. Keep every edit organized under clear revision milestones.</p>
                     <div class="deep-feature-specs">
@@ -1095,7 +1457,7 @@ $links = [
             <!-- Spotlight 2: Committee Reviews -->
             <div class="deep-dive-card" id="feature-review">
                 <div class="deep-dive-info">
-                    <span class="deep-dive-pill">Stage 02 • Committee Review</span>
+                    <span class="deep-dive-pill">Spotlight 02 • Committee Review</span>
                     <h2>Actionable Feedback & Instant Approvals</h2>
                     <p>Reviewers and CREC panels review manuscripts within a clean reading canvas. Provide targeted revision notes, attach rubric scoring sheets, and approve projects to progress toward defense colloquiums.</p>
                     <div class="deep-feature-specs">
@@ -1126,9 +1488,10 @@ $links = [
             </div>
 
             <!-- Spotlight 3: Institutional Archive & Analytics -->
+            <span class="deep-dive-anchor-alias" id="feature-analytics" aria-hidden="true"></span>
             <div class="deep-dive-card" id="feature-archive">
                 <div class="deep-dive-info">
-                    <span class="deep-dive-pill">Stage 03 • Archival & Analytics</span>
+                    <span class="deep-dive-pill">Spotlight 03 • Archival & Analytics</span>
                     <h2>Public Discovery & Institutional Intelligence</h2>
                     <p>Preserve completed, defended studies in the public university archive. Enable global researchers to cite your campus's discoveries while administrators analyze annual performance trends in real time.</p>
                     <div class="deep-feature-specs">
@@ -1142,7 +1505,7 @@ $links = [
                     <div class="interactive-preview-box">
                         <div class="preview-box-header">
                             <span>📊 Institutional Analytics</span>
-                            <span style="color: #60a5fa;">● Real-time Live</span>
+                            <span style="color: #60a5fa;">Analytics Preview</span>
                         </div>
                         <div class="interactive-mock-item" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
                             <div style="background: rgba(255,255,255,0.04); padding: 10px; border-radius: 8px;">
@@ -1223,6 +1586,163 @@ $links = [
         </div>
         <div class="footer-bottom">© 2024 Research Management System. All rights reserved.</div>
     </footer>
+<script>
+(function () {
+    'use strict';
+
+    var modal = document.getElementById('featureDetailModal');
+    if (!modal || typeof modal.showModal !== 'function') return;
+
+    var triggers = Array.prototype.slice.call(document.querySelectorAll('.modern-feature-card .card-link-btn'));
+    var closeButton = modal.querySelector('.feature-detail-modal__close');
+    var icon = document.getElementById('featureDetailIcon');
+    var role = document.getElementById('featureDetailRole');
+    var title = document.getElementById('featureDetailTitle');
+    var description = document.getElementById('featureDetailDescription');
+    var capabilities = document.getElementById('featureDetailCapabilities');
+    var useCase = document.getElementById('featureDetailUseCase');
+    var workflowLink = document.getElementById('featureDetailWorkflow');
+    var hashPrefix = '#feature-detail-';
+    var activeHash = '';
+    var lastTrigger = null;
+    var pushedModalState = false;
+
+    var roleUseCases = {
+        Student: 'Available from the student workspace to keep submissions, milestones, and required actions connected to the active research project.',
+        Faculty: 'Supports advisers and reviewers while evaluating assigned research, recording guidance, and monitoring follow-through.',
+        Admin: 'Used by authorized administrators and research offices to maintain governance, visibility, and institutional control.',
+        Platform: 'Works across role-based workspaces as a shared service supporting secure, coordinated research activity.'
+    };
+
+    function slugify(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    function triggerForHash(hash) {
+        if (!hash || hash.indexOf(hashPrefix) !== 0) return null;
+        var slug = hash.slice(hashPrefix.length);
+        return triggers.find(function (trigger) {
+            return trigger.getAttribute('data-feature-slug') === slug;
+        }) || null;
+    }
+
+    function populateModal(trigger) {
+        var card = trigger.closest('.modern-feature-card');
+        var cardTitle = card.querySelector('h3');
+        var cardDescription = card.querySelector('p');
+        var cardIcon = card.querySelector('.feature-icon-box');
+        var cardRole = card.querySelector('.role-tag-badge');
+        var cardPoints = card.querySelectorAll('.feature-points-list li');
+        var roleName = cardRole ? cardRole.textContent.trim() : 'Platform';
+
+        icon.textContent = cardIcon ? cardIcon.textContent.trim() : '✦';
+        role.textContent = roleName;
+        title.textContent = cardTitle ? cardTitle.textContent.trim() : 'Feature details';
+        description.textContent = cardDescription ? cardDescription.textContent.trim() : '';
+        useCase.textContent = roleUseCases[roleName] || roleUseCases.Platform;
+        workflowLink.setAttribute('href', trigger.getAttribute('href') || '#feature-catalog');
+
+        capabilities.textContent = '';
+        Array.prototype.forEach.call(cardPoints, function (point) {
+            var item = document.createElement('li');
+            item.textContent = point.textContent.replace(/^\s*✓\s*/, '').trim();
+            capabilities.appendChild(item);
+        });
+    }
+
+    function showFeature(trigger, pushHistory) {
+        var slug = trigger.getAttribute('data-feature-slug');
+        activeHash = hashPrefix + slug;
+        lastTrigger = trigger;
+        populateModal(trigger);
+
+        if (!modal.open) modal.showModal();
+        document.body.classList.add('feature-modal-open');
+
+        if (pushHistory && window.location.hash !== activeHash) {
+            history.pushState({ featureModal: slug }, '', activeHash);
+            pushedModalState = true;
+        } else {
+            pushedModalState = false;
+        }
+
+        closeButton.focus();
+    }
+
+    function hideFeature(restoreFocus) {
+        if (modal.open) modal.close();
+        document.body.classList.remove('feature-modal-open');
+        if (restoreFocus !== false && lastTrigger) lastTrigger.focus();
+    }
+
+    function requestClose() {
+        if (pushedModalState && window.location.hash === activeHash) {
+            pushedModalState = false;
+            history.back();
+            return;
+        }
+
+        if (window.location.hash === activeHash) {
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        hideFeature(true);
+    }
+
+    triggers.forEach(function (trigger) {
+        var cardTitle = trigger.closest('.modern-feature-card').querySelector('h3');
+        var slug = slugify(cardTitle ? cardTitle.textContent : 'feature');
+        trigger.setAttribute('data-feature-slug', slug);
+        trigger.setAttribute('aria-haspopup', 'dialog');
+        trigger.setAttribute('aria-controls', 'featureDetailModal');
+
+        trigger.addEventListener('click', function (event) {
+            event.preventDefault();
+            showFeature(trigger, true);
+        });
+    });
+
+    closeButton.addEventListener('click', requestClose);
+
+    modal.addEventListener('cancel', function (event) {
+        event.preventDefault();
+        requestClose();
+    });
+
+    modal.addEventListener('click', function (event) {
+        if (event.target !== modal) return;
+        var rect = modal.getBoundingClientRect();
+        var outside = event.clientX < rect.left || event.clientX > rect.right ||
+            event.clientY < rect.top || event.clientY > rect.bottom;
+        if (outside) requestClose();
+    });
+
+    workflowLink.addEventListener('click', function (event) {
+        var target = workflowLink.getAttribute('href');
+        if (!target || target.charAt(0) !== '#') return;
+        event.preventDefault();
+        pushedModalState = false;
+        history.replaceState(null, '', target);
+        hideFeature(false);
+        var section = document.querySelector(target);
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    window.addEventListener('popstate', function () {
+        var trigger = triggerForHash(window.location.hash);
+        if (trigger) {
+            showFeature(trigger, false);
+        } else {
+            hideFeature(true);
+        }
+    });
+
+    var initialTrigger = triggerForHash(window.location.hash);
+    if (initialTrigger) showFeature(initialTrigger, false);
+}());
+</script>
 <script src="../js/public-motion.js" defer></script>
 </body>
 </html>

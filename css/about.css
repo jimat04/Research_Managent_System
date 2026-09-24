@@ -85,6 +85,37 @@
   align-items: center;
 }
 
+/* Balanced page-specific grids for uneven content counts. */
+.features-grid.about-benefits-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.about-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.about-stats-grid > div {
+  grid-column: span 2;
+}
+
+.about-stats-grid > div:nth-last-child(3) {
+  grid-column: 2 / span 2;
+}
+
+.about-stats-grid > div:nth-last-child(2) {
+  grid-column: 4 / span 2;
+}
+
+.about-stats-grid > div:last-child {
+  grid-column: 6 / span 2;
+}
+
 /* Manual grid responsive tweaks */
 .manual-grid {
   display: grid;
@@ -133,6 +164,23 @@
   .manual-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .features-grid.about-benefits-grid,
+  .about-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .about-stats-grid > div,
+  .about-stats-grid > div:nth-last-child(3),
+  .about-stats-grid > div:nth-last-child(2) {
+    grid-column: auto;
+  }
+
+  .about-stats-grid > div:last-child {
+    grid-column: 1 / -1;
+    width: calc((100% - 32px) / 2);
+    justify-self: center;
+  }
 }
 
 @media (max-width: 600px) {
@@ -146,6 +194,17 @@
 
   .manual-grid {
     grid-template-columns: 1fr;
+  }
+
+  .features-grid.about-benefits-grid,
+  .about-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-stats-grid > div:last-child {
+    grid-column: auto;
+    width: auto;
+    justify-self: stretch;
   }
 }
 
