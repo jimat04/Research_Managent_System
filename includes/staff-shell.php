@@ -142,27 +142,19 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/staff/staff-dashboard.php', 'Dashboard', '📊', true, 0],
-            [SITE_URL . 'pages/shared/calendar.php',        'Calendar',  '&#128197;', true, 0],
         ],
-        'Processing' => [
-            [SITE_URL . 'pages/staff/staff-submissions.php', 'Submissions Inbox', '📥', true,  $stat_pending],
-            [SITE_URL . 'pages/staff/staff-crec.php',       'CREC / EREC Review', '🏛️', true,  $stat_crec],
-            [SITE_URL . 'pages/staff/staff-milestones.php', 'Milestones',         '📑', true,  $stat_milestones],
-            [SITE_URL . 'pages/staff/staff-defense.php',    'Defense Schedule',   '🗓️', true,  $stat_defenses],
-            [SITE_URL . 'pages/staff/staff-revisions.php',  'Revision Returns',   '🔄', false, 0],
-        ],
-        'Repository' => [
-            [SITE_URL . 'pages/shared/research-archive.php',     'Research Archive',       '🗂️', true, 0],
-            [SITE_URL . 'pages/staff/document-verification.php', 'Document Verification',  '📄', false, 0],
+        'Research Modules' => [
+            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
+            [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true, 0],
+            [SITE_URL . 'pages/shared/copyrights.php',       'Copyrights',          '&#169;', true, 0],
+            [SITE_URL . 'pages/shared/research-archive.php', 'Repository',          '&#128451;', true, 0],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',         'Messages',         '💬', true, 0],
-            [SITE_URL . 'pages/staff/contact-messages.php',  'Contact Messages', '📨', true, $stat_contact],
             [SITE_URL . 'pages/shared/notifications.php',    'Notifications',    '🔔', true, 0],
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true, 0],
-            [SITE_URL . 'pages/shared/settings.php',         'Settings', '⚙️', true, 0],
         ],
     ];
 

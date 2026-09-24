@@ -67,29 +67,20 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/admin/admin-dashboard.php', 'Dashboard', '📊', true],
-            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',  '&#128197;', true],
         ],
-        'User Management' => [
-            [SITE_URL . 'pages/admin/admin-users.php',       'User Management', '👥', true],
-            [SITE_URL . 'pages/admin/admin-departments.php', 'Departments',     '🏛️', true],
-            [SITE_URL . 'pages/admin/admin-programs.php',    'Programs',        '🎓', true],
-        ],
-        'Research Management' => [
-            [SITE_URL . 'pages/admin/admin-research.php',    'Research Projects',  '📁', true],
-            [SITE_URL . 'pages/admin/admin-archive.php',     'Archive',            '🗂️', true],
-            [SITE_URL . 'pages/staff/staff-defense.php',     'Defense Schedule',   '🛡️', true],
+        'Research Modules' => [
+            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true],
+            [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true],
+            [SITE_URL . 'pages/shared/copyrights.php',       'Copyrights',          '&#169;', true],
+            [SITE_URL . 'pages/shared/research-archive.php', 'Repository',          '&#128451;', true],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',         'Messages',      '💬', true],
             [SITE_URL . 'pages/shared/notifications.php',    'Notifications', '🔔', true],
-            [SITE_URL . 'pages/admin/admin-contact.php',     'Contact Inbox', '📨', true],
         ],
-        'Analytics' => [
-            [SITE_URL . 'pages/admin/admin-reports.php',     'Reports & Analytics', '📈', true],
-            [SITE_URL . 'pages/admin/admin-logs.php',        'Activity Logs',       '📋', true],
-        ],
-        'System' => [
-            [SITE_URL . 'pages/admin/admin-backup.php',      'Backup',   '💾', true],
+        'Administration' => [
+            [SITE_URL . 'pages/admin/admin-users.php',       'Users',    '👥', true],
+            [SITE_URL . 'pages/admin/admin-reports.php',     'Reports',  '📈', true],
             [SITE_URL . 'pages/admin/admin-settings.php',    'Settings', '🔧', true],
         ],
         'Account' => [

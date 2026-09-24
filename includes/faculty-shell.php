@@ -169,19 +169,12 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/faculty/faculty-dashboard.php', 'Dashboard', '📊', true, 0],
-            [SITE_URL . 'pages/shared/calendar.php',             'Calendar',  '&#128197;', true, 0],
         ],
-        'Advisement' => [
-            [SITE_URL . 'pages/faculty/faculty-submissions.php', 'My Submissions',    '📥', true, 0],
-            [SITE_URL . 'pages/faculty/faculty-review.php',      'Review Chapters',   '🔍', true, 0],
-            [SITE_URL . 'pages/faculty/faculty-students.php',    'My Students',       '👨‍🎓', true, 0],
-        ],
-        'Evaluation' => [
-            [SITE_URL . 'pages/faculty/faculty-my-reviews.php',  'My CREC/EREC Reviews', '📋', true, $pending_reviews],
-        ],
-        'Resources' => [
-            [SITE_URL . 'pages/shared/research-archive.php',     'Research Archive',  '🗂️', true, 0],
-            [SITE_URL . 'pages/faculty/faculty-reports.php',     'Reports',           '📊', true, 0],
+        'Research Modules' => [
+            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
+            [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true, 0],
+            [SITE_URL . 'pages/shared/copyrights.php',       'Copyrights',          '&#169;', true, 0],
+            [SITE_URL . 'pages/shared/research-archive.php', 'Repository',          '&#128451;', true, 0],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',         'Messages',      '💬', true, $unread_messages],
@@ -189,7 +182,6 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true, 0],
-            [SITE_URL . 'pages/shared/settings.php',         'Settings', '⚙️', true, 0],
         ],
     ];
 

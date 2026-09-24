@@ -90,25 +90,19 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
     $nav = [
         'Overview' => [
             [SITE_URL . 'pages/student/student-dashboard.php', 'Dashboard', '📊', true, 0],
-            [SITE_URL . 'pages/shared/calendar.php',         'Calendar',  '&#128197;', true, 0],
         ],
-        'Research' => [
-            [SITE_URL . 'pages/student/my-research.php',       'My Research',       '📁', true, 0],
-            [SITE_URL . 'pages/student/submit-research.php',   'Submit Research',   '📝', true, 0],
-            [SITE_URL . 'pages/student/submit-chapter.php',    'Submit Chapter',    '📄', true, 0],
-            [SITE_URL . 'pages/student/my-documents.php',      'My Documents',      '📂', true, 0],
-            [SITE_URL . 'pages/student/progress-tracking.php', 'Progress Tracking', '📈', true, 0],
+        'Research Modules' => [
+            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
+            [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true, 0],
+            [SITE_URL . 'pages/shared/copyrights.php',       'Copyrights',          '&#169;', true, 0],
+            [SITE_URL . 'pages/shared/research-archive.php', 'Repository',          '&#128451;', true, 0],
         ],
         'Communication' => [
             [SITE_URL . 'pages/shared/messages.php',       'Messages',      '💬', true, $unread_messages],
             [SITE_URL . 'pages/shared/notifications.php',  'Notifications', '🔔', true, $unread_notifications],
         ],
-        'Resources' => [
-            [SITE_URL . 'pages/shared/research-archive.php', 'Research Archive', '🗂️', true, 0],
-        ],
         'Account' => [
             [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
-            [SITE_URL . 'pages/shared/settings.php', 'Settings', '⚙️', true, 0],
         ],
     ];
 
