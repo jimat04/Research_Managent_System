@@ -432,7 +432,7 @@ HTML
     }
 
     // Handle conditional blocks (simple if statements)
-    $content = preg_replace('/\{\{#if \w+\}\}.*?\{\{\/if\}\}/s', function($matches) use ($vars) {
+    $content = preg_replace_callback('/\{\{#if \w+\}\}.*?\{\{\/if\}\}/s', function($matches) use ($vars) {
         preg_match('/\{\{#if (\w+)\}\}(.*?)\{\{\/if\}\}/s', $matches[0], $parts);
         $varName = $parts[1];
         $block = $parts[2];
