@@ -12,6 +12,20 @@ $user = getCurrentUser();
 
 $error = '';
 $success = '';
+$warning = '';
+$flash = getMessage();
+if (is_array($flash)) {
+    $flash_type = (string) ($flash['type'] ?? 'info');
+    $flash_message = (string) ($flash['message'] ?? '');
+    if ($flash_type === 'success') {
+        $success = $flash_message;
+    } elseif ($flash_type === 'warning') {
+        $warning = $flash_message;
+    } elseif ($flash_type === 'error') {
+        $error = $flash_message;
+    }
+}
+$smtp_configured = rms_smtp_is_configured();
 
 // Filter by status
 $status_filter = $_GET['status'] ?? 'pending';
@@ -112,7 +126,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $contact_id = intval($_POST['contact_id'] ?? 0);
 
         if ($action === 'reply' && $contact_id > 0) {
-            // Send email reply
             $reply_message = trim($_POST['reply_message'] ?? '');
             $mark_resolved = isset($_POST['mark_resolved']);
 
@@ -127,33 +140,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $stmt->close();
 
                 if ($contact) {
-                    // Send reply email
-                    $email_body = getEmailTemplate('contact_reply', [
-                        'userName' => htmlspecialchars($contact['name'], ENT_QUOTES, 'UTF-8'),
-                        'concernType' => htmlspecialchars($contact['concern_type'], ENT_QUOTES, 'UTF-8'),
-                        'originalMessage' => htmlspecialchars($contact['message'], ENT_QUOTES, 'UTF-8'),
-                        'replyMessage' => nl2br(htmlspecialchars($reply_message, ENT_QUOTES, 'UTF-8')),
-                        'staffName' => htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8')
-                    ]);
-
-                    $subject = "Re: " . $contact['concern_type'] . " - RMS Support";
-
-                    if (sendEmail($contact['email'], $subject, $email_body, $contact['name'])) {
-                        // Update message with reply notes
-                        if ($mark_resolved) {
-                            $stmt = $conn->prepare("UPDATE contact_messages SET status = 'resolved', resolved_by = ?, resolved_at = NOW(), notes = ? WHERE contact_id = ?");
-                            $stmt->bind_param('isi', $user['user_id'], $reply_message, $contact_id);
-                        } else {
-                            $stmt = $conn->prepare("UPDATE contact_messages SET notes = ? WHERE contact_id = ?");
-                            $stmt->bind_param('si', $reply_message, $contact_id);
-                        }
-                        $stmt->execute();
-                        $stmt->close();
-
-                        logActivity("Replied to contact message from {$contact['name']}", 'contact_management');
-                        $success = 'Email reply sent.';
+                    // Persist the reply first so delivery failures never lose staff work.
+                    if ($mark_resolved) {
+                        $stmt = $conn->prepare("UPDATE contact_messages SET status = 'resolved', resolved_by = ?, resolved_at = NOW(), notes = ? WHERE contact_id = ?");
+                        $stmt->bind_param('isi', $user['user_id'], $reply_message, $contact_id);
                     } else {
-                        $error = 'Failed to send email reply. Please try again.';
+                        $stmt = $conn->prepare("UPDATE contact_messages SET notes = ? WHERE contact_id = ?");
+                        $stmt->bind_param('si', $reply_message, $contact_id);
+                    }
+                    $reply_saved = $stmt->execute();
+                    $stmt->close();
+
+                    if (!$reply_saved) {
+                        $error = 'The reply could not be saved. Please try again.';
+                    } else {
+                        logActivity("Replied to contact message from {$contact['name']}", 'contact_management');
+
+                        // Delivery is best-effort and happens only after the record is safe.
+                        $email_body = getEmailTemplate('contact_reply', [
+                            'userName' => htmlspecialchars($contact['name'], ENT_QUOTES, 'UTF-8'),
+                            'concernType' => htmlspecialchars($contact['concern_type'], ENT_QUOTES, 'UTF-8'),
+                            'originalMessage' => htmlspecialchars($contact['message'], ENT_QUOTES, 'UTF-8'),
+                            'replyMessage' => nl2br(htmlspecialchars($reply_message, ENT_QUOTES, 'UTF-8')),
+                            'staffName' => htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES, 'UTF-8')
+                        ]);
+                        $subject = "Re: " . $contact['concern_type'] . " - RMS Support";
+                        $email_sent = sendEmail($contact['email'], $subject, $email_body, $contact['name']);
+
+                        $redirect_url = 'admin-contact.php?status=' . $status_filter
+                            . ($search ? '&search=' . urlencode($search) : '');
+                        if ($email_sent) {
+                            redirectWithMessage($redirect_url, 'Reply sent and saved.', 'success');
+                        }
+                        redirectWithMessage(
+                            $redirect_url,
+                            'Reply saved to the message record, but the email could not be delivered - SMTP may be unconfigured.',
+                            'warning'
+                        );
                     }
                 } else {
                     $error = 'Contact message not found.';
@@ -213,7 +236,7 @@ renderAdminShell(
   .contact-commandbar{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;margin:-18px 22px 0;padding:13px 15px;border:1px solid var(--contact-line);border-radius:13px;background:#f8fafc;box-shadow:0 12px 30px rgba(25,34,53,.08)}.search-bar{display:flex;gap:9px;margin:0}.search-bar .form-control{flex:1;min-width:0}.status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e0e5ec;border-radius:9px;background:#e9edf2}.status-tab{display:inline-flex;align-items:center;gap:7px;min-height:37px;padding:9px 13px;border-radius:6px;color:#657083;font-size:12px;font-weight:680;text-decoration:none;white-space:nowrap;transition:background .2s ease,color .2s ease,box-shadow .2s ease}.status-tab:hover{color:#182033}.status-tab.active{background:#fff;color:#182033;box-shadow:0 1px 4px rgba(24,32,51,.1)}.status-count{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:5px;background:#d8dde4;color:#556174;font:720 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.status-tab.active .status-count{background:#eadab9;color:#79571f}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid transparent;border-radius:8px;background:none;color:inherit;font-family:inherit;font-size:12px;font-weight:680;line-height:1.2;text-decoration:none;cursor:pointer;transition:transform .2s ease,background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}.btn:hover{transform:translateY(-1px)}.btn:active{transform:translateY(0) scale(.98)}.btn:focus-visible,.status-tab:focus-visible,.form-control:focus-visible{outline:3px solid rgba(210,162,72,.28);outline-offset:2px}.btn-primary{border-color:var(--contact-gold);background:var(--contact-gold);color:#182033;box-shadow:0 7px 17px rgba(210,162,72,.14)}.btn-primary:hover{border-color:#dfb45f;background:#dfb45f}.btn-secondary{border-color:#d8dfe8;background:#fff;color:#344054}.btn-secondary:hover{border-color:#b3bdca;background:#f7f8fa}.btn-success{border-color:#cfe5d7;background:#f1f9f4;color:#2d704c}.btn-success:hover{border-color:#9ac9ac;background:#e7f5ed}.btn-danger{border-color:#ead6d1;background:#fff8f6;color:#984633}.btn-danger:hover{border-color:#d39a8d;background:#faece8}.btn-sm{min-height:34px;padding:7px 10px;font-size:11px}
   .form-control{width:100%;min-height:42px;padding:9px 13px;border:1px solid #d8dfe7;border-radius:8px;background:#fff;color:#000!important;font-family:inherit;font-size:13px;line-height:1.45}.form-control:focus{outline:0;border-color:#b88731;box-shadow:0 0 0 3px rgba(210,162,72,.16)}.form-label{display:block;margin-bottom:7px;color:#000;font-size:12px;font-weight:700}.form-group{margin-bottom:18px}.form-check{display:flex;align-items:center;gap:8px;margin-bottom:4px;color:#000;font-size:13px;font-weight:600}
-  .alert{display:flex;align-items:center;gap:10px;margin:0 0 19px;padding:13px 16px;border:1px solid #d9e6de;border-radius:10px;background:#f3faf6;color:#245d40;font-size:13px;font-weight:600}.alert-error{border-color:#edd8d2;background:#fff6f3;color:#93432f}.alert-mark{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,.72);font-weight:800}
+  .alert{display:flex;align-items:center;gap:10px;margin:0 0 19px;padding:13px 16px;border:1px solid #d9e6de;border-radius:10px;background:#f3faf6;color:#245d40;font-size:13px;font-weight:600}.alert-error{border-color:#edd8d2;background:#fff6f3;color:#93432f}.alert-warning{border-color:#f1d49b;background:#fff8e8;color:#805a16}.alert-info{border-color:#cbddeb;background:#f0f7fc;color:#28566f}.alert-mark{display:grid;place-items:center;flex:0 0 auto;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,.72);font-weight:800}.alert-dismiss{margin-left:auto;border:0;background:transparent;color:inherit;font-size:22px;line-height:1;cursor:pointer}.alert-dismiss:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .contact-inbox{margin-top:34px;overflow:hidden;border:1px solid var(--contact-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.065)}.inbox-header{display:flex;align-items:end;justify-content:space-between;gap:18px;padding:28px 31px 23px;border-bottom:1px solid #e8ecf1}.inbox-eyebrow{margin-bottom:8px;color:#987027}.inbox-title{margin:0;color:#1c2639;font-size:25px;line-height:1.1;letter-spacing:-.03em}.inbox-copy{max-width:650px;margin:8px 0 0;color:var(--contact-muted);font-size:13px;line-height:1.55}.inbox-count{color:#8a95a5;font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
   .message-card{position:relative;padding:25px 30px 27px;border-bottom:1px solid #edf0f4;background:#fff;transition:background .2s ease}.message-card:last-child{border-bottom:0}.message-card:hover{background:#fbfaf7}.message-header{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:16px;align-items:start;margin-bottom:17px}.sender-avatar{display:grid;place-items:center;width:44px;height:44px;border:1px solid #e0d2b5;border-radius:11px;background:#f8f1e3;color:#805c21;font:750 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.message-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.sender-name{color:#202a3d;font-size:15px;font-weight:690}.sender-email{color:#6e798b;font-size:12px;overflow-wrap:anywhere}.concern-badge{display:inline-flex;padding:4px 7px;border:1px solid #d8e3ed;border-radius:5px;background:#f0f5fa;color:#315b8c;font-size:9px;font-weight:750;letter-spacing:.055em;text-transform:uppercase}.message-date{margin-top:7px;color:#929cab;font-size:11px}.message-id{color:#8a95a5;font:650 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}.message-body{max-width:900px;margin:0 0 18px 64px;padding:17px 19px;border-left:3px solid #d6b36b;background:#f8f9fb;color:#344054;font-size:13px;line-height:1.68;overflow-wrap:anywhere}.notes-box{max-width:900px;margin:0 0 18px 64px;padding:16px 18px;border:1px solid #d8e6e1;border-radius:9px;background:#f2f8f6;color:#355b54;font-size:12px;line-height:1.6}.notes-title{margin-bottom:7px;color:#254c44;font-weight:720}.notes-handler{margin-top:10px;color:#6e827d;font-size:11px}.message-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:64px}
   .empty-state{padding:72px 28px;text-align:center}.empty-state-icon{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 16px;border:1px solid #e3d4b4;border-radius:14px;background:#fbf6eb;color:#876225;font:750 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.empty-title{color:#273247;font-size:18px;font-weight:690}.empty-copy{max-width:520px;margin:7px auto 0;color:#7a8596;font-size:13px;line-height:1.58}.empty-copy a{color:#805c21;font-weight:680}.pagination{display:flex;justify-content:center;align-items:center;gap:12px;padding:18px 22px;border-top:1px solid #edf0f4;background:#fafbfc}.page-label{color:#758093;font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace}
@@ -228,6 +251,16 @@ renderAdminShell(
   <?php endif; ?>
   <?php if ($success): ?>
     <div class="alert"><span class="alert-mark" aria-hidden="true">&#10003;</span><?php echo cm_escape($success); ?></div>
+  <?php endif; ?>
+  <?php if ($warning): ?>
+    <div class="alert alert-warning" role="status"><span class="alert-mark" aria-hidden="true">!</span><?php echo cm_escape($warning); ?></div>
+  <?php endif; ?>
+  <?php if (!$smtp_configured): ?>
+    <div class="alert alert-info" role="status">
+      <span class="alert-mark" aria-hidden="true">i</span>
+      <span>Email delivery is not configured - replies will be saved but not emailed.</span>
+      <button type="button" class="alert-dismiss" aria-label="Dismiss email configuration notice" onclick="this.parentElement.remove()">&times;</button>
+    </div>
   <?php endif; ?>
 
   <section class="contact-hero" aria-labelledby="contact-hero-title">

@@ -24,7 +24,8 @@ if (!function_exists('rms_mail_config')) {
      */
     function rms_mail_config($key, $default = null) {
         $value = $_ENV[$key] ?? null;
-        if ($value === null || $value === '' || strtolower((string) $value) === 'null') {
+        $normalized = strtolower(trim((string) $value));
+        if ($value === null || $normalized === '' || in_array($normalized, ['null', 'false'], true)) {
             return $default;
         }
         return $value;
@@ -42,7 +43,7 @@ if (!function_exists('rms_smtp_is_configured')) {
      * @return bool
      */
     function rms_smtp_is_configured() {
-        return rms_mail_config('MAIL_MAILER') === 'smtp'
+        return strtolower(trim((string) rms_mail_config('MAIL_MAILER', ''))) === 'smtp'
             && rms_mail_config('MAIL_HOST') !== null
             && rms_mail_config('MAIL_USERNAME') !== null
             && rms_mail_config('MAIL_PASSWORD') !== null;
