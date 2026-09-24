@@ -1,4 +1,4 @@
--- Canonical fresh-install schema - matches live DB as of 2026-09 including migrations 002-010.
+-- Canonical fresh-install schema - matches live DB as of 2026-09 including migrations 002-012.
 -- For LEGACY databases use the numbered migrations instead.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -517,6 +517,81 @@ CREATE TABLE `users` (
   KEY `idx_users_role_status` (`role`,`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+-- ---------------------------------------------------------------------------
+-- Research activity, publication, and copyright modules (Migration 012)
+-- User ID columns are indexed soft references; there are no user foreign keys.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `research_activities` (
+  `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `activity_type` enum('seminar','presentation','workshop','forum') NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `activity_date` date NOT NULL,
+  `activity_time` time DEFAULT NULL,
+  `venue` varchar(255) DEFAULT NULL,
+  `speaker` varchar(255) DEFAULT NULL,
+  `organizer` varchar(255) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `status` enum('scheduled','completed','cancelled') NOT NULL DEFAULT 'scheduled',
+  `created_by` int unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`activity_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `activity_participants` (
+  `participant_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `activity_id` int unsigned NOT NULL,
+  `user_id` int unsigned DEFAULT NULL,
+  `participant_name` varchar(255) DEFAULT NULL,
+  `role` varchar(120) DEFAULT NULL COMMENT 'speaker/attendee/organizer',
+  `attended` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`participant_id`),
+  KEY `idx_activity_participants_activity_id` (`activity_id`),
+  KEY `idx_activity_participants_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `publications` (
+  `publication_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `research_title` varchar(500) NOT NULL,
+  `researcher_id` int unsigned DEFAULT NULL,
+  `researcher_name` varchar(255) DEFAULT NULL COMMENT 'Denormalized for non-user authors',
+  `researcher_category` enum('faculty','student') NOT NULL DEFAULT 'faculty',
+  `publication_type` enum('journal','conference','book_chapter','other') NOT NULL DEFAULT 'journal',
+  `journal_publisher` varchar(255) DEFAULT NULL,
+  `publication_date` date DEFAULT NULL,
+  `doi_identifier` varchar(255) DEFAULT NULL,
+  `file_path` varchar(500) DEFAULT NULL,
+  `file_name` varchar(255) DEFAULT NULL,
+  `status` enum('submitted','under_review','accepted','published') NOT NULL DEFAULT 'submitted',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`publication_id`),
+  KEY `idx_publications_researcher_id` (`researcher_id`),
+  KEY `idx_publications_status` (`status`),
+  KEY `idx_publications_publication_date` (`publication_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `copyright_applications` (
+  `copyright_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `applicant_id` int unsigned DEFAULT NULL,
+  `applicant_name` varchar(255) DEFAULT NULL,
+  `applicant_category` enum('faculty','student') NOT NULL DEFAULT 'faculty',
+  `output_title` varchar(500) NOT NULL,
+  `output_type` enum('software','research','instructional_material','module','other') NOT NULL DEFAULT 'research',
+  `co_authors` varchar(500) DEFAULT NULL,
+  `date_completed` date DEFAULT NULL,
+  `file_path` varchar(500) DEFAULT NULL,
+  `file_name` varchar(255) DEFAULT NULL,
+  `copyright_ref_no` varchar(120) DEFAULT NULL,
+  `status` enum('pending','under_review','registered','rejected') NOT NULL DEFAULT 'pending',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`copyright_id`),
+  KEY `idx_copyright_applications_applicant_id` (`applicant_id`),
+  KEY `idx_copyright_applications_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -580,6 +655,30 @@ INSERT INTO `users` (`user_id`, `role`, `first_name`, `last_name`, `email`, `pas
 (7, 'research_staff', 'CREC', 'Staff', 'CREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'CREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
 (8, 'research_staff', 'ORS', 'Staff', 'ORS@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Office of Research Services', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
 (9, 'research_staff', 'Graduate', 'Staff', 'graduate@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Graduate School Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL);
+
+-- DEMO: Research activity records for fresh-install previews.
+INSERT INTO `research_activities` (`activity_id`, `activity_type`, `title`, `activity_date`, `activity_time`, `venue`, `speaker`, `organizer`, `description`, `status`, `created_by`) VALUES
+(1, 'seminar', 'Responsible Research and Publication Ethics', '2026-10-08', '09:00:00', 'EARIST Cavite Audio-Visual Room', 'Dr. Maria Santos', 'Office of Research Services', 'Orientation on ethical research conduct and responsible publication.', 'scheduled', 8),
+(2, 'workshop', 'Intellectual Property Documentation Workshop', '2026-08-21', '13:30:00', 'Research and Innovation Center', 'Engr. Jose Reyes', 'CREC', 'Hands-on preparation of copyright application materials.', 'completed', 7),
+(3, 'forum', 'Student Research Forum 2026', '2026-11-14', NULL, 'Campus Multipurpose Hall', NULL, 'Graduate School Office', 'Interdisciplinary student research exchange.', 'scheduled', 9);
+
+-- DEMO: Activity participant records, including linked users and a named guest.
+INSERT INTO `activity_participants` (`participant_id`, `activity_id`, `user_id`, `participant_name`, `role`, `attended`) VALUES
+(1, 1, 2, 'Maria Santos', 'speaker', 0),
+(2, 2, 4, 'Juan Dela Cruz', 'attendee', 1),
+(3, 3, NULL, 'Ana Villanueva', 'organizer', 0);
+
+-- DEMO: Faculty and student publication records.
+INSERT INTO `publications` (`publication_id`, `research_title`, `researcher_id`, `researcher_name`, `researcher_category`, `publication_type`, `journal_publisher`, `publication_date`, `doi_identifier`, `file_path`, `file_name`, `status`) VALUES
+(1, 'Campus Research Monitoring Through Integrated Digital Workflows', 2, 'Maria Santos', 'faculty', 'journal', 'Philippine Journal of Technology Education', '2026-06-30', '10.1234/pjte.2026.001', 'uploads/publications/2026/', 'campus-research-monitoring.pdf', 'published'),
+(2, 'Low-Cost Environmental Sensor Network for Cavite Communities', 4, 'Juan Dela Cruz', 'student', 'conference', 'Cavite Research and Innovation Conference', NULL, NULL, 'uploads/publications/2026/', 'environmental-sensor-network.pdf', 'under_review'),
+(3, 'Inclusive Learning Spaces in State Universities', NULL, 'Elena Navarro', 'faculty', 'book_chapter', 'Southern Luzon Academic Press', '2026-04-15', NULL, NULL, NULL, 'accepted');
+
+-- DEMO: Copyright applications at representative workflow stages.
+INSERT INTO `copyright_applications` (`copyright_id`, `applicant_id`, `applicant_name`, `applicant_category`, `output_title`, `output_type`, `co_authors`, `date_completed`, `file_path`, `file_name`, `copyright_ref_no`, `status`) VALUES
+(1, 2, 'Maria Santos', 'faculty', 'EARIST Cavite Research Monitoring System', 'software', 'Jose Reyes', '2026-07-18', 'uploads/copyright/2026/', 'rms-source-and-manual.zip', 'CR-2026-0041', 'registered'),
+(2, 4, 'Juan Dela Cruz', 'student', 'Community Sensor Deployment Guide', 'instructional_material', 'Anna Reyes', '2026-08-02', 'uploads/copyright/2026/', 'sensor-deployment-guide.pdf', NULL, 'under_review'),
+(3, NULL, 'Roberto Mendoza', 'faculty', 'Applied Research Methods Module', 'module', NULL, '2026-09-10', NULL, NULL, NULL, 'pending');
 
 -- Best-effort restoration of the two message relationships from the original
 -- schema. The handler deliberately swallows DDL errors on engines that cannot
