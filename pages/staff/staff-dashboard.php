@@ -2,745 +2,224 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
+require_once __DIR__ . '/../../includes/admin-shell.php';
 
-requireRole('research_staff');
+requireLogin();
 $user = getCurrentUser();
-$user_id = (int) $user['user_id'];
+if (!$user) {
+    header('Location: ' . SITE_URL . 'public/login.php');
+    exit;
+}
 
-// Helper function
-function se($value) {
+$role = (string) ($user['role'] ?? '');
+if (!in_array($role, ['research_staff', 'admin'], true)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+
+function monitoringDashboardEscape(?string $value): string
+{
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-// Stat counts
-$stat_pending = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status = 'submitted'"
-)->fetch_assoc()['count'] ?? 0);
-
-$stat_crec = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('under_review', 'under_crec_review')"
-)->fetch_assoc()['count'] ?? 0);
-
-$stat_revision = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('revision_required', 'for_revision')"
-)->fetch_assoc()['count'] ?? 0);
-
-$stat_archive = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM research_projects
-     WHERE status IN ('completed','archived')
-       AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
-)->fetch_assoc()['count'] ?? 0);
-
-// Contact Messages count
-$stat_contact = (int) ($conn->query(
-    "SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'"
-)->fetch_assoc()['count'] ?? 0);
-
-// Submissions Inbox
-$inbox_stmt = $conn->prepare("
-    SELECT
-        rp.project_id,
-        rp.title,
-        rp.created_at,
-        rp.status,
-        u.first_name,
-        u.last_name,
-        rc.category_name,
-        CASE WHEN pu.project_id IS NOT NULL THEN 1 ELSE 0 END AS has_proposal
-    FROM research_projects rp
-    LEFT JOIN users           u  ON u.user_id      = rp.created_by
-    LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
-    LEFT JOIN (
-        SELECT DISTINCT project_id FROM uploads WHERE type = 'proposal'
-    ) pu ON pu.project_id = rp.project_id
-    WHERE rp.status = 'submitted'
-    ORDER BY rp.created_at DESC
-    LIMIT 10
-");
-$inbox_stmt->execute();
-$inbox = $inbox_stmt->get_result();
-
-// Repository Overview
-$repo_row = $conn->query("
-    SELECT
-        SUM(status = 'draft')                                                                                           AS draft_count,
-        SUM(status IN ('submitted','under_review','under_crec_review','under_erec_review'))                             AS review_count,
-        SUM(status IN ('for_revision','revision_required'))                                                             AS revision_count,
-        SUM(status IN ('approved','ongoing','progress_report','terminal_review'))                                        AS ongoing_count,
-        SUM(status IN ('completed','archived'))                                                                         AS completed_count
-    FROM research_projects
-")->fetch_assoc();
-
-$repo_draft     = (int) ($repo_row['draft_count']     ?? 0);
-$repo_review    = (int) ($repo_row['review_count']    ?? 0);
-$repo_revision  = (int) ($repo_row['revision_count']  ?? 0);
-$repo_ongoing   = (int) ($repo_row['ongoing_count']   ?? 0);
-$repo_completed = (int) ($repo_row['completed_count'] ?? 0);
-$repo_total     = $repo_draft + $repo_review + $repo_revision + $repo_ongoing + $repo_completed;
-
-// Build donut chart degrees
-$deg = function (int $count) use ($repo_total): float {
-    return $repo_total > 0 ? round(($count / $repo_total) * 360, 2) : 0;
-};
-$d1 = $deg($repo_draft);
-$d2 = $d1 + $deg($repo_review);
-$d3 = $d2 + $deg($repo_revision);
-$d4 = $d3 + $deg($repo_ongoing);
-
-// Recent Activity
-$activity_stmt = $conn->prepare("
-    SELECT al.action, al.module, al.created_at,
-           u.first_name, u.last_name
-    FROM activity_log al
-    LEFT JOIN users u ON u.user_id = al.user_id
-    ORDER BY al.created_at DESC
-    LIMIT 10
-");
-$activity_stmt->execute();
-$activities = $activity_stmt->get_result();
-
-// Status badge helper
-function statusBadge(string $status): array {
-    $map = [
-        'draft'               => ['status-draft',    'Draft'],
-        'submitted'           => ['status-review',   'Submitted'],
-        'under_review'        => ['status-review',   'Under Review'],
-        'under_crec_review'   => ['status-review',   'CREC Review'],
-        'under_erec_review'   => ['status-review',   'EREC Review'],
-        'for_revision'        => ['status-pending',  'For Revision'],
-        'revision_required'   => ['status-pending',  'Revision Required'],
-        'approved'            => ['status-approved', 'Approved'],
-        'ongoing'             => ['status-approved', 'Ongoing'],
-        'completed'           => ['status-approved', 'Completed'],
-        'archived'            => ['status-approved', 'Archived'],
+function monitoringDashboardTableExists(mysqli $connection, string $table): bool
+{
+    $allowedTables = [
+        'research_activities',
+        'activity_participants',
+        'publications',
+        'copyright_applications',
     ];
-    return $map[$status] ?? ['status-draft', ucwords(str_replace('_', ' ', $status))];
+
+    if (!in_array($table, $allowedTables, true)) {
+        return false;
+    }
+
+    $stmt = $connection->prepare("SHOW TABLES LIKE '{$table}'");
+    $stmt->execute();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+    return $exists;
 }
 
-function activityDotColor(string $action): string {
-    $a = strtolower($action);
-    if (strpos($a, 'approv') !== false || strpos($a, 'login') !== false)  return '#16A34A';
-    if (strpos($a, 'submi')  !== false || strpos($a, 'revis') !== false)  return '#EA580C';
-    if (strpos($a, 'creat')  !== false || strpos($a, 'regist') !== false) return '#2563EB';
-    return '#64748B';
+function monitoringDashboardStatusBadge(string $status): array
+{
+    return match ($status) {
+        'scheduled', 'pending', 'submitted' => ['label' => ucfirst($status), 'tone' => 'warning'],
+        'under_review' => ['label' => 'Under review', 'tone' => 'review'],
+        'accepted' => ['label' => 'Accepted', 'tone' => 'info'],
+        'completed', 'published', 'registered' => ['label' => ucfirst($status), 'tone' => 'success'],
+        'cancelled', 'rejected' => ['label' => ucfirst($status), 'tone' => 'danger'],
+        default => ['label' => ucwords(str_replace('_', ' ', $status)), 'tone' => 'neutral'],
+    };
 }
 
-$first_name = se($user['first_name']);
+$tables = [
+    'activities' => monitoringDashboardTableExists($conn, 'research_activities'),
+    'participants' => monitoringDashboardTableExists($conn, 'activity_participants'),
+    'publications' => monitoringDashboardTableExists($conn, 'publications'),
+    'copyrights' => monitoringDashboardTableExists($conn, 'copyright_applications'),
+];
 
-// Render staff shell
-renderStaffShell($user, 'staff-dashboard', 'Research Staff Dashboard', 'Process submissions and manage the EARIST research repository.');
+$researchers = ['total' => 0, 'faculty' => 0, 'student' => 0];
+$activeStatus = 'active';
+$facultyRole = 'faculty';
+$studentRole = 'student';
+$stmt = $conn->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(role = ?), 0) AS faculty, COALESCE(SUM(role = ?), 0) AS student FROM users WHERE status = ? AND role IN (?, ?)');
+$stmt->bind_param('sssss', $facultyRole, $studentRole, $activeStatus, $facultyRole, $studentRole);
+$stmt->execute();
+$researcherRow = $stmt->get_result()->fetch_assoc() ?: [];
+$stmt->close();
+foreach (array_keys($researchers) as $key) $researchers[$key] = (int) ($researcherRow[$key] ?? 0);
+
+$stats = [
+    'seminars' => 0,
+    'presentations' => 0,
+    'published' => 0,
+    'pending_publications' => 0,
+    'copyright_applications' => 0,
+    'registered_copyrights' => 0,
+];
+if ($tables['activities']) {
+    $cancelled = 'cancelled';
+    $seminar = 'seminar';
+    $presentation = 'presentation';
+    $stmt = $conn->prepare('SELECT COALESCE(SUM(activity_type = ? AND status <> ?), 0) AS seminars, COALESCE(SUM(activity_type = ? AND status <> ?), 0) AS presentations FROM research_activities');
+    $stmt->bind_param('ssss', $seminar, $cancelled, $presentation, $cancelled);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    $stats['seminars'] = (int) ($row['seminars'] ?? 0);
+    $stats['presentations'] = (int) ($row['presentations'] ?? 0);
+}
+if ($tables['publications']) {
+    $published = 'published';
+    $submitted = 'submitted';
+    $underReview = 'under_review';
+    $stmt = $conn->prepare('SELECT COALESCE(SUM(status = ?), 0) AS published, COALESCE(SUM(status IN (?, ?)), 0) AS pending_publications FROM publications');
+    $stmt->bind_param('sss', $published, $submitted, $underReview);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    $stats['published'] = (int) ($row['published'] ?? 0);
+    $stats['pending_publications'] = (int) ($row['pending_publications'] ?? 0);
+}
+if ($tables['copyrights']) {
+    $pending = 'pending';
+    $underReview = 'under_review';
+    $registered = 'registered';
+    $stmt = $conn->prepare('SELECT COALESCE(SUM(status IN (?, ?)), 0) AS copyright_applications, COALESCE(SUM(status = ?), 0) AS registered_copyrights FROM copyright_applications');
+    $stmt->bind_param('sss', $pending, $underReview, $registered);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    $stats['copyright_applications'] = (int) ($row['copyright_applications'] ?? 0);
+    $stats['registered_copyrights'] = (int) ($row['registered_copyrights'] ?? 0);
+}
+
+$monthStart = (new DateTimeImmutable('first day of this month'))->modify('-5 months');
+$monthlyActivity = [];
+for ($index = 0; $index < 6; $index++) {
+    $month = $monthStart->modify('+' . $index . ' months');
+    $monthlyActivity[$month->format('Y-m')] = ['label' => $month->format('M Y'), 'count' => 0];
+}
+if ($tables['activities']) {
+    $cancelled = 'cancelled';
+    $startDate = $monthStart->format('Y-m-d');
+    $endDate = (new DateTimeImmutable('first day of next month'))->format('Y-m-d');
+    $stmt = $conn->prepare("SELECT DATE_FORMAT(activity_date, '%Y-%m') AS month_key, COUNT(*) AS total FROM research_activities WHERE status <> ? AND activity_date >= ? AND activity_date < ? GROUP BY DATE_FORMAT(activity_date, '%Y-%m') ORDER BY month_key");
+    $stmt->bind_param('sss', $cancelled, $startDate, $endDate);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $key = (string) $row['month_key'];
+        if (isset($monthlyActivity[$key])) $monthlyActivity[$key]['count'] = (int) $row['total'];
+    }
+    $stmt->close();
+}
+$monthlyMax = 0;
+foreach ($monthlyActivity as $month) $monthlyMax = max($monthlyMax, $month['count']);
+
+$eventParts = [];
+if ($tables['activities']) {
+    $eventParts[] = "SELECT ra.created_at AS event_at, CONCAT(UCASE(LEFT(ra.activity_type, 1)), SUBSTRING(ra.activity_type, 2), ' created') AS event_label, COALESCE(NULLIF(ra.organizer, ''), NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), 'Institutional activity') AS actor_name, ra.status, 'activity' AS source_type, ra.activity_id AS source_id FROM research_activities ra LEFT JOIN users u ON u.user_id = ra.created_by";
+}
+if ($tables['publications']) {
+    $eventParts[] = "SELECT p.created_at AS event_at, 'Publication submitted' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, p.status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p";
+    $eventParts[] = "SELECT p.updated_at AS event_at, 'Publication published' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, 'published' AS status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p WHERE p.status = 'published'";
+}
+if ($tables['copyrights']) {
+    $eventParts[] = "SELECT c.created_at AS event_at, 'Copyright applied' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, c.status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c";
+    $eventParts[] = "SELECT c.updated_at AS event_at, 'Copyright registered' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, 'registered' AS status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c WHERE c.status = 'registered'";
+}
+$recentEvents = [];
+if ($eventParts) {
+    $eventSql = 'SELECT event_at, event_label, actor_name, status, source_type, source_id FROM (' . implode(' UNION ALL ', $eventParts) . ') AS module_events ORDER BY event_at DESC LIMIT 6';
+    $stmt = $conn->prepare($eventSql);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) $recentEvents[] = $row;
+    $stmt->close();
+}
+
+$eventUrl = static function (array $event): string {
+    $path = match ($event['source_type']) {
+        'activity' => 'pages/shared/activity-detail.php?id=',
+        'publication' => 'pages/shared/publication-detail.php?id=',
+        'copyright' => 'pages/shared/copyright-detail.php?id=',
+        default => 'pages/shared/activities.php?id=',
+    };
+    return SITE_URL . $path . (int) $event['source_id'];
+};
+
+$firstName = trim((string) ($user['first_name'] ?? '')) ?: ($role === 'admin' ? 'Administrator' : 'Research Staff');
+$roleLabel = $role === 'admin' ? 'Administrator' : 'Research Staff';
+$currentPage = $role === 'admin' ? 'admin-dashboard.php' : 'staff-dashboard.php';
+$pageTitle = 'Welcome back, ' . $firstName;
+$pageSubtitle = $role === 'admin' ? 'Institution-wide research monitoring overview' : 'Research activity, publication, and copyright monitoring';
+if ($role === 'admin') renderAdminShell($user, $currentPage, $pageTitle, $pageSubtitle);
+else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 ?>
 
 <style>
-  :root {
-    --charcoal: #111827;
-    --slate: #1F2937;
-    --bg-surface: #F8FAFC;
-    --bg-card: #FFFFFF;
-    --border: #E5E7EB;
-    --gold: #C8A44D;
-    --text-primary: #111827;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
-
-    --status-draft: #64748B;
-    --status-proposal: #2563EB;
-    --status-crec: #3B82F6;
-    --status-erec: #7C3AED;
-    --status-revision: #EA580C;
-    --status-approved: #16A34A;
-    --status-completed: #059669;
-    --status-archived: #475569;
-  }
-
-  /* Welcome banner */
-  .welcome-banner {
-    background: linear-gradient(135deg, #0d9488, #059669);
-    border-radius: 20px;
-    padding: 32px;
-    color: white;
-    margin-bottom: 48px;
-  }
-
-  .welcome-banner h2 {
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-
-  .welcome-banner p {
-    font-size: 16px;
-    opacity: 0.95;
-  }
-
-  /* STATS GRID */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 24px;
-    margin-bottom: 48px;
-  }
-
-  .stat-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 24px;
-    transition: all 0.3s;
-  }
-
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-  }
-
-  .stat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .stat-number {
-    font-size: 36px;
-    font-weight: 700;
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-
-  .stat-label {
-    font-size: 14px;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .stat-icon {
-    font-size: 32px;
-    opacity: 0.3;
-  }
-
-  /* BENTO GRID */
-  .bento-grid {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 24px;
-    margin-bottom: 48px;
-  }
-
-  .bento-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px;
-  }
-
-  .bento-card.span-8 { grid-column: span 8; }
-  .bento-card.span-4 { grid-column: span 4; }
-  .bento-card.span-6 { grid-column: span 6; }
-  .bento-card.span-12 { grid-column: span 12; }
-
-  .card-header {
-    margin-bottom: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .card-title {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    color: var(--charcoal);
-  }
-
-  .card-subtitle {
-    font-size: 14px;
-    color: var(--text-secondary);
-  }
-
-  .card-action {
-    color: #0d9488;
-    font-size: 14px;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-  }
-
-  /* DONUT CHART */
-  .chart-container {
-    display: flex;
-    gap: 32px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .donut-chart {
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .donut-center {
-    width: 100px;
-    height: 100px;
-    background: var(--bg-card);
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  }
-
-  .donut-value {
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .donut-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-  }
-
-  .chart-legend {
-    flex: 1;
-    min-width: 200px;
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    font-size: 14px;
-  }
-
-  .legend-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .legend-label {
-    color: var(--text-primary);
-  }
-
-  .legend-value {
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  /* ACTIVITY LIST */
-  .activity-list {
-    list-style: none;
-  }
-
-  .activity-item {
-    display: flex;
-    gap: 12px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .activity-item:last-child {
-    border-bottom: none;
-  }
-
-  .activity-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-top: 6px;
-    flex-shrink: 0;
-  }
-
-  .activity-content {
-    flex: 1;
-  }
-
-  .activity-content p {
-    font-size: 14px;
-    margin-bottom: 4px;
-  }
-
-  .activity-time {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  /* TABLE */
-  .table-wrap {
-    overflow-x: auto;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  thead {
-    background: var(--bg-surface);
-  }
-
-  th {
-    text-align: left;
-    padding: 12px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  td {
-    padding: 16px;
-    font-size: 14px;
-    border-top: 1px solid var(--border);
-  }
-
-  tr:hover {
-    background: var(--bg-surface);
-  }
-
-  .badge-status {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .badge-status.status-draft {
-    background: #F1F5F9;
-    color: var(--status-draft);
-  }
-
-  .badge-status.status-review {
-    background: #DBEAFE;
-    color: var(--status-proposal);
-  }
-
-  .badge-status.status-pending {
-    background: #FEF3C7;
-    color: var(--status-revision);
-  }
-
-  .badge-status.status-approved {
-    background: #DCFCE7;
-    color: var(--status-approved);
-  }
-
-  /* BUTTON */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-decoration: none;
-  }
-
-  .btn-primary {
-    background: #0d9488;
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #059669;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(13,148,136,0.3);
-  }
-
-  .btn-sm {
-    padding: 6px 14px;
-    font-size: 13px;
-  }
-
-  /* EMPTY STATE */
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--text-muted);
-  }
-
-  .empty-state-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-  }
-
-  .empty-state p {
-    font-size: 14px;
-  }
-
-  /* RESPONSIVE */
-  @media (max-width: 1200px) {
-    .bento-card.span-8,
-    .bento-card.span-4 {
-      grid-column: span 12;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .bento-card {
-      padding: 24px;
-    }
-  }
+.module-hub{--accent:#315b9f;--ink:#172033;--copy:#64748b;--line:#e2e8f0;max-width:1380px;margin:0 auto;color:var(--ink)}.module-greeting{display:flex;justify-content:space-between;gap:24px;align-items:end;margin:0 0 24px;padding:30px;border-left:5px solid var(--accent);border-radius:4px 18px 18px 4px;background:#eef3fb}.module-kicker{margin:0 0 7px;color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.module-greeting h1{margin:0;font-size:clamp(27px,3vw,40px);line-height:1.08;letter-spacing:-.04em;text-wrap:balance}.module-greeting p{max-width:650px;margin:10px 0 0;color:#526176;line-height:1.6}.greeting-meta{text-align:right}.greeting-meta strong{display:block;font-size:13px}.greeting-meta span{display:block;margin-top:5px;color:var(--copy);font-size:11px}.stat-grid{display:grid;grid-template-columns:repeat(7,minmax(145px,1fr));gap:10px;margin-bottom:24px}.stat-card{min-width:0;padding:18px;border:1px solid #dfe5ee;border-radius:14px;background:#fff}.stat-card strong{display:block;font-size:28px;line-height:1;font-variant-numeric:tabular-nums}.stat-card>span{display:block;margin-top:8px;color:#475569;font-size:11px;font-weight:800;line-height:1.35}.stat-card small{display:block;margin-top:8px;color:#7b8798;font-size:10px;line-height:1.45}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(360px,.8fr);gap:18px;margin-bottom:18px}.hub-panel{min-width:0;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 12px 30px rgba(30,50,70,.05)}.panel-head{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px 20px;border-bottom:1px solid #e8edf3}.panel-head h2{margin:0;font-size:17px;letter-spacing:-.015em}.panel-head p{margin:5px 0 0;color:var(--copy);font-size:12px;line-height:1.45}.bar-chart{display:grid;gap:15px;padding:22px}.bar-row{display:grid;grid-template-columns:72px minmax(0,1fr) 28px;gap:12px;align-items:center}.bar-label,.bar-value{font-size:11px;font-weight:750}.bar-label{color:#526176}.bar-value{text-align:right;font-variant-numeric:tabular-nums}.bar-track{height:11px;overflow:hidden;border-radius:3px;background:#edf1f6}.bar-fill{height:100%;min-width:0;border-radius:3px;background:#315b9f}.event-wrap{overflow-x:auto}.event-table{width:100%;min-width:720px;border-collapse:collapse}.event-table th{padding:11px 15px;background:#f8fafc;color:var(--copy);font-size:10px;letter-spacing:.06em;text-align:left;text-transform:uppercase}.event-table td{padding:14px 15px;border-top:1px solid #edf1f5;font-size:12px;vertical-align:middle}.event-name{color:var(--ink);font-weight:750;text-decoration:none}.event-name:hover{color:var(--accent)}.event-date{white-space:nowrap;color:#526176;font-variant-numeric:tabular-nums}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:10px;font-weight:800;white-space:nowrap}.tone-warning{background:#fef3c7;color:#92400e}.tone-review{background:#ede9fe;color:#5b21b6}.tone-info{background:#cffafe;color:#155e75}.tone-success{background:#dcfce7;color:#166534}.tone-danger{background:#fee2e2;color:#991b1b}.tone-neutral{background:#e2e8f0;color:#475569}.quick-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:20px}.action-link{display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font-size:12px;font-weight:800;text-align:center;text-decoration:none;transition:transform .18s ease,border-color .18s ease,color .18s ease,background .18s ease}.action-link.primary{border-color:var(--accent);background:var(--accent);color:#fff}.action-link:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}.action-link.primary:hover{background:#24477e;color:#fff}.action-link:active{transform:scale(.98)}.action-link:focus-visible,.event-name:focus-visible{outline:3px solid rgba(49,91,159,.15);outline-offset:3px}.empty-state{padding:38px 22px;text-align:center;color:var(--copy);font-size:13px;line-height:1.55}@media(max-width:1180px){.stat-grid{grid-template-columns:repeat(4,1fr)}.dashboard-grid{grid-template-columns:1fr}.quick-actions{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.module-greeting{display:block;padding:24px 21px}.greeting-meta{margin-top:18px;text-align:left}.stat-grid{grid-template-columns:repeat(2,1fr)}.quick-actions{grid-template-columns:1fr}.bar-row{grid-template-columns:64px minmax(0,1fr) 24px}}
 </style>
 
-<!-- Welcome Banner -->
-<div class="welcome-banner">
-  <h2>Welcome back, <?php echo $first_name; ?></h2>
-  <p>You have <?php echo se($stat_pending); ?> new submission<?php echo $stat_pending !== 1 ? 's' : ''; ?> awaiting verification.</p>
+<div class="module-hub">
+  <header class="module-greeting"><div><p class="module-kicker">Monitoring overview</p><h1>Welcome back, <?= monitoringDashboardEscape($firstName) ?></h1><p>Track institutional research activities, publication progress, and copyright processing from one view.</p></div><div class="greeting-meta"><strong><?= monitoringDashboardEscape($roleLabel) ?></strong><span><?= monitoringDashboardEscape(date('l, F j, Y')) ?></span></div></header>
+
+  <section class="stat-grid" aria-label="Research module statistics">
+    <article class="stat-card"><strong><?= $researchers['total'] ?></strong><span>Active Researchers</span><small><?= $researchers['faculty'] ?> faculty &middot; <?= $researchers['student'] ?> students</small></article>
+    <article class="stat-card"><strong><?= $stats['seminars'] ?></strong><span>Seminars</span><small>Non-cancelled activities</small></article>
+    <article class="stat-card"><strong><?= $stats['presentations'] ?></strong><span>Presentations</span><small>Non-cancelled activities</small></article>
+    <article class="stat-card"><strong><?= $stats['published'] ?></strong><span>Publications</span><small>Published outputs</small></article>
+    <article class="stat-card"><strong><?= $stats['pending_publications'] ?></strong><span>Pending Publications</span><small>Submitted or under review</small></article>
+    <article class="stat-card"><strong><?= $stats['copyright_applications'] ?></strong><span>Copyright Applications</span><small>Pending or under review</small></article>
+    <article class="stat-card"><strong><?= $stats['registered_copyrights'] ?></strong><span>Registered Copyrights</span><small>Completed registrations</small></article>
+  </section>
+
+  <div class="dashboard-grid">
+    <section class="hub-panel" aria-labelledby="activity-chart-heading"><div class="panel-head"><div><h2 id="activity-chart-heading">Research Activity by Month</h2><p>Non-cancelled activities during the last six calendar months.</p></div></div>
+      <?php if ($monthlyMax === 0): ?><div class="empty-state">No research activities were recorded during this six-month window.</div>
+      <?php else: ?><div class="bar-chart"><?php foreach ($monthlyActivity as $month): $width = $monthlyMax > 0 ? ($month['count'] / $monthlyMax) * 100 : 0; ?><div class="bar-row"><span class="bar-label"><?= monitoringDashboardEscape($month['label']) ?></span><div class="bar-track" aria-label="<?= monitoringDashboardEscape($month['label'] . ': ' . $month['count']) ?>"><div class="bar-fill" style="width:<?= monitoringDashboardEscape(number_format($width, 2, '.', '')) ?>%"></div></div><span class="bar-value"><?= (int) $month['count'] ?></span></div><?php endforeach; ?></div><?php endif; ?>
+    </section>
+
+    <section class="hub-panel" aria-labelledby="quick-actions-heading"><div class="panel-head"><div><h2 id="quick-actions-heading">Quick Actions</h2><p>Open the module forms and institutional repository.</p></div></div><div class="quick-actions">
+      <a class="action-link primary" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/shared/activity-form.php') ?>">+ Add Activity</a>
+      <a class="action-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/shared/publication-form.php') ?>">+ Add Publication</a>
+      <a class="action-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/shared/copyright-form.php') ?>">+ Copyright Application</a>
+      <a class="action-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">Open Repository</a>
+      <?php if ($role === 'admin'): ?><a class="action-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/admin/admin-reports.php') ?>">Reports</a><?php endif; ?>
+    </div></section>
+  </div>
+
+  <section class="hub-panel" aria-labelledby="recent-events-heading"><div class="panel-head"><div><h2 id="recent-events-heading">Recent Research Activities</h2><p>The six newest events across activities, publications, and copyrights.</p></div></div>
+    <?php if (!$recentEvents): ?><div class="empty-state">Module activity will appear here after the first activity, publication, or copyright application is recorded.</div>
+    <?php else: ?><div class="event-wrap"><table class="event-table"><thead><tr><th>Date</th><th>What happened</th><th>Actor</th><th>Status</th></tr></thead><tbody><?php foreach ($recentEvents as $event): $badge = monitoringDashboardStatusBadge((string) $event['status']); ?><tr><td class="event-date"><?= monitoringDashboardEscape(date('M j, Y g:i a', strtotime((string) $event['event_at']))) ?></td><td><a class="event-name" href="<?= monitoringDashboardEscape($eventUrl($event)) ?>"><?= monitoringDashboardEscape($event['event_label']) ?></a></td><td><?= monitoringDashboardEscape($event['actor_name']) ?></td><td><span class="badge tone-<?= monitoringDashboardEscape($badge['tone']) ?>"><?= monitoringDashboardEscape($badge['label']) ?></span></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+  </section>
 </div>
 
-<!-- STATS GRID -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-header">
-      <div>
-        <div class="stat-number"><?php echo se($stat_pending); ?></div>
-        <div class="stat-label">Pending Review</div>
-      </div>
-      <div class="stat-icon">📥</div>
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-header">
-      <div>
-        <div class="stat-number"><?php echo se($stat_crec); ?></div>
-        <div class="stat-label">In CREC Review</div>
-      </div>
-      <div class="stat-icon">🏛️</div>
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-header">
-      <div>
-        <div class="stat-number"><?php echo se($stat_revision); ?></div>
-        <div class="stat-label">Revision Returns</div>
-      </div>
-      <div class="stat-icon">🔄</div>
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-header">
-      <div>
-        <div class="stat-number"><?php echo se($stat_archive); ?></div>
-        <div class="stat-label">Archived (30 Days)</div>
-      </div>
-      <div class="stat-icon">🗂️</div>
-    </div>
-  </div>
-</div>
-
-<!-- BENTO GRID -->
-<div class="bento-grid">
-  <!-- REPOSITORY OVERVIEW -->
-  <div class="bento-card span-6">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Repository Overview</div>
-        <div class="card-subtitle">All research projects</div>
-      </div>
-      <a href="<?php echo SITE_URL; ?>pages/shared/research-archive.php" class="card-action">View archive →</a>
-    </div>
-
-    <div class="chart-container">
-      <?php
-      $donut_css = $repo_total > 0
-        ? "conic-gradient(
-            #64748B   0deg {$d1}deg,
-            #7C3AED   {$d1}deg {$d2}deg,
-            #EA580C   {$d2}deg {$d3}deg,
-            #2563EB   {$d3}deg {$d4}deg,
-            #16A34A   {$d4}deg 360deg
-          )"
-        : '#E5E7EB';
-      ?>
-      <div class="donut-chart" style="background: <?php echo $donut_css; ?>;">
-        <div class="donut-center">
-          <div class="donut-value"><?php echo se($repo_total); ?></div>
-          <div class="donut-label">Total</div>
-        </div>
-      </div>
-
-      <div class="chart-legend">
-        <div class="legend-item">
-          <div class="legend-left">
-            <div class="legend-dot" style="background: #64748B;"></div>
-            <span class="legend-label">Draft</span>
-          </div>
-          <span class="legend-value"><?php echo se($repo_draft); ?></span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-left">
-            <div class="legend-dot" style="background: #7C3AED;"></div>
-            <span class="legend-label">In Review</span>
-          </div>
-          <span class="legend-value"><?php echo se($repo_review); ?></span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-left">
-            <div class="legend-dot" style="background: #EA580C;"></div>
-            <span class="legend-label">For Revision</span>
-          </div>
-          <span class="legend-value"><?php echo se($repo_revision); ?></span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-left">
-            <div class="legend-dot" style="background: #2563EB;"></div>
-            <span class="legend-label">Ongoing</span>
-          </div>
-          <span class="legend-value"><?php echo se($repo_ongoing); ?></span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-left">
-            <div class="legend-dot" style="background: #16A34A;"></div>
-            <span class="legend-label">Completed</span>
-          </div>
-          <span class="legend-value"><?php echo se($repo_completed); ?></span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RECENT ACTIVITY -->
-  <div class="bento-card span-6">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Recent Activity</div>
-        <div class="card-subtitle">Latest system actions</div>
-      </div>
-      <a href="<?php echo SITE_URL; ?>pages/shared/notifications.php" class="card-action">View all →</a>
-    </div>
-
-    <ul class="activity-list">
-      <?php
-      $act_count = 0;
-      while ($act = $activities->fetch_assoc()):
-          if ($act_count >= 5) break;
-          $act_count++;
-          $dot_color = activityDotColor($act['action'] ?? '');
-          $act_user  = trim(($act['first_name'] ?? '') . ' ' . ($act['last_name'] ?? ''));
-          $time_str  = !empty($act['created_at']) ? date('M d, Y • h:i A', strtotime($act['created_at'])) : '';
-      ?>
-        <li class="activity-item">
-          <div class="activity-dot" style="background: <?php echo $dot_color; ?>;"></div>
-          <div class="activity-content">
-            <p><?php echo $act_user ? '<strong>' . se($act_user) . '</strong>: ' : ''; ?><?php echo se($act['action']); ?></p>
-            <?php if ($time_str): ?>
-              <div class="activity-time"><?php echo se($time_str); ?></div>
-            <?php endif; ?>
-          </div>
-        </li>
-      <?php endwhile; ?>
-      <?php if ($act_count === 0): ?>
-        <li class="activity-item">
-          <div class="activity-content">
-            <p style="color: var(--text-muted);">No recent activity</p>
-          </div>
-        </li>
-      <?php endif; ?>
-    </ul>
-  </div>
-
-  <!-- SUBMISSIONS INBOX -->
-  <div class="bento-card span-12" id="inbox">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Submissions Inbox</div>
-        <div class="card-subtitle">New submissions awaiting completeness verification</div>
-      </div>
-    </div>
-
-    <?php if ($inbox->num_rows > 0): ?>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Research Title</th>
-              <th>Proponent</th>
-              <th>Category</th>
-              <th>Submitted</th>
-              <th>Proposal</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php
-            while ($row = $inbox->fetch_assoc()):
-                [$badge_class, $badge_label] = statusBadge($row['status'] ?? 'submitted');
-                $proponent = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) ?: '—';
-                $category  = $row['category_name'] ?? 'General';
-                $sub_date  = !empty($row['created_at']) ? date('M d, Y', strtotime($row['created_at'])) : '—';
-                $has_doc   = (int) ($row['has_proposal'] ?? 0) === 1;
-            ?>
-              <tr>
-                <td style="font-weight: 500; max-width: 300px;">
-                  <?php echo se($row['title']); ?>
-                </td>
-                <td><?php echo se($proponent); ?></td>
-                <td style="font-size: 13px; color: var(--text-secondary);"><?php echo se($category); ?></td>
-                <td><?php echo se($sub_date); ?></td>
-                <td>
-                  <?php if ($has_doc): ?>
-                    <span style="color: #16A34A; font-size: 13px; font-weight: 600;">✓ Attached</span>
-                  <?php else: ?>
-                    <span style="color: #EA580C; font-size: 13px;">⚠️ Missing</span>
-                  <?php endif; ?>
-                </td>
-                <td>
-                  <span class="badge-status <?php echo se($badge_class); ?>">
-                    <?php echo se($badge_label); ?>
-                  </span>
-                </td>
-                <td>
-                  <a class="btn btn-primary btn-sm"
-                     href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo (int) $row['project_id']; ?>">
-                    Review
-                  </a>
-                </td>
-              </tr>
-            <?php endwhile; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php else: ?>
-      <div class="empty-state">
-        <div class="empty-state-icon">🎉</div>
-        <p>No pending submissions in inbox.</p>
-      </div>
-    <?php endif; ?>
-  </div>
-</div>
-
-<?php renderStaffShellClose(); ?>
+<?php
+if ($role === 'admin') renderAdminShellClose();
+else renderStaffShellClose();
+?>

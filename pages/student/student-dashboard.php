@@ -2,312 +2,185 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 
-requireRole('student');
+requireLogin();
 $user = getCurrentUser();
-$user_id = (int) $user['user_id'];
-
-// Support both the base schema and installations with soft-delete columns.
-$column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
-$has_deleted_at = false;
-if ($column_stmt) {
-    $column_stmt->execute();
-    $has_deleted_at = $column_stmt->get_result()->num_rows > 0;
-    $column_stmt->close();
+if (!$user) {
+    header('Location: ' . SITE_URL . 'public/login.php');
+    exit;
 }
-$deleted_filter = $has_deleted_at ? ' AND deleted_at IS NULL' : '';
 
-$project_stmt = $conn->prepare("SELECT * FROM research_projects WHERE created_by = ?" . $deleted_filter . " ORDER BY updated_at DESC, created_at DESC");
-$project_stmt->bind_param('i', $user_id);
-$project_stmt->execute();
-$projects = $project_stmt->get_result();
+$role = (string) ($user['role'] ?? '');
+if (!in_array($role, ['faculty', 'student'], true)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
 
-$notification_stmt = $conn->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5");
-$notification_stmt->bind_param('i', $user_id);
-$notification_stmt->execute();
-$notifications = $notification_stmt->get_result();
+function personalDashboardEscape(?string $value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
 
-$unread_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_stmt->bind_param('i', $user_id);
-$unread_stmt->execute();
-$unread_count = (int) ($unread_stmt->get_result()->fetch_assoc()['count'] ?? 0);
+function personalDashboardTableExists(mysqli $connection, string $table): bool
+{
+    $allowedTables = [
+        'research_activities',
+        'publications',
+        'copyright_applications',
+        'notifications',
+    ];
 
-$project_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE created_by = ?" . $deleted_filter . " AND status <> 'draft'");
-$project_count_stmt->bind_param('i', $user_id);
-$project_count_stmt->execute();
-$stat_projects = (int) ($project_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
-
-$review_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE created_by = ?" . $deleted_filter . " AND status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')");
-$review_count_stmt->bind_param('i', $user_id);
-$review_count_stmt->execute();
-$stat_review = (int) ($review_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
-
-$approved_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE created_by = ?" . $deleted_filter . " AND status IN ('approved', 'ongoing', 'completed', 'archived')");
-$approved_count_stmt->bind_param('i', $user_id);
-$approved_count_stmt->execute();
-$stat_approved = (int) ($approved_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
-
-$revision_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE created_by = ?" . $deleted_filter . " AND status IN ('for_revision', 'revision_required')");
-$revision_count_stmt->bind_param('i', $user_id);
-$revision_count_stmt->execute();
-$stat_revision = (int) ($revision_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
-
-$active_project = null;
-$chapter_progress = [];
-if ($projects->num_rows > 0) {
-    $projects->data_seek(0);
-    $active_project = $projects->fetch_assoc();
-    $chapter_stmt = $conn->prepare("SELECT chapter_number, status FROM chapters WHERE project_id = ? ORDER BY chapter_number ASC");
-    if ($chapter_stmt) {
-        $chapter_stmt->bind_param('i', $active_project['project_id']);
-        $chapter_stmt->execute();
-        $chapter_result = $chapter_stmt->get_result();
-        while ($chapter = $chapter_result->fetch_assoc()) {
-            $chapter_progress[(int) $chapter['chapter_number']] = $chapter['status'];
-        }
-        $chapter_stmt->close();
+    if (!in_array($table, $allowedTables, true)) {
+        return false;
     }
+
+    $stmt = $connection->prepare("SHOW TABLES LIKE '{$table}'");
+    $stmt->execute();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+    return $exists;
 }
 
-$approved_chapters = count(array_filter($chapter_progress, static function ($status) {
-    return $status === 'approved';
-}));
-$active_status = $active_project['status'] ?? 'draft';
-$active_status_label = ucwords(str_replace('_', ' ', $active_status));
-$workflow_stage_map = [
-    'draft' => 0, 'submitted' => 1, 'under_review' => 1,
-    'under_crec_review' => 1, 'under_erec_review' => 2,
-    'for_revision' => 2, 'revision_required' => 2, 'approved' => 3,
-    'ongoing' => 4, 'completed' => 5, 'archived' => 5,
+function personalDashboardStatusBadge(string $status): array
+{
+    return match ($status) {
+        'scheduled', 'pending', 'submitted' => ['label' => ucfirst($status), 'tone' => 'warning'],
+        'under_review' => ['label' => 'Under review', 'tone' => 'review'],
+        'accepted' => ['label' => 'Accepted', 'tone' => 'info'],
+        'completed', 'published', 'registered' => ['label' => ucfirst($status), 'tone' => 'success'],
+        'cancelled', 'rejected', 'error' => ['label' => ucfirst($status), 'tone' => 'danger'],
+        'warning' => ['label' => 'Notice', 'tone' => 'warning'],
+        'success' => ['label' => 'Update', 'tone' => 'success'],
+        default => ['label' => ucwords(str_replace('_', ' ', $status)), 'tone' => 'neutral'],
+    };
+}
+
+$userId = (int) ($user['user_id'] ?? 0);
+$tables = [
+    'activities' => personalDashboardTableExists($conn, 'research_activities'),
+    'publications' => personalDashboardTableExists($conn, 'publications'),
+    'copyrights' => personalDashboardTableExists($conn, 'copyright_applications'),
+    'notifications' => personalDashboardTableExists($conn, 'notifications'),
 ];
-$current_workflow_stage = $workflow_stage_map[$active_status] ?? 0;
 
-// Use real report dates instead of dashboard-only placeholder deadlines.
-$upcoming_deadlines = [];
-$reports_stmt = $conn->prepare("SHOW TABLES LIKE 'research_reports'");
-if ($reports_stmt) {
-    $reports_stmt->execute();
-    $has_reports_table = $reports_stmt->get_result()->num_rows > 0;
-    $reports_stmt->close();
-    if ($has_reports_table) {
-        $join_deleted_filter = $has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
-        $deadline_stmt = $conn->prepare("
-            SELECT rr.report_type, rr.due_date, rp.title
-            FROM research_reports rr
-            INNER JOIN research_projects rp ON rp.project_id = rr.project_id
-            WHERE rp.created_by = ?
-              AND rr.due_date IS NOT NULL
-              AND rr.due_date >= CURDATE()
-              AND rr.status NOT IN ('approved', 'rejected')
-              {$join_deleted_filter}
-            ORDER BY rr.due_date ASC
-            LIMIT 3
-        ");
-        if ($deadline_stmt) {
-            $deadline_stmt->bind_param('i', $user_id);
-            $deadline_stmt->execute();
-            $upcoming_deadlines = $deadline_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-            $deadline_stmt->close();
-        }
+$publicationCounts = ['submitted' => 0, 'under_review' => 0, 'accepted' => 0, 'published' => 0];
+$recentPublications = [];
+if ($tables['publications']) {
+    $stmt = $conn->prepare('SELECT status, COUNT(*) AS total FROM publications WHERE researcher_id = ? GROUP BY status');
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $status = (string) $row['status'];
+        if (array_key_exists($status, $publicationCounts)) $publicationCounts[$status] = (int) $row['total'];
     }
+    $stmt->close();
+
+    $stmt = $conn->prepare('SELECT publication_id, research_title, publication_type, publication_date, status, updated_at FROM publications WHERE researcher_id = ? ORDER BY updated_at DESC, publication_id DESC LIMIT 5');
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) $recentPublications[] = $row;
+    $stmt->close();
 }
 
-renderStudentShell(
-    $user,
-    'student-dashboard',
-    'Welcome back, ' . $user['first_name'],
-    'Track your research progress and stay connected with your adviser.'
-);
+$copyrightCounts = ['pending' => 0, 'under_review' => 0, 'registered' => 0, 'rejected' => 0];
+$recentCopyrights = [];
+if ($tables['copyrights']) {
+    $stmt = $conn->prepare('SELECT status, COUNT(*) AS total FROM copyright_applications WHERE applicant_id = ? GROUP BY status');
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $status = (string) $row['status'];
+        if (array_key_exists($status, $copyrightCounts)) $copyrightCounts[$status] = (int) $row['total'];
+    }
+    $stmt->close();
+
+    $stmt = $conn->prepare('SELECT copyright_id, output_title, output_type, copyright_ref_no, status, updated_at FROM copyright_applications WHERE applicant_id = ? ORDER BY updated_at DESC, copyright_id DESC LIMIT 5');
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) $recentCopyrights[] = $row;
+    $stmt->close();
+}
+
+$upcomingActivities = [];
+if ($tables['activities']) {
+    $scheduled = 'scheduled';
+    $stmt = $conn->prepare('SELECT activity_id, activity_type, title, activity_date, activity_time, venue FROM research_activities WHERE status = ? AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5');
+    $stmt->bind_param('s', $scheduled);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) $upcomingActivities[] = $row;
+    $stmt->close();
+}
+
+$recentNotifications = [];
+if ($tables['notifications']) {
+    $stmt = $conn->prepare('SELECT notification_id, title, message, type, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC, notification_id DESC LIMIT 5');
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) $recentNotifications[] = $row;
+    $stmt->close();
+}
+
+$publicationTotal = array_sum($publicationCounts);
+$copyrightTotal = array_sum($copyrightCounts);
+$firstName = trim((string) ($user['first_name'] ?? '')) ?: ($role === 'faculty' ? 'Faculty' : 'Student');
+$lastName = trim((string) ($user['last_name'] ?? ''));
+$greeting = $role === 'faculty' ? 'Good day, Prof. ' . ($lastName ?: $firstName) : 'Welcome back, ' . $firstName;
+$roleLabel = $role === 'faculty' ? 'Faculty Researcher' : 'Student Researcher';
+$currentPage = $role === 'faculty' ? 'faculty-dashboard.php' : 'student-dashboard.php';
+$pageSubtitle = 'Your publications, copyright applications, activities, and notifications';
+if ($role === 'faculty') renderFacultyShell($user, $currentPage, $greeting, $pageSubtitle);
+else renderStudentShell($user, $currentPage, $greeting, $pageSubtitle);
 ?>
 
 <style>
-  .student-page-content{background-color:#EEEAF8;background-image:radial-gradient(circle at 88% 4%,rgba(91,30,188,.12),transparent 27%),radial-gradient(circle at 8% 42%,rgba(37,99,235,.07),transparent 25%),linear-gradient(180deg,#F4F1FA 0%,#ECE8F5 100%)}
-  .student-topbar{background:#FBFAFE;border-bottom-color:#DDD6EA}
-  .student-dashboard-page{--accent:#5B1EBC;--accent-dark:#481796;--accent-soft:#F1EAFB;--review:#2563EB;--review-soft:#EAF1FF;--success:#15805B;--success-soft:#E8F7F0;--attention:#C45D12;--attention-soft:#FFF1E5;--ink:#151728;--copy:#5E6578;--muted:#8B92A5;--line:#E6E7EE;max-width:1440px;margin:0 auto;color:var(--ink)}
-  .student-dashboard-page *{box-sizing:border-box}
-  .dashboard-brief{position:relative;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:48px;overflow:hidden;margin-bottom:24px;padding:40px;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:radial-gradient(circle at 88% 10%,rgba(216,195,255,.24),transparent 31%),radial-gradient(circle at 7% 100%,rgba(73,123,238,.20),transparent 28%),linear-gradient(135deg,#2B1257 0%,#4B188F 52%,#6B2CC4 100%);color:#F9F7FF;box-shadow:0 22px 54px rgba(55,25,104,.24)}
-  .dashboard-brief::after{content:'';position:absolute;right:-86px;bottom:-98px;width:250px;height:250px;border:42px solid rgba(255,255,255,.06);border-radius:50%;pointer-events:none}
-  .brief-copy,.brief-focus{position:relative;z-index:1}.brief-eyebrow{margin:0 0 12px;color:#DCCBFF;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
-  .brief-copy h1,.brief-focus h2{color:#FFF}
-  .dashboard-brief .dashboard-button.primary{background:#FFF;color:#4B188F;box-shadow:0 10px 22px rgba(24,8,54,.22)}.dashboard-brief .dashboard-button.primary:hover{background:#F1EAFB;color:#351064}
-  .dashboard-brief .dashboard-button.secondary{border-color:rgba(255,255,255,.36);background:rgba(255,255,255,.09);color:#FFF}.dashboard-brief .dashboard-button.secondary:hover{border-color:rgba(255,255,255,.65);background:rgba(255,255,255,.15);color:#FFF}
-  .brief-copy h1{max-width:650px;margin:0;font-size:clamp(30px,3vw,46px);font-weight:700;letter-spacing:-.045em;line-height:1.08;text-wrap:balance}
-  .brief-copy>p:not(.brief-eyebrow){max-width:58ch;margin:16px 0 24px;color:#E6DFF2;font-size:15px;line-height:1.7}.dashboard-actions{display:flex;flex-wrap:wrap;gap:10px}
-  .dashboard-button,.dashboard-text-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;border-radius:10px;font-size:13px;font-weight:650;line-height:1;text-decoration:none;white-space:nowrap;transition:transform .2s ease,background-color .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}
-  .dashboard-button{padding:0 18px;border:1px solid transparent}.dashboard-button.primary{background:var(--accent);color:#fff;box-shadow:0 8px 18px rgba(91,30,188,.18)}.dashboard-button.primary:hover{background:var(--accent-dark);transform:translateY(-1px)}
-  .dashboard-button.secondary{border-color:var(--line);background:rgba(255,255,255,.78);color:var(--ink)}.dashboard-button.secondary:hover{border-color:rgba(91,30,188,.28);color:var(--accent)}
-  .dashboard-button:active,.dashboard-text-link:active{transform:scale(.98)}.dashboard-button:focus-visible,.dashboard-text-link:focus-visible,.project-title-link:focus-visible,.table-action:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-  .brief-focus{align-self:stretch;padding:4px 0 4px 32px;border-left:1px solid rgba(255,255,255,.25)}.brief-focus-label{margin-bottom:13px;color:#E0D5F2;font-size:12px;font-weight:600}
-  .brief-focus h2{margin:0 0 16px;font-size:clamp(18px,2vw,24px);font-weight:650;letter-spacing:-.025em;line-height:1.3;text-wrap:pretty}.brief-focus-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:19px}
-  .status-badge{display:inline-flex;align-items:center;min-height:27px;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dark);font-size:11px;font-weight:700;line-height:1.2}.status-badge.status-draft,.status-badge.status-archived{background:#EDF0F5;color:#526071}.status-badge.status-submitted,.status-badge.status-under-review,.status-badge.status-under-crec-review{background:#E8F0FE;color:#1D4ED8}.status-badge.status-under-erec-review{background:#F1EAFB;color:#5B1EBC}.status-badge.status-for-revision,.status-badge.status-revision-required{background:#FFF2E2;color:#B45309}.status-badge.status-approved,.status-badge.status-ongoing,.status-badge.status-completed{background:#E8F7ED;color:#137A3E}.brief-chapter-count{color:var(--copy);font-size:12px;font-variant-numeric:tabular-nums}
-  .brief-focus .status-badge{background:rgba(255,255,255,.16);color:#FFF;box-shadow:inset 0 0 0 1px rgba(255,255,255,.17)}.brief-focus .brief-chapter-count{color:#D9CFEA}.brief-focus .dashboard-text-link{color:#FFF}
-  .dashboard-text-link{justify-content:flex-start;min-height:32px;color:var(--accent)}.dashboard-text-link:hover{color:var(--accent-dark);transform:translateX(2px)}.brief-focus .dashboard-text-link:hover{color:#E7D9FF}
-  .metrics-strip{display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:24px;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 8px 26px rgba(32,34,65,.045)}
-  .metric{position:relative;display:grid;grid-template-columns:38px 1fr;gap:12px;align-items:center;min-width:0;padding:21px 24px}.metric::before{content:'';position:absolute;inset:0 0 auto;height:3px;background:var(--metric-color,var(--accent))}.metric+.metric{border-left:1px solid var(--line)}
-  .metric-projects{--metric-color:var(--accent);--metric-soft:#E9DCF9;background:#F7F2FD}.metric-review{--metric-color:var(--review);--metric-soft:#DCE9FF;background:#F1F6FF}.metric-approved{--metric-color:var(--success);--metric-soft:#D9F1E5;background:#EFFAF5}.metric-revision{--metric-color:var(--attention);--metric-soft:#FFE3CB;background:#FFF6ED}
-  .metric-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:var(--metric-soft,var(--accent-soft));color:var(--metric-color,var(--accent));font-size:17px}.metric-value{color:var(--metric-color,var(--ink));font-size:25px;font-weight:700;letter-spacing:-.035em;line-height:1;font-variant-numeric:tabular-nums}
-  .metric-label{margin-top:5px;overflow:hidden;color:var(--copy);font-size:12px;font-weight:550;text-overflow:ellipsis;white-space:nowrap}
-  .dashboard-workspace,.dashboard-secondary-grid{display:grid;gap:24px;margin-bottom:24px}.dashboard-workspace{grid-template-columns:minmax(0,1.55fr) minmax(280px,.65fr)}.dashboard-secondary-grid{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}
-  .dashboard-section{min-width:0;padding:28px;border:1px solid rgba(91,30,188,.12);border-radius:16px;background:#FCFAFF;box-shadow:0 12px 32px rgba(53,31,91,.07)}.dashboard-workspace>.dashboard-section:first-child{border-top:3px solid var(--accent);background:#FCFAFF}.dashboard-secondary-grid>.dashboard-section:first-child{border-top:3px solid var(--review);background:#F5F8FF}.dashboard-secondary-grid>.dashboard-section:last-child{border-top:3px solid var(--attention);background:#FFF8F1}.projects-section{border-top:3px solid var(--success);background:#F7FCF9}
-  .section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:22px}.section-heading h2{margin:0;font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1.25}.section-heading p{margin:6px 0 0;color:var(--copy);font-size:13px;line-height:1.5}.section-count{flex:none;color:var(--accent);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
-  .chapter-list{display:grid;gap:8px}.chapter-item{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 14px;border-radius:12px;background:#F8F9FC;transition:background-color .2s ease,transform .2s ease}.chapter-item:hover{background:#F3F0F9;transform:translateX(2px)}
-  .chapter-number{display:grid;place-items:center;width:38px;height:38px;border:1px solid #DDE0E9;border-radius:10px;background:#fff;color:var(--copy);font-size:13px;font-weight:700}.chapter-number.completed{border-color:#B7E4C7;background:#EAF8EF;color:#137A3E}.chapter-number.review{border-color:#BFD5FC;background:#EBF2FE;color:#1D4ED8}.chapter-number.revision{border-color:#F6D3A8;background:#FFF4E6;color:#B45309}
-  .chapter-title{margin-bottom:2px;font-size:13px;font-weight:650}.chapter-desc{overflow:hidden;color:var(--copy);font-size:12px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.chapter-status{padding:5px 9px;border-radius:999px;background:#EDF0F5;color:#5E6578;font-size:10px;font-weight:700;white-space:nowrap}.chapter-status.approved{background:#E8F7ED;color:#137A3E}.chapter-status.review{background:#E8F0FE;color:#1D4ED8}.chapter-status.revision{background:#FFF2E2;color:#B45309}
-  .workflow-panel{background:radial-gradient(circle at 100% 0%,rgba(91,30,188,.18),transparent 42%),linear-gradient(160deg,#F5EEFF,#E9DDF8);border-color:rgba(91,30,188,.22)}.workflow-list{position:relative;display:grid;gap:2px;margin:0;padding:0;list-style:none}.workflow-list::before{content:'';position:absolute;top:17px;bottom:17px;left:13px;width:1px;background:#CFC0E1}
-  .workflow-step{position:relative;display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start;padding:8px 0}.workflow-mark{position:relative;z-index:1;display:grid;place-items:center;width:27px;height:27px;border:1px solid #D9DCE5;border-radius:50%;background:#FBFAFE;color:#9499A8;font-size:10px;font-weight:700}.workflow-step.completed .workflow-mark{border-color:var(--accent);background:var(--accent);color:#fff}.workflow-step.active .workflow-mark{border:7px solid var(--accent);background:#fff;box-shadow:0 0 0 4px rgba(91,30,188,.10)}
-  .workflow-name{margin:1px 0 2px;font-size:13px;font-weight:650}.workflow-state{color:var(--muted);font-size:11px}.workflow-step.active .workflow-state{color:var(--accent);font-weight:650}
-  .activity-feed,.deadline-list{margin:0;padding:0;list-style:none}.activity-item,.deadline-item{display:grid;gap:12px;padding:14px 0;border-bottom:1px solid #ECEEF3}.activity-item{grid-template-columns:36px minmax(0,1fr)}.activity-item:first-child,.deadline-item:first-child{padding-top:0}.activity-item:last-child,.deadline-item:last-child{padding-bottom:0;border-bottom:0}
-  .activity-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--review-soft);color:var(--review);font-size:13px;font-weight:700}.activity-icon.success{background:var(--success-soft);color:var(--success)}.activity-icon.warning{background:var(--attention-soft);color:var(--attention)}.activity-icon.error{background:#FDECEC;color:#B42318}
-  .activity-message,.deadline-name{margin:0 0 4px;font-size:13px;font-weight:550;line-height:1.45}.activity-date,.deadline-meta{color:var(--muted);font-size:11px;line-height:1.4}.deadline-item{grid-template-columns:52px minmax(0,1fr);align-items:center}.deadline-date{display:grid;place-items:center;min-height:48px;padding:6px;border-radius:10px;background:var(--attention-soft);color:var(--attention);text-align:center}.deadline-date strong{display:block;font-size:18px;line-height:1}.deadline-date span{margin-top:4px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-  .empty-compact{display:grid;place-items:center;min-height:170px;padding:24px;border-radius:12px;background:rgba(255,255,255,.55);color:var(--copy);text-align:center}.empty-compact-icon{margin-bottom:9px;font-size:26px}.empty-compact p{margin:0;font-size:13px}
-  .projects-section{margin-bottom:8px}.projects-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}.projects-table{width:100%;min-width:720px;border-collapse:collapse}.projects-table th{padding:12px 16px;background:#F8F9FC;color:var(--copy);font-size:11px;font-weight:700;letter-spacing:.04em;text-align:left;text-transform:uppercase}.projects-table td{padding:16px;border-top:1px solid var(--line);color:var(--copy);font-size:13px;vertical-align:middle}.projects-table tbody tr{transition:background-color .2s ease}.projects-table tbody tr:hover{background:#FBFAFE}
-  .project-title-link{display:inline-block;max-width:540px;color:var(--ink);font-weight:650;line-height:1.4;text-decoration:none}.project-title-link:hover{color:var(--accent)}.table-action{color:var(--accent);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}.table-action:hover{color:var(--accent-dark);text-decoration:underline;text-underline-offset:3px}
-  .project-empty{padding:46px 24px;border:1px dashed rgba(91,30,188,.25);border-radius:12px;background:#FBFAFE;text-align:center}.project-empty-icon{margin-bottom:12px;font-size:32px}.project-empty h3{margin:0 0 7px;font-size:16px}.project-empty p{margin:0 auto 18px;color:var(--copy);font-size:13px}
-  @media(prefers-reduced-motion:no-preference){.dashboard-brief,.metrics-strip,.dashboard-workspace,.dashboard-secondary-grid,.projects-section{animation:dashboardEnter .48s cubic-bezier(.16,1,.3,1) both}.metrics-strip{animation-delay:.06s}.dashboard-workspace{animation-delay:.12s}.dashboard-secondary-grid{animation-delay:.18s}.projects-section{animation-delay:.24s}}
-  @keyframes dashboardEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-  @media(max-width:1180px){.dashboard-brief{grid-template-columns:minmax(0,1fr) minmax(280px,.7fr);gap:32px}.metrics-strip{grid-template-columns:repeat(2,1fr)}.metric:nth-child(3){border-left:0;border-top:1px solid var(--line)}.metric:nth-child(4){border-top:1px solid var(--line)}}
-  @media(max-width:980px){.dashboard-brief,.dashboard-workspace,.dashboard-secondary-grid{grid-template-columns:1fr}.brief-focus{padding:24px 0 0;border-top:1px solid rgba(255,255,255,.25);border-left:0}}
-  @media(max-width:640px){.dashboard-brief{padding:28px 22px}.brief-copy h1{font-size:30px}.dashboard-actions{display:grid}.dashboard-button{width:100%}.metrics-strip{grid-template-columns:1fr}.metric+.metric,.metric:nth-child(3){border-top:1px solid var(--line);border-left:0}.dashboard-section{padding:22px 18px}.section-heading{align-items:flex-start}.chapter-item{grid-template-columns:38px minmax(0,1fr)}.chapter-status{grid-column:2;justify-self:start}.chapter-desc{white-space:normal}.projects-section .section-heading{flex-direction:column}}
-  @media(prefers-reduced-motion:reduce){.student-dashboard-page *{animation:none!important;transition:none!important}}
+.module-hub{--accent:#5b1ebc;--accent-dark:#481796;--accent-soft:#f1eafb;--ink:#172033;--copy:#64748b;--line:#e2e8f0;max-width:1380px;margin:0 auto;color:var(--ink)}.module-hub.role-faculty{--accent:#0f766e;--accent-dark:#115e59;--accent-soft:#e7f5f3}.module-greeting{display:flex;justify-content:space-between;gap:26px;align-items:end;margin:0 0 22px;padding:30px;border-left:5px solid var(--accent);border-radius:4px 18px 18px 4px;background:var(--accent-soft)}.module-kicker{margin:0 0 7px;color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.module-greeting h1{margin:0;font-size:clamp(27px,3vw,40px);line-height:1.08;letter-spacing:-.04em;text-wrap:balance}.module-greeting p{max-width:650px;margin:10px 0 0;color:#526176;line-height:1.6}.greeting-meta{text-align:right}.greeting-meta strong{display:block;font-size:13px}.greeting-meta span{display:block;margin-top:5px;color:var(--copy);font-size:11px}.quick-links{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px}.quick-link{display:inline-flex;align-items:center;justify-content:center;min-height:42px;border:1px solid #cbd5e1;border-radius:9px;padding:0 15px;background:#fff;color:#334155;font-size:12px;font-weight:800;text-decoration:none;transition:transform .18s ease,border-color .18s ease,color .18s ease,background .18s ease}.quick-link.primary{border-color:var(--accent);background:var(--accent);color:#fff}.quick-link:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}.quick-link.primary:hover{background:var(--accent-dark);color:#fff}.quick-link:active{transform:scale(.98)}.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}.hub-panel{min-width:0;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 12px 30px rgba(30,50,70,.05)}.panel-head{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px 20px;border-bottom:1px solid #e8edf3}.panel-head h2{margin:0;font-size:17px;letter-spacing:-.015em}.panel-head p{margin:5px 0 0;color:var(--copy);font-size:12px;line-height:1.45}.panel-link{color:var(--accent);font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap}.count-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid #edf1f5;background:#fbfcfe}.count-item{padding:13px 12px;text-align:center}.count-item+.count-item{border-left:1px solid #edf1f5}.count-item strong{display:block;font-size:20px;font-variant-numeric:tabular-nums}.count-item span{display:block;margin-top:5px;color:var(--copy);font-size:9px;font-weight:800;line-height:1.25;text-transform:uppercase}.record-list{margin:0;padding:0;list-style:none}.record-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:15px 20px;border-bottom:1px solid #edf1f5}.record-item:last-child{border-bottom:0}.record-title{display:block;overflow:hidden;color:var(--ink);font-size:13px;font-weight:750;line-height:1.4;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}.record-title:hover{color:var(--accent)}.record-meta{display:block;margin-top:5px;color:var(--copy);font-size:10px;line-height:1.4}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:10px;font-weight:800;white-space:nowrap}.tone-warning{background:#fef3c7;color:#92400e}.tone-review{background:#ede9fe;color:#5b21b6}.tone-info{background:#cffafe;color:#155e75}.tone-success{background:#dcfce7;color:#166534}.tone-danger{background:#fee2e2;color:#991b1b}.tone-neutral{background:#e2e8f0;color:#475569}.activity-list,.notification-list{margin:0;padding:0;list-style:none}.activity-item,.notification-item{display:grid;gap:13px;padding:15px 20px;border-bottom:1px solid #edf1f5}.activity-item{grid-template-columns:56px minmax(0,1fr)}.notification-item{grid-template-columns:10px minmax(0,1fr)}.activity-item:last-child,.notification-item:last-child{border-bottom:0}.activity-date{display:grid;place-items:center;align-content:center;min-height:52px;border-radius:10px;background:var(--accent-soft);color:var(--accent);text-align:center}.activity-date strong{font-size:18px;line-height:1}.activity-date span{margin-top:3px;font-size:9px;font-weight:800;text-transform:uppercase}.activity-title,.notification-title{margin:0;color:var(--ink);font-size:13px;font-weight:750;line-height:1.4}.activity-title a{color:inherit;text-decoration:none}.activity-title a:hover{color:var(--accent)}.activity-meta,.notification-message,.notification-date{margin:4px 0 0;color:var(--copy);font-size:11px;line-height:1.45}.notification-dot{width:8px;height:8px;margin-top:5px;border-radius:50%;background:#94a3b8}.notification-dot.info{background:#2563eb}.notification-dot.success{background:#15803d}.notification-dot.warning{background:#d97706}.notification-dot.error{background:#b42318}.empty-state{padding:42px 22px;text-align:center}.empty-state strong{display:block;font-size:15px}.empty-state p{max-width:430px;margin:7px auto 0;color:var(--copy);font-size:12px;line-height:1.5}.quick-link:focus-visible,.panel-link:focus-visible,.record-title:focus-visible,.activity-title a:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 20%,transparent);outline-offset:3px}@media(max-width:900px){.dashboard-grid{grid-template-columns:1fr}}@media(max-width:640px){.module-greeting{display:block;padding:24px 21px}.greeting-meta{margin-top:18px;text-align:left}.quick-links{display:grid}.quick-link{width:100%;box-sizing:border-box}.count-strip{grid-template-columns:repeat(2,1fr)}.count-item:nth-child(3){border-left:0;border-top:1px solid #edf1f5}.count-item:nth-child(4){border-top:1px solid #edf1f5}.record-item{align-items:start}.record-title{white-space:normal}}
 </style>
 
-<div class="student-dashboard-page">
-  <section class="dashboard-brief" aria-labelledby="dashboard-focus-title">
-    <div class="brief-copy">
-      <p class="brief-eyebrow">Student research workspace</p>
-      <h1 id="dashboard-focus-title">Keep your research moving.</h1>
-      <p>Review your current stage, prepare the next chapter, and respond to adviser feedback from one clear workspace.</p>
-      <div class="dashboard-actions">
-        <?php if ($active_project): ?>
-          <a class="dashboard-button primary" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $active_project['project_id']; ?>">Continue research</a>
-          <a class="dashboard-button secondary" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php">Submit a chapter</a>
-        <?php else: ?>
-          <a class="dashboard-button primary" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">Start a proposal</a>
-          <a class="dashboard-button secondary" href="<?php echo SITE_URL; ?>public/research-archive.php">Browse the archive</a>
-        <?php endif; ?>
-      </div>
-    </div>
-    <div class="brief-focus">
-      <div class="brief-focus-label"><?php echo $active_project ? 'Active research' : 'Your next step'; ?></div>
-      <?php if ($active_project): ?>
-        <h2><?php echo htmlspecialchars($active_project['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
-        <?php $active_status_class = 'status-' . str_replace('_', '-', strtolower($active_status)); ?>
-        <div class="brief-focus-meta"><span class="status-badge <?php echo htmlspecialchars($active_status_class, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($active_status_label, ENT_QUOTES, 'UTF-8'); ?></span><span class="brief-chapter-count"><?php echo $approved_chapters; ?> of 5 chapters approved</span></div>
-        <a class="dashboard-text-link" href="<?php echo SITE_URL; ?>pages/student/progress-tracking.php">Open progress tracking <span aria-hidden="true">→</span></a>
-      <?php else: ?>
-        <h2>Create your first research proposal and send it for review.</h2>
-        <a class="dashboard-text-link" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">Begin proposal <span aria-hidden="true">→</span></a>
-      <?php endif; ?>
-    </div>
-  </section>
+<div class="module-hub role-<?= $role === 'faculty' ? 'faculty' : 'student' ?>">
+  <header class="module-greeting"><div><p class="module-kicker">Personal research summary</p><h1><?= personalDashboardEscape($greeting) ?></h1><p>Review your submitted outputs and keep track of upcoming institution-wide research activities.</p></div><div class="greeting-meta"><strong><?= personalDashboardEscape($roleLabel) ?></strong><span><?= personalDashboardEscape(date('l, F j, Y')) ?></span></div></header>
 
-  <section class="metrics-strip" aria-label="Research summary">
-    <div class="metric metric-projects"><span class="metric-icon" aria-hidden="true">📁</span><div><div class="metric-value"><?php echo $stat_projects; ?></div><div class="metric-label">Submitted projects</div></div></div>
-    <div class="metric metric-review"><span class="metric-icon" aria-hidden="true">🔎</span><div><div class="metric-value"><?php echo $stat_review; ?></div><div class="metric-label">Under review</div></div></div>
-    <div class="metric metric-approved"><span class="metric-icon" aria-hidden="true">✓</span><div><div class="metric-value"><?php echo $stat_approved; ?></div><div class="metric-label">Approved projects</div></div></div>
-    <div class="metric metric-revision"><span class="metric-icon" aria-hidden="true">✎</span><div><div class="metric-value"><?php echo $stat_revision; ?></div><div class="metric-label">Need revision</div></div></div>
-  </section>
+  <nav class="quick-links" aria-label="Research module shortcuts">
+    <a class="quick-link primary" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">Research Activities</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Publications</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Copyrights</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">Repository</a>
+  </nav>
 
-  <div class="dashboard-workspace">
-    <section class="dashboard-section" aria-labelledby="chapter-progress-title">
-      <div class="section-heading"><div><h2 id="chapter-progress-title">Chapter progress</h2><p><?php echo $active_project ? 'Status for your most recently updated project.' : 'Chapter status will appear after you create a project.'; ?></p></div><span class="section-count"><?php echo $approved_chapters; ?>/5 approved</span></div>
-      <div class="chapter-list">
-        <?php
-        $chapter_titles = [
-            1 => ['Chapter 1', 'The Problem and Its Background'],
-            2 => ['Chapter 2', 'Review of Related Literature'],
-            3 => ['Chapter 3', 'Methodology'],
-            4 => ['Chapter 4', 'Results and Discussion'],
-            5 => ['Chapter 5', 'Summary, Conclusions, and Recommendations'],
-        ];
-        foreach ($chapter_titles as $number => $chapter):
-            $chapter_status = $chapter_progress[$number] ?? 'draft';
-            $chapter_class = '';
-            if ($chapter_status === 'approved') $chapter_class = 'completed';
-            elseif ($chapter_status === 'under_review') $chapter_class = 'review';
-            elseif ($chapter_status === 'revision_required') $chapter_class = 'revision';
-            $badge_class = $chapter_class === 'completed' ? 'approved' : $chapter_class;
-        ?>
-          <div class="chapter-item"><span class="chapter-number <?php echo $chapter_class; ?>"><?php echo $number; ?></span><div><div class="chapter-title"><?php echo htmlspecialchars($chapter[0], ENT_QUOTES, 'UTF-8'); ?></div><div class="chapter-desc"><?php echo htmlspecialchars($chapter[1], ENT_QUOTES, 'UTF-8'); ?></div></div><span class="chapter-status <?php echo $badge_class; ?>"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $chapter_status)), ENT_QUOTES, 'UTF-8'); ?></span></div>
-        <?php endforeach; ?>
-      </div>
+  <div class="dashboard-grid">
+    <section class="hub-panel" aria-labelledby="my-publications-heading"><div class="panel-head"><div><h2 id="my-publications-heading">My Publications</h2><p><?= $publicationTotal ?> <?= $publicationTotal === 1 ? 'record' : 'records' ?> linked to your account.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Open module</a></div>
+      <div class="count-strip"><?php foreach ($publicationCounts as $status => $count): $badge = personalDashboardStatusBadge($status); ?><div class="count-item"><strong><?= (int) $count ?></strong><span><?= personalDashboardEscape($badge['label']) ?></span></div><?php endforeach; ?></div>
+      <?php if (!$tables['publications'] || !$recentPublications): ?><div class="empty-state"><strong><?= $tables['publications'] ? 'No publications yet' : 'Publications unavailable' ?></strong><p><?= $tables['publications'] ? 'Your five most recent publication submissions will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+      <?php else: ?><ul class="record-list"><?php foreach ($recentPublications as $publication): $badge = personalDashboardStatusBadge((string) $publication['status']); ?><li class="record-item"><div><a class="record-title" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $publication['publication_id']) ?>"><?= personalDashboardEscape($publication['research_title']) ?></a><span class="record-meta"><?= personalDashboardEscape(ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?><?= $publication['publication_date'] ? ' &middot; ' . personalDashboardEscape(date('M j, Y', strtotime((string) $publication['publication_date']))) : '' ?></span></div><span class="badge tone-<?= personalDashboardEscape($badge['tone']) ?>"><?= personalDashboardEscape($badge['label']) ?></span></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
 
-    <aside class="dashboard-section workflow-panel" aria-labelledby="workflow-title">
-      <div class="section-heading"><div><h2 id="workflow-title">Research workflow</h2><p><?php echo $active_project ? 'Your current institutional review stage.' : 'Start with a proposal submission.'; ?></p></div></div>
-      <?php $workflow_steps = ['Proposal', 'CREC evaluation', 'EREC forum', 'Approval', 'Implementation']; ?>
-      <ol class="workflow-list">
-        <?php foreach ($workflow_steps as $index => $step): ?>
-          <?php
-          $workflow_class = $index < $current_workflow_stage ? 'completed' : ($index === $current_workflow_stage ? 'active' : '');
-          if ($current_workflow_stage >= count($workflow_steps)) $workflow_class = 'completed';
-          $workflow_label = $workflow_class === 'completed' ? 'Completed' : ($workflow_class === 'active' ? 'Current stage' : 'Upcoming');
-          ?>
-          <li class="workflow-step <?php echo $workflow_class; ?>"><span class="workflow-mark" aria-hidden="true"><?php echo $workflow_class === 'completed' ? '✓' : $index + 1; ?></span><div><div class="workflow-name"><?php echo htmlspecialchars($step, ENT_QUOTES, 'UTF-8'); ?></div><div class="workflow-state"><?php echo $workflow_label; ?></div></div></li>
-        <?php endforeach; ?>
-      </ol>
-    </aside>
-  </div>
-
-  <div class="dashboard-secondary-grid">
-    <section class="dashboard-section" aria-labelledby="activity-title">
-      <div class="section-heading"><div><h2 id="activity-title">Recent activity</h2><p>Your latest research and account updates.</p></div><a class="dashboard-text-link" href="<?php echo SITE_URL; ?>pages/shared/notifications.php">View all <span aria-hidden="true">→</span></a></div>
-      <?php if ($notifications->num_rows > 0): ?>
-        <ul class="activity-feed">
-          <?php
-          $notification_icons = ['success' => '✓', 'warning' => '!', 'error' => '×', 'info' => 'i'];
-          while ($notification = $notifications->fetch_assoc()):
-              $type = in_array($notification['type'], ['success', 'warning', 'error', 'info'], true) ? $notification['type'] : 'info';
-          ?>
-            <li class="activity-item"><span class="activity-icon <?php echo $type; ?>" aria-hidden="true"><?php echo $notification_icons[$type]; ?></span><div><p class="activity-message"><?php echo htmlspecialchars($notification['message'], ENT_QUOTES, 'UTF-8'); ?></p><div class="activity-date"><?php echo date('M d, Y', strtotime($notification['created_at'])); ?></div></div></li>
-          <?php endwhile; ?>
-        </ul>
-      <?php else: ?>
-        <div class="empty-compact"><div><div class="empty-compact-icon" aria-hidden="true">🔔</div><p>No recent activity yet.</p></div></div>
-      <?php endif; ?>
-    </section>
-
-    <section class="dashboard-section" aria-labelledby="deadlines-title">
-      <div class="section-heading"><div><h2 id="deadlines-title">Upcoming deadlines</h2><p>Report dates connected to your projects.</p></div><a class="dashboard-text-link" href="<?php echo SITE_URL; ?>pages/shared/calendar.php">Calendar <span aria-hidden="true">→</span></a></div>
-      <?php if ($upcoming_deadlines): ?>
-        <ul class="deadline-list">
-          <?php foreach ($upcoming_deadlines as $deadline): ?>
-            <?php
-            $date = new DateTimeImmutable($deadline['due_date']);
-            $days = (int) (new DateTimeImmutable('today'))->diff($date)->format('%a');
-            $due = $days === 0 ? 'Due today' : ($days === 1 ? 'Due tomorrow' : 'Due in ' . $days . ' days');
-            ?>
-            <li class="deadline-item"><div class="deadline-date" aria-hidden="true"><strong><?php echo $date->format('d'); ?></strong><span><?php echo $date->format('M'); ?></span></div><div><p class="deadline-name"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $deadline['report_type'])), ENT_QUOTES, 'UTF-8'); ?></p><div class="deadline-meta"><?php echo htmlspecialchars($due, ENT_QUOTES, 'UTF-8'); ?> for <?php echo htmlspecialchars($deadline['title'], ENT_QUOTES, 'UTF-8'); ?></div></div></li>
-          <?php endforeach; ?>
-        </ul>
-      <?php else: ?>
-        <div class="empty-compact"><div><div class="empty-compact-icon" aria-hidden="true">📅</div><p>No upcoming report deadlines.</p></div></div>
-      <?php endif; ?>
+    <section class="hub-panel" aria-labelledby="my-copyrights-heading"><div class="panel-head"><div><h2 id="my-copyrights-heading">My Copyright Applications</h2><p><?= $copyrightTotal ?> <?= $copyrightTotal === 1 ? 'record' : 'records' ?> linked to your account.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Open module</a></div>
+      <div class="count-strip"><?php foreach ($copyrightCounts as $status => $count): $badge = personalDashboardStatusBadge($status); ?><div class="count-item"><strong><?= (int) $count ?></strong><span><?= personalDashboardEscape($badge['label']) ?></span></div><?php endforeach; ?></div>
+      <?php if (!$tables['copyrights'] || !$recentCopyrights): ?><div class="empty-state"><strong><?= $tables['copyrights'] ? 'No copyright applications yet' : 'Copyrights unavailable' ?></strong><p><?= $tables['copyrights'] ? 'Your five most recent copyright applications will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+      <?php else: ?><ul class="record-list"><?php foreach ($recentCopyrights as $application): $badge = personalDashboardStatusBadge((string) $application['status']); ?><li class="record-item"><div><a class="record-title" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $application['copyright_id']) ?>"><?= personalDashboardEscape($application['output_title']) ?></a><span class="record-meta"><?= personalDashboardEscape(ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?><?= $application['copyright_ref_no'] ? ' &middot; ' . personalDashboardEscape($application['copyright_ref_no']) : '' ?></span></div><span class="badge tone-<?= personalDashboardEscape($badge['tone']) ?>"><?= personalDashboardEscape($badge['label']) ?></span></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
   </div>
 
-  <section class="dashboard-section projects-section" aria-labelledby="projects-title">
-    <div class="section-heading"><div><h2 id="projects-title">My research projects</h2><p>Open a project to review its files, feedback, and current status.</p></div><a class="dashboard-button primary" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">New research</a></div>
-    <?php if ($projects->num_rows > 0): ?>
-      <div class="projects-table-wrap">
-        <table class="projects-table">
-          <thead><tr><th>Research title</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>
-            <?php
-            $projects->data_seek(0);
-            while ($project = $projects->fetch_assoc()):
-                $project_url = SITE_URL . 'pages/student/research-detail.php?id=' . (int) $project['project_id'];
-                $project_status_class = 'status-' . str_replace('_', '-', strtolower($project['status']));
-            ?>
-              <tr><td><a class="project-title-link" href="<?php echo htmlspecialchars($project_url, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8'); ?></a></td><td><?php echo date('M d, Y', strtotime($project['created_at'])); ?></td><td><span class="status-badge <?php echo htmlspecialchars($project_status_class, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $project['status'])), ENT_QUOTES, 'UTF-8'); ?></span></td><td><a class="table-action" href="<?php echo htmlspecialchars($project_url, ENT_QUOTES, 'UTF-8'); ?>">View project</a></td></tr>
-            <?php endwhile; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php else: ?>
-      <div class="project-empty"><div class="project-empty-icon" aria-hidden="true">📁</div><h3>No research projects yet</h3><p>Create your first proposal to begin the review process.</p><a class="dashboard-button primary" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">Start a proposal</a></div>
-    <?php endif; ?>
-  </section>
+  <div class="dashboard-grid">
+    <section class="hub-panel" aria-labelledby="upcoming-activities-heading"><div class="panel-head"><div><h2 id="upcoming-activities-heading">Upcoming Activities</h2><p>The next five scheduled institution-wide activities.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">View all</a></div>
+      <?php if (!$tables['activities'] || !$upcomingActivities): ?><div class="empty-state"><strong><?= $tables['activities'] ? 'No upcoming activities' : 'Activities unavailable' ?></strong><p><?= $tables['activities'] ? 'Newly scheduled seminars, presentations, workshops, and forums will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+      <?php else: ?><ul class="activity-list"><?php foreach ($upcomingActivities as $activity): $activityDate = new DateTimeImmutable((string) $activity['activity_date']); ?><li class="activity-item"><div class="activity-date" aria-hidden="true"><strong><?= personalDashboardEscape($activityDate->format('d')) ?></strong><span><?= personalDashboardEscape($activityDate->format('M')) ?></span></div><div><p class="activity-title"><a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id']) ?>"><?= personalDashboardEscape($activity['title']) ?></a></p><p class="activity-meta"><?= personalDashboardEscape(ucfirst((string) $activity['activity_type'])) ?><?= $activity['activity_time'] ? ' &middot; ' . personalDashboardEscape(date('g:i a', strtotime((string) $activity['activity_time']))) : '' ?><?= $activity['venue'] ? ' &middot; ' . personalDashboardEscape($activity['venue']) : '' ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
+    </section>
+
+    <section class="hub-panel" aria-labelledby="recent-notifications-heading"><div class="panel-head"><div><h2 id="recent-notifications-heading">Recent Notifications</h2><p>Your five latest system updates.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/notifications.php') ?>">View all</a></div>
+      <?php if (!$tables['notifications'] || !$recentNotifications): ?><div class="empty-state"><strong>No notifications yet</strong><p>Submission and processing updates will appear here.</p></div>
+      <?php else: ?><ul class="notification-list"><?php foreach ($recentNotifications as $notification): $notificationType = in_array($notification['type'], ['info', 'success', 'warning', 'error'], true) ? $notification['type'] : 'info'; ?><li class="notification-item"><span class="notification-dot <?= personalDashboardEscape($notificationType) ?>" aria-hidden="true"></span><div><p class="notification-title"><?= personalDashboardEscape($notification['title']) ?></p><p class="notification-message"><?= personalDashboardEscape($notification['message']) ?></p><p class="notification-date"><?= personalDashboardEscape(date('M j, Y g:i a', strtotime((string) $notification['created_at']))) ?><?= (int) $notification['is_read'] === 0 ? ' &middot; Unread' : '' ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
+    </section>
+  </div>
 </div>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if ($role === 'faculty') renderFacultyShellClose();
+else renderStudentShellClose();
+?>
