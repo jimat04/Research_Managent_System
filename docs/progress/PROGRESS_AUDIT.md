@@ -1,7 +1,8 @@
 # RMS Progress Audit Report
 
 **Audit Date:** September 6, 2026
-**Last updated:** September 23, 2026 (post-closeout hardening round)
+**Last updated:** September 25, 2026 (v2 research-monitoring pivot)
+**System version:** v2 — EARIST Cavite Research Monitoring System (pivot from workflow RMS, September 25, 2026)
 **Auditor:** Claude (E2E walkthrough pass on live DB)
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
@@ -70,7 +71,28 @@ Remaining audit items (ORS consolidation stage, structured digital forms for For
 
 ---
 
+## 0.2 v2 Pivot — Research Monitoring System (2026-09-25)
+
+Per adviser direction, the system was restructured from a Research Manual 2015 workflow system into a research-office monitoring system for EARIST Cavite. The workflow core (proposal → CREC → EREC → approval → defense → archive, 8/8 E2E-proven) remains on disk but is no longer in navigation; it is retained as reference code and may be restored as a future module.
+
+New module structure (6 commits, each E2E-tested before merge):
+
+| Commit  | Deliverable                                                                                                                                                    |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dc01465 | Schema: research\_activities, activity\_participants, publications, copyright\_applications (migration 012 + canonical schema with demo seeds)                 |
+| 9f04007 | Navigation restructure + read-only hub pages for the three modules (role-scoped)                                                                               |
+| ef4d1a2 | Activities: CRUD, participants, attendance, status transitions, create-notifications                                                                           |
+| a977596 | Publications: submission with PDF upload, FOR UPDATE owner locks, review pipeline (submitted → under\_review → accepted/published), safe downloads             |
+| fe85caf | Copyrights: applications, registration with required reference number, rejection with reason, safe downloads                                                   |
+| f2ab103 | Dashboards: 7-indicator monitoring overview (staff/admin, shared implementation), personal summaries (faculty/student), pure-CSS activity chart, quick actions |
+
+Role model unchanged (student / faculty / research\_staff / admin): faculty and students submit publications and copyright applications and view activities; staff and admin manage all modules. Repository (research-archive) integrated into navigation.
+
+---
+
 ## 1. Per-portal page status
+
+*Sections 1-6 below describe the v1 workflow system retained on disk after the v2 pivot.*
 
 A page is **fully built** if it has its own role gating, render logic and ≥ ~200 lines of code; a **stub** is a 1-line file that defers to `pages/shared/module-page.php`. All line counts were taken from `wc -l` on the working tree.
 
