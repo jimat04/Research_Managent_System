@@ -831,18 +831,18 @@ $archive_labels = [
 renderAdminShell(
     $user,
     'admin-archive',
-    'Publication & Colloquium',
-    'Move completed research from presentation to publication and institutional archive.'
+    'Archive Management',
+    'Manage completed research outputs and preserve finalized projects in the institutional record.'
 );
 ?>
 
     <section class="archive-hero">
       <div class="archive-hero-copy">
-        <div class="archive-kicker">Research lifecycle · Final stage</div>
-        <h1>Bring finished research into the public record.</h1>
-        <p>Coordinate the colloquium, journal outcome, and permanent archive from one focused workspace.</p>
+        <div class="archive-kicker">Completed research · Publication &amp; preservation</div>
+        <h1>Carry completed research into the public record.</h1>
+        <p>Track colloquium presentation and journal outcomes, then preserve completed projects in the institutional archive.</p>
       </div>
-      <div class="archive-route" aria-label="Publication workflow">
+      <div class="archive-route" aria-label="Post-completion research outcomes">
         <div><span>01</span><strong>Present</strong><small>Research colloquium</small></div>
         <div><span>02</span><strong>Publish</strong><small>Journal tracking</small></div>
         <div><span>03</span><strong>Preserve</strong><small>Institutional archive</small></div>
@@ -869,7 +869,7 @@ renderAdminShell(
       <div class="stat-card stat-card-completed">
         <div class="stat-index">Ready queue</div>
         <div class="stat-number"><?php echo arch_se($total_completed); ?></div>
-        <div class="stat-label">Completed (awaiting)</div>
+        <div class="stat-label">Completed projects</div>
       </div>
     </div>
 
@@ -880,14 +880,14 @@ renderAdminShell(
       <div class="admin-flash admin-flash-err">✕ <?php echo arch_se($arch_flash['err']); ?></div>
     <?php endif; ?>
 
-    <!-- PUBLICATION & COLLOQUIUM -->
+    <!-- POST-COMPLETION PUBLICATION & COLLOQUIUM -->
     <div class="card publication-card">
       <div class="card-header">
         <div>
-          <div class="section-kicker">Active pipeline</div>
-          <div class="card-title">Publication &amp; Colloquium</div>
+          <div class="section-kicker">Post-completion outcomes</div>
+          <div class="card-title">Publication &amp; Dissemination</div>
           <p class="card-sub">
-            Advance each completed project through presentation, journal publication, and long-term preservation.
+            Record colloquium presentation and journal publication outcomes for completed projects, and update their archive status.
           </p>
         </div>
         <div class="project-count">
@@ -1104,7 +1104,7 @@ renderAdminShell(
         <div>
           <div class="section-kicker">Permanent collection</div>
           <div class="card-title">Archived Projects</div>
-          <p class="card-sub">Search the institutional record by title, researcher, or department.</p>
+          <p class="card-sub">Browse preserved research projects in the institutional record by title, researcher, or department.</p>
         </div>
       </div>
 

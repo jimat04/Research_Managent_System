@@ -106,6 +106,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=journal_publications', 'Journal Publications', 'publication'],
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=conference_presentations', 'Conference Presentations', 'presentation'],
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=research_repository', 'Research Repository', 'repository'],
+                [SITE_URL . 'pages/admin/admin-archive.php', 'Archive Management', 'records'],
             ],
         ],
         [
