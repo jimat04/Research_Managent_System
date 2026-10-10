@@ -2,11 +2,8 @@
 /**
  * Admin — Archive Management
  *
- * Two views on this page:
- *   1. Archived Projects        — projects with research_projects.status='archived' (read-only)
- *   2. Publication & Colloquium  — write UI for research_publication_tracking on completed/archived
- *                                 projects. The student progress-tracking page reads from this
- *                                 table; before this change no code ever wrote to it.
+ * Completed and archived projects share one register for dissemination outcomes
+ * and the completed-to-archived status transition.
  *
  * research_publication_tracking has UNIQUE KEY (project_id), so a first-time update uses
  * INSERT ... ON DUPLICATE KEY UPDATE. The three status enums are validated server-side
@@ -115,11 +112,17 @@ $rp_has_deleted_at = (bool) ($conn->query("SHOW COLUMNS FROM research_projects L
 $rp_deleted_filter        = $rp_has_deleted_at ? ' AND deleted_at IS NULL'         : '';
 $rp_deleted_filter_alias  = $rp_has_deleted_at ? ' AND rp.deleted_at IS NULL'     : '';
 
-// ── archive view filters (existing) ───────────────────────────────────
-$search = $_GET['search'] ?? '';
-$department_filter = $_GET['department'] ?? '';
+// ── completed research record filters ──────────────────────────────────
+$search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
+$department_filter = isset($_GET['department']) && is_string($_GET['department']) ? trim($_GET['department']) : '';
+$record_status = isset($_GET['record_status']) && is_string($_GET['record_status'])
+    ? $_GET['record_status']
+    : '';
+if (!in_array($record_status, ['completed', 'archived'], true)) {
+    $record_status = '';
+}
 
-// ── POST handlers (publication + archive transitions) ──────────────────
+// ── POST handlers (dissemination outcomes + archive transition) ─────────
 $arch_flash = ['ok' => '', 'err' => ''];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -152,8 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $student_id = (int) ($project['created_by'] ?? 0);
                     $proj_status = (string) ($project['status'] ?? '');
 
-                    // Publication & Colloquium updates are only meaningful on
-                    // completed/archived projects. In-progress ones aren't ready.
+                    // Dissemination outcomes are only tracked after project completion.
                     $allow_publish = in_array($proj_status, ['completed', 'archived'], true);
 
                     if ($action === 'update_colloquium') {
@@ -275,56 +277,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         }
                     } elseif ($action === 'update_archive') {
                         $new_status = (string) ($_POST['archive_status'] ?? '');
-                        if (!in_array($new_status, arch_enum_values('archive_status'), true)) {
+                        if ($proj_status !== 'completed') {
+                            $arch_flash['err'] = 'Only completed projects can be moved into the archive. Archived project records are preserved.';
+                        } elseif (!in_array($new_status, arch_enum_values('archive_status'), true)) {
                             $arch_flash['err'] = 'Invalid archive status value.';
                         } else {
-                            $sql = "
-                                INSERT INTO research_publication_tracking
-                                    (project_id, archive_status, created_at, updated_at)
-                                VALUES (?, ?, NOW(), NOW())
-                                ON DUPLICATE KEY UPDATE
-                                    archive_status = VALUES(archive_status),
-                                    updated_at = NOW()
-                            ";
-                            $upd = $conn->prepare($sql);
-                            if ($upd) {
-                                $upd->bind_param('is', $project_id, $new_status);
-                                $upd->execute();
-                                $upd->close();
-                            }
-
-                            // Side-effect: archiving the publication row archives the project too,
-                            // but only from a 'completed' state (never anything else — guards
-                            // against accidentally archiving a draft).
-                            $flipped_project = false;
-                            $author_snapshot_saved = true;
-                            if ($new_status === 'archived' && $proj_status === 'completed') {
-                                $ps_upd = $conn->prepare("UPDATE research_projects SET status = 'archived', updated_at = NOW() WHERE project_id = ? AND status = 'completed'" . $rp_deleted_filter);
-                                if ($ps_upd) {
-                                    $ps_upd->bind_param('i', $project_id);
-                                    $ps_upd->execute();
-                                    $flipped_project = $ps_upd->affected_rows > 0;
-                                    $ps_upd->close();
-                                }
-                            }
-                            if ($new_status === 'archived' && ($flipped_project || $proj_status === 'archived')) {
-                                $author_snapshot_saved = $author_snapshots_exists
-                                    && arch_capture_author_snapshots($conn, $project_id);
-                            }
-
-                            logActivity(
-                                'Updated archive status to "' . $new_status . '" for project #' . $project_id . ' ("' . $title . '")'
-                                . ($flipped_project ? ' — project also moved to archived' : ''),
-                                'publication_tracking'
-                            );
-                            if ($flipped_project && !$author_snapshot_saved) {
-                                $arch_flash['err'] = 'The project was archived, but student program attribution could not be preserved. Apply migration 011 and retry the archive update.';
+                            if (!$conn->begin_transaction()) {
+                                $arch_flash['err'] = 'Unable to begin the archive update.';
                             } else {
-                                $arch_flash['ok'] = $flipped_project
-                                    ? 'Archive status updated, project moved to archived, and student program attribution preserved.'
-                                    : ($new_status === 'archived'
-                                        ? 'Archive status updated and student program attribution preserved.'
-                                        : 'Archive status updated.');
+                                $archive_saved = false;
+                                $archive_stmt = $conn->prepare("
+                                    INSERT INTO research_publication_tracking
+                                        (project_id, archive_status, created_at, updated_at)
+                                    VALUES (?, ?, NOW(), NOW())
+                                    ON DUPLICATE KEY UPDATE
+                                        archive_status = VALUES(archive_status),
+                                        updated_at = NOW()
+                                ");
+                                if (!$archive_stmt) {
+                                    $arch_flash['err'] = 'Unable to prepare the archive status update.';
+                                } else {
+                                    $archive_stmt->bind_param('is', $project_id, $new_status);
+                                    if (!$archive_stmt->execute()) {
+                                        $arch_flash['err'] = 'Unable to save the archive status.';
+                                    } else {
+                                        $archive_saved = true;
+                                    }
+                                    $archive_stmt->close();
+                                }
+
+                                $flipped_project = false;
+                                $author_snapshot_saved = true;
+                                if ($arch_flash['err'] === '' && $new_status === 'archived') {
+                                    $project_stmt = $conn->prepare("
+                                        UPDATE research_projects
+                                           SET status = 'archived', updated_at = NOW()
+                                         WHERE project_id = ? AND status = 'completed'" . $rp_deleted_filter
+                                    );
+                                    if (!$project_stmt) {
+                                        $arch_flash['err'] = 'Unable to prepare the project archive transition.';
+                                    } else {
+                                        $project_stmt->bind_param('i', $project_id);
+                                        if (!$project_stmt->execute()) {
+                                            $arch_flash['err'] = 'Unable to move the completed project into the archive.';
+                                        } elseif ($project_stmt->affected_rows !== 1) {
+                                            $arch_flash['err'] = 'The project status changed before it could be archived. Refresh the page and try again.';
+                                        } else {
+                                            $flipped_project = true;
+                                        }
+                                        $project_stmt->close();
+                                    }
+                                }
+
+                                if ($arch_flash['err'] === '' && $new_status === 'archived') {
+                                    $author_snapshot_saved = $author_snapshots_exists
+                                        && arch_capture_author_snapshots($conn, $project_id);
+                                    if (!$author_snapshot_saved) {
+                                        $arch_flash['err'] = 'Unable to preserve student program attribution. Apply migration 011 before archiving this project.';
+                                    }
+                                }
+
+                                if ($arch_flash['err'] !== '') {
+                                    $conn->rollback();
+                                } elseif (!$conn->commit()) {
+                                    $conn->rollback();
+                                    $arch_flash['err'] = 'Unable to commit the archive update.';
+                                } elseif ($archive_saved) {
+                                    logActivity(
+                                        'Updated archive status to "' . $new_status . '" for project #' . $project_id . ' ("' . $title . '")'
+                                        . ($flipped_project ? ' — project also moved to archived' : ''),
+                                        'publication_tracking'
+                                    );
+                                    $arch_flash['ok'] = $flipped_project
+                                        ? 'Archive status updated, project moved to archived, and student program attribution preserved.'
+                                        : 'Archive status updated.';
+                                }
                             }
                         }
                     } else {
@@ -336,14 +363,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// ── Stat cards ─────────────────────────────────────────────────────────
+// ── Completion and dissemination counts ────────────────────────────────
 $total_archived = (int) ($conn->query("SELECT COUNT(*) AS c FROM research_projects WHERE status = 'archived'" . $rp_deleted_filter)->fetch_assoc()['c'] ?? 0);
 $total_completed = (int) ($conn->query("SELECT COUNT(*) AS c FROM research_projects WHERE status = 'completed'" . $rp_deleted_filter)->fetch_assoc()['c'] ?? 0);
 
-// "Colloquium-ready" = completed/archived projects whose publication row either
-// doesn't exist yet OR has colloquium_status != 'presented'. This matches the
-// student progress-tracking definition of "scheduled/presented/cancelled".
-$colloquium_ready = 0;
+// Track presentation outcomes independently from the project completion/archive status.
+$colloquium_unpresented = 0;
 $published_count  = 0;
 if ($pubtbl_exists) {
     $cq = $conn->query("
@@ -352,61 +377,42 @@ if ($pubtbl_exists) {
           AND (NOT EXISTS (SELECT 1 FROM research_publication_tracking rpt WHERE rpt.project_id = rp.project_id)
                OR EXISTS (SELECT 1 FROM research_publication_tracking rpt WHERE rpt.project_id = rp.project_id AND rpt.colloquium_status <> 'presented'))
     ");
-    if ($cq) { $colloquium_ready = (int) ($cq->fetch_assoc()['c'] ?? 0); $cq->free(); }
+    if ($cq) { $colloquium_unpresented = (int) ($cq->fetch_assoc()['c'] ?? 0); $cq->free(); }
 
-    $pc = $conn->query("SELECT COUNT(*) AS c FROM research_publication_tracking WHERE journal_status = 'published'");
+    $pc = $conn->query("
+        SELECT COUNT(*) AS c
+          FROM research_publication_tracking rpt
+          JOIN research_projects rp ON rp.project_id = rpt.project_id
+         WHERE rp.status IN ('completed', 'archived')
+           AND rpt.journal_status = 'published'" . $rp_deleted_filter_alias
+    );
     if ($pc) { $published_count = (int) ($pc->fetch_assoc()['c'] ?? 0); $pc->free(); }
 }
 
-// ── Archive view query (existing) ─────────────────────────────────────
-$where_clauses = ["rp.status = 'archived'"];
-$params = [];
-$types = '';
-if (!empty($search)) {
-    $where_clauses[] = "(rp.title LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
-    $search_term = "%{$search}%";
-    $params[] = $search_term;
-    $params[] = $search_term;
-    $params[] = $search_term;
-    $types .= 'sss';
-}
-if (!empty($department_filter)) {
-    $where_clauses[] = "u.department = ?";
-    $params[] = $department_filter;
-    $types .= 's';
-}
-$where_sql = implode(' AND ', $where_clauses);
-
-$query = "
-    SELECT rp.*,
-           CONCAT(u.first_name, ' ', u.last_name) as student_name,
-           u.email as student_email,
-           u.department,
-           CONCAT(f.first_name, ' ', f.last_name) as adviser_name
-    FROM research_projects rp
-    LEFT JOIN users u ON rp.created_by = u.user_id
-    LEFT JOIN project_advisers pa ON rp.project_id = pa.project_id
-    LEFT JOIN users f ON pa.adviser_id = f.user_id
-    WHERE {$where_sql}
-    ORDER BY rp.updated_at DESC
-    LIMIT 100
-";
-$stmt = $conn->prepare($query);
-if (!empty($params)) { $stmt->bind_param($types, ...$params); }
-$stmt->execute();
-$projects = $stmt->get_result();
-
-$departments = $conn->query("
-    SELECT DISTINCT u.department
-    FROM research_projects rp
-    LEFT JOIN users u ON rp.created_by = u.user_id
-    WHERE rp.status = 'archived' AND u.department IS NOT NULL AND u.department != ''
-    ORDER BY u.department
-");
-
-// ── Publication & Colloquium list (completed + archived) ──────────────
+// ── Completed and archived research register ───────────────────────────
 $pub_list = [];
 if ($pubtbl_exists) {
+    $where_clauses = ["rp.status IN ('completed', 'archived')"];
+    $params = [];
+    $types = '';
+    if ($record_status !== '') {
+        $where_clauses[] = 'rp.status = ?';
+        $params[] = $record_status;
+        $types .= 's';
+    }
+    if ($search !== '') {
+        $where_clauses[] = "(rp.title LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+        $search_term = '%' . $search . '%';
+        $params[] = $search_term;
+        $params[] = $search_term;
+        $params[] = $search_term;
+        $types .= 'sss';
+    }
+    if ($department_filter !== '') {
+        $where_clauses[] = 'u.department = ?';
+        $params[] = $department_filter;
+        $types .= 's';
+    }
     $pub_sql = "
         SELECT rp.project_id, rp.title, rp.status AS project_status, rp.updated_at,
                CONCAT(u.first_name, ' ', u.last_name) AS student_name,
@@ -416,16 +422,37 @@ if ($pubtbl_exists) {
           FROM research_projects rp
           LEFT JOIN users u ON u.user_id = rp.created_by
           LEFT JOIN research_publication_tracking rpt ON rpt.project_id = rp.project_id
-         WHERE rp.status IN ('completed','archived')" . $rp_deleted_filter_alias . "
+         WHERE " . implode(' AND ', $where_clauses) . $rp_deleted_filter_alias . "
          ORDER BY rp.updated_at DESC
          LIMIT 100
     ";
-    $pr = $conn->query($pub_sql);
-    if ($pr) {
-        while ($r = $pr->fetch_assoc()) { $pub_list[] = $r; }
-        $pr->free();
+    $pub_stmt = $conn->prepare($pub_sql);
+    if (!$pub_stmt) {
+        throw new RuntimeException('Unable to prepare the completed research register: ' . $conn->error);
     }
+    if ($params) {
+        $pub_stmt->bind_param($types, ...$params);
+    }
+    if (!$pub_stmt->execute()) {
+        $error = $pub_stmt->error;
+        $pub_stmt->close();
+        throw new RuntimeException('Unable to load the completed research register: ' . $error);
+    }
+    $pub_result = $pub_stmt->get_result();
+    while ($r = $pub_result->fetch_assoc()) {
+        $pub_list[] = $r;
+    }
+    $pub_stmt->close();
 }
+
+$departments = $conn->query("
+    SELECT DISTINCT u.department
+      FROM research_projects rp
+      LEFT JOIN users u ON u.user_id = rp.created_by
+     WHERE rp.status IN ('completed', 'archived')" . $rp_deleted_filter_alias . "
+       AND u.department IS NOT NULL AND u.department != ''
+     ORDER BY u.department
+");
 
 // ── status label maps (for display only — write-side uses whitelists above) ──
 $colloquium_labels = [
@@ -569,7 +596,7 @@ $archive_labels = [
   .pub-empty { font-size: 12px; color: var(--text-muted, #94A3B8); font-style: italic; }
   .pub-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 
-  /* FINAL-STAGE WORKSPACE */
+  /* COMPLETION AND ARCHIVE WORKSPACE */
   .archive-hero {
     position: relative;
     isolation: isolate;
@@ -582,8 +609,8 @@ $archive_labels = [
     padding: 42px 46px 62px;
     border-radius: 24px;
     background:
-      radial-gradient(circle at 82% 14%, rgba(217, 164, 65, .24), transparent 30%),
-      radial-gradient(circle at 8% 110%, rgba(13, 148, 136, .2), transparent 34%),
+      radial-gradient(circle at 82% 14%, rgba(245, 124, 0, .2), transparent 30%),
+      radial-gradient(circle at 8% 110%, rgba(245, 124, 0, .11), transparent 34%),
       #101827;
     color: #fff;
     box-shadow: 0 24px 55px rgba(30, 41, 59, .16);
@@ -606,7 +633,7 @@ $archive_labels = [
     letter-spacing: .12em;
     text-transform: uppercase;
   }
-  .archive-kicker { color: #e8bd67; margin-bottom: 12px; }
+  .archive-kicker { color: #fdba74; margin-bottom: 12px; }
   .archive-hero h1 {
     max-width: 650px;
     margin: 0;
@@ -629,15 +656,13 @@ $archive_labels = [
     gap: 10px;
     align-items: center;
     padding: 13px 15px;
-    border: 1px solid rgba(255,255,255,.1);
-    background: rgba(255,255,255,.055);
-    backdrop-filter: blur(8px);
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f8fafc;
   }
-  .archive-route > div:first-child { border-radius: 13px 13px 5px 5px; }
-  .archive-route > div:last-child { border-radius: 5px 5px 13px 13px; }
-  .archive-route span { color: #e8bd67; font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
-  .archive-route strong { font-size: 13px; }
-  .archive-route small { color: #aab5c6; font-size: 12px; }
+  .archive-route span { color: #c45f00; font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .archive-route strong { color: #182230; font-size: 13px; }
+  .archive-route small { color: #64748b; font-size: 12px; }
 
   .stats-grid {
     position: relative;
@@ -670,7 +695,7 @@ $archive_labels = [
   .stat-card-colloquium { --metric-accent: #2563eb; }
   .stat-card-published { --metric-accent: #7c3aed; }
   .stat-card-archived { --metric-accent: #059669; }
-  .stat-card-completed { --metric-accent: #d09a2d; }
+  .stat-card-completed { --metric-accent: #f57c00; }
   .stat-index { color: var(--metric-accent); margin-bottom: 22px; }
   .stat-number { color: #111827; font-size: 36px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
   .stat-label { color: #667085; font-size: 12px; }
@@ -683,15 +708,37 @@ $archive_labels = [
     border-radius: 18px;
     background: #fff;
   }
-  .section-kicker { color: #9a6b13; margin-bottom: 5px; }
+  .section-kicker { color: #c45f00; margin-bottom: 5px; }
   .card-title { font-size: 23px; letter-spacing: -.025em; }
   .card-sub { max-width: 700px; line-height: 1.6; }
   .project-count {
     padding: 7px 11px;
     border-radius: 8px;
-    background: #fff7e6;
-    color: #845b0d;
+    background: rgba(245, 124, 0, .09);
+    color: #9a4b00;
     font: 700 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .record-filter-bar {
+    padding: 12px;
+    border: 1px solid #e6eaf0;
+    border-radius: 13px;
+    background: #f7f8fa;
+  }
+  .record-filter-bar .search-input,
+  .record-filter-bar .filter-select { min-height: 42px; background: #fff; }
+  .record-filter-bar :is(input, select, button, a):focus-visible {
+    outline: 3px solid rgba(245, 124, 0, .23);
+    outline-offset: 2px;
+  }
+  .record-note {
+    margin: -5px 0 18px;
+    padding: 12px 15px;
+    border-left: 3px solid #f57c00;
+    border-radius: 0 9px 9px 0;
+    background: #fff8f1;
+    color: #6b4a2d;
+    font-size: 13px;
+    line-height: 1.55;
   }
   .publication-table-wrap { overflow: visible; border: 0; border-radius: 0; }
   .publication-table,
@@ -724,7 +771,7 @@ $archive_labels = [
     background: #172033;
     color: #fff;
   }
-  .project-overline { color: #d6aa52; margin-bottom: 13px; }
+  .project-overline { color: #fdba74; margin-bottom: 13px; }
   .project-title a {
     color: #fff;
     font-size: 17px;
@@ -733,11 +780,11 @@ $archive_labels = [
     letter-spacing: -.015em;
     text-decoration: none;
   }
-  .project-title a:hover { color: #f0ca7b; }
+  .project-title a:hover { color: #fdba74; }
   .project-owner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: #aeb9ca; font-size: 12px; }
-  .project-progress { overflow: hidden; height: 4px; margin-top: 24px; border-radius: 999px; background: rgba(255,255,255,.12); }
-  .project-progress span { display: block; height: 100%; border-radius: inherit; background: #d6aa52; }
-  .project-progress-label { margin-top: 7px; color: #8491a5; font-size: 11px; }
+  .project-meta { margin-top: 16px; font-size: 12px; }
+  .project-meta a { color: #fdba74; text-decoration: none; }
+  .project-meta a:hover { color: #fff; text-decoration: underline; }
   .stage-cell::before {
     content: attr(data-stage);
     display: block;
@@ -772,8 +819,8 @@ $archive_labels = [
   .publication-table .pub-edit-row select:focus,
   .publication-table .pub-edit-row input:focus {
     outline: 0;
-    border-color: #ab7c23;
-    box-shadow: 0 0 0 3px rgba(171, 124, 35, .13);
+    border-color: #f57c00;
+    box-shadow: 0 0 0 3px rgba(245, 124, 0, .13);
   }
   .publication-table .pub-meta { margin-top: 7px; color: #748094; line-height: 1.45; }
   .publication-table .pub-actions { margin-top: 2px; }
@@ -785,11 +832,19 @@ $archive_labels = [
     background: #fff;
     color: #263246;
   }
-  .publication-table .btn-secondary:hover { border-color: #a97920; background: #fff8e8; color: #754f09; transform: translateY(-1px); }
+  .publication-table .btn-secondary:hover { border-color: #f57c00; background: #fff8f1; color: #9a4b00; transform: translateY(-1px); }
   .publication-table .btn-secondary:active { transform: translateY(0); }
-  .publication-table .btn-secondary:focus-visible { outline: 3px solid rgba(171, 124, 35, .2); outline-offset: 2px; }
+  .publication-table .btn-secondary:focus-visible { outline: 3px solid rgba(245, 124, 0, .23); outline-offset: 2px; }
 
-  .archive-library-card { margin-top: 38px; border-color: #dfe5ed; box-shadow: 0 12px 34px rgba(30, 41, 59, .07); }
+  .archive-library-card {
+    margin-top: 16px;
+    padding: 0 22px 24px;
+    border: 1px solid #dfe5ed;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 34px rgba(30, 41, 59, .07);
+  }
+  .archive-library-card > .card-header { margin: 0 -22px 20px; }
   .archive-library-card .filter-bar { padding: 12px; border-radius: 13px; background: #f5f7fa; }
   .archive-library-card .search-input,
   .archive-library-card .filter-select { min-height: 42px; background: #fff; }
@@ -797,7 +852,7 @@ $archive_labels = [
 
   @media (max-width: 1180px) {
     .archive-hero { grid-template-columns: 1fr; gap: 28px; }
-    .archive-route { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .archive-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .archive-route > div { grid-template-columns: 28px 1fr; }
     .archive-route small { grid-column: 2; }
     .publication-table .publication-project { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -817,7 +872,10 @@ $archive_labels = [
     .publication-table .project-identity { grid-column: auto; }
     .publication-table .publication-project > td { border-left: 0; border-top: 1px solid #e8ecf2; }
     .publication-table .publication-project > td:first-child { border-top: 0; }
-    .archive-library-card { padding: 22px 18px; }
+    .archive-library-card { padding: 0 18px 20px; }
+    .archive-library-card > .card-header { margin: 0 -18px 18px; }
+    .record-filter-bar { align-items: stretch; }
+    .record-filter-bar .search-input { min-width: 0; }
   }
   @media (max-width: 460px) {
     .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-left: 6px; margin-right: 6px; }
@@ -832,44 +890,43 @@ renderAdminShell(
     $user,
     'admin-archive',
     'Archive Management',
-    'Manage completed research outputs and preserve finalized projects in the institutional record.'
+    'Close completed research records and manage their dissemination and preservation.'
 );
 ?>
 
     <section class="archive-hero">
       <div class="archive-hero-copy">
-        <div class="archive-kicker">Completed research · Publication &amp; preservation</div>
-        <h1>Carry completed research into the public record.</h1>
-        <p>Track colloquium presentation and journal outcomes, then preserve completed projects in the institutional archive.</p>
+        <div class="archive-kicker">Research lifecycle · Completion and preservation</div>
+        <h1>Close the record. Keep the work accessible.</h1>
+        <p>Review completed projects, record how their findings are shared, and move finalized work into the institutional archive.</p>
       </div>
-      <div class="archive-route" aria-label="Post-completion research outcomes">
-        <div><span>01</span><strong>Present</strong><small>Research colloquium</small></div>
-        <div><span>02</span><strong>Publish</strong><small>Journal tracking</small></div>
-        <div><span>03</span><strong>Preserve</strong><small>Institutional archive</small></div>
+      <div class="archive-route" aria-label="Project status flow">
+        <div><span>STATUS</span><strong>Completed</strong><small>Implementation is finished</small></div>
+        <div><span>NEXT</span><strong>Archived</strong><small>Preserved institutional record</small></div>
       </div>
     </section>
 
-    <!-- STATS -->
+    <!-- COMPLETION AND OUTCOME COUNTS -->
     <div class="stats-grid">
       <div class="stat-card stat-card-colloquium">
-        <div class="stat-index">01 · Present</div>
-        <div class="stat-number"><?php echo arch_se($colloquium_ready); ?></div>
-        <div class="stat-label">Awaiting Colloquium</div>
-      </div>
-      <div class="stat-card stat-card-published">
-        <div class="stat-index">02 · Publish</div>
-        <div class="stat-number"><?php echo arch_se($published_count); ?></div>
-        <div class="stat-label">Published</div>
+        <div class="stat-index">Project status</div>
+        <div class="stat-number"><?php echo arch_se($total_completed); ?></div>
+        <div class="stat-label">Completed · ready to archive</div>
       </div>
       <div class="stat-card stat-card-archived">
-        <div class="stat-index">03 · Preserve</div>
+        <div class="stat-index">Project status</div>
         <div class="stat-number"><?php echo arch_se($total_archived); ?></div>
-        <div class="stat-label">Archived</div>
+        <div class="stat-label">In the archive</div>
+      </div>
+      <div class="stat-card stat-card-published">
+        <div class="stat-index">Dissemination outcome</div>
+        <div class="stat-number"><?php echo $pubtbl_exists ? arch_se($published_count) : '&mdash;'; ?></div>
+        <div class="stat-label">Journal publications</div>
       </div>
       <div class="stat-card stat-card-completed">
-        <div class="stat-index">Ready queue</div>
-        <div class="stat-number"><?php echo arch_se($total_completed); ?></div>
-        <div class="stat-label">Completed projects</div>
+        <div class="stat-index">Dissemination outcome</div>
+        <div class="stat-number"><?php echo $pubtbl_exists ? arch_se($colloquium_unpresented) : '&mdash;'; ?></div>
+        <div class="stat-label">Not yet presented at colloquium</div>
       </div>
     </div>
 
@@ -880,33 +937,60 @@ renderAdminShell(
       <div class="admin-flash admin-flash-err">✕ <?php echo arch_se($arch_flash['err']); ?></div>
     <?php endif; ?>
 
-    <!-- POST-COMPLETION PUBLICATION & COLLOQUIUM -->
-    <div class="card publication-card">
+    <!-- COMPLETED AND ARCHIVED RESEARCH REGISTER -->
+    <div class="card publication-card archive-library-card">
       <div class="card-header">
         <div>
-          <div class="section-kicker">Post-completion outcomes</div>
-          <div class="card-title">Publication &amp; Dissemination</div>
+          <div class="section-kicker">Completed → archived</div>
+          <div class="card-title">Completed research record</div>
           <p class="card-sub">
-            Record colloquium presentation and journal publication outcomes for completed projects, and update their archive status.
+            Manage archive status and keep colloquium and journal outcomes with each completed project.
           </p>
         </div>
         <div class="project-count">
-          <?php echo (int) count($pub_list); ?> project<?php echo count($pub_list) !== 1 ? 's' : ''; ?>
+          Showing <?php echo (int) count($pub_list); ?> project<?php echo count($pub_list) !== 1 ? 's' : ''; ?>
         </div>
       </div>
 
       <?php if (!$pubtbl_exists): ?>
         <div class="admin-flash admin-flash-err">
           ✕ The <code>research_publication_tracking</code> table is missing. Run migration
-          <code>database/migrations/rms_db_migration.sql</code> to enable this section.
-        </div>
-      <?php elseif (empty($pub_list)): ?>
-        <div style="text-align: center; padding: 40px 24px; color: #94A3B8;">
-          <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">🗂️</div>
-          <p style="margin: 0; font-size: 14px;">No completed or archived projects yet.</p>
-          <p style="margin: 6px 0 0 0; font-size: 13px;">Projects appear here when they reach the completed or archived stage.</p>
+          <code>database/migrations/rms_db_migration.sql</code> to enable dissemination and archive tracking.
         </div>
       <?php else: ?>
+        <p class="record-note">
+          Colloquium and journal entries document dissemination outcomes; they are not approval gates for archiving.
+          Only projects with status <strong>completed</strong> can be moved into the archive.
+        </p>
+        <form method="GET" action="admin-archive.php" class="filter-bar record-filter-bar">
+          <input type="search" name="search" class="search-input" placeholder="Search by title or student name..." value="<?php echo arch_se($search); ?>" aria-label="Search completed research">
+          <select name="record_status" class="filter-select" aria-label="Filter by project status">
+            <option value="">Completed and archived</option>
+            <option value="completed" <?php echo $record_status === 'completed' ? 'selected' : ''; ?>>Completed · ready to archive</option>
+            <option value="archived" <?php echo $record_status === 'archived' ? 'selected' : ''; ?>>Archived</option>
+          </select>
+          <select name="department" class="filter-select" aria-label="Filter by department">
+            <option value="">All departments</option>
+            <?php while ($dept = $departments->fetch_assoc()): ?>
+              <option value="<?php echo arch_se($dept['department']); ?>" <?php echo $department_filter === $dept['department'] ? 'selected' : ''; ?>>
+                <?php echo arch_se($dept['department']); ?>
+              </option>
+            <?php endwhile; ?>
+          </select>
+          <button type="submit" class="btn btn-secondary btn-sm">Filter records</button>
+          <?php if ($search !== '' || $department_filter !== '' || $record_status !== ''): ?>
+            <a href="admin-archive.php" class="btn btn-secondary btn-sm">Clear filters</a>
+          <?php endif; ?>
+        </form>
+        <?php if (empty($pub_list)): ?>
+          <div style="text-align: center; padding: 40px 24px; color: #64748B;">
+            <div style="font-size: 40px; margin-bottom: 12px;">🗂️</div>
+            <p style="margin: 0; font-size: 15px; font-weight: 600; color: #334155;">
+              <?php echo $record_status === 'archived' ? 'No archived projects match your filters.' : ($record_status === 'completed' ? 'No completed projects match your filters.' : 'No completed or archived projects match your filters.'); ?>
+            </p>
+            <p style="margin: 6px 0 0; font-size: 13px;">Clear or change the filters to see other completed research records.</p>
+          </div>
+        <?php else: ?>
         <div class="table-wrap publication-table-wrap">
           <table class="publication-table">
             <thead>
@@ -914,7 +998,7 @@ renderAdminShell(
                 <th style="min-width: 240px;">Title / Student</th>
                 <th>Colloquium</th>
                 <th>Journal</th>
-                <th>Archive</th>
+                <th>Repository</th>
               </tr>
             </thead>
             <tbody>
@@ -922,17 +1006,15 @@ renderAdminShell(
                 $p_id          = (int) $row['project_id'];
                 $pname         = (string) ($row['student_name'] ?? '—');
                 $proj_status   = (string) ($row['project_status'] ?? '');
-                $col_state     = (string) ($row['colloquium_status'] ?? '');
+                $col_state     = (string) ($row['colloquium_status'] ?? 'not_scheduled');
                 $col_date      = (string) ($row['colloquium_date'] ?? '');
-                $jour_state    = (string) ($row['journal_status'] ?? '');
+                $jour_state    = (string) ($row['journal_status'] ?? 'not_submitted');
                 $jour_ref      = (string) ($row['journal_reference'] ?? '');
-                $arch_state    = (string) ($row['archive_status'] ?? '');
+                $arch_state    = $proj_status === 'archived'
+                    ? 'archived'
+                    : (string) ($row['archive_status'] ?? 'not_archived');
                 $remarks       = (string) ($row['remarks'] ?? '');
                 $has_row       = $row['pub_updated_at'] !== null;
-                $closed_stages = ($col_state === 'presented' ? 1 : 0)
-                    + ($jour_state === 'published' ? 1 : 0)
-                    + ($arch_state === 'archived' ? 1 : 0);
-
                 // Status → badge color (read-side display only)
                 $col_class  = 'badge-slate';
                 if ($col_state === 'scheduled')    $col_class  = 'badge-blue';
@@ -961,21 +1043,22 @@ renderAdminShell(
                   <td class="project-identity">
                     <div class="project-overline">Project <?php echo arch_se(str_pad((string) $p_id, 2, '0', STR_PAD_LEFT)); ?></div>
                     <div class="project-title">
-                      <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $p_id; ?>"
-                         >
+                      <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $p_id; ?>">
                         <?php echo arch_se($row['title']); ?>
                       </a>
                     </div>
                     <div class="project-owner">
                       <?php echo arch_se($pname); ?>
                       <span class="badge <?php echo $proj_status === 'archived' ? 'badge-archived' : 'badge-completed'; ?>">
-                          <?php echo arch_se(ucfirst($proj_status)); ?>
+                          <?php echo arch_se($proj_status === 'archived' ? 'Archived' : 'Completed · ready to archive'); ?>
                       </span>
                     </div>
-                    <div class="project-progress" aria-label="<?php echo $closed_stages; ?> of 3 final milestones complete">
-                      <span style="width: <?php echo (int) round(($closed_stages / 3) * 100); ?>%;"></span>
+                    <?php if (!empty($row['department'])): ?>
+                      <div class="project-owner"><?php echo arch_se($row['department']); ?></div>
+                    <?php endif; ?>
+                    <div class="project-meta">
+                      <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $p_id; ?>">View project record</a>
                     </div>
-                    <div class="project-progress-label"><?php echo $closed_stages; ?>/3 milestones closed</div>
                   </td>
                   <td class="stage-cell <?php echo $col_state === 'presented' ? 'stage-complete' : ''; ?>" data-stage="01 · Colloquium">
                     <span class="badge <?php echo $col_class; ?>">
@@ -1053,7 +1136,7 @@ renderAdminShell(
                       </div>
                     </form>
                   </td>
-                  <td class="stage-cell <?php echo $arch_state === 'archived' ? 'stage-complete' : ''; ?>" data-stage="03 · Archive">
+                  <td class="stage-cell <?php echo $arch_state === 'archived' ? 'stage-complete' : ''; ?>" data-stage="03 · Repository">
                     <span class="badge <?php echo $arch_class; ?>">
                       <?php echo arch_se($archive_labels[$arch_state] ?? 'Not archived'); ?>
                     </span>
@@ -1061,34 +1144,33 @@ renderAdminShell(
                       <div class="pub-empty">No record yet — first save will create it.</div>
                     <?php endif; ?>
 
-                    <form method="POST" class="pub-edit">
-                      <?php echo csrfField(); ?>
-                      <input type="hidden" name="action" value="update_archive">
-                      <input type="hidden" name="project_id" value="<?php echo $p_id; ?>">
-                      <div class="pub-edit-row">
-                        <span class="label">Status</span>
-                        <select name="archive_status" required>
-                          <?php foreach (arch_enum_values('archive_status') as $v): ?>
-                            <option value="<?php echo arch_se($v); ?>" <?php echo $v === $arch_state ? 'selected' : ''; ?>>
-                              <?php echo arch_se($archive_labels[$v] ?? $v); ?>
-                            </option>
-                          <?php endforeach; ?>
-                        </select>
-                      </div>
-                      <?php if ($proj_status === 'completed'): ?>
-                        <div class="pub-meta">
-                          ⚠️ Setting this to <strong>archived</strong> will also archive the project
-                          (research_projects.status → 'archived').
+                    <?php if ($proj_status === 'completed'): ?>
+                      <form method="POST" class="pub-edit">
+                        <?php echo csrfField(); ?>
+                        <input type="hidden" name="action" value="update_archive">
+                        <input type="hidden" name="project_id" value="<?php echo $p_id; ?>">
+                        <div class="pub-edit-row">
+                          <span class="label">Archive status</span>
+                          <select name="archive_status" required>
+                            <?php foreach (arch_enum_values('archive_status') as $v): ?>
+                              <option value="<?php echo arch_se($v); ?>" <?php echo $v === $arch_state ? 'selected' : ''; ?>>
+                                <?php echo arch_se($archive_labels[$v] ?? $v); ?>
+                              </option>
+                            <?php endforeach; ?>
+                          </select>
                         </div>
-                      <?php elseif ($proj_status === 'archived'): ?>
                         <div class="pub-meta">
-                          ✓ Project is already archived.
+                          Moving this project to <strong>Archived</strong> updates its research status and preserves the record.
                         </div>
-                      <?php endif; ?>
-                      <div class="pub-actions">
-                        <button type="submit" class="btn btn-secondary btn-sm">💾 Save Archive</button>
-                      </div>
-                    </form>
+                        <div class="pub-actions">
+                          <button type="submit" class="btn btn-secondary btn-sm">
+                            <?php echo $arch_state === 'archived' ? 'Move to archive' : 'Save archive status'; ?>
+                          </button>
+                        </div>
+                      </form>
+                    <?php else: ?>
+                      <p class="pub-meta">This project is already archived. Its archive status cannot be reversed here.</p>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -1096,76 +1178,7 @@ renderAdminShell(
           </table>
         </div>
       <?php endif; ?>
-    </div>
-
-    <!-- ARCHIVE CARD -->
-    <div class="card archive-library-card">
-      <div class="card-header">
-        <div>
-          <div class="section-kicker">Permanent collection</div>
-          <div class="card-title">Archived Projects</div>
-          <p class="card-sub">Browse preserved research projects in the institutional record by title, researcher, or department.</p>
-        </div>
-      </div>
-
-      <!-- FILTERS -->
-      <form method="GET" action="admin-archive.php" class="filter-bar">
-        <input type="text" name="search" class="search-input" placeholder="Search by title or student name..." value="<?php echo arch_se($search); ?>">
-        <select name="department" class="filter-select" onchange="this.form.submit()">
-          <option value="">All Departments</option>
-          <?php while ($dept = $departments->fetch_assoc()): ?>
-            <option value="<?php echo arch_se($dept['department']); ?>" <?php echo $department_filter === $dept['department'] ? 'selected' : ''; ?>>
-              <?php echo arch_se($dept['department']); ?>
-            </option>
-          <?php endwhile; ?>
-        </select>
-        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
-        <?php if (!empty($search) || !empty($department_filter)): ?>
-          <a href="admin-archive.php" class="btn btn-secondary btn-sm">Clear</a>
-        <?php endif; ?>
-      </form>
-
-      <!-- TABLE -->
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Student</th>
-              <th>Department</th>
-              <th>Adviser</th>
-              <th>Archived</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php if ($projects->num_rows > 0): ?>
-              <?php while ($project = $projects->fetch_assoc()): ?>
-                <tr>
-                  <td style="font-weight: 500;">
-                    <?php echo arch_se($project['title']); ?>
-                  </td>
-                  <td><?php echo arch_se($project['student_name'] ?? '—'); ?></td>
-                  <td><?php echo arch_se($project['department'] ?? '—'); ?></td>
-                  <td><?php echo arch_se($project['adviser_name'] ?? 'Unassigned'); ?></td>
-                  <td style="white-space: nowrap;">
-                    <?php echo arch_se(date('M d, Y', strtotime($project['updated_at']))); ?>
-                  </td>
-                  <td>
-                    <a href="../shared/research-detail.php?id=<?php echo (int) $project['project_id']; ?>" class="btn btn-secondary btn-sm">View</a>
-                  </td>
-                </tr>
-              <?php endwhile; ?>
-            <?php else: ?>
-              <tr>
-                <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-muted, #94A3B8);">
-                  No archived research projects found matching your filters.
-                </td>
-              </tr>
-            <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
+      <?php endif; ?>
     </div>
 
 <?php

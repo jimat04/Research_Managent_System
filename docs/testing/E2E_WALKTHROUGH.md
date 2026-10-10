@@ -186,7 +186,7 @@ Log in as **staff**.
 
 Log in as **Admin**.
 
-52. Open **Archive Management** (`pages/admin/admin-archive.php`) → **Publication & Colloquium** → confirm the completed project is listed.
+52. Open **Archive Management** (`pages/admin/admin-archive.php`) → **Completed research record** → confirm the completed project is listed.
 53. ☐ Set colloquium = **scheduled** with date/venue → Juan notified
 54. ☐ Set journal = **published** with reference → saves correctly
 55. ☐ Set archive = **archived** → project status flips to **archived**

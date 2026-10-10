@@ -68,7 +68,7 @@ if ($tableCheck instanceof mysqli_result) $tableCheck->free();
 $publicationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 $publication = null;
 $loadPublication = static function (mysqli $connection, int $id): ?array {
-    $stmt = $connection->prepare('SELECT p.publication_id, p.research_title, p.researcher_id, p.research_project_id, p.researcher_name, p.researcher_category, p.publication_type, p.journal_publisher, p.publication_date, p.doi_identifier, p.file_path, p.file_name, p.status, p.created_at, p.updated_at, rp.title AS research_project_title FROM publications p LEFT JOIN research_projects rp ON rp.project_id = p.research_project_id WHERE p.publication_id = ? LIMIT 1');
+    $stmt = $connection->prepare('SELECT p.publication_id, p.research_title, p.researcher_id, p.research_project_id, p.researcher_name, p.researcher_category, p.publication_type, p.publication_type_name, p.journal_publisher, p.publication_date, p.doi_identifier, p.file_path, p.file_name, p.status, p.created_at, p.updated_at, rp.title AS research_project_title FROM publications p LEFT JOIN research_projects rp ON rp.project_id = p.research_project_id WHERE p.publication_id = ? LIMIT 1');
     $stmt->bind_param('i', $id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: null;
@@ -196,6 +196,15 @@ elseif ($shell === 'faculty') renderFacultyShell($user, 'publications.php', 'Pub
 else renderStudentShell($user, 'publications.php', 'Publication Details', $pageSubtitle);
 
 $badge = $publication ? publicationDetailStatusBadge((string) $publication['status']) : publicationDetailStatusBadge('');
+$typeLabel = 'Other';
+if ($publication) {
+    $typeLabel = (string) $publication['publication_type'];
+    if ($publication['publication_type'] === 'other' && trim((string) ($publication['publication_type_name'] ?? '')) !== '') {
+        $typeLabel = (string) $publication['publication_type_name'];
+    } else {
+        $typeLabel = $typeOptions[$typeLabel] ?? ucwords(str_replace('_', ' ', $typeLabel));
+    }
+}
 $doiUrl = $publication ? publicationDetailDoiUrl($publication['doi_identifier']) : null;
 $fileUrl = $publication && trim((string) $publication['file_path']) !== ''
     ? SITE_URL . 'pages/shared/download-research-document.php?type=publication&id=' . (int) $publication['publication_id']
@@ -215,7 +224,7 @@ $canEdit = $publication && ($canReview || ($ownerRole && (int) $publication['res
     <section class="empty-state"><div class="empty-mark" aria-hidden="true">?</div><h1>Publication not found</h1><p><?= publicationDetailEscape($publicationsAvailable ? 'The publication may have been removed, or the link is incomplete.' : 'The publications module is not installed. Apply database migration 012 to enable it.') ?></p><a class="action-button" href="<?= publicationDetailEscape(SITE_URL . 'pages/shared/publications.php') ?>">Return to Publications</a></section>
   <?php else: ?>
     <article class="detail-card">
-      <header class="detail-hero"><div class="hero-meta"><span class="badge type-badge"><?= publicationDetailEscape($typeOptions[$publication['publication_type']] ?? ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?></span><span class="badge tone-<?= publicationDetailEscape($badge['tone']) ?>"><?= publicationDetailEscape($badge['label']) ?></span></div><h1><?= publicationDetailEscape($publication['research_title']) ?></h1><p><?= publicationDetailEscape($publication['researcher_name'] ?: 'Unnamed researcher') ?> &middot; <?= publicationDetailEscape(ucfirst((string) $publication['researcher_category'])) ?></p></header>
+      <header class="detail-hero"><div class="hero-meta"><span class="badge type-badge"><?= publicationDetailEscape($typeLabel) ?></span><span class="badge tone-<?= publicationDetailEscape($badge['tone']) ?>"><?= publicationDetailEscape($badge['label']) ?></span></div><h1><?= publicationDetailEscape($publication['research_title']) ?></h1><p><?= publicationDetailEscape($publication['researcher_name'] ?: 'Unnamed researcher') ?> &middot; <?= publicationDetailEscape(ucfirst((string) $publication['researcher_category'])) ?></p></header>
       <div class="detail-grid">
         <div class="detail-field"><span>Journal / publisher</span><strong><?= publicationDetailEscape($publication['journal_publisher'] ?: 'Not recorded') ?></strong></div>
         <div class="detail-field"><span>Originating research project</span><strong><?= publicationDetailEscape($publication['research_project_title'] ?: 'Not linked') ?></strong></div>

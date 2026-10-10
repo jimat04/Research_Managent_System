@@ -335,6 +335,8 @@ function verify_migration(mysqli $conn, string $filename): ?bool
         '018_research_title_approval_status.sql' =>
             migration_enum_contains($conn, 'research_projects', 'status', 'title_approved'),
         '019_staff1_staff2_demo_accounts.sql' => verify_staff_demo_accounts($conn),
+        '020_publication_custom_type_name.sql' =>
+            migration_column_exists($conn, 'publications', 'publication_type_name'),
         'add_contact_messages_table.sql' =>
             migration_table_exists($conn, 'contact_messages')
             && migration_column_exists($conn, 'contact_messages', 'concern_type'),

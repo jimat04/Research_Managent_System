@@ -625,6 +625,7 @@ CREATE TABLE IF NOT EXISTS `publications` (
   `researcher_name` varchar(255) DEFAULT NULL COMMENT 'Denormalized for non-user authors',
   `researcher_category` enum('faculty','student') NOT NULL DEFAULT 'faculty',
   `publication_type` enum('journal','conference','book_chapter','other') NOT NULL DEFAULT 'journal',
+  `publication_type_name` varchar(120) DEFAULT NULL,
   `journal_publisher` varchar(255) DEFAULT NULL,
   `publication_date` date DEFAULT NULL,
   `doi_identifier` varchar(255) DEFAULT NULL,

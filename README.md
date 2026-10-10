@@ -54,7 +54,9 @@ A PHP and MySQL research management system for students, faculty advisers, resea
    Migration 011 enables archived researcher-author snapshots; migration 013
    adds and backfills copyright registration dates required by the registry and
    admin output reports. Migration 014 stores trainings as a distinct research
-   activity type. These migrations are not needed after a fresh schema import.
+   activity type. Migration 020 adds custom labels for publication records
+   whose type is Other. These migrations are not needed after a fresh schema
+   import.
 
 7. Open the app — the root `index.php` redirects to the public entry point:
 

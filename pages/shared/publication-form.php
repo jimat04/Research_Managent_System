@@ -88,14 +88,14 @@ $existing = null;
 $values = [
     'research_title' => '', 'researcher_name' => $isOwnerRole ? $currentName : '',
     'researcher_category' => $isOwnerRole ? $role : 'faculty', 'research_project_id' => '', 'publication_type' => 'journal',
-    'journal_publisher' => '', 'publication_date' => '', 'doi_identifier' => '',
+    'publication_type_name' => '', 'journal_publisher' => '', 'publication_date' => '', 'doi_identifier' => '',
     'status' => 'submitted', 'file_path' => '', 'file_name' => '',
 ];
 $errors = [];
 if (!$publicationsAvailable) $errors[] = 'The publications module is not installed.';
 
 if ($isEdit && $publicationsAvailable) {
-    $stmt = $conn->prepare('SELECT publication_id, research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT publication_id, research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, publication_type_name, journal_publisher, publication_date, doi_identifier, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
     $stmt->bind_param('i', $publicationId);
     $stmt->execute();
     $existing = $stmt->get_result()->fetch_assoc() ?: null;
@@ -163,6 +163,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (['research_title', 'research_project_id', 'publication_type', 'journal_publisher', 'publication_date', 'doi_identifier'] as $field) {
         $values[$field] = trim((string) ($_POST[$field] ?? ''));
     }
+    $customTypeNameInput = $_POST['publication_type_name'] ?? '';
+    $values['publication_type_name'] = is_string($customTypeNameInput) ? trim($customTypeNameInput) : '';
     if ($role === 'research_staff') {
         $existingStatus = (string) ($existing['status'] ?? 'submitted');
         $canManageCurrent = !$isEdit || $staffCanManagePublication(
@@ -189,6 +191,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($values['research_title'] === '' || strlen($values['research_title']) > 500) $errors[] = 'Research title is required and must not exceed 500 characters.';
     if (!preg_match('/^(journal|conference|book_chapter|other)$/D', $values['publication_type'])) $errors[] = 'Choose a valid publication type.';
+    if ($values['publication_type'] === 'other') {
+        if ($values['publication_type_name'] === '') $errors[] = 'Enter a name for the other publication type.';
+        if (strlen($values['publication_type_name']) > 120) $errors[] = 'The custom publication type name must not exceed 120 characters.';
+    } else {
+        $values['publication_type_name'] = '';
+    }
     if ($values['researcher_name'] === '' || strlen($values['researcher_name']) > 255) $errors[] = 'Researcher name is required and must not exceed 255 characters.';
     if (!preg_match('/^(faculty|student)$/D', $values['researcher_category'])) $errors[] = 'Choose a valid researcher category.';
     if (!preg_match('/^(submitted|under_review|accepted|published)$/D', $values['status'])) $errors[] = 'Choose a valid publication status.';
@@ -276,17 +284,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $publisher = $values['journal_publisher'] !== '' ? $values['journal_publisher'] : null;
             $publicationDate = $values['publication_date'] !== '' ? $values['publication_date'] : null;
             $doi = $values['doi_identifier'] !== '' ? $values['doi_identifier'] : null;
+            $publicationTypeName = $values['publication_type_name'] !== '' ? $values['publication_type_name'] : null;
             $researchProjectId = $values['research_project_id'] !== '' ? (int) $values['research_project_id'] : null;
             if ($isEdit && $isOwnerRole) {
-                $stmt = $conn->prepare("UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted'");
-                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 6) . 'ii', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $userId);
+                $stmt = $conn->prepare("UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, publication_type_name = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted'");
+                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 7) . 'ii', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publicationTypeName, $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $userId);
             } elseif ($isEdit) {
-                $stmt = $conn->prepare('UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND status = ?');
-                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 6) . 'is', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $values['status']);
+                $stmt = $conn->prepare('UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, publication_type_name = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND status = ?');
+                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 7) . 'is', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publicationTypeName, $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $values['status']);
             } else {
                 $researcherId = $isOwnerRole ? $userId : null;
-                $stmt = $conn->prepare('INSERT INTO publications (research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('siisssssssss', $values['research_title'], $researcherId, $researchProjectId, $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $values['status']);
+                $stmt = $conn->prepare('INSERT INTO publications (research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, publication_type_name, journal_publisher, publication_date, doi_identifier, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('sii' . str_repeat('s', 10), $values['research_title'], $researcherId, $researchProjectId, $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publicationTypeName, $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $values['status']);
             }
             $stmt->execute();
             if (!$isEdit) $publicationId = (int) $stmt->insert_id;
@@ -334,6 +343,7 @@ else renderStudentShell($user, 'publications.php', $pageTitle, $pageSubtitle);
 ?>
 
 <style>
+.publication-form #publication-type-name-field[hidden]{display:none}
 .publication-form-page{max-width:980px;margin:0 auto;color:#172033}.form-heading{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:20px}.form-heading h1{margin:0;font-size:clamp(25px,3vw,36px);letter-spacing:-.035em}.form-heading p{max-width:620px;margin:8px 0 0;color:#64748b;line-height:1.55}.back-link{color:#315b9f;font-size:12px;font-weight:800;text-decoration:none}.form-card{overflow:hidden;border:1px solid #dfe5ee;border-radius:18px;background:#fff;box-shadow:0 15px 38px rgba(42,67,108,.07)}.form-note{padding:13px 20px;border-bottom:1px solid #e2e8f0;background:#f8fafc;color:#526176;font-size:12px}.form-errors{margin:0 0 18px;padding:15px 18px;border:1px solid #fecaca;border-radius:12px;background:#fff1f2;color:#991b1b}.form-errors strong{display:block;margin-bottom:6px}.form-errors ul{margin:0;padding-left:19px}.publication-form{padding:26px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:19px 18px}.field.full{grid-column:1/-1}.field label{display:block;margin-bottom:7px;color:#334155;font-size:12px;font-weight:800}.required{color:#b42318}.optional{margin-left:5px;color:#64748b;font-size:10px;font-weight:650}.field input,.field select{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:11px 12px;background:#fff;color:#172033;font:inherit;font-size:13px}.field input[readonly]{background:#f8fafc;color:#526176}.field input:focus,.field select:focus,.button:focus-visible,.back-link:focus-visible{border-color:#315b9f;outline:3px solid rgba(49,91,159,.12);outline-offset:2px}.field small{display:block;margin-top:6px;color:#64748b;font-size:11px;line-height:1.45}.file-field{padding:17px;border:1px dashed #aebdd3;border-radius:12px;background:#f8fafc}.file-field input{padding:9px;background:#fff}.current-file{margin:0 0 10px;color:#315b9f;font-size:12px;font-weight:750}.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid #e8edf3}.button{display:inline-flex;align-items:center;justify-content:center;min-height:43px;border:1px solid #315b9f;border-radius:9px;padding:9px 17px;background:#315b9f;color:#fff;font:inherit;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;transition:transform .18s ease,background .18s ease}.button:hover{background:#24477e;color:#fff;transform:translateY(-1px)}.button.secondary{border-color:#cbd5e1;background:#fff;color:#475569}@media(max-width:640px){.form-heading{display:block}.back-link{display:inline-block;margin-top:14px}.publication-form{padding:20px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.form-actions{flex-direction:column-reverse}.button{width:100%;box-sizing:border-box}}
 </style>
 
@@ -349,6 +359,7 @@ else renderStudentShell($user, 'publications.php', $pageTitle, $pageSubtitle);
         <div class="field"><label for="researcher-name">Researcher <span class="required">*</span></label><input id="researcher-name" name="researcher_name" type="text" maxlength="255" value="<?= publicationFormEscape($values['researcher_name']) ?>" <?= $isOwnerRole ? 'readonly' : 'required' ?>></div>
         <div class="field"><label for="researcher-category">Category <span class="required">*</span></label><?php if ($isOwnerRole): ?><input type="text" value="<?= publicationFormEscape(ucfirst($values['researcher_category'])) ?>" readonly><?php else: ?><select id="researcher-category" name="researcher_category" required><option value="faculty" <?= $values['researcher_category'] === 'faculty' ? 'selected' : '' ?>>Faculty</option><option value="student" <?= $values['researcher_category'] === 'student' ? 'selected' : '' ?>>Student</option></select><?php endif; ?></div>
         <div class="field"><label for="publication-type">Publication type <span class="required">*</span></label><select id="publication-type" name="publication_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= publicationFormEscape($value) ?>" <?= $values['publication_type'] === $value ? 'selected' : '' ?>><?= publicationFormEscape($label) ?></option><?php endforeach; ?></select></div>
+        <div class="field" id="publication-type-name-field"><label for="publication-type-name">Custom publication type name <span class="required" id="publication-type-name-required">*</span></label><input id="publication-type-name" name="publication_type_name" type="text" maxlength="120" value="<?= publicationFormEscape($values['publication_type_name']) ?>" aria-describedby="publication-type-name-help"><small id="publication-type-name-help">Enter the specific type when you choose Other, such as a thesis, technical report, or policy brief.</small></div>
         <div class="field full"><label for="research-project">Originating research project <span class="optional">optional</span></label><select id="research-project" name="research_project_id"><option value="">Not linked</option><?php foreach ($projectOptions as $project): ?><option value="<?= (int) $project['project_id'] ?>" <?= (string) $values['research_project_id'] === (string) $project['project_id'] ? 'selected' : '' ?>><?= publicationFormEscape($project['title'] . ' · ' . ucfirst((string) $project['status'])) ?></option><?php endforeach; ?></select><small>Choose a project only when the relationship is confirmed. Existing unlinked outputs remain valid.</small></div>
         <div class="field"><label for="publication-date">Publication date</label><input id="publication-date" name="publication_date" type="date" value="<?= publicationFormEscape($values['publication_date']) ?>"></div>
         <div class="field full"><label for="journal-publisher">Journal or publisher</label><input id="journal-publisher" name="journal_publisher" type="text" maxlength="255" value="<?= publicationFormEscape($values['journal_publisher']) ?>"></div>
@@ -360,6 +371,26 @@ else renderStudentShell($user, 'publications.php', $pageTitle, $pageSubtitle);
     </form>
   </section>
 </div>
+
+<script>
+(() => {
+  const typeSelect = document.getElementById('publication-type');
+  const customTypeField = document.getElementById('publication-type-name-field');
+  const customTypeInput = document.getElementById('publication-type-name');
+  const requiredMarker = document.getElementById('publication-type-name-required');
+  if (!typeSelect || !customTypeField || !customTypeInput || !requiredMarker) return;
+
+  const syncCustomTypeField = () => {
+    const isOther = typeSelect.value === 'other';
+    customTypeField.hidden = !isOther;
+    customTypeInput.required = isOther;
+    requiredMarker.hidden = !isOther;
+  };
+
+  typeSelect.addEventListener('change', syncCustomTypeField);
+  syncCustomTypeField();
+})();
+</script>
 
 <?php
 if ($shell === 'admin') renderAdminShellClose();
