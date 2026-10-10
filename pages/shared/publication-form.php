@@ -32,7 +32,27 @@ function publicationFormStoredFile(string $relativePath): ?string
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
 $isOwnerRole = in_array($role, ['faculty', 'student'], true);
-$isReviewer = in_array($role, ['research_staff', 'admin'], true);
+$isReviewer = $role === 'admin';
+$staffCanManagePublication = static function (string $type, string $status) use ($userId): bool {
+    $typePage = match ($type) {
+        'journal' => 'journal_publications',
+        'conference' => 'conference_presentations',
+        default => '',
+    };
+    if ($typePage !== '' && hasModulePermission($userId, 'publication_dissemination', 'manage', $typePage)) {
+        return true;
+    }
+    return $status === 'published'
+        && hasModulePermission($userId, 'research_implementation_outputs', 'manage', 'research_outputs');
+};
+if ($role === 'research_staff') {
+    $requestedType = trim((string) ($_GET['publication_type'] ?? 'journal'));
+    $isReviewer = $staffCanManagePublication($requestedType, 'submitted');
+    if (!$isReviewer && !array_key_exists('id', $_GET)) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+}
 if (!$isOwnerRole && !$isReviewer) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
@@ -44,6 +64,18 @@ if ($tableCheck instanceof mysqli_result) $tableCheck->free();
 
 $typeOptions = ['journal' => 'Journal', 'conference' => 'Conference', 'book_chapter' => 'Book chapter', 'other' => 'Other'];
 $statusOptions = ['submitted' => 'Submitted', 'under_review' => 'Under review', 'accepted' => 'Accepted', 'published' => 'Published'];
+$projectOptions = [];
+if ($publicationsAvailable) {
+    $projectSql = $isOwnerRole
+        ? 'SELECT project_id, title, status FROM research_projects WHERE deleted_at IS NULL AND (created_by = ? OR student_id = ? OR adviser_id = ?) ORDER BY updated_at DESC, project_id DESC'
+        : "SELECT project_id, title, status FROM research_projects WHERE deleted_at IS NULL AND status NOT IN ('draft', 'rejected') ORDER BY updated_at DESC, project_id DESC";
+    $projectStmt = $conn->prepare($projectSql);
+    if ($isOwnerRole) $projectStmt->bind_param('iii', $userId, $userId, $userId);
+    $projectStmt->execute();
+    $projectResult = $projectStmt->get_result();
+    while ($project = $projectResult->fetch_assoc()) $projectOptions[] = $project;
+    $projectStmt->close();
+}
 $currentName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
 $editRequested = array_key_exists('id', $_GET);
 $publicationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
@@ -55,7 +87,7 @@ $isEdit = $publicationId !== null;
 $existing = null;
 $values = [
     'research_title' => '', 'researcher_name' => $isOwnerRole ? $currentName : '',
-    'researcher_category' => $isOwnerRole ? $role : 'faculty', 'publication_type' => 'journal',
+    'researcher_category' => $isOwnerRole ? $role : 'faculty', 'research_project_id' => '', 'publication_type' => 'journal',
     'journal_publisher' => '', 'publication_date' => '', 'doi_identifier' => '',
     'status' => 'submitted', 'file_path' => '', 'file_name' => '',
 ];
@@ -63,7 +95,7 @@ $errors = [];
 if (!$publicationsAvailable) $errors[] = 'The publications module is not installed.';
 
 if ($isEdit && $publicationsAvailable) {
-    $stmt = $conn->prepare('SELECT publication_id, research_title, researcher_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT publication_id, research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
     $stmt->bind_param('i', $publicationId);
     $stmt->execute();
     $existing = $stmt->get_result()->fetch_assoc() ?: null;
@@ -71,6 +103,17 @@ if ($isEdit && $publicationsAvailable) {
     if (!$existing) {
         header('Location: ' . SITE_URL . 'pages/shared/publication-detail.php?id=' . $publicationId);
         exit;
+    }
+    if ($role === 'research_staff') {
+        $authorizedEdit = $staffCanManagePublication(
+            (string) $existing['publication_type'],
+            (string) $existing['status']
+        );
+        if (!$authorizedEdit) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+        $isReviewer = true;
     }
     if ($isOwnerRole && ((int) $existing['researcher_id'] !== $userId || $existing['status'] !== 'submitted')) {
         header('Location: ' . SITE_URL . 'public/403.php');
@@ -101,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isEdit = $formMode === 'edit';
     $existing = null;
     if ($isEdit && $publicationsAvailable) {
-        $stmt = $conn->prepare('SELECT publication_id, researcher_id, researcher_name, researcher_category, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
+        $stmt = $conn->prepare('SELECT publication_id, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
         $stmt->bind_param('i', $publicationId);
         $stmt->execute();
         $existing = $stmt->get_result()->fetch_assoc() ?: null;
@@ -117,8 +160,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    foreach (['research_title', 'publication_type', 'journal_publisher', 'publication_date', 'doi_identifier'] as $field) {
+    foreach (['research_title', 'research_project_id', 'publication_type', 'journal_publisher', 'publication_date', 'doi_identifier'] as $field) {
         $values[$field] = trim((string) ($_POST[$field] ?? ''));
+    }
+    if ($role === 'research_staff') {
+        $existingStatus = (string) ($existing['status'] ?? 'submitted');
+        $canManageCurrent = !$isEdit || $staffCanManagePublication(
+            (string) ($existing['publication_type'] ?? ''),
+            $existingStatus
+        );
+        $canManageRequested = $staffCanManagePublication((string) $values['publication_type'], $existingStatus);
+        if (!$canManageCurrent || !$canManageRequested) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+        $values['status'] = (string) ($existing['status'] ?? 'submitted');
     }
     if ($isOwnerRole) {
         $values['researcher_name'] = $currentName;
@@ -127,9 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $values['researcher_name'] = trim((string) ($_POST['researcher_name'] ?? ''));
         $categoryInput = trim((string) ($_POST['researcher_category'] ?? ''));
-        $statusInput = trim((string) ($_POST['status'] ?? ''));
         $values['researcher_category'] = preg_match('/^(faculty|student)$/D', $categoryInput) ? $categoryInput : '';
-        $values['status'] = preg_match('/^(submitted|under_review|accepted|published)$/D', $statusInput) ? $statusInput : '';
+        $values['status'] = $isEdit && $existing ? (string) $existing['status'] : 'submitted';
     }
 
     if ($values['research_title'] === '' || strlen($values['research_title']) > 500) $errors[] = 'Research title is required and must not exceed 500 characters.';
@@ -139,6 +194,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!preg_match('/^(submitted|under_review|accepted|published)$/D', $values['status'])) $errors[] = 'Choose a valid publication status.';
     if (strlen($values['journal_publisher']) > 255) $errors[] = 'Journal or publisher must not exceed 255 characters.';
     if (strlen($values['doi_identifier']) > 255) $errors[] = 'DOI or identifier must not exceed 255 characters.';
+    if ($values['research_project_id'] !== '' && !ctype_digit($values['research_project_id'])) $errors[] = 'Choose a valid research project.';
+    $values['research_project_id'] = $values['research_project_id'] !== '' ? (string) (int) $values['research_project_id'] : '';
+    if (!$errors && $values['research_project_id'] !== '') {
+        $projectStmt = $conn->prepare('SELECT project_id FROM research_projects WHERE project_id = ? AND deleted_at IS NULL' . ($isOwnerRole ? ' AND (created_by = ? OR student_id = ? OR adviser_id = ?)' : '') . ' LIMIT 1');
+        if ($isOwnerRole) $projectStmt->bind_param('iiii', $values['research_project_id'], $userId, $userId, $userId);
+        else $projectStmt->bind_param('i', $values['research_project_id']);
+        $projectStmt->execute();
+        $validProject = $projectStmt->get_result()->num_rows === 1;
+        $projectStmt->close();
+        if (!$validProject) $errors[] = 'Choose a research project you are allowed to associate.';
+    }
     if ($values['publication_date'] !== '') {
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $values['publication_date']);
         if (!$date || $date->format('Y-m-d') !== $values['publication_date']) $errors[] = 'Enter a valid publication date.';
@@ -181,8 +247,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->begin_transaction();
             if ($isEdit) {
                 $lockSql = $isOwnerRole
-                    ? "SELECT publication_id FROM publications WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted' FOR UPDATE"
-                    : 'SELECT publication_id FROM publications WHERE publication_id = ? FOR UPDATE';
+                    ? "SELECT publication_id, status FROM publications WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted' FOR UPDATE"
+                    : 'SELECT publication_id, status FROM publications WHERE publication_id = ? FOR UPDATE';
                 $lock = $conn->prepare($lockSql);
                 if ($isOwnerRole) $lock->bind_param('ii', $publicationId, $userId);
                 else $lock->bind_param('i', $publicationId);
@@ -190,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lockedPublication = $lock->get_result()->fetch_assoc();
                 $lock->close();
                 if (!$lockedPublication) throw new RuntimeException('Publication is no longer editable.');
+                $values['status'] = (string) $lockedPublication['status'];
             }
 
             if ($validatedUpload) {
@@ -209,16 +276,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $publisher = $values['journal_publisher'] !== '' ? $values['journal_publisher'] : null;
             $publicationDate = $values['publication_date'] !== '' ? $values['publication_date'] : null;
             $doi = $values['doi_identifier'] !== '' ? $values['doi_identifier'] : null;
+            $researchProjectId = $values['research_project_id'] !== '' ? (int) $values['research_project_id'] : null;
             if ($isEdit && $isOwnerRole) {
-                $stmt = $conn->prepare("UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted'");
-                $stmt->bind_param('sssssssssii', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $userId);
+                $stmt = $conn->prepare("UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND researcher_id = ? AND status = 'submitted'");
+                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 6) . 'ii', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $userId);
             } elseif ($isEdit) {
-                $stmt = $conn->prepare('UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ?, status = ? WHERE publication_id = ?');
-                $stmt->bind_param('ssssssssssi', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $values['status'], $publicationId);
+                $stmt = $conn->prepare('UPDATE publications SET research_title = ?, researcher_name = ?, researcher_category = ?, research_project_id = ?, publication_type = ?, journal_publisher = ?, publication_date = ?, doi_identifier = ?, file_path = ?, file_name = ? WHERE publication_id = ? AND status = ?');
+                $stmt->bind_param(str_repeat('s', 3) . 'i' . str_repeat('s', 6) . 'is', $values['research_title'], $values['researcher_name'], $values['researcher_category'], $researchProjectId, $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $publicationId, $values['status']);
             } else {
                 $researcherId = $isOwnerRole ? $userId : null;
-                $stmt = $conn->prepare('INSERT INTO publications (research_title, researcher_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('sisssssssss', $values['research_title'], $researcherId, $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $values['status']);
+                $stmt = $conn->prepare('INSERT INTO publications (research_title, researcher_id, research_project_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('siisssssssss', $values['research_title'], $researcherId, $researchProjectId, $values['researcher_name'], $values['researcher_category'], $values['publication_type'], $publisher, $publicationDate, $doi, $newRelativePath, $newOriginalName, $values['status']);
             }
             $stmt->execute();
             if (!$isEdit) $publicationId = (int) $stmt->insert_id;
@@ -273,7 +341,7 @@ else renderStudentShell($user, 'publications.php', $pageTitle, $pageSubtitle);
   <header class="form-heading"><div><h1><?= publicationFormEscape($pageTitle) ?></h1><p><?= publicationFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= publicationFormEscape($isEdit && $publicationId ? SITE_URL . 'pages/shared/publication-detail.php?id=' . $publicationId : SITE_URL . 'pages/shared/publications.php') ?>">&larr; Back</a></header>
   <?php if ($errors): ?><div class="form-errors" role="alert"><strong>Review the following:</strong><ul><?php foreach ($errors as $error): ?><li><?= publicationFormEscape($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
   <section class="form-card">
-    <div class="form-note"><?= $isOwnerRole ? 'Your account is recorded as the researcher. Submitted records remain editable until review begins.' : 'Staff and administrators may submit on behalf of a researcher and set the workflow status.' ?></div>
+    <div class="form-note"><?= $isOwnerRole ? 'Your account is recorded as the researcher. Submitted records remain editable until review begins.' : 'Staff and administrators may submit on behalf of a researcher. Use the publication detail page to advance its review status.' ?></div>
     <form class="publication-form" method="post" enctype="multipart/form-data">
       <?= csrfField() ?><input type="hidden" name="form_mode" value="<?= $isEdit ? 'edit' : 'create' ?>"><?php if ($isEdit && $publicationId): ?><input type="hidden" name="publication_id" value="<?= (int) $publicationId ?>"><?php endif; ?>
       <div class="form-grid">
@@ -281,10 +349,11 @@ else renderStudentShell($user, 'publications.php', $pageTitle, $pageSubtitle);
         <div class="field"><label for="researcher-name">Researcher <span class="required">*</span></label><input id="researcher-name" name="researcher_name" type="text" maxlength="255" value="<?= publicationFormEscape($values['researcher_name']) ?>" <?= $isOwnerRole ? 'readonly' : 'required' ?>></div>
         <div class="field"><label for="researcher-category">Category <span class="required">*</span></label><?php if ($isOwnerRole): ?><input type="text" value="<?= publicationFormEscape(ucfirst($values['researcher_category'])) ?>" readonly><?php else: ?><select id="researcher-category" name="researcher_category" required><option value="faculty" <?= $values['researcher_category'] === 'faculty' ? 'selected' : '' ?>>Faculty</option><option value="student" <?= $values['researcher_category'] === 'student' ? 'selected' : '' ?>>Student</option></select><?php endif; ?></div>
         <div class="field"><label for="publication-type">Publication type <span class="required">*</span></label><select id="publication-type" name="publication_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= publicationFormEscape($value) ?>" <?= $values['publication_type'] === $value ? 'selected' : '' ?>><?= publicationFormEscape($label) ?></option><?php endforeach; ?></select></div>
+        <div class="field full"><label for="research-project">Originating research project <span class="optional">optional</span></label><select id="research-project" name="research_project_id"><option value="">Not linked</option><?php foreach ($projectOptions as $project): ?><option value="<?= (int) $project['project_id'] ?>" <?= (string) $values['research_project_id'] === (string) $project['project_id'] ? 'selected' : '' ?>><?= publicationFormEscape($project['title'] . ' · ' . ucfirst((string) $project['status'])) ?></option><?php endforeach; ?></select><small>Choose a project only when the relationship is confirmed. Existing unlinked outputs remain valid.</small></div>
         <div class="field"><label for="publication-date">Publication date</label><input id="publication-date" name="publication_date" type="date" value="<?= publicationFormEscape($values['publication_date']) ?>"></div>
         <div class="field full"><label for="journal-publisher">Journal or publisher</label><input id="journal-publisher" name="journal_publisher" type="text" maxlength="255" value="<?= publicationFormEscape($values['journal_publisher']) ?>"></div>
         <div class="field full"><label for="doi-identifier">DOI or identifier</label><input id="doi-identifier" name="doi_identifier" type="text" maxlength="255" value="<?= publicationFormEscape($values['doi_identifier']) ?>" placeholder="10.1234/example or https://doi.org/..."></div>
-        <?php if ($isReviewer): ?><div class="field"><label for="publication-status">Status <span class="required">*</span></label><select id="publication-status" name="status" required><?php foreach ($statusOptions as $value => $label): ?><option value="<?= publicationFormEscape($value) ?>" <?= $values['status'] === $value ? 'selected' : '' ?>><?= publicationFormEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?>
+        <?php if ($isReviewer && $isEdit): ?><div class="field"><label for="publication-status">Current status</label><input id="publication-status" type="text" value="<?= publicationFormEscape(ucwords(str_replace('_', ' ', $values['status']))) ?>" readonly><small>Change status from the publication detail page using a valid review action.</small></div><?php endif; ?>
         <div class="field full file-field"><label for="research-file">Research file (PDF) <?php if (!$values['file_path']): ?><span class="required">*</span><?php else: ?><span class="optional">optional replacement</span><?php endif; ?></label><?php if ($values['file_name']): ?><p class="current-file">Current file: <?= publicationFormEscape($values['file_name']) ?></p><?php endif; ?><input id="research-file" name="research_file" type="file" accept=".pdf,application/pdf" <?= $values['file_path'] ? '' : 'required' ?>><small>PDF only, up to <?= publicationFormEscape(number_format(MAX_UPLOAD_SIZE / 1048576, 0)) ?> MB. Uploading a new file replaces the current manuscript after the record saves.</small></div>
       </div>
       <div class="form-actions"><a class="button secondary" href="<?= publicationFormEscape($isEdit && $publicationId ? SITE_URL . 'pages/shared/publication-detail.php?id=' . $publicationId : SITE_URL . 'pages/shared/publications.php') ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Submit publication' ?></button></div>

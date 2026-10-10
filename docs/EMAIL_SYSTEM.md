@@ -1,8 +1,9 @@
 # Email Notification System - Setup Guide
 
-**Date:** August 29, 2026  
+**Original implementation notes:** August 29, 2026
 **Feature:** Student Auto-Approval + Email Verification  
-**Status:** ✅ Implemented
+
+> Historical implementation guide, source-checked October 10, 2026. This does not certify mail delivery in any environment.
 
 ---
 
@@ -12,10 +13,10 @@ The email notification system enables:
 
 1. **Student Auto-Approval** — Students get `status='active'` immediately upon registration
 2. **Faculty/Staff Manual Approval** — Faculty and staff remain `status='pending'` until admin approves
-3. **Email Verification** — All users must verify their email address via token link
-4. **Admin Notifications** — Admins receive emails when faculty/staff register
-5. **Approval Notifications** — Users receive emails when their accounts are approved
-6. **Research Status Notifications** — Users receive emails when research status changes (future enhancement)
+3. **Email Verification** — Registration sends a verification email, but verification is not required to log in.
+4. **Admin Notifications** — Registration attempts to notify admins when faculty/staff register.
+5. **Approval Notifications** — Account activation attempts to notify the user.
+6. **Research Status Notification Helper** — A status-change email helper and template exist, but there are no current application call sites; status emails are not automatically sent by the research workflow.
 
 ---
 
@@ -27,22 +28,11 @@ The email notification system enables:
 
 ## 🔧 Configuration
 
-### 1. Run Database Migration
+### 1. Database schema
 
-Execute the migration to add email verification fields:
+The canonical fresh-install schema already contains the email-verification columns. Apply the email verification migration only when upgrading a legacy database that does not have those columns; follow the current README migration guidance rather than rerunning it on a fresh import.
 
-```bash
-mysql -u root rms_db < database/migrations/003_add_email_verification.sql
-```
-
-Or via phpMyAdmin, import `database/migrations/003_add_email_verification.sql`
-
-This adds:
-- `email_verified` (TINYINT)
-- `email_verification_token` (VARCHAR 64)
-- `email_verification_expires` (DATETIME)
-
-### 2. Configure Email Settings in `.env`
+### 2. Configure email settings in `.env`
 
 Copy these settings to your `.env` file and update with your SMTP credentials:
 
@@ -82,9 +72,9 @@ MAIL_FROM_NAME="EARIST RMS"
 MAIL_REPLY_TO=youremail@gmail.com
 ```
 
-### 4. Alternative: Use PHP mail() Function
+### 4. PHP mail() fallback
 
-If you don't have SMTP access, use the built-in PHP `mail()` function:
+`includes/email.php` uses PHP `mail()` when usable SMTP settings are not present. This fallback depends on a working mail transport on the host and is not evidence that delivery succeeded.
 
 ```env
 MAIL_MAILER=mail
@@ -111,9 +101,9 @@ The system includes 4 professional email templates:
 - Sent to all active admins when faculty/staff register
 - Contains user details and link to user management page
 
-### 4. **Research Status Change** (Future)
-- Sent when research project status changes
-- Includes reviewer comments
+### 4. Research status change (helper only)
+- `sendResearchStatusEmail()` and its template are implemented in `includes/email.php`.
+- No current page or workflow calls this helper, so users do not automatically receive research-status emails.
 
 ---
 
@@ -121,21 +111,18 @@ The system includes 4 professional email templates:
 
 ### **Students**
 
-1. Student registers via `public/login.php#register`
-2. Account created with `status='active'` ✅ AUTO-APPROVED
-3. Verification email sent
-4. Student can log in immediately but should verify email
-5. Optional: Require email verification before full access (future enhancement)
+1. Student registers via `public/login.php#register`.
+2. Account is created with `status='active'`.
+3. The application attempts to send a verification email.
+4. Student can log in without first verifying the email; email verification is not an access gate.
 
 ### **Faculty / Research Staff**
 
-1. Faculty/staff registers via `public/login.php#register`
-2. Account created with `status='pending'` ⏳ NEEDS APPROVAL
-3. Verification email sent to user
-4. Notification email sent to all admins
-5. Admin reviews and activates account in `pages/admin/admin-users.php`
-6. Approval email sent to user
-7. User can now log in
+1. Faculty/staff registers via `public/login.php#register`.
+2. Account is created with `status='pending'`.
+3. Application attempts to send a verification email and notify admins.
+4. Admin reviews and activates the account in `pages/admin/admin-users.php`.
+5. Application attempts to send an activation email; the user can log in once active.
 
 ---
 
@@ -315,28 +302,14 @@ The following actions are logged in `activity_log`:
 
 ---
 
-## ✅ Completion Status
+## Implementation status (source checked)
 
-**Implemented:**
-- ✅ Student auto-approval
-- ✅ Faculty/staff manual approval workflow
-- ✅ Email verification system with tokens
-- ✅ PHPMailer integration
-- ✅ Professional email templates
-- ✅ Admin approval notifications
-- ✅ User approval notifications
-- ✅ Resend verification functionality
-- ✅ Database migration
-- ✅ Configuration via `.env`
+**Present in source:** student registration uses active status; faculty/research-staff registration uses pending status; verification and resend pages/helpers exist; PHPMailer is used; admin/user notification helpers are present. The canonical schema already includes verification fields, so do not rerun the legacy migration on a fresh install.
 
-**Next Steps:**
-1. Run database migration
-2. Configure SMTP in `.env`
-3. Test registration flows
-4. Optional: Enforce email verification before dashboard access
+**Not established by this document:** successful delivery, production SMTP readiness, mandatory verification, or that all optional email templates have current call sites. Configure mail for the deployment and test using non-production accounts.
 
 ---
 
 **Generated:** August 29, 2026 12:55 PM (UTC+8)  
 **Version:** 1.0  
-**Status:** Production Ready
+**Current verification:** This guide documents the August 2026 implementation, not a production mail-delivery test. Configure SMTP and verify delivery on the deployment host before release.

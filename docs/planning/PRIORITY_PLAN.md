@@ -1,8 +1,10 @@
-# RMS Priority Action Plan
+# RMS Priority Action Plan — Historical Roadmap
 
 **Date:** August 28, 2026  
 **Based On:** RECOMMENDATIONS.md Analysis  
 **Goal:** Prioritize improvements by criticality, impact, and effort
+
+> This is the original August 2026 planning snapshot, not the current project backlog. Many items below were subsequently implemented or superseded. Confirm current source and `TODO.md` before scheduling work; the completion marks and effort estimates below are historical and are not current verification.
 
 ---
 
@@ -357,14 +359,14 @@ Focus ONLY on security - Get production-ready:
 4. ✅ File upload security (4 hours)
 5. ✅ SQL audit (4 hours)
 
-**Result:** Secure, production-ready system
+**Intended outcome:** Improve the security baseline; this historical plan is not a production-readiness certification.
 
 #### **Option B: "Balanced Approach" (2 Weeks)** ⭐ RECOMMENDED
 Security + high-impact UX improvements:
 1. Week 1: All security items above
 2. Week 2: Email notifications + form validation + loading states
 
-**Result:** Secure AND user-friendly
+**Intended outcome:** Improve security and usability; verify implementation and deployment separately.
 
 #### **Option C: "Full Enhancement" (4 Weeks)**
 Everything from Tier 1 + Tier 2:
@@ -466,5 +468,4 @@ These 5 items (1 week of work) will give you 80% of the security benefit.
 ---
 
 **Generated:** August 28, 2026 15:43 (UTC+8)  
-**Status:** Prioritized Action Plan Complete  
-**Next Review:** End of Week 1 (September 4, 2026)
+**Historical status:** Prioritized Action Plan recorded as complete on August 28, 2026. The suggested September 4, 2026 review date has passed; consult current backlog and source before using this roadmap.

@@ -1,8 +1,9 @@
 # Contact System Integration Summary
 
-**Date:** August 29, 2026  
-**Time:** 05:44 UTC  
-**Status:** ✅ COMPLETE
+**Original integration date:** August 29, 2026
+**Status:** Historical implementation summary; current navigation and behavior were not re-tested by that report.
+
+**Current source check (October 10, 2026):** Contact submission is handled by `public/contact.php` and `includes/contact-handler.php`. Management pages are `pages/admin/admin-contact.php` and `pages/staff/contact-messages.php`. The admin shell links to Contact Messages; the current staff shell does not link to its contact-message page.
 
 ---
 
@@ -22,10 +23,11 @@ Successfully integrated and tested the complete Contact Management System for RM
 - Confirmed role-based access controls
 - Validated email template system
 
-### 2. ✅ Staff Dashboard Navigation Integration
-**File:** `pages/staff/staff-dashboard.php`
+### 2. Staff navigation change (historical)
 
-Added Contact Messages navigation link with pending count badge:
+The original integration added a Contact Messages link to the standalone staff dashboard. Current navigation is rendered by `includes/staff-shell.php`, which does not include that link. Staff can still open `pages/staff/contact-messages.php` directly; `pages/admin/admin-contact.php` also permits the `research_staff` role.
+
+The original navigation change looked like:
 ```php
 // Added stat query for contact messages
 $stat_contact = (int) ($conn->query(
@@ -51,13 +53,10 @@ require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 ```
 
-### 4. ✅ Complete Page Rebuild
+### 4. Page rebuild (historical)
 **File:** `pages/staff/contact-messages.php`
 
-Rebuilt as a complete standalone page (671 lines) with:
-- Full HTML5 structure (DOCTYPE, head, body)
-- Complete sidebar navigation with user info
-- Premium RMS design system styling
+The page was rebuilt as a standalone page in August 2026. It now renders through `renderStaffShell()` in `includes/staff-shell.php`; avoid duplicating the shell when making future changes. Current features include:
 - Modal interface for message resolution
 - Pagination, filtering, and search
 - Success/error alert system
@@ -111,8 +110,8 @@ database/
 
 | Role | Email | Password | Access |
 |------|-------|----------|--------|
-| Admin | admin@rms.edu.ph | Admin@123 | Full admin panel + email replies |
-| Research Staff | staff@rms.edu.ph | Staff@123 | Staff interface with message management |
+| Admin | See the root README for local demo credentials | Not recorded here | Full admin panel + email replies |
+| Research Staff | Use an active local `research_staff` account | Not recorded here | Staff contact page and shared reply interface |
 
 ### URLs
 
@@ -125,7 +124,7 @@ database/
 
 **Staff (after login):**
 - Contact Messages: `http://localhost/rms/pages/staff/contact-messages.php`
-- Or click: 📨 Contact Messages in staff sidebar
+- The current staff shell does not link this page; use the direct URL.
 
 ---
 
@@ -259,10 +258,10 @@ CREATE TABLE contact_messages (
 
 ## Issues Resolved
 
-### Issue #1: Missing Navigation Link
-**Problem:** Staff dashboard had no link to Contact Messages  
-**Solution:** Added navigation item with badge counter in Communication section  
-**Status:** ✅ Fixed
+### Issue #1: Staff navigation link
+**Original problem:** The standalone staff dashboard had no link to Contact Messages
+**Original solution:** A navigation item with a badge counter was added to that page.
+**Current status:** The current shared `staff-shell.php` navigation still has no Contact Messages item; this is an open UX follow-up.
 
 ### Issue #2: Missing Includes
 **Problem:** `requireLogin()` undefined - fatal error  
@@ -270,9 +269,8 @@ CREATE TABLE contact_messages (
 **Status:** ✅ Fixed
 
 ### Issue #3: Incomplete Page Structure
-**Problem:** Page had no DOCTYPE, HTML structure causing 404  
-**Solution:** Complete rebuild with full HTML5 document structure  
-**Status:** ✅ Fixed
+**Original problem:** The page lacked a complete document structure.
+**Original solution:** It was rebuilt. The current page uses the shared staff shell rather than maintaining standalone sidebar markup.
 
 ### Issue #4: 403 Access Denied
 **Problem:** User not logged in or wrong role  
@@ -302,7 +300,7 @@ CREATE TABLE contact_messages (
 
 ### Priority: Info
 - Email system requires `.env` SMTP configuration for production use
-- Currently using 2 test messages for demonstration
+- Message counts and contents are database state; do not treat the August 2026 sample count as a current fixture.
 
 ---
 
@@ -315,7 +313,8 @@ CREATE TABLE contact_messages (
 - [x] Email templates are configured
 - [x] Role-based access enforced
 - [x] CSRF protection working
-- [x] Navigation links present
+- [x] Admin-shell Contact Messages link present
+- [ ] Add Contact Messages to staff-shell navigation if desired
 - [x] Pagination working
 - [x] Modal interactions functional
 - [x] Activity logging enabled
@@ -327,12 +326,12 @@ CREATE TABLE contact_messages (
 
 ## Conclusion
 
-The Contact Management System is **fully operational and production-ready**. All core functionality is working correctly:
+The original August 2026 run reported the core contact flows working. This is not a current production-readiness certification; verify local mail configuration and rerun role, CSRF, and message-lifecycle checks before release:
 
 ✅ Public users can submit inquiries  
 ✅ Admin and staff can manage messages  
 ✅ Email reply system is configured  
-✅ Navigation is complete  
+⚠️ Staff-shell navigation still lacks a Contact Messages link
 ✅ Security measures are in place  
 ✅ Documentation is comprehensive  
 
@@ -343,7 +342,7 @@ The only minor enhancement needed is SMTP configuration in `.env` for production
 ## Support
 
 **Login Issues?**
-- Use admin@rms.edu.ph / Admin@123 or staff@rms.edu.ph / Staff@123
+- Use the current local demo accounts documented in the root README, or an active admin-provisioned `research_staff` account.
 - Clear browser cookies if session expired
 - Check that XAMPP MySQL is running
 
@@ -353,11 +352,10 @@ The only minor enhancement needed is SMTP configuration in `.env` for production
 - Default uses PHP mail() function (may not work in dev)
 
 **Database Issues?**
-- Ensure `contact_messages` table exists
-- Run migration: `database/migrations/add_contact_messages_table.sql`
+- Confirm `contact_messages` exists. Use the canonical schema for fresh installations and the documented upgrade path for existing databases; do not rerun an old one-off migration without checking it first.
 
 ---
 
-**Integration Date:** 2026-08-29  
-**Completed By:** Claude (Kiro)  
-**Status:** ✅ Production Ready
+**Integration date:** 2026-08-29
+**Current source review:** 2026-10-10
+**Status:** Historical implementation record; verify the current installation before release.

@@ -15,7 +15,82 @@ if (!$user) {
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$canManage = in_array($role, ['research_staff', 'admin'], true);
+$capacityPageInput = trim((string) ($_GET['capacity_page'] ?? ''));
+$capacityPage = in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
+    ? $capacityPageInput
+    : '';
+$requestedActivityType = trim((string) ($_GET['type'] ?? ''));
+$permissionPages = match ($requestedActivityType) {
+    'seminar' => ['seminars'],
+    'training' => ['trainings'],
+    'workshop' => ['workshops'],
+    default => ['seminars', 'trainings', 'workshops'],
+};
+if ($capacityPage !== '' && (
+    ($capacityPage === 'seminars' && $requestedActivityType !== 'seminar')
+    || ($capacityPage === 'trainings' && $requestedActivityType !== 'training')
+    || ($capacityPage === 'workshops' && $requestedActivityType !== 'workshop')
+)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+if ($capacityPage === '') {
+    $capacityPage = match ($requestedActivityType) {
+        'seminar' => 'seminars',
+        'training' => 'trainings',
+        'workshop' => 'workshops',
+        default => '',
+    };
+}
+if ($role === 'research_staff' && $capacityPage === '' && $requestedActivityType === '') {
+    foreach (['seminars', 'trainings', 'workshops'] as $pageKey) {
+        if (hasModulePermission($userId, 'research_capacity_building', 'view', $pageKey)) {
+            header('Location: ' . SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($pageKey));
+            exit;
+        }
+    }
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+if ($role === 'research_staff' && !in_array($requestedActivityType, ['', 'seminar', 'training', 'workshop'], true)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$capacityReturnUrl = $capacityPage !== ''
+    ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($capacityPage)
+    : SITE_URL . 'pages/shared/activities.php';
+$canViewActivities = hasRole('admin');
+foreach ($permissionPages as $permissionPage) {
+    if (hasModulePermission($userId, 'research_capacity_building', 'view', $permissionPage)) {
+        $canViewActivities = true;
+        break;
+    }
+}
+if (!$canViewActivities) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$canManagePage = static function (string $activityType, string $selectedPage) use ($role, $userId): bool {
+    if ($role === 'admin') {
+        return true;
+    }
+    $pages = match ($activityType) {
+        'seminar' => ['seminars'],
+        'training' => ['trainings'],
+        'workshop' => ['workshops'],
+        default => [],
+    };
+    foreach ($pages as $pageKey) {
+        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey)) {
+            return true;
+        }
+    }
+    return false;
+};
+$canManage = hasRole('admin');
+if (!$canManage) {
+    $canManage = $canManagePage($requestedActivityType, $capacityPage);
+}
 
 function activitiesEscape(?string $value): string
 {
@@ -53,18 +128,31 @@ if ($participantCheck instanceof mysqli_result) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!$canManage) {
+    $activityId = filter_var($_POST['activity_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $postCanManage = hasRole('admin');
+    if (!$postCanManage && $activityId) {
+        $activityTypeStmt = $conn->prepare('SELECT activity_type FROM research_activities WHERE activity_id = ? LIMIT 1');
+        if ($activityTypeStmt) {
+            $activityTypeStmt->bind_param('i', $activityId);
+            $activityTypeStmt->execute();
+            $activityTypeRow = $activityTypeStmt->get_result()->fetch_assoc();
+            $activityTypeStmt->close();
+            $postCanManage = $activityTypeRow
+                ? $canManagePage((string) $activityTypeRow['activity_type'], $capacityPage)
+                : false;
+        }
+    }
+    if (!$postCanManage) {
         header('Location: ' . SITE_URL . 'public/403.php');
         exit;
     }
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'Your form expired. Please try again.'];
-        header('Location: ' . SITE_URL . 'pages/shared/activities.php');
+        header('Location: ' . $capacityReturnUrl);
         exit;
     }
 
     $action = (string) ($_POST['action'] ?? '');
-    $activityId = filter_var($_POST['activity_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $targetStatuses = ['complete' => 'completed', 'cancel' => 'cancelled'];
     if (!$activitiesAvailable || !$activityId || !isset($targetStatuses[$action])) {
         $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'The requested activity action is not available.'];
@@ -82,45 +170,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $stmt->close();
     }
-    header('Location: ' . SITE_URL . 'pages/shared/activities.php');
+    header('Location: ' . $capacityReturnUrl);
     exit;
 }
 
 $flash = $_SESSION['activities_flash'] ?? null;
 unset($_SESSION['activities_flash']);
 
-$typeOptions = ['seminar' => 'Seminar', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
+$typeOptions = ['seminar' => 'Seminar', 'training' => 'Training', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
 $statusOptions = ['scheduled' => 'Scheduled', 'completed' => 'Completed', 'cancelled' => 'Cancelled'];
 $query = trim((string) ($_GET['q'] ?? ''));
 $query = strlen($query) > 150 ? substr($query, 0, 150) : $query;
 $typeInput = trim((string) ($_GET['type'] ?? ''));
-$type = preg_match('/^(seminar|presentation|workshop|forum)$/D', $typeInput) ? $typeInput : '';
+$type = preg_match('/^(seminar|training|presentation|workshop|forum)$/D', $typeInput) ? $typeInput : '';
+if ($role === 'research_staff' && isset($typeOptions[$type])) {
+    $typeOptions = [$type => $typeOptions[$type]];
+}
+$createActivityUrl = SITE_URL . 'pages/shared/activity-form.php';
+if ($type !== '') {
+    $createActivityUrl .= '?type=' . rawurlencode($type);
+    if ($capacityPage !== '') {
+        $createActivityUrl .= '&capacity_page=' . rawurlencode($capacityPage);
+    }
+}
 $statusInput = trim((string) ($_GET['status'] ?? ''));
 $status = preg_match('/^(scheduled|completed|cancelled)$/D', $statusInput) ? $statusInput : '';
 $filtersActive = $query !== '' || $type !== '' || $status !== '';
 
-$stats = ['seminars' => 0, 'presentations' => 0, 'participants' => 0];
+// Preset views are resolved only from validated enum values. Additional filters
+// remain in the query string and continue to narrow the directory in that view.
+$view = 'overview';
+if ($type !== '') {
+    $view = $type;
+} elseif ($status === 'completed') {
+    $view = 'records';
+}
+
+$typeLabels = [
+    'seminar' => 'Seminars',
+    'training' => 'Trainings',
+    'presentation' => 'Presentations',
+    'workshop' => 'Workshops',
+    'forum' => 'Forums',
+];
+$stats = ['participants' => 0];
 $upcoming = [];
+$attendanceSummary = [];
 $activities = [];
 if ($activitiesAvailable) {
-    $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar' THEN 1 END) AS seminars, COUNT(CASE WHEN activity_type = 'presentation' THEN 1 END) AS presentations FROM research_activities");
-    $row = activitiesRun($stmt)->fetch_assoc() ?: [];
-    $stats['seminars'] = (int) ($row['seminars'] ?? 0);
-    $stats['presentations'] = (int) ($row['presentations'] ?? 0);
-    $stmt->close();
+    if ($view === 'overview') {
+        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar' THEN 1 END) AS seminar, COUNT(CASE WHEN activity_type = 'training' THEN 1 END) AS training, COUNT(CASE WHEN activity_type = 'presentation' THEN 1 END) AS presentation, COUNT(CASE WHEN activity_type = 'workshop' THEN 1 END) AS workshop, COUNT(CASE WHEN activity_type = 'forum' THEN 1 END) AS forum FROM research_activities");
+        $row = activitiesRun($stmt)->fetch_assoc() ?: [];
+        foreach ($typeLabels as $activityType => $label) {
+            $stats[$activityType] = (int) ($row[$activityType] ?? 0);
+        }
+        $stmt->close();
+        if ($participantsAvailable) {
+            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id');
+            $stats['participants'] = (int) (activitiesRun($stmt)->fetch_assoc()['participants'] ?? 0);
+            $stmt->close();
+        }
+        $stmt = $conn->prepare("SELECT activity_id, activity_date, activity_time, title, venue FROM research_activities WHERE status = 'scheduled' AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5");
+        $result = activitiesRun($stmt);
+        while ($row = $result->fetch_assoc()) $upcoming[] = $row;
+        $stmt->close();
+    } elseif (isset($typeOptions[$view])) {
+        $viewType = $view;
+        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN status = 'completed' THEN 1 END) AS held, COUNT(CASE WHEN status = 'scheduled' THEN 1 END) AS scheduled FROM research_activities WHERE activity_type = ?");
+        $stmt->bind_param('s', $viewType);
+        $row = activitiesRun($stmt)->fetch_assoc() ?: [];
+        $stats['held'] = (int) ($row['held'] ?? 0);
+        $stats['scheduled'] = (int) ($row['scheduled'] ?? 0);
+        $stmt->close();
+        if ($participantsAvailable) {
+            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id WHERE ra.activity_type = ?');
+            $stmt->bind_param('s', $viewType);
+            $stats['participants'] = (int) (activitiesRun($stmt)->fetch_assoc()['participants'] ?? 0);
+            $stmt->close();
+        }
+        $stmt = $conn->prepare("SELECT activity_id, activity_date, activity_time, title, venue FROM research_activities WHERE activity_type = ? AND status = 'scheduled' AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5");
+        $stmt->bind_param('s', $viewType);
+        $result = activitiesRun($stmt);
+        while ($row = $result->fetch_assoc()) $upcoming[] = $row;
+        $stmt->close();
+    } elseif ($view === 'records') {
+        $stmt = $conn->prepare("SELECT COUNT(*) AS completed FROM research_activities WHERE status = 'completed'");
+        $stats['completed'] = (int) (activitiesRun($stmt)->fetch_assoc()['completed'] ?? 0);
+        $stmt->close();
+        $stats['attendance_rate'] = 0.0;
+        $stats['unique_participants'] = 0;
+        if ($participantsAvailable) {
+            $stmt = $conn->prepare("SELECT COUNT(ap.participant_id) AS participant_count, COALESCE(SUM(ap.attended = 1), 0) AS attended_count, COUNT(DISTINCT COALESCE(CONCAT('user:', ap.user_id), CONCAT('name:', LOWER(NULLIF(TRIM(ap.participant_name), ''))))) AS unique_participants FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status = 'completed'");
+            $row = activitiesRun($stmt)->fetch_assoc() ?: [];
+            $participantCount = (int) ($row['participant_count'] ?? 0);
+            $attendedCount = (int) ($row['attended_count'] ?? 0);
+            $stats['attendance_rate'] = $participantCount > 0 ? ($attendedCount / $participantCount) * 100 : 0.0;
+            $stats['unique_participants'] = (int) ($row['unique_participants'] ?? 0);
+            $stmt->close();
 
-    if ($participantsAvailable) {
-        $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id');
-        $stats['participants'] = (int) (activitiesRun($stmt)->fetch_assoc()['participants'] ?? 0);
+            $stmt = $conn->prepare("SELECT ra.activity_id, ra.activity_date, ra.title, COUNT(ap.participant_id) AS participants, COALESCE(SUM(ap.attended = 1), 0) AS attended FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status = 'completed' GROUP BY ra.activity_id, ra.activity_date, ra.title ORDER BY ra.activity_date DESC, ra.activity_id DESC");
+        } else {
+            $stmt = $conn->prepare("SELECT activity_id, activity_date, title, 0 AS participants, 0 AS attended FROM research_activities WHERE status = 'completed' ORDER BY activity_date DESC, activity_id DESC");
+        }
+        $result = activitiesRun($stmt);
+        while ($row = $result->fetch_assoc()) $attendanceSummary[] = $row;
         $stmt->close();
     }
-
-    $stmt = $conn->prepare("SELECT activity_id, activity_date, activity_time, title, venue FROM research_activities WHERE status = 'scheduled' AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5");
-    $result = activitiesRun($stmt);
-    while ($row = $result->fetch_assoc()) {
-        $upcoming[] = $row;
-    }
-    $stmt->close();
 
     $sql = 'SELECT activity_id, activity_date, title, activity_type, venue, organizer, status FROM research_activities WHERE 1 = 1';
     $params = [];
@@ -151,6 +306,59 @@ if ($activitiesAvailable) {
     $stmt->close();
 }
 
+$viewConfig = [
+    'overview' => [
+        'title' => 'Research Activities',
+        'kicker' => 'Research engagement',
+        'subtitle' => 'Institutional seminars, trainings, presentations, workshops, and forums',
+        'description' => 'Review scheduled and completed research events, their organizers, and participation records.',
+        'stats' => array_merge(
+            array_map(static function (string $activityType, string $label) use ($stats): array {
+                return ['value' => $stats[$activityType] ?? 0, 'label' => $label];
+            }, array_keys($typeLabels), array_values($typeLabels)),
+            [['value' => $stats['participants'], 'label' => 'Total participants']]
+        ),
+        'panel' => 'upcoming',
+        'panel_title' => 'Upcoming activities',
+        'shell_page' => SITE_URL . 'pages/shared/activities.php',
+        'directory_title' => 'Activity directory',
+    ],
+    'records' => [
+        'title' => 'Completed Activity Records',
+        'kicker' => 'Attendance records',
+        'subtitle' => 'Completed activities and attendance outcomes',
+        'description' => 'Review completed research activities and their recorded participation.',
+        'stats' => [
+            ['value' => $stats['completed'] ?? 0, 'label' => 'Completed activities'],
+            ['value' => (float) ($stats['attendance_rate'] ?? 0) === 0.0 ? '0%' : number_format((float) $stats['attendance_rate'], 1) . '%', 'label' => 'Attendance rate'],
+            ['value' => $stats['unique_participants'] ?? 0, 'label' => 'Unique participants'],
+        ],
+        'panel' => 'attendance',
+        'panel_title' => 'Attendance summary',
+        'shell_page' => SITE_URL . 'pages/shared/activities.php?status=completed',
+        'directory_title' => 'Completed activity records',
+    ],
+];
+foreach ($typeOptions as $activityType => $singularLabel) {
+    $pluralLabel = $typeLabels[$activityType];
+    $viewConfig[$activityType] = [
+        'title' => 'Research ' . $pluralLabel,
+        'kicker' => $singularLabel . ' program',
+        'subtitle' => $singularLabel . ' program of the research office',
+        'description' => 'Track completed and scheduled ' . strtolower($pluralLabel) . ', participation, and upcoming sessions.',
+        'stats' => [
+            ['value' => $stats['held'] ?? 0, 'label' => $pluralLabel . ' held'],
+            ['value' => $stats['scheduled'] ?? 0, 'label' => $pluralLabel . ' scheduled'],
+            ['value' => $stats['participants'], 'label' => rtrim($pluralLabel, 's') . ' participants'],
+        ],
+        'panel' => 'upcoming',
+        'panel_title' => 'Upcoming ' . strtolower($pluralLabel),
+        'shell_page' => SITE_URL . 'pages/shared/activities.php?type=' . rawurlencode($activityType),
+        'directory_title' => $singularLabel . ' directory',
+    ];
+}
+$pageConfig = $viewConfig[$view];
+
 $shell = match ($role) {
     'admin' => 'admin',
     'research_staff' => 'staff',
@@ -158,13 +366,18 @@ $shell = match ($role) {
     default => 'student',
 };
 if ($shell === 'admin') {
-    renderAdminShell($user, 'activities.php', 'Research Activities', 'Institutional seminars, presentations, workshops, and forums');
+    $originalGet = $_GET;
+    if ($view === 'overview') {
+        unset($_GET['type'], $_GET['status']);
+    }
+    renderAdminShell($user, $pageConfig['shell_page'], $pageConfig['title'], $pageConfig['subtitle']);
+    $_GET = $originalGet;
 } elseif ($shell === 'staff') {
-    renderStaffShell($user, 'activities.php', 'Research Activities', 'Institutional seminars, presentations, workshops, and forums');
+    renderStaffShell($user, 'activities.php', $pageConfig['title'], $pageConfig['subtitle']);
 } elseif ($shell === 'faculty') {
-    renderFacultyShell($user, 'activities.php', 'Research Activities', 'Institutional seminars, presentations, workshops, and forums');
+    renderFacultyShell($user, 'activities.php', $pageConfig['title'], $pageConfig['subtitle']);
 } else {
-    renderStudentShell($user, 'activities.php', 'Research Activities', 'Institutional seminars, presentations, workshops, and forums');
+    renderStudentShell($user, 'activities.php', $pageConfig['title'], $pageConfig['subtitle']);
 }
 ?>
 
@@ -174,31 +387,42 @@ if ($shell === 'admin') {
 
 <div class="module-hub">
   <header class="module-intro">
-    <div><p class="module-kicker">Research engagement</p><h1>Activities across the campus</h1><p>Review scheduled and completed research events, their organizers, and participation records.</p></div>
-    <?php if ($canManage): ?><a class="hub-button" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-form.php') ?>">+ Add Activity</a><?php endif; ?>
+    <div><p class="module-kicker"><?= activitiesEscape($pageConfig['kicker']) ?></p><h1><?= activitiesEscape($pageConfig['title']) ?></h1><p><?= activitiesEscape($pageConfig['description']) ?></p></div>
+    <?php if ($canManage): ?><a class="hub-button" href="<?= activitiesEscape($createActivityUrl) ?>">+ Add Activity</a><?php endif; ?>
   </header>
   <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= activitiesEscape($flash['message'] ?? '') ?></div><?php endif; ?>
   <section class="stat-grid" aria-label="Activity statistics">
-    <article class="stat-card"><strong><?= $stats['seminars'] ?></strong><span>Seminars</span></article>
-    <article class="stat-card"><strong><?= $stats['presentations'] ?></strong><span>Presentations</span></article>
-    <article class="stat-card"><strong><?= $stats['participants'] ?></strong><span>Total participants</span></article>
+    <?php foreach ($pageConfig['stats'] as $card): ?><article class="stat-card"><strong><?= activitiesEscape((string) $card['value']) ?></strong><span><?= activitiesEscape($card['label']) ?></span></article><?php endforeach; ?>
   </section>
 
-  <section class="hub-panel" aria-labelledby="upcoming-heading">
-    <div class="panel-head"><div><h2 id="upcoming-heading">Upcoming</h2><p>The next five scheduled activities.</p></div></div>
-    <?php if (!$activitiesAvailable || !$upcoming): ?>
-      <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#128197;</div><h2>No upcoming activities</h2><p><?= $activitiesAvailable ? 'Scheduled activities will appear here when dates are added.' : 'The research activities module is not installed on this database.' ?></p></div>
-    <?php else: ?>
-      <div class="upcoming-list">
-        <?php foreach ($upcoming as $item): ?>
-          <article class="upcoming-item"><div class="upcoming-date"><?= activitiesEscape(date('M j, Y', strtotime((string) $item['activity_date']))) ?></div><strong><a href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $item['activity_id']) ?>"><?= activitiesEscape($item['title']) ?></a></strong><span><?= activitiesEscape($item['venue'] ?: 'Venue to be announced') ?></span></article>
-        <?php endforeach; ?>
-      </div>
-    <?php endif; ?>
-  </section>
+  <?php if ($pageConfig['panel'] === 'upcoming'): ?>
+    <section class="hub-panel" aria-labelledby="upcoming-heading">
+      <div class="panel-head"><div><h2 id="upcoming-heading"><?= activitiesEscape($pageConfig['panel_title']) ?></h2><p>The next five scheduled <?= $view === 'overview' ? 'activities' : activitiesEscape(strtolower($typeLabels[$view])) ?>.</p></div></div>
+      <?php if (!$activitiesAvailable || !$upcoming): ?>
+        <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#128197;</div><h2>No upcoming <?= $view === 'overview' ? 'activities' : activitiesEscape(strtolower($typeLabels[$view])) ?></h2><p><?= $activitiesAvailable ? 'Scheduled events will appear here when dates are added.' : 'The research activities module is not installed on this database.' ?></p></div>
+      <?php else: ?>
+        <div class="upcoming-list">
+          <?php foreach ($upcoming as $item): ?>
+            <article class="upcoming-item"><div class="upcoming-date"><?= activitiesEscape(date('M j, Y', strtotime((string) $item['activity_date']))) ?></div><strong><a href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $item['activity_id']) ?>"><?= activitiesEscape($item['title']) ?></a></strong><span><?= activitiesEscape($item['venue'] ?: 'Venue to be announced') ?></span></article>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php elseif ($pageConfig['panel'] === 'attendance'): ?>
+    <section class="hub-panel" aria-labelledby="attendance-heading">
+      <div class="panel-head"><div><h2 id="attendance-heading">Attendance summary</h2><p>Participant counts for completed activities.</p></div></div>
+      <?php if (!$activitiesAvailable || !$attendanceSummary): ?>
+        <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#10003;</div><h2><?= $activitiesAvailable ? 'No completed activities yet' : 'Activities are unavailable' ?></h2><p><?= $activitiesAvailable ? 'Attendance summaries will appear when an activity is marked completed.' : 'The research activities module is not installed on this database.' ?></p></div>
+      <?php else: ?>
+        <div class="table-wrap"><table class="hub-table"><thead><tr><th>Date</th><th>Activity</th><th>Participants</th><th>Attended</th></tr></thead><tbody>
+          <?php foreach ($attendanceSummary as $record): ?><tr><td><?= activitiesEscape(date('M j, Y', strtotime((string) $record['activity_date']))) ?></td><td class="title-cell"><a href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $record['activity_id']) ?>"><?= activitiesEscape($record['title']) ?></a></td><td><?= (int) $record['participants'] ?></td><td><?= (int) $record['attended'] ?></td></tr><?php endforeach; ?>
+        </tbody></table></div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
 
   <section class="hub-panel" aria-labelledby="activity-directory-heading">
-    <div class="panel-head"><div><h2 id="activity-directory-heading">Activity directory</h2><p><?= count($activities) ?> <?= count($activities) === 1 ? 'record' : 'records' ?> in view</p></div></div>
+    <div class="panel-head"><div><h2 id="activity-directory-heading"><?= activitiesEscape($pageConfig['directory_title']) ?></h2><p><?= count($activities) ?> <?= count($activities) === 1 ? 'record' : 'records' ?> in view</p></div></div>
     <form class="filter-form" method="get" action="<?= activitiesEscape(SITE_URL . 'pages/shared/activities.php') ?>">
       <div class="field"><label for="activity-q">Title, venue, or speaker</label><input id="activity-q" name="q" type="search" maxlength="150" value="<?= activitiesEscape($query) ?>" placeholder="Search activities"></div>
       <div class="field"><label for="activity-type">Type</label><select id="activity-type" name="type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activitiesEscape($value) ?>" <?= $type === $value ? 'selected' : '' ?>><?= activitiesEscape($label) ?></option><?php endforeach; ?></select></div>
@@ -209,7 +433,7 @@ if ($shell === 'admin') {
       <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#8635;</div><h2><?= $activitiesAvailable ? 'No activities found' : 'Activities are unavailable' ?></h2><p><?= $activitiesAvailable ? 'Adjust the search or filters to see more activity records.' : 'Apply database migration 012 to enable this module.' ?></p></div>
     <?php else: ?>
       <div class="table-wrap"><table class="hub-table"><thead><tr><th>Date</th><th>Title</th><th>Type</th><th>Venue</th><th>Organizer</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-      <?php foreach ($activities as $activity): $badge = activitiesStatusBadge((string) $activity['status']); $detailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id']; ?><tr><td><?= activitiesEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?></td><td class="title-cell"><a href="<?= activitiesEscape($detailUrl) ?>"><?= activitiesEscape($activity['title']) ?></a></td><td><?= activitiesEscape($typeOptions[$activity['activity_type']] ?? ucwords(str_replace('_', ' ', (string) $activity['activity_type']))) ?></td><td class="muted"><?= activitiesEscape($activity['venue'] ?: '—') ?></td><td class="muted"><?= activitiesEscape($activity['organizer'] ?: '—') ?></td><td><span class="badge tone-<?= activitiesEscape($badge['tone']) ?>"><?= activitiesEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= activitiesEscape($detailUrl) ?>">View</a><?php if ($canManage): ?><a class="row-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activity['activity_id']) ?>">Edit</a><?php if ($activity['status'] === 'scheduled'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action danger" type="submit">Cancel</button></form><?php endif; ?><?php endif; ?></div></td></tr><?php endforeach; ?>
+      <?php foreach ($activities as $activity): $badge = activitiesStatusBadge((string) $activity['status']); $capacitySuffix = $capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : ''; $detailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id'] . $capacitySuffix; ?><tr><td><?= activitiesEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?></td><td class="title-cell"><a href="<?= activitiesEscape($detailUrl) ?>"><?= activitiesEscape($activity['title']) ?></a></td><td><?= activitiesEscape($typeOptions[$activity['activity_type']] ?? ucwords(str_replace('_', ' ', (string) $activity['activity_type']))) ?></td><td class="muted"><?= activitiesEscape($activity['venue'] ?: '—') ?></td><td class="muted"><?= activitiesEscape($activity['organizer'] ?: '—') ?></td><td><span class="badge tone-<?= activitiesEscape($badge['tone']) ?>"><?= activitiesEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= activitiesEscape($detailUrl) ?>">View</a><?php if ($canManage): ?><a class="row-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activity['activity_id'] . $capacitySuffix) ?>">Edit</a><?php if ($activity['status'] === 'scheduled'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action danger" type="submit">Cancel</button></form><?php endif; ?><?php endif; ?></div></td></tr><?php endforeach; ?>
       </tbody></table></div>
     <?php endif; ?>
   </section>

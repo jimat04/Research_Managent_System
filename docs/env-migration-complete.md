@@ -1,8 +1,8 @@
 # .env Migration Complete ✅
 
-**Completed:** 2026-08-28 08:04 UTC  
-**Duration:** ~15 minutes  
-**Status:** ✅ Successfully migrated
+**Migration completed:** 2026-08-28
+**Current source reviewed:** 2026-10-10
+**Status:** Environment-based configuration remains implemented. This is a historical change record, not a deployment security certification.
 
 ---
 
@@ -17,7 +17,7 @@ composer require vlucas/phpdotenv
 - ✅ Installed 6 dependencies (symfony polyfills, phpoption, etc.)
 
 ### 2. Created Environment Files
-- ✅ `.env` - Production credentials (gitignored)
+- ✅ `.env` - Local/private deployment configuration (must remain untracked)
 - ✅ `.env.example` - Template for other developers
 
 ### 3. Updated Configuration
@@ -31,19 +31,17 @@ define('DB_PASS',     '');  // ❌ EXPOSED IN CODE
 define('DB_NAME',     'rms_db');
 ```
 
-**After:**
+**Current behavior:**
 ```php
-require_once __DIR__ . '/../vendor/autoload.php';
-use Dotenv\Dotenv;
-$dotenv = Dotenv::createImmutable(__DIR__ . '/..');
-$dotenv->load();
-$dotenv->required(['DB_HOST', 'DB_USER', 'DB_NAME', 'SITE_URL'])->notEmpty();
-
-define('DB_HOST', $_ENV['DB_HOST']);
-define('DB_USER', $_ENV['DB_USER']);
-define('DB_PASS', $_ENV['DB_PASS'] ?? '');
-define('DB_NAME', $_ENV['DB_NAME']);
+// includes/config.php loads phpdotenv only when .env is readable.
+Dotenv\Dotenv::createImmutable(__DIR__ . '/..')->safeLoad();
+define('DB_HOST', rms_env('DB_HOST', 'localhost'));
+define('DB_USER', rms_env('DB_USER', 'root'));
+define('DB_PASS', rms_env('DB_PASS', ''));
+define('DB_NAME', rms_env('DB_NAME', 'rms_db'));
 ```
+
+`rms_env()` also checks `$_SERVER` and supplies defaults. A local `.env` is the recommended setup, but the current code does not enforce that every variable exists; configure explicit values for each deployment.
 
 ### 4. Tested & Verified
 ```
@@ -60,16 +58,13 @@ define('DB_NAME', $_ENV['DB_NAME']);
 
 ### Before Migration:
 - ❌ Credentials hardcoded in `includes/config.php`
-- ❌ Visible in version control
+- This historical report does not establish whether credentials were ever committed or exposed.
 - ❌ Can't have different values per environment
-- ❌ Anyone with code access = database access
 
 ### After Migration:
-- ✅ Credentials in `.env` (gitignored)
-- ✅ Never committed to version control
+- ✅ Local configuration can be loaded from `.env`; `.env` is ignored by Git
 - ✅ Can have different `.env` per environment (dev/staging/prod)
-- ✅ Code access ≠ database access
-- ✅ Validation of required variables
+- The current config supplies defaults and does not enforce that every setting is explicitly provided. Environment variables do not replace host permissions, secret rotation, or restricted database access.
 - ✅ Template (`.env.example`) for new developers
 
 ---
@@ -152,37 +147,17 @@ No need to modify code files for different environments.
 
 ---
 
-## Security Score Impact
+## Security Context
 
-**Before:** 58/100 (Moderate Risk)  
-**After:** 68/100 (Moderate-Low Risk)  
-**Improvement:** +10 points
-
-**Remaining Critical Items:**
-- Backup system (target: +12 points)
-- SQL injection audit (target: +8 points)
-- File upload security (target: +7 points)
-- Target: 85/100 (Production Ready)
+No security score was measured as part of this change. Environment variables reduce accidental credential exposure in source control, but do not by themselves establish production readiness; verify deployment secrets, permissions, debug settings, and database access separately.
 
 ---
 
 ## Next Steps
 
-From PRIORITY_PLAN.md (Week 1):
+This next-step list reflects the original August 2026 plan. The error pages have since been added under `public/` and are configured in the root `.htaccess`; use the current planning/progress documents for remaining work.
 
-**Today (Remaining):**
-1. ✅ ~~Migrate to .env~~ (DONE)
-2. 🔴 Create 403.php error page (30 min) - NEXT
-3. 🔴 Create 404.php error page (30 min)
-4. 🔴 Create 500.php error page (30 min)
-
-**Tuesday:**
-1. 🔴 SQL injection audit (4 hours)
-2. 🔴 Begin backup system (4 hours)
-
-**Wednesday:**
-1. 🔴 Complete backup system
-2. 🔴 Test restore procedure
+Do not use this snapshot as a current deployment checklist.
 
 ---
 
@@ -196,6 +171,4 @@ From PRIORITY_PLAN.md (Week 1):
 
 ---
 
-**Status:** ✅ TIER 1 #2 COMPLETE  
-**Time Saved:** This took 15 min instead of estimated 90 min  
-**Next:** Create error pages (403.php, 404.php, 500.php)
+**Status:** Environment configuration change completed in August 2026; revalidate settings for each deployment.

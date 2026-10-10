@@ -32,8 +32,15 @@ function copyrightFormStoredFile(string $relativePath): ?string
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
 $isOwnerRole = in_array($role, ['faculty', 'student'], true);
-$isReviewer = in_array($role, ['research_staff', 'admin'], true);
-if (!$isOwnerRole && !$isReviewer) {
+$isReviewer = $role === 'admin';
+$staffCopyrightPages = static function (string $type): array {
+    return match ($type) {
+        'patent', 'utility_model' => ['patents_utility_models'],
+        'innovation', 'technology_transfer' => ['innovation_technology_transfer'],
+        default => ['copyrights'],
+    };
+};
+if (!$isOwnerRole && !$isReviewer && $role !== 'research_staff') {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
@@ -42,7 +49,53 @@ $tableCheck = $conn->query("SHOW TABLES LIKE 'copyright_applications'");
 $copyrightsAvailable = $tableCheck instanceof mysqli_result && $tableCheck->num_rows > 0;
 if ($tableCheck instanceof mysqli_result) $tableCheck->free();
 
-$typeOptions = ['software' => 'Software', 'research' => 'Research', 'instructional_material' => 'Instructional material', 'module' => 'Module', 'other' => 'Other'];
+$typeOptions = [
+    'software' => 'Software',
+    'research' => 'Research',
+    'instructional_material' => 'Instructional material',
+    'module' => 'Module',
+    'other' => 'Other',
+    'patent' => 'Patent',
+    'utility_model' => 'Utility model',
+    'innovation' => 'Innovation',
+    'technology_transfer' => 'Technology transfer',
+];
+$requestedIpScope = trim((string) ($_GET['ip_scope'] ?? ''));
+$ipScope = preg_match('/^(patents_utility_models|innovation_technology_transfer)$/D', $requestedIpScope) ? $requestedIpScope : '';
+if ($ipScope === 'patents_utility_models') {
+    $typeOptions = ['patent' => 'Patent', 'utility_model' => 'Utility model'];
+} elseif ($ipScope === 'innovation_technology_transfer') {
+    $typeOptions = ['innovation' => 'Innovation', 'technology_transfer' => 'Technology transfer'];
+}
+if ($role === 'research_staff') {
+    $canManageAllCopyrights = hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'copyrights');
+    if ($canManageAllCopyrights) {
+        $isReviewer = true;
+    } elseif ($ipScope === 'patents_utility_models' && hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'patents_utility_models')) {
+        $isReviewer = true;
+    } elseif ($ipScope === 'innovation_technology_transfer' && hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'innovation_technology_transfer')) {
+        $isReviewer = true;
+    } else {
+        $typeOptions = [];
+        if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'patents_utility_models')) {
+            $typeOptions['patent'] = 'Patent';
+            $typeOptions['utility_model'] = 'Utility model';
+        }
+        if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'innovation_technology_transfer')) {
+            $typeOptions['innovation'] = 'Innovation';
+            $typeOptions['technology_transfer'] = 'Technology transfer';
+        }
+        $isReviewer = $typeOptions !== [];
+    }
+    if (!$isReviewer) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+}
+$requestedOutputType = trim((string) ($_GET['output_type'] ?? ''));
+$defaultOutputType = isset($typeOptions[$requestedOutputType])
+    ? $requestedOutputType
+    : (string) (array_key_first($typeOptions) ?? 'research');
 $statusOptions = ['pending' => 'Pending', 'under_review' => 'Under review', 'registered' => 'Registered', 'rejected' => 'Rejected'];
 $currentName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
 $editRequested = array_key_exists('id', $_GET);
@@ -55,15 +108,40 @@ $isEdit = $copyrightId !== null;
 $existing = null;
 $values = [
     'output_title' => '', 'applicant_name' => $isOwnerRole ? $currentName : '',
-    'applicant_category' => $isOwnerRole ? $role : 'faculty', 'output_type' => 'research',
-    'co_authors' => '', 'date_completed' => '', 'status' => 'pending',
+    'applicant_category' => $isOwnerRole ? $role : 'faculty', 'output_type' => $defaultOutputType,
+    'research_project_id' => '', 'publication_id' => '', 'co_authors' => '', 'inventors' => '',
+    'potential_partners' => '', 'transfer_activities' => '', 'agreement_reference' => '',
+    'utilization_status' => '', 'application_number' => '', 'filing_date' => '',
+    'date_completed' => '', 'status' => 'pending',
     'file_path' => '', 'file_name' => '',
 ];
+$projectOptions = [];
+$publicationOptions = [];
+if ($copyrightsAvailable) {
+    $projectSql = $isOwnerRole
+        ? 'SELECT project_id, title, status FROM research_projects WHERE deleted_at IS NULL AND (created_by = ? OR student_id = ? OR adviser_id = ?) ORDER BY updated_at DESC, project_id DESC'
+        : "SELECT project_id, title, status FROM research_projects WHERE deleted_at IS NULL AND status NOT IN ('draft', 'rejected') ORDER BY updated_at DESC, project_id DESC";
+    $projectStmt = $conn->prepare($projectSql);
+    if ($isOwnerRole) $projectStmt->bind_param('iii', $userId, $userId, $userId);
+    $projectStmt->execute();
+    $projectResult = $projectStmt->get_result();
+    while ($project = $projectResult->fetch_assoc()) $projectOptions[] = $project;
+    $projectStmt->close();
+    $publicationSql = $isOwnerRole
+        ? 'SELECT publication_id, research_title, publication_type, status FROM publications WHERE researcher_id = ? ORDER BY created_at DESC, publication_id DESC'
+        : 'SELECT publication_id, research_title, publication_type, status FROM publications ORDER BY created_at DESC, publication_id DESC';
+    $publicationStmt = $conn->prepare($publicationSql);
+    if ($isOwnerRole) $publicationStmt->bind_param('i', $userId);
+    $publicationStmt->execute();
+    $publicationResult = $publicationStmt->get_result();
+    while ($publication = $publicationResult->fetch_assoc()) $publicationOptions[] = $publication;
+    $publicationStmt->close();
+}
 $errors = [];
 if (!$copyrightsAvailable) $errors[] = 'The copyrights module is not installed.';
 
 if ($isEdit && $copyrightsAvailable) {
-    $stmt = $conn->prepare('SELECT copyright_id, applicant_id, applicant_name, applicant_category, output_title, output_type, co_authors, date_completed, file_path, file_name, status FROM copyright_applications WHERE copyright_id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT copyright_id, applicant_id, applicant_name, applicant_category, research_project_id, publication_id, output_title, output_type, co_authors, inventors, potential_partners, transfer_activities, agreement_reference, utilization_status, application_number, filing_date, date_completed, file_path, file_name, status FROM copyright_applications WHERE copyright_id = ? LIMIT 1');
     $stmt->bind_param('i', $copyrightId);
     $stmt->execute();
     $existing = $stmt->get_result()->fetch_assoc() ?: null;
@@ -71,6 +149,20 @@ if ($isEdit && $copyrightsAvailable) {
     if (!$existing) {
         header('Location: ' . SITE_URL . 'pages/shared/copyright-detail.php?id=' . $copyrightId);
         exit;
+    }
+    if ($role === 'research_staff') {
+        $authorizedEdit = false;
+        foreach ($staffCopyrightPages((string) $existing['output_type']) as $pageKey) {
+            if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', $pageKey)) {
+                $authorizedEdit = true;
+                break;
+            }
+        }
+        if (!$authorizedEdit) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+        $isReviewer = true;
     }
     if ($isOwnerRole && ((int) $existing['applicant_id'] !== $userId || $existing['status'] !== 'pending')) {
         header('Location: ' . SITE_URL . 'public/403.php');
@@ -101,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isEdit = $formMode === 'edit';
     $existing = null;
     if ($isEdit && $copyrightsAvailable) {
-        $stmt = $conn->prepare('SELECT copyright_id, applicant_id, applicant_name, applicant_category, file_path, file_name, status FROM copyright_applications WHERE copyright_id = ? LIMIT 1');
+        $stmt = $conn->prepare('SELECT copyright_id, applicant_id, applicant_name, applicant_category, research_project_id, publication_id, file_path, file_name, status FROM copyright_applications WHERE copyright_id = ? LIMIT 1');
         $stmt->bind_param('i', $copyrightId);
         $stmt->execute();
         $existing = $stmt->get_result()->fetch_assoc() ?: null;
@@ -117,8 +209,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    foreach (['output_title', 'output_type', 'co_authors', 'date_completed'] as $field) {
+    foreach (['output_title', 'output_type', 'research_project_id', 'publication_id', 'co_authors', 'inventors', 'potential_partners', 'transfer_activities', 'agreement_reference', 'utilization_status', 'application_number', 'filing_date', 'date_completed'] as $field) {
         $values[$field] = trim((string) ($_POST[$field] ?? ''));
+    }
+    if ($role === 'research_staff') {
+        $authorizedType = false;
+        foreach ($staffCopyrightPages((string) $values['output_type']) as $pageKey) {
+            if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', $pageKey)) {
+                $authorizedType = true;
+                break;
+            }
+        }
+        if (!$authorizedType) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+        $values['status'] = (string) ($existing['status'] ?? 'pending');
     }
     if ($isOwnerRole) {
         $values['applicant_name'] = $currentName;
@@ -127,20 +233,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $values['applicant_name'] = trim((string) ($_POST['applicant_name'] ?? ''));
         $categoryInput = trim((string) ($_POST['applicant_category'] ?? ''));
-        $statusInput = trim((string) ($_POST['status'] ?? ''));
         $values['applicant_category'] = preg_match('/^(faculty|student)$/D', $categoryInput) ? $categoryInput : '';
-        $values['status'] = preg_match('/^(pending|under_review|registered|rejected)$/D', $statusInput) ? $statusInput : '';
+        $values['status'] = $isEdit && $existing ? (string) $existing['status'] : 'pending';
     }
 
     if ($values['output_title'] === '' || strlen($values['output_title']) > 500) $errors[] = 'Output title is required and must not exceed 500 characters.';
-    if (!preg_match('/^(software|research|instructional_material|module|other)$/D', $values['output_type'])) $errors[] = 'Choose a valid output type.';
+    if (!preg_match('/^(software|research|instructional_material|module|other|patent|utility_model|innovation|technology_transfer)$/D', $values['output_type']) || !isset($typeOptions[$values['output_type']])) $errors[] = 'Choose a valid output type.';
     if ($values['applicant_name'] === '' || strlen($values['applicant_name']) > 255) $errors[] = 'Applicant name is required and must not exceed 255 characters.';
     if (!preg_match('/^(faculty|student)$/D', $values['applicant_category'])) $errors[] = 'Choose a valid applicant category.';
     if (!preg_match('/^(pending|under_review|registered|rejected)$/D', $values['status'])) $errors[] = 'Choose a valid application status.';
     if (strlen($values['co_authors']) > 500) $errors[] = 'Co-authors must not exceed 500 characters.';
-    if ($values['date_completed'] !== '') {
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $values['date_completed']);
-        if (!$date || $date->format('Y-m-d') !== $values['date_completed']) $errors[] = 'Enter a valid completion date.';
+    if (strlen($values['inventors']) > 500) $errors[] = 'Inventors must not exceed 500 characters.';
+    if (strlen($values['potential_partners']) > 500) $errors[] = 'Potential partners must not exceed 500 characters.';
+    if (strlen($values['transfer_activities']) > 10000) $errors[] = 'Technology-transfer activities must not exceed 10,000 characters.';
+    if (strlen($values['agreement_reference']) > 120) $errors[] = 'Agreement reference must not exceed 120 characters.';
+    if (strlen($values['utilization_status']) > 120) $errors[] = 'Utilization status must not exceed 120 characters.';
+    if (strlen($values['application_number']) > 120) $errors[] = 'Application number must not exceed 120 characters.';
+    foreach (['research_project_id', 'publication_id'] as $linkField) {
+        if ($values[$linkField] !== '' && !ctype_digit($values[$linkField])) $errors[] = 'Choose a valid linked record.';
+    }
+    $values['research_project_id'] = $values['research_project_id'] !== '' ? (string) (int) $values['research_project_id'] : '';
+    $values['publication_id'] = $values['publication_id'] !== '' ? (string) (int) $values['publication_id'] : '';
+    if ($values['output_type'] === 'patent' || $values['output_type'] === 'utility_model') {
+        if ($values['application_number'] === '' || strlen($values['application_number']) < 2) $errors[] = 'Application number is required for patents and utility models.';
+        if ($values['inventors'] === '') $errors[] = 'Inventors are required for patents and utility models.';
+    }
+    if ($values['output_type'] === 'innovation' || $values['output_type'] === 'technology_transfer') {
+        if ($values['transfer_activities'] === '') $errors[] = 'Technology-transfer activities are required for innovation and technology-transfer records.';
+    }
+    foreach (['filing_date', 'date_completed'] as $dateField) {
+        if ($values[$dateField] !== '') {
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $values[$dateField]);
+            if (!$date || $date->format('Y-m-d') !== $values[$dateField]) $errors[] = 'Enter a valid date.';
+        }
+    }
+    if (!$errors && $values['research_project_id'] !== '') {
+        $projectStmt = $conn->prepare('SELECT project_id FROM research_projects WHERE project_id = ? AND deleted_at IS NULL' . ($isOwnerRole ? ' AND (created_by = ? OR student_id = ? OR adviser_id = ?)' : '') . ' LIMIT 1');
+        if ($isOwnerRole) $projectStmt->bind_param('iiii', $values['research_project_id'], $userId, $userId, $userId);
+        else $projectStmt->bind_param('i', $values['research_project_id']);
+        $projectStmt->execute();
+        $validProject = $projectStmt->get_result()->num_rows === 1;
+        $projectStmt->close();
+        if (!$validProject) $errors[] = 'Choose a research project you are allowed to associate.';
+    }
+    if (!$errors && $values['publication_id'] !== '') {
+        $publicationStmt = $conn->prepare('SELECT publication_id FROM publications WHERE publication_id = ? LIMIT 1');
+        $publicationStmt->bind_param('i', $values['publication_id']);
+        $publicationStmt->execute();
+        $validPublication = $publicationStmt->get_result()->num_rows === 1;
+        $publicationStmt->close();
+        if (!$validPublication) $errors[] = 'Choose a valid research output.';
     }
 
     $hasExistingFile = $existing && (string) ($existing['file_path'] ?? '') !== '';
@@ -180,8 +322,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->begin_transaction();
             if ($isEdit) {
                 $lockSql = $isOwnerRole
-                    ? "SELECT copyright_id FROM copyright_applications WHERE copyright_id = ? AND applicant_id = ? AND status = 'pending' FOR UPDATE"
-                    : 'SELECT copyright_id FROM copyright_applications WHERE copyright_id = ? FOR UPDATE';
+                    ? "SELECT copyright_id, status FROM copyright_applications WHERE copyright_id = ? AND applicant_id = ? AND status = 'pending' FOR UPDATE"
+                    : 'SELECT copyright_id, status FROM copyright_applications WHERE copyright_id = ? FOR UPDATE';
                 $lock = $conn->prepare($lockSql);
                 if ($isOwnerRole) $lock->bind_param('ii', $copyrightId, $userId);
                 else $lock->bind_param('i', $copyrightId);
@@ -189,6 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lockedApplication = $lock->get_result()->fetch_assoc();
                 $lock->close();
                 if (!$lockedApplication) throw new RuntimeException('Copyright application is no longer editable.');
+                $values['status'] = (string) $lockedApplication['status'];
             }
 
             if ($validatedUpload) {
@@ -206,17 +349,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $coAuthors = $values['co_authors'] !== '' ? $values['co_authors'] : null;
+            $inventors = $values['inventors'] !== '' ? $values['inventors'] : null;
+            $potentialPartners = $values['potential_partners'] !== '' ? $values['potential_partners'] : null;
+            $transferActivities = $values['transfer_activities'] !== '' ? $values['transfer_activities'] : null;
+            $agreementReference = $values['agreement_reference'] !== '' ? $values['agreement_reference'] : null;
+            $utilizationStatus = $values['utilization_status'] !== '' ? $values['utilization_status'] : null;
+            $applicationNumber = $values['application_number'] !== '' ? $values['application_number'] : null;
+            $filingDate = $values['filing_date'] !== '' ? $values['filing_date'] : null;
             $dateCompleted = $values['date_completed'] !== '' ? $values['date_completed'] : null;
+            $researchProjectId = $values['research_project_id'] !== '' ? (int) $values['research_project_id'] : null;
+            $publicationId = $values['publication_id'] !== '' ? (int) $values['publication_id'] : null;
             if ($isEdit && $isOwnerRole) {
-                $stmt = $conn->prepare("UPDATE copyright_applications SET output_title = ?, applicant_name = ?, applicant_category = ?, output_type = ?, co_authors = ?, date_completed = ?, file_path = ?, file_name = ? WHERE copyright_id = ? AND applicant_id = ? AND status = 'pending'");
-                $stmt->bind_param('ssssssssii', $values['output_title'], $values['applicant_name'], $values['applicant_category'], $values['output_type'], $coAuthors, $dateCompleted, $newRelativePath, $newOriginalName, $copyrightId, $userId);
+                $stmt = $conn->prepare("UPDATE copyright_applications SET output_title = ?, applicant_name = ?, applicant_category = ?, research_project_id = ?, publication_id = ?, output_type = ?, co_authors = ?, inventors = ?, potential_partners = ?, transfer_activities = ?, agreement_reference = ?, utilization_status = ?, application_number = ?, filing_date = ?, date_completed = ?, file_path = ?, file_name = ? WHERE copyright_id = ? AND applicant_id = ? AND status = 'pending'");
+                $stmt->bind_param(str_repeat('s', 3) . 'ii' . str_repeat('s', 12) . 'ii', $values['output_title'], $values['applicant_name'], $values['applicant_category'], $researchProjectId, $publicationId, $values['output_type'], $coAuthors, $inventors, $potentialPartners, $transferActivities, $agreementReference, $utilizationStatus, $applicationNumber, $filingDate, $dateCompleted, $newRelativePath, $newOriginalName, $copyrightId, $userId);
             } elseif ($isEdit) {
-                $stmt = $conn->prepare('UPDATE copyright_applications SET output_title = ?, applicant_name = ?, applicant_category = ?, output_type = ?, co_authors = ?, date_completed = ?, file_path = ?, file_name = ?, status = ? WHERE copyright_id = ?');
-                $stmt->bind_param('sssssssssi', $values['output_title'], $values['applicant_name'], $values['applicant_category'], $values['output_type'], $coAuthors, $dateCompleted, $newRelativePath, $newOriginalName, $values['status'], $copyrightId);
+                $stmt = $conn->prepare('UPDATE copyright_applications SET output_title = ?, applicant_name = ?, applicant_category = ?, research_project_id = ?, publication_id = ?, output_type = ?, co_authors = ?, inventors = ?, potential_partners = ?, transfer_activities = ?, agreement_reference = ?, utilization_status = ?, application_number = ?, filing_date = ?, date_completed = ?, file_path = ?, file_name = ? WHERE copyright_id = ? AND status = ?');
+                $stmt->bind_param(str_repeat('s', 3) . 'ii' . str_repeat('s', 12) . 'is', $values['output_title'], $values['applicant_name'], $values['applicant_category'], $researchProjectId, $publicationId, $values['output_type'], $coAuthors, $inventors, $potentialPartners, $transferActivities, $agreementReference, $utilizationStatus, $applicationNumber, $filingDate, $dateCompleted, $newRelativePath, $newOriginalName, $copyrightId, $values['status']);
             } else {
                 $applicantId = $isOwnerRole ? $userId : null;
-                $stmt = $conn->prepare('INSERT INTO copyright_applications (output_title, applicant_id, applicant_name, applicant_category, output_type, co_authors, date_completed, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('sissssssss', $values['output_title'], $applicantId, $values['applicant_name'], $values['applicant_category'], $values['output_type'], $coAuthors, $dateCompleted, $newRelativePath, $newOriginalName, $values['status']);
+                $stmt = $conn->prepare('INSERT INTO copyright_applications (output_title, applicant_id, applicant_name, applicant_category, research_project_id, publication_id, output_type, co_authors, inventors, potential_partners, transfer_activities, agreement_reference, utilization_status, application_number, filing_date, date_completed, file_path, file_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('sissiisssssssssssss', $values['output_title'], $applicantId, $values['applicant_name'], $values['applicant_category'], $researchProjectId, $publicationId, $values['output_type'], $coAuthors, $inventors, $potentialPartners, $transferActivities, $agreementReference, $utilizationStatus, $applicationNumber, $filingDate, $dateCompleted, $newRelativePath, $newOriginalName, $values['status']);
             }
             $stmt->execute();
             if (!$isEdit) $copyrightId = (int) $stmt->insert_id;
@@ -255,8 +407,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $shell = match ($role) {
     'admin' => 'admin', 'research_staff' => 'staff', 'faculty' => 'faculty', default => 'student',
 };
-$pageTitle = $isEdit ? 'Edit Copyright Application' : 'Apply for Copyright';
-$pageSubtitle = $isEdit ? 'Update application details and the supporting PDF' : 'Submit an output for copyright processing';
+$scopeLabel = $ipScope === 'patents_utility_models' ? 'Patent / Utility Model' : ($ipScope === 'innovation_technology_transfer' ? 'Innovation / Technology Transfer' : 'Copyright');
+$pageTitle = $isEdit ? 'Edit ' . $scopeLabel . ' Application' : 'Apply for ' . $scopeLabel;
+$pageSubtitle = $isEdit ? 'Update application details, relationships, and supporting documentation' : 'Submit a classified intellectual-property or technology-utilization record';
 if ($shell === 'admin') renderAdminShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
 elseif ($shell === 'staff') renderStaffShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
 elseif ($shell === 'faculty') renderFacultyShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
@@ -271,7 +424,7 @@ else renderStudentShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
   <header class="form-heading"><div><h1><?= copyrightFormEscape($pageTitle) ?></h1><p><?= copyrightFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= copyrightFormEscape($isEdit && $copyrightId ? SITE_URL . 'pages/shared/copyright-detail.php?id=' . $copyrightId : SITE_URL . 'pages/shared/copyrights.php') ?>">&larr; Back</a></header>
   <?php if ($errors): ?><div class="form-errors" role="alert"><strong>Review the following:</strong><ul><?php foreach ($errors as $error): ?><li><?= copyrightFormEscape($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
   <section class="form-card">
-    <div class="form-note"><?= $isOwnerRole ? 'Your account is recorded as the applicant. Pending applications remain editable until review begins.' : 'Staff and administrators may submit on behalf of an applicant and set the workflow status.' ?></div>
+    <div class="form-note"><?= $isOwnerRole ? 'Your account is recorded as the applicant. Pending applications remain editable until review begins.' : 'Staff and administrators may submit on behalf of an applicant. Use the application detail page to advance its review status.' ?></div>
     <form class="copyright-form" method="post" enctype="multipart/form-data">
       <?= csrfField() ?><input type="hidden" name="form_mode" value="<?= $isEdit ? 'edit' : 'create' ?>"><?php if ($isEdit && $copyrightId): ?><input type="hidden" name="copyright_id" value="<?= (int) $copyrightId ?>"><?php endif; ?>
       <div class="form-grid">
@@ -279,9 +432,18 @@ else renderStudentShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
         <div class="field"><label for="applicant-name">Applicant <span class="required">*</span></label><input id="applicant-name" name="applicant_name" type="text" maxlength="255" value="<?= copyrightFormEscape($values['applicant_name']) ?>" <?= $isOwnerRole ? 'readonly' : 'required' ?>></div>
         <div class="field"><label for="applicant-category">Category <span class="required">*</span></label><?php if ($isOwnerRole): ?><input type="text" value="<?= copyrightFormEscape(ucfirst($values['applicant_category'])) ?>" readonly><?php else: ?><select id="applicant-category" name="applicant_category" required><option value="faculty" <?= $values['applicant_category'] === 'faculty' ? 'selected' : '' ?>>Faculty</option><option value="student" <?= $values['applicant_category'] === 'student' ? 'selected' : '' ?>>Student</option></select><?php endif; ?></div>
         <div class="field"><label for="output-type">Output type <span class="required">*</span></label><select id="output-type" name="output_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= copyrightFormEscape($value) ?>" <?= $values['output_type'] === $value ? 'selected' : '' ?>><?= copyrightFormEscape($label) ?></option><?php endforeach; ?></select></div>
+        <div class="field"><label for="research-project">Originating research project <span class="optional">optional</span></label><select id="research-project" name="research_project_id"><option value="">Not linked</option><?php foreach ($projectOptions as $project): ?><option value="<?= (int) $project['project_id'] ?>" <?= (string) $values['research_project_id'] === (string) $project['project_id'] ? 'selected' : '' ?>><?= copyrightFormEscape($project['title'] . ' · ' . ucfirst((string) $project['status'])) ?></option><?php endforeach; ?></select><small>Leave unlinked when the originating project is not confirmed.</small></div>
+        <div class="field"><label for="research-output">Related research output <span class="optional">optional</span></label><select id="research-output" name="publication_id"><option value="">Not linked</option><?php foreach ($publicationOptions as $publication): ?><option value="<?= (int) $publication['publication_id'] ?>" <?= (string) $values['publication_id'] === (string) $publication['publication_id'] ? 'selected' : '' ?>><?= copyrightFormEscape($publication['research_title'] . ' · ' . ucfirst((string) $publication['publication_type'])) ?></option><?php endforeach; ?></select></div>
         <div class="field"><label for="date-completed">Date completed</label><input id="date-completed" name="date_completed" type="date" value="<?= copyrightFormEscape($values['date_completed']) ?>"></div>
-        <div class="field full"><label for="co-authors">Co-authors</label><textarea id="co-authors" name="co_authors" maxlength="500" placeholder="List co-authors or collaborators, separated by commas"><?= copyrightFormEscape($values['co_authors']) ?></textarea></div>
-        <?php if ($isReviewer): ?><div class="field"><label for="application-status">Status <span class="required">*</span></label><select id="application-status" name="status" required><?php foreach ($statusOptions as $value => $label): ?><option value="<?= copyrightFormEscape($value) ?>" <?= $values['status'] === $value ? 'selected' : '' ?>><?= copyrightFormEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?>
+        <div class="field"><label for="application-number">Application number <span class="optional">for patent/IP records</span></label><input id="application-number" name="application_number" type="text" maxlength="120" value="<?= copyrightFormEscape($values['application_number']) ?>"></div>
+        <div class="field"><label for="filing-date">Filing date</label><input id="filing-date" name="filing_date" type="date" value="<?= copyrightFormEscape($values['filing_date']) ?>"></div>
+        <div class="field full"><label for="inventors">Inventors / researchers</label><textarea id="inventors" name="inventors" maxlength="500" placeholder="List inventors or researchers, separated by commas"><?= copyrightFormEscape($values['inventors']) ?></textarea></div>
+        <div class="field full"><label for="co-authors">Co-authors / collaborators</label><textarea id="co-authors" name="co_authors" maxlength="500" placeholder="List co-authors or collaborators, separated by commas"><?= copyrightFormEscape($values['co_authors']) ?></textarea></div>
+        <div class="field"><label for="potential-partners">Potential partners</label><input id="potential-partners" name="potential_partners" type="text" maxlength="500" value="<?= copyrightFormEscape($values['potential_partners']) ?>" placeholder="Organizations or industry partners"></div>
+        <div class="field"><label for="agreement-reference">Agreement reference</label><input id="agreement-reference" name="agreement_reference" type="text" maxlength="120" value="<?= copyrightFormEscape($values['agreement_reference']) ?>"></div>
+        <div class="field"><label for="utilization-status">Utilization status</label><input id="utilization-status" name="utilization_status" type="text" maxlength="120" value="<?= copyrightFormEscape($values['utilization_status']) ?>" placeholder="Concept, transferred, in use, etc."></div>
+        <div class="field full"><label for="transfer-activities">Technology-transfer activities</label><textarea id="transfer-activities" name="transfer_activities" maxlength="10000" placeholder="Describe licensing, partner engagement, demonstrations, agreements, or utilization activities"><?= copyrightFormEscape($values['transfer_activities']) ?></textarea></div>
+        <?php if ($isReviewer && $isEdit): ?><div class="field"><label for="application-status">Current status</label><input id="application-status" type="text" value="<?= copyrightFormEscape(ucwords(str_replace('_', ' ', $values['status']))) ?>" readonly><small>Change status from the application detail page using a valid processing action.</small></div><?php endif; ?>
         <div class="field full file-field"><label for="supporting-file">Supporting file (PDF) <?php if (!$values['file_path']): ?><span class="required">*</span><?php else: ?><span class="optional">optional replacement</span><?php endif; ?></label><?php if ($values['file_name']): ?><p class="current-file">Current file: <?= copyrightFormEscape($values['file_name']) ?></p><?php endif; ?><input id="supporting-file" name="supporting_file" type="file" accept=".pdf,application/pdf" <?= $values['file_path'] ? '' : 'required' ?>><small>PDF only, up to <?= copyrightFormEscape(number_format(MAX_UPLOAD_SIZE / 1048576, 0)) ?> MB. Uploading a new file replaces the current supporting document after the record saves.</small></div>
       </div>
       <div class="form-actions"><a class="button secondary" href="<?= copyrightFormEscape($isEdit && $copyrightId ? SITE_URL . 'pages/shared/copyright-detail.php?id=' . $copyrightId : SITE_URL . 'pages/shared/copyrights.php') ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Submit application' ?></button></div>

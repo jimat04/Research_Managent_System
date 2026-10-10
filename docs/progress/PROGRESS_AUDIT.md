@@ -1,17 +1,21 @@
 # RMS Progress Audit Report
 
 **Audit Date:** September 6, 2026
-**Last updated:** September 25, 2026 (v2 research-monitoring pivot)
+**Last updated:** October 10, 2026 (source-aligned status note)
 **System version:** v2 — EARIST Cavite Research Monitoring System (pivot from workflow RMS, September 25, 2026)
 **Auditor:** Claude (E2E walkthrough pass on live DB)
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
 
+> The live-database E2E evidence and v1 page-count / completion estimates below are historical snapshots. The v2 pivot replaced the main workflow scope; this document is not a fresh end-to-end or deployment audit. Current source was spot-checked on October 10, 2026. Use current handlers, role shells, `TODO.md`, and deployment tests for release decisions.
+
 ---
 
 ## 📊 EXECUTIVE SUMMARY
 
-### Overall Progress: ≈ 95% Complete (E2E-proven end to end; remainder optional or unbuilt-by-design)
+### Historical v1 estimate: ≈ 95% complete
+
+This estimate referred to the v1 research-workflow scope and the historical E2E run below. It is not a completion measure for the current v2 research-monitoring system.
 
 **What changed since the 2026-09-02 audit:**
 
@@ -87,6 +91,12 @@ New module structure (6 commits, each E2E-tested before merge):
 | f2ab103 | Dashboards: 7-indicator monitoring overview (staff/admin, shared implementation), personal summaries (faculty/student), pure-CSS activity chart, quick actions |
 
 Role model unchanged (student / faculty / research\_staff / admin): faculty and students submit publications and copyright applications and view activities; staff and admin manage all modules. Repository (research-archive) integrated into navigation.
+
+### 0.3 Current v2 source snapshot (October 10, 2026)
+
+The role shells and canonical schema currently expose research-capacity-building activities (seminars, trainings, workshops, presentations, and forums), publications, copyright/IP records, and research-repository workflows alongside communication and account pages. Faculty and student shells link to activities, publications, copyrights, and repository pages. Research staff module visibility is permission-controlled; admin has module management links. The canonical schema includes `research_activities`, `activity_participants`, `publications`, and `copyright_applications`.
+
+This is a source-tree check only. It does not independently verify every write path, role permission combination, migration state, or live database. The old workflow gap list and page-count estimate below belong to the pre-pivot v1 scope and must not be treated as the current v2 backlog.
 
 ---
 
@@ -179,11 +189,11 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 
 ---
 
-## 2. Security posture (verified)
+## 2. v1 security posture (historical snapshot)
 
 ### 2.1 CSRF coverage
 - `csrfField()` / `isCsrfTokenValid()` are used in **29 files / 97 occurrences** (Grep across `**/*.php`). All state-changing forms inside the role pages that POST to themselves include a CSRF field and validate it server-side.
-- The four 1-line stubs do not include CSRF because they have no form — they are read-only and routed through `module-page.php`.
+- At the time of the v1 audit, four one-line shared stubs had no state-changing form. Those pages were subsequently implemented; this old observation is not a current review of their CSRF posture.
 
 ### 2.2 Prepared-statement coverage
 - `includes/module-pages.php` has **28 prepared statements vs 6 raw `$conn->query(...)` calls**. The 6 remaining raw calls are all to *hard-coded* schema strings (`SHOW TABLES LIKE 'research_projects'`, `SELECT … FROM research_categories WHERE status = 1`, `SELECT … FROM research_projects WHERE status IN ('completed','archived')`, `SELECT … FROM activity_log …`, `SELECT … FROM users`, `SELECT COUNT(*) …`) with no interpolated user variables.
@@ -241,21 +251,21 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 
 ---
 
-## 4. Remaining gaps (prioritized)
+## 4. Remaining v1 workflow gaps at time of audit (historical)
 
-### 🔴 P0 — must-do before claiming "Research Manual 2015 complete"
+### 🔴 P0 — recorded before the v2 pivot; not the current product backlog
 1. **ORS Consolidation stage (Manual step 3).** No table, no UI, no status transition. Add an ORS review state (`under_ors_consolidation`) with a staff-side queue page (mirror `pages/staff/staff-crec.php`).
 2. **Final Bound Report upload slot (Manual step 11).** `pages/staff/staff-milestones.php:73` already lists `final_bound_report` as a document type, but `pages/student/submit-milestone.php` only renders the MOU/NDA/Midway/Terminal cards. Add a "Final Bound Report" card using the same flow.
 3. **Admin notification on new submission** — `pages/student/submit-research.php` notifies co-researchers but not admins. One `createNotification(...)` call inside the existing transaction. (This is also the last unchecked `TODO.md` item from the original list.)
 
-### 🟡 P1 — replace the four 1-line stubs
+### 🟡 P1 — shared-page work recorded before those pages were implemented
 4. `pages/shared/calendar.php` — render the actual schedule from `defense_schedule` + `research_projects.created_by` (the query already exists in `includes/module-pages.php:283-291` for the student calendar).
 5. `pages/shared/research-archive.php` — surface the public-facing browse from the existing public `public/research-archive.php` plus a role-scoped list.
 6. `pages/shared/view-research.php` — redirect or render the same content as `pages/shared/research-detail.php` for the current role.
 7. `pages/shared/settings.php` — render profile-preferences + email notification toggles (a thin new form).
 
 ### 🟡 P1 — security hygiene
-8. **Login rate limiting — current state and upgrade path.** `public/login.php` already implements `loginFailureKey()` (keyed by client IP + session id), `isLoginLocked()`, `recordFailedLogin()`, and `resetFailedLogins()`. After 5 failed attempts the IP is locked out for 15 minutes and the user sees `"Too many failed attempts. Please try again in N minute(s)."` (message at `public/login.php:106`). It is session-based, so clearing cookies resets the counter. A DB-backed `login_attempts` table (keyed by IP and/or email, surviving cookie clearing) would be a P2 hardening upgrade, not a fix for a missing feature.
+8. **Login rate limiting — current source check.** `public/login.php` implements `loginFailureKey()`, `isLoginLocked()`, and `recordFailedLogin()` using session state. A database-backed limiter that survives cookie clearing could be considered separately; the old statement that rate limiting is absent is incorrect.
 9. **`pages/staff/staff-crec.php:302` reads `users WHERE role='admin'` with raw `$conn->query`** — it is a hard-coded string, but migrating it to a prepared statement keeps the style consistent.
 
 ### 🟢 P2 — nice-to-have
@@ -277,18 +287,17 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 | Student portal (9/9 pages) | 100 % | 15 % | 15 |
 | Shared portal (6 built, 4 stubs) | 60 % | 5 % | 3.0 |
 | Research-Manual 2015 coverage (11/13 steps full, 1 partial, 2 gaps) | 88 % | 15 % | 13.2 |
-| Login rate limiting | 0 % | 5 % | 0.0 |
+| Login rate limiting (v1 scoring snapshot) | 0 % | 5 % | 0.0 |
 | File upload validation (folder whitelist + MIME + size) | 95 % | 5 % | 4.75 |
 | **Total** | — | **100 %** | **≈ 79.5 %** |
 
-**Rounded estimate: ~80 %** of the original scope. The previous audit's 45 % figure predates the entire admin / staff / faculty build-out and the module-page system, so it is no longer comparable.
+**Historical rounded estimate: ~80 %** of the original v1 scope. The estimate is retired and should not be used to score the current v2 system.
 
 ---
 
 ## 6. TL;DR
 
-- 31 of 33 role pages are real, working, gated, and CSRF-protected.
-- The four 1-line shared stubs (`calendar`, `research-archive`, `settings`, `view-research`) are the most visible leftover.
-- The Research Manual 2015 is **two steps short of complete**: ORS Consolidation (step 3) and the Final Bound Report upload slot (step 11).
-- The only remaining original TODO item is admin notification on new submission.
-- The only security regression to fix is the missing login rate limiter.
+- Sections 1–6 describe the v1 workflow application retained in the working tree; their page inventory and gaps are not the current v2 completion assessment.
+- The current source has monitoring modules for activities, publications, copyrights/IP, and repository workflows, in addition to role-based dashboards, communication, and account features.
+- The reported 8-phase E2E run predates the v2 pivot. No fresh v2 end-to-end verification is asserted here.
+- Login rate limiting exists in session-based form in `public/login.php`; database-backed persistence would be a separate hardening option.

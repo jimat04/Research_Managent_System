@@ -1,5 +1,7 @@
 # RMS File Uploader Component — Implementation Summary
 
+**Source checked:** October 10, 2026. This is an implementation summary, not a record of a fresh runtime test. The reusable control is currently used by student proposal submit/edit and chapter submission pages. Those pages handle uploads through their normal form POST flows; the AJAX endpoint and XHR progress method exist, but are not called by the current page integrations.
+
 ## 🎯 Deliverables Completed
 
 ### 1. **CSS Stylesheet** (`css/file-uploader.css`)
@@ -17,8 +19,8 @@
 - ✅ Drag-and-drop support with drag-over state
 - ✅ Click-to-browse file picker
 - ✅ Client-side validation (file type + size)
-- ✅ Multiple file support (configurable via `data-multiple`)
-- ✅ Progress tracking (XHR upload with progress events)
+- ⚠️ Multi-file selection exists in the UI, but the PHP handler currently processes one `$_FILES` file record; end-to-end multiple-file upload is not supported.
+- ✅ XHR progress tracking method exists; current page integrations do not invoke it
 - ✅ Remove/Replace file actions
 - ✅ Screen reader announcements via `aria-live`
 - ✅ Keyboard accessible (Enter/Space to trigger picker)
@@ -43,12 +45,11 @@
 - ✅ Dynamic config based on folder target
 - ✅ HTTP status codes (200/400/403/405)
 
-### 5. **Integration Demo** (`pages/student/submit-research.php`)
-- ✅ Replaced basic file input with premium uploader component
-- ✅ Form POST integration (works without JavaScript as fallback)
-- ✅ Database transaction safety (project + upload records)
-- ✅ Success/error handling
-- ✅ Validation messages
+### 5. **Current student integrations**
+- `pages/student/submit-research.php` — proposal upload during submission
+- `pages/student/edit-research.php` — optional replacement proposal upload
+- `pages/student/submit-chapter.php` — optional chapter document upload
+- These use the page's normal form POST handling; the AJAX progress UI is not active in these flows.
 
 ### 6. **Testing Documentation** (`docs/FILE_UPLOADER_TESTING.md`)
 - ✅ 7-step smoke test (idle → hover → drag → select → errors → success → DB verification)
@@ -101,14 +102,14 @@
 
 ## 🔒 Security Features
 
-1. **Whitelist Validation** — Both extension AND MIME type checked (prevents spoofing)
+1. **Whitelist Validation** — Extension checked and server MIME detection used to validate supported file extensions; this is not malware scanning.
 2. **Unique Filenames** — `rms_` prefix + `uniqid('', true)` (prevents overwrites)
 3. **CSRF Protection** — Token required for AJAX uploads
 4. **Session Gating** — `requireLogin()` on upload endpoint
 5. **File Permissions** — `chmod 0644` (read-only for web server)
 6. **Directory Protection** — `uploads/.htaccess` blocks PHP execution
 7. **Prepared Statements** — SQL injection prevention
-8. **Size Limits** — Enforced server-side (10MB proposals, 20MB manuscripts)
+8. **Size Limits** — Enforced server-side. Current page integrations set proposal/chapter limits to 10,000 KB; the AJAX endpoint defines 20,000 KB for defense and manuscript targets.
 
 ---
 
@@ -131,6 +132,8 @@
 | `projectId` | int\|null | `null` | Associate with project |
 | `chapterId` | int\|null | `null` | Associate with chapter |
 
+The canonical `uploads.project_id` column is `NOT NULL`; a valid project ID must be passed to `handleRmsUpload()` for the database insert to succeed.
+
 ---
 
 ## 🎯 Integration Points
@@ -138,25 +141,18 @@
 ### Where to Use
 
 1. **Student Module**
-   - ✅ Submit research (proposal) — **IMPLEMENTED**
-   - Chapter uploads (5 chapters)
-   - Defense documents
-   - Manuscript revisions
+   - ✅ Proposal submission and optional replacement — `submit-research.php`, `edit-research.php`
+   - ✅ Chapter document — `submit-chapter.php`
+   - ⏳ Defense and manuscript targets are accepted by the AJAX endpoint but are not currently integrated by these page flows.
 
 2. **Faculty Module**
-   - Review attachments
-   - Feedback documents
-   - Evaluation forms
+   - Not currently integrated.
 
 3. **Staff Module**
-   - Document verification uploads
-   - MOU/NDA scans
-   - Approval letters
+   - Not currently integrated.
 
 4. **Admin Module**
-   - Archive imports
-   - Backup uploads
-   - System documents
+   - Not currently integrated.
 
 ### Usage Template
 
@@ -197,7 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['your_file'])) {
 
 ---
 
-## ✅ 7-Step Smoke Test Summary
+## Smoke test reference
+
+The steps below are a manual test recipe, not evidence of a current passing run. Use a disposable local student account and test project; do not rely on seeded records or use production uploads.
 
 | Step | Action | Expected Result |
 |------|--------|-----------------|
@@ -216,9 +214,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['your_file'])) {
 ```sql
 -- Check latest upload
 SELECT upload_id, project_id, type, original_name, file_name, 
-       ROUND(file_size/1024/1024, 2) AS size_mb, uploaded_by, uploaded_at
+       ROUND(file_size/1024/1024, 2) AS size_mb, uploaded_by, upload_date
 FROM uploads
-ORDER BY uploaded_at DESC
+ORDER BY upload_date DESC
 LIMIT 1;
 
 -- Check latest project
@@ -234,13 +232,13 @@ LIMIT 1;
 
 ---
 
-## 🚀 Next Steps (v2 Enhancements)
+## Follow-up ideas (not verified as current priorities)
 
 ### Immediate Improvements
-- [ ] Add XHR streaming progress (real-time % in progress bar)
-- [ ] Wire "Cancel upload" button to abort XHR request
+- [ ] Wire the existing XHR progress method into a page integration, if AJAX upload is desired
+- [ ] Add a user-facing cancel action if an AJAX flow is added
 - [ ] Add image preview thumbnails for avatar/profile uploads
-- [ ] Support existing file display (when editing, show current file with replace/remove)
+- [x] Current chapter attachment is displayed in the chapter submission flow. Proposal editing permits an optional replacement and retains the previous file when none is submitted.
 
 ### Chapter Upload Flow
 - [ ] Create chapter-specific uploader (PDF only, chapter_id association)
@@ -252,7 +250,7 @@ LIMIT 1;
 - [ ] Comment attachments (inline with chapter review)
 
 ### Advanced Features
-- [ ] Multiple file upload in single dropzone (already supported in JS, needs UI polish)
+- [ ] Implement and test multi-file handling across the JavaScript, endpoint, and PHP handler before advertising it as supported.
 - [ ] File download/preview modal
 - [ ] Upload history table (per project)
 - [ ] Storage quota indicators

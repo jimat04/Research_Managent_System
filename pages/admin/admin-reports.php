@@ -76,6 +76,75 @@ $status_labels = [
     'archived' => 'Archived',
 ];
 
+$moduleTables = [];
+foreach (['research_activities', 'activity_participants', 'publications', 'copyright_applications'] as $tableName) {
+    $tableCheck = $conn->prepare('SELECT COUNT(*) AS table_count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+    $tableCheck->bind_param('s', $tableName);
+    $tableCheck->execute();
+    $moduleTables[$tableName] = (int) ($tableCheck->get_result()->fetch_assoc()['table_count'] ?? 0) > 0;
+    $tableCheck->close();
+}
+
+$activityReport = ['seminars' => 0, 'presentations' => 0, 'workshops' => 0, 'scheduled' => 0, 'completed' => 0, 'participants' => 0, 'attended' => 0];
+if ($moduleTables['research_activities']) {
+    $activityStmt = $conn->prepare("SELECT SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'presentation' AND status <> 'cancelled') AS presentations, SUM(activity_type IN ('workshop', 'forum') AND status <> 'cancelled') AS workshops, SUM(status = 'scheduled') AS scheduled, SUM(status = 'completed') AS completed FROM research_activities");
+    $activityStmt->execute();
+    $activityRow = $activityStmt->get_result()->fetch_assoc() ?: [];
+    foreach (['seminars', 'presentations', 'workshops', 'scheduled', 'completed'] as $key) {
+        $activityReport[$key] = (int) ($activityRow[$key] ?? 0);
+    }
+    $activityStmt->close();
+}
+if ($moduleTables['research_activities'] && $moduleTables['activity_participants']) {
+    $attendanceStmt = $conn->prepare('SELECT COUNT(*) AS participants, COALESCE(SUM(attended = 1), 0) AS attended FROM activity_participants');
+    $attendanceStmt->execute();
+    $attendanceRow = $attendanceStmt->get_result()->fetch_assoc() ?: [];
+    $activityReport['participants'] = (int) ($attendanceRow['participants'] ?? 0);
+    $activityReport['attended'] = (int) ($attendanceRow['attended'] ?? 0);
+    $attendanceStmt->close();
+}
+
+$publicationStages = ['submitted' => 0, 'under_review' => 0, 'accepted' => 0, 'published' => 0];
+$publicationTypes = [];
+if ($moduleTables['publications']) {
+    $publicationStmt = $conn->prepare('SELECT status, COUNT(*) AS total FROM publications GROUP BY status');
+    $publicationStmt->execute();
+    $result = $publicationStmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        if (array_key_exists($row['status'], $publicationStages)) $publicationStages[$row['status']] = (int) $row['total'];
+    }
+    $publicationStmt->close();
+    $publicationStmt = $conn->prepare('SELECT publication_type, COUNT(*) AS total FROM publications GROUP BY publication_type ORDER BY total DESC, publication_type ASC');
+    $publicationStmt->execute();
+    $result = $publicationStmt->get_result();
+    while ($row = $result->fetch_assoc()) $publicationTypes[] = $row;
+    $publicationStmt->close();
+}
+
+$copyrightStages = ['pending' => 0, 'under_review' => 0, 'registered' => 0, 'rejected' => 0];
+$copyrightTypes = [];
+$registeredCopyrightsThisYear = 0;
+if ($moduleTables['copyright_applications']) {
+    $copyrightStmt = $conn->prepare('SELECT status, COUNT(*) AS total FROM copyright_applications GROUP BY status');
+    $copyrightStmt->execute();
+    $result = $copyrightStmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        if (array_key_exists($row['status'], $copyrightStages)) $copyrightStages[$row['status']] = (int) $row['total'];
+    }
+    $copyrightStmt->close();
+    $copyrightStmt = $conn->prepare('SELECT output_type, COUNT(*) AS total FROM copyright_applications GROUP BY output_type ORDER BY total DESC, output_type ASC');
+    $copyrightStmt->execute();
+    $result = $copyrightStmt->get_result();
+    while ($row = $result->fetch_assoc()) $copyrightTypes[] = $row;
+    $copyrightStmt->close();
+    $copyrightStmt = $conn->prepare("SELECT COUNT(*) AS total FROM copyright_applications WHERE status = 'registered' AND registered_at >= ?");
+    $registrationYearStart = date('Y') . '-01-01 00:00:00';
+    $copyrightStmt->bind_param('s', $registrationYearStart);
+    $copyrightStmt->execute();
+    $registeredCopyrightsThisYear = (int) ($copyrightStmt->get_result()->fetch_assoc()['total'] ?? 0);
+    $copyrightStmt->close();
+}
+
 renderAdminShell(
     $user,
     'admin-reports',
@@ -95,6 +164,26 @@ renderAdminShell(
   @media(max-width:760px){.reports-hero{min-height:0;padding:31px 24px 50px;border-radius:18px 18px 7px 7px}.reports-hero h2{font-size:40px}.hero-stats{grid-template-columns:1fr}.hero-stat{grid-template-columns:34px 1fr auto}.hero-stat-value{grid-column:auto}.report-metrics{grid-template-columns:repeat(4,minmax(150px,1fr));margin:-18px 12px 0;overflow-x:auto}.report-metric{min-width:150px}.analytics-grid{margin-top:28px}.report-panel-header{align-items:flex-start;flex-direction:column;padding:24px 20px 20px}.report-chart{padding:18px 20px 23px}.report-bar{grid-template-columns:minmax(92px,1fr) minmax(90px,1.5fr) 52px;gap:10px}.report-tag{white-space:normal}}
   @media(max-width:480px){.report-bar{grid-template-columns:1fr 54px}.report-bar-track{grid-column:1/-1;grid-row:2}.report-bar-value{grid-column:2;grid-row:1}}
   @media(prefers-reduced-motion:reduce){.report-bar-fill{animation:none}}
+</style>
+<style>
+  .module-reports{margin-top:38px}
+  .module-reports-heading{margin:0 0 16px}
+  .module-reports-heading h2{margin:0;color:#1c2639;font-size:26px;letter-spacing:-.03em}
+  .module-reports-heading p{margin:7px 0 0;color:#687386;font-size:13px;line-height:1.55}
+  .module-report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+  .module-report-card{overflow:hidden;border:1px solid #dfe5ed;border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(31,42,63,.045)}
+  .module-report-card header{padding:19px 20px;border-bottom:1px solid #e8ecf1}
+  .module-report-card h3{margin:0;color:#1c2639;font-size:16px}
+  .module-report-card header p{margin:6px 0 0;color:#687386;font-size:11px;line-height:1.5}
+  .module-report-list{display:grid;gap:0;padding:8px 20px}
+  .module-report-row{display:flex;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid #f0f2f5;color:#475569;font-size:12px}
+  .module-report-row:last-child{border-bottom:0}
+  .module-report-row strong{color:#192235;font-variant-numeric:tabular-nums}
+  .module-report-card footer{padding:0 20px 18px}
+  .module-report-card footer a{color:#7c5417;font-size:11px;font-weight:750;text-decoration:none}
+  .module-report-empty{padding:18px 20px;color:#687386;font-size:12px}
+  @media(max-width:1000px){.module-report-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:680px){.module-report-grid{grid-template-columns:1fr}.module-reports-heading h2{font-size:22px}}
 </style>
 <div class="reports-workspace">
   <section class="reports-hero" aria-labelledby="reports-hero-title">
@@ -182,6 +271,56 @@ renderAdminShell(
       <?php endif; ?>
     </section>
   </div>
+
+  <section class="module-reports" id="module-portfolio" aria-labelledby="module-reports-heading">
+    <header class="module-reports-heading"><h2 id="module-reports-heading">Research modules and intellectual outputs</h2><p>Live operational reports for events, publication outcomes, copyright applications, and registered outputs.</p></header>
+    <div class="module-report-grid">
+      <article class="module-report-card">
+        <header><h3>Research activities</h3><p>Seminar, presentation, and participation totals recorded in the activity module.</p></header>
+        <?php if ($moduleTables['research_activities']): ?>
+          <div class="module-report-list">
+            <div class="module-report-row"><span>Seminars</span><strong><?= $activityReport['seminars'] ?></strong></div>
+            <div class="module-report-row"><span>Presentations</span><strong><?= $activityReport['presentations'] ?></strong></div>
+            <div class="module-report-row"><span>Workshops and forums</span><strong><?= $activityReport['workshops'] ?></strong></div>
+            <div class="module-report-row"><span>Scheduled / completed</span><strong><?= $activityReport['scheduled'] ?> / <?= $activityReport['completed'] ?></strong></div>
+            <div class="module-report-row"><span>Recorded attendance</span><strong><?= $activityReport['attended'] ?> / <?= $activityReport['participants'] ?></strong></div>
+          </div>
+        <?php else: ?><div class="module-report-empty">Research activity data is unavailable. Apply migration 012 to enable the module.</div><?php endif; ?>
+        <footer><a href="<?= htmlspecialchars(SITE_URL . 'pages/shared/activities.php', ENT_QUOTES, 'UTF-8') ?>">Open activity records</a></footer>
+      </article>
+
+      <article class="module-report-card">
+        <header><h3>Publication monitoring</h3><p>Submissions tracked from first review through publication.</p></header>
+        <?php if ($moduleTables['publications']): ?>
+          <div class="module-report-list">
+            <?php foreach (['submitted' => 'Submitted', 'under_review' => 'Under review', 'accepted' => 'Accepted', 'published' => 'Published'] as $stage => $label): ?>
+              <div class="module-report-row"><span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span><strong><?= $publicationStages[$stage] ?></strong></div>
+            <?php endforeach; ?>
+            <?php foreach ($publicationTypes as $typeRow): ?>
+              <div class="module-report-row"><span><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string) $typeRow['publication_type'])), ENT_QUOTES, 'UTF-8') ?></span><strong><?= (int) $typeRow['total'] ?></strong></div>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?><div class="module-report-empty">Publication data is unavailable. Apply migration 012 to enable the module.</div><?php endif; ?>
+        <footer><a href="<?= htmlspecialchars(SITE_URL . 'pages/shared/publications.php?status=under_review', ENT_QUOTES, 'UTF-8') ?>">Open publication monitoring</a></footer>
+      </article>
+
+      <article class="module-report-card">
+        <header><h3>Copyrights and research outputs</h3><p>Application stages, registered outputs, and registrations completed this year.</p></header>
+        <?php if ($moduleTables['copyright_applications']): ?>
+          <div class="module-report-list">
+            <?php foreach (['pending' => 'Pending', 'under_review' => 'Under review', 'registered' => 'Registered', 'rejected' => 'Rejected'] as $stage => $label): ?>
+              <div class="module-report-row"><span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span><strong><?= $copyrightStages[$stage] ?></strong></div>
+            <?php endforeach; ?>
+            <div class="module-report-row"><span>Registered this year</span><strong><?= $registeredCopyrightsThisYear ?></strong></div>
+            <?php foreach ($copyrightTypes as $typeRow): ?>
+              <div class="module-report-row"><span><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string) $typeRow['output_type'])), ENT_QUOTES, 'UTF-8') ?> outputs</span><strong><?= (int) $typeRow['total'] ?></strong></div>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?><div class="module-report-empty">Copyright data is unavailable. Apply migration 012 to enable the module.</div><?php endif; ?>
+        <footer><a href="<?= htmlspecialchars(SITE_URL . 'pages/shared/copyrights.php?status=under_review', ENT_QUOTES, 'UTF-8') ?>">Open copyright monitoring</a></footer>
+      </article>
+    </div>
+  </section>
 </div>
 
 <?php

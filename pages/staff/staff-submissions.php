@@ -18,6 +18,8 @@ requireRole('research_staff');
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+requireModulePermission('research_development', 'view', 'research_proposals');
+$canManageProposals = hasModulePermission($user_id, 'research_development', 'manage', 'research_proposals');
 $adviser_locked_statuses = ['draft', 'completed', 'archived', 'rejected'];
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -77,6 +79,10 @@ if ($project_advisers_exists) {
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    if (!$canManageProposals) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         // Mint a fresh token so the user can retry on the next request without a hard refresh
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -85,7 +91,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $action     = (string) $_POST['action'];
         $project_id = isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0;
 
-        if ($project_id <= 0) {
+        if (in_array($action, ['forward_to_crec', 'return_for_revision'], true)) {
+            $_SESSION['module_error'] = 'Title decisions must be made in the authorized title and chapter review queue.';
+            header('Location: ' . SITE_URL . 'pages/shared/research-submission-review.php');
+            exit;
+        } elseif ($project_id <= 0) {
             $_SESSION['module_error'] = 'Invalid submission reference (received project_id='
                 . htmlspecialchars((string)($_POST['project_id'] ?? 'MISSING'), ENT_QUOTES, 'UTF-8')
                 . '). Please refresh the page (Ctrl+Shift+R) and try again.';
@@ -491,6 +501,7 @@ $list_sql = "
         u.student_id,
         u.email,
         rc.category_name,
+        up.upload_id AS proposal_upload_id,
         up.file_name  AS proposal_file_name,
         up.file_path  AS proposal_file_path,
         up.original_name AS proposal_original_name
@@ -498,7 +509,7 @@ $list_sql = "
     LEFT JOIN users u  ON u.user_id = rp.created_by
     LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
     LEFT JOIN (
-        SELECT u1.project_id, u1.file_name, u1.file_path, u1.original_name
+        SELECT u1.project_id, u1.upload_id, u1.file_name, u1.file_path, u1.original_name
           FROM uploads u1
           JOIN (
               SELECT project_id, MIN(upload_id) AS first_upload_id
@@ -912,7 +923,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                 : '—';
 
             $proposal_url  = !empty($row['proposal_file_path'])
-                ? SITE_URL . $row['proposal_file_path']
+                ? SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . (int) $row['proposal_upload_id']
                 : '';
             $proposal_name = $row['proposal_original_name'] ?? 'proposal file';
             $project_advisers = $advisers_by_project[(int) $row['project_id']] ?? [];
@@ -973,6 +984,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                         ?>
                           <div class="adviser-item">
                             <span><?php echo se($adviser_name); ?></span>
+                            <?php if ($canManageProposals): ?>
                             <form method="POST" onsubmit="return confirm('Remove this adviser assignment?');">
                               <?php echo csrfField(); ?>
                               <input type="hidden" name="action" value="remove_adviser">
@@ -980,11 +992,13 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                               <input type="hidden" name="adviser_id" value="<?php echo (int) $adviser['adviser_id']; ?>">
                               <button type="submit" class="btn btn-danger btn-sm">Remove</button>
                             </form>
+                            <?php endif; ?>
                           </div>
                         <?php endforeach; ?>
                       </div>
                     <?php endif; ?>
 
+                    <?php if ($canManageProposals): ?>
                     <form method="POST" class="adviser-assign">
                       <?php echo csrfField(); ?>
                       <input type="hidden" name="action" value="assign_adviser">
@@ -1001,6 +1015,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
                       </select>
                       <button type="submit" class="btn btn-primary btn-sm" <?php echo empty($faculty_to_assign) ? 'disabled' : ''; ?>>Assign</button>
                     </form>
+                    <?php endif; ?>
                   </details>
                 <?php endif; ?>
               </td>
@@ -1009,18 +1024,11 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
               </td>
               <td>
                 <div class="row-actions">
-                  <form method="POST" style="display: inline;">
-                    <?php echo csrfField(); ?>
-                    <input type="hidden" name="action" value="forward_to_crec">
-                    <input type="hidden" name="project_id" value="<?php echo (int) $row['project_id']; ?>">
-                    <button type="submit" class="btn btn-primary btn-sm" title="Forward to CREC">
-                      ✓ Forward
-                    </button>
-                  </form>
-                  <button type="button" class="btn btn-danger btn-sm"
-                          onclick="openReturnModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>')">
-                    ↩ Return
-                  </button>
+                  <?php if ($canManageProposals): ?>
+                  <a class="btn btn-primary btn-sm" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php">Open Review Queue</a>
+                  <?php else: ?>
+                    <span class="text-muted">View only</span>
+                  <?php endif; ?>
                 </div>
               </td>
             </tr>
@@ -1050,6 +1058,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
   <?php endif; ?>
 </div>
 
+<?php if ($canManageProposals): ?>
 <!-- Return-for-revision modal -->
 <div id="returnModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="returnModalTitle">
   <div class="modal-content">
@@ -1062,6 +1071,7 @@ renderStaffShell($user, 'staff-submissions', 'Submissions Inbox', 'Verify new pr
         <h3 id="returnModalTitle">↩ Return for Revision</h3>
         <button type="button" class="modal-close" onclick="closeReturnModal()" aria-label="Close">×</button>
       </div>
+      <?php endif; ?>
       <div class="modal-body">
         <p style="margin: 0 0 16px; font-size: 14px; color: #64748B;">
           Returning: <strong id="return_title" style="color: #111827;"></strong>

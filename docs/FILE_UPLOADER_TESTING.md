@@ -1,5 +1,7 @@
 # RMS File Uploader Component — Testing Guide
 
+**Current source check:** October 10, 2026. This is a manual test recipe, not a fresh test report. Run it only against a local disposable database/account. Never use the documented steps to upload test files to production.
+
 ## Overview
 
 Premium file uploader component for RMS matching the purple/lavender design language.
@@ -10,7 +12,7 @@ Premium file uploader component for RMS matching the purple/lavender design lang
 - `includes/file-uploader.php` — Server-side handler & HTML renderer
 - `public/api/upload.php` — AJAX upload endpoint
 
-**Demo Integration:** Student submit-research page (`pages/student/submit-research.php`)
+**Current integrations:** Student proposal submit/edit and chapter submission pages. These currently use their normal form POST handlers. The JavaScript XHR method and API endpoint exist, but the current page integrations do not call them; this guide's submit step therefore does not exercise XHR progress.
 
 ---
 
@@ -18,7 +20,7 @@ Premium file uploader component for RMS matching the purple/lavender design lang
 
 ### 1. **Idle State**
 - Open `http://localhost/rms/pages/student/submit-research.php`
-- Log in as student: `jdelacruz@rms.edu.ph` / `Student@123`
+- Log in using a local student account (see the root README for optional demo-account details).
 - Scroll to "Proposal Document" section
 - **Expected:** Soft lavender dropzone (#F8F4FF), dashed purple border (#D4C4F0), cloud icon 📁, "Click to browse or drag files here" prompt
 
@@ -77,8 +79,8 @@ Premium file uploader component for RMS matching the purple/lavender design lang
     - New row in `uploads` table with:
       - `project_id` = new project ID
       - `type` = 'proposal'
-      - `file_path` = 'uploads/proposals/rms_XXXXXXXXXX.pdf'
-      - `uploaded_by` = student's user_id
+      - `file_path` points to a generated `rms_...pdf` file under `uploads/proposals/`
+      - `uploaded_by` = student's user ID
   - Physical file saved in `uploads/proposals/` directory
 
 ---
@@ -89,9 +91,9 @@ After test #7, run these queries:
 
 ```sql
 -- Check the uploaded file record
-SELECT upload_id, project_id, type, original_name, file_name, file_size, uploaded_by, uploaded_at
+SELECT upload_id, project_id, type, original_name, file_name, file_size, uploaded_by, upload_date
 FROM uploads
-ORDER BY uploaded_at DESC
+ORDER BY upload_date DESC
 LIMIT 1;
 
 -- Check the project record
@@ -144,7 +146,7 @@ echo renderFileUploader([
   'allowedFormatsText' => 'PDF only • Max 10 MB',  // Format display
   'required' => true,                      // Is field required?
   'acceptMultiple' => false,               // Allow multiple files?
-  'projectId' => 123,                      // Associate with project (optional)
+  'projectId' => 123,                      // Required for a successful uploads-table insert
   'chapterId' => 45                        // Associate with chapter (optional)
 ]);
 ?>
@@ -175,7 +177,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['chapter_file'])) {
 
 ---
 
-## Folder Targets & Defaults
+## AJAX Endpoint Folder Targets
+
+These settings belong to `public/api/upload.php`; page-level form uploads can pass their own accepted types and size limits to `handleRmsUpload()`.
 
 | Folder Target | Accept | Max Size | Type |
 |---------------|--------|----------|------|
@@ -188,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['chapter_file'])) {
 
 ## Security Features
 
-✅ **Whitelist validation** — Both MIME type AND extension checked  
+✅ **Whitelist validation** — Extension checked; server-side MIME detection validates supported extension types. This is not malware scanning.
 ✅ **Unique filenames** — `uniqid('rms_', true)` prevents overwrites  
 ✅ **CSRF protection** — Token required for AJAX uploads  
 ✅ **Session gating** — `requireLogin()` on upload endpoint  
@@ -196,13 +200,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['chapter_file'])) {
 ✅ **Directory protection** — `uploads/.htaccess` blocks PHP execution  
 ✅ **Prepared statements** — SQL injection prevention  
 
+`uploads.project_id` is `NOT NULL` in the canonical schema. Supply a valid project ID to `handleRmsUpload()` even though the generic renderer/handler option defaults to `null`.
+
 ---
 
-## Known Limitations
+## Current integration boundary
 
-- **AJAX progress bar** is wired up in JS but requires the endpoint to fully support streaming progress events. For v1, it works via regular form POST (no animated progress bar, but upload still succeeds).
-- **Multiple file upload** is supported by the component but the demo (submit-research) uses single file mode.
-- **Cancel upload** button is rendered but XHR abort is not fully wired (optional for v1).
+- **AJAX progress bar** and JSON endpoint are implemented, but current student form integrations use standard POST and do not invoke the XHR method.
+- **Multiple file upload** is not supported end-to-end: the UI can select multiple files, but the current endpoint/PHP handler expects a single uploaded file record.
+- **Cancel upload**: the XHR code handles an abort event, but there is no user-facing cancel control wired to abort the request.
 
 ---
 
@@ -263,14 +269,13 @@ Icon emoji:
 
 ---
 
-## Next Steps (v2 Enhancements)
+## Follow-up ideas (not a current roadmap)
 
-- [ ] Wire up XHR upload with real-time progress bar animation
-- [ ] Add "Cancel upload" abort functionality
-- [ ] Support multiple file uploads in one dropzone (already wired in JS)
+- [ ] Consider wiring XHR progress into a page integration; current forms submit through normal POST.
+- [ ] If an AJAX form integration is added, expose a user-facing cancel action that aborts the active XHR.
+- [ ] Implement and test multi-file handling across the JavaScript, endpoint, and PHP handler.
 - [ ] Add image preview thumbnails for avatar/cover uploads
-- [ ] Integrate with chapter upload flow (Chapter 1-5 submissions)
-- [ ] Add existing file display with "Replace" / "Remove" options when editing
+- [x] Chapter submission uses the component and displays the current attachment; editable chapters allow replacing it.
 
 ---
 

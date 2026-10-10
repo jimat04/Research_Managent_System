@@ -21,14 +21,24 @@ function archive_fetch_all($stmt) {
 $search = trim($_GET['search'] ?? '');
 $selected_category = filter_input(INPUT_GET, 'category_id', FILTER_VALIDATE_INT);
 $selected_ay = filter_input(INPUT_GET, 'ay_id', FILTER_VALIDATE_INT);
+$selected_program = trim((string) ($_GET['program'] ?? ''));
 $selected_category = $selected_category ?: 0;
 $selected_ay = $selected_ay ?: 0;
+if (function_exists('mb_substr')) {
+    $selected_program = mb_substr($selected_program, 0, 120);
+} else {
+    $selected_program = substr($selected_program, 0, 120);
+}
 
 $deleted_column_stmt = $conn->prepare("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
 $deleted_column_stmt->execute();
 $has_deleted_at = $deleted_column_stmt->get_result()->num_rows > 0;
 $deleted_column_stmt->close();
 $deleted_filter = $has_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
+
+$snapshot_table_result = $conn->query("SHOW TABLES LIKE 'research_author_snapshots'");
+$has_author_snapshots = $snapshot_table_result instanceof mysqli_result && $snapshot_table_result->num_rows > 0;
+if ($snapshot_table_result instanceof mysqli_result) $snapshot_table_result->close();
 
 // @rms-db: Apply rms_db_migration.sql so research_projects.deleted_at is available for soft deletes.
 $count_stmt = $conn->prepare("SELECT COUNT(*) FROM research_projects WHERE status IN ('completed', 'archived')" . ($has_deleted_at ? ' AND deleted_at IS NULL' : ''));
@@ -56,6 +66,60 @@ $year_stmt = $conn->prepare(
 $academic_years = archive_fetch_all($year_stmt);
 $year_stmt->close();
 
+if ($has_author_snapshots) {
+    $program_sql = "
+        SELECT DISTINCT program
+        FROM (
+            SELECT ras.program
+              FROM research_author_snapshots ras
+              JOIN research_projects rp ON rp.project_id = ras.project_id
+             WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+               AND ras.program IS NOT NULL AND ras.program != ''
+            UNION
+            SELECT u.program
+              FROM project_members pm
+              JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
+              JOIN research_projects rp ON rp.project_id = pm.project_id
+             WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+               AND u.program IS NOT NULL AND u.program != ''
+               AND NOT EXISTS (SELECT 1 FROM research_author_snapshots ras WHERE ras.project_id = rp.project_id)
+            UNION
+            SELECT u.program
+              FROM research_projects rp
+              JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+             WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+               AND u.program IS NOT NULL AND u.program != ''
+               AND NOT EXISTS (SELECT 1 FROM research_author_snapshots ras WHERE ras.project_id = rp.project_id)
+        ) archive_programs
+        ORDER BY program
+    ";
+} else {
+    $program_sql = "
+        SELECT DISTINCT program
+        FROM (
+            SELECT u.program
+              FROM project_members pm
+              JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
+              JOIN research_projects rp ON rp.project_id = pm.project_id
+             WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+               AND u.program IS NOT NULL AND u.program != ''
+            UNION
+            SELECT u.program
+              FROM research_projects rp
+              JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+             WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+               AND u.program IS NOT NULL AND u.program != ''
+        ) archive_programs
+        ORDER BY program
+    ";
+}
+$programs = [];
+$program_result = $conn->query($program_sql);
+if ($program_result) {
+    while ($program_row = $program_result->fetch_assoc()) $programs[] = $program_row['program'];
+    $program_result->close();
+}
+
 $query = "
     SELECT
         rp.project_id,
@@ -69,6 +133,7 @@ $query = "
         ay.semester,
         lead_user.first_name AS lead_first_name,
         lead_user.last_name AS lead_last_name,
+        lead_user.program AS lead_program,
         COALESCE(pm.co_member_count, 0) AS co_member_count
     FROM research_projects rp
     LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
@@ -109,6 +174,47 @@ if ($selected_ay > 0) {
     $types .= 'i';
 }
 
+if ($selected_program !== '') {
+    if ($has_author_snapshots) {
+        $query .= " AND (
+            EXISTS (
+                SELECT 1 FROM research_author_snapshots ras
+                 WHERE ras.project_id = rp.project_id AND ras.program = ?
+            )
+            OR (
+                NOT EXISTS (SELECT 1 FROM research_author_snapshots ras WHERE ras.project_id = rp.project_id)
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM project_members pm_program
+                        JOIN users program_user ON program_user.user_id = pm_program.user_id AND program_user.role = 'student'
+                        WHERE pm_program.project_id = rp.project_id AND program_user.program = ?
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM users owner_program
+                        WHERE owner_program.user_id = rp.created_by AND owner_program.role = 'student' AND owner_program.program = ?
+                    )
+                )
+            )
+        )";
+        array_push($parameters, $selected_program, $selected_program, $selected_program);
+        $types .= 'sss';
+    } else {
+        $query .= " AND (
+            EXISTS (
+                SELECT 1 FROM project_members pm_program
+                JOIN users program_user ON program_user.user_id = pm_program.user_id AND program_user.role = 'student'
+                WHERE pm_program.project_id = rp.project_id AND program_user.program = ?
+            )
+            OR EXISTS (
+                SELECT 1 FROM users owner_program
+                WHERE owner_program.user_id = rp.created_by AND owner_program.role = 'student' AND owner_program.program = ?
+            )
+        )";
+        array_push($parameters, $selected_program, $selected_program);
+        $types .= 'ss';
+    }
+}
+
 $query .= ' ORDER BY rp.updated_at DESC, rp.title ASC';
 // @rms-ui: Add pagination controls when the public archive grows beyond the current result set.
 
@@ -118,6 +224,69 @@ if (!empty($parameters)) {
 }
 $projects = archive_fetch_all($archive_stmt);
 $archive_stmt->close();
+
+$authors_by_project = [];
+$project_ids = array_map(static fn($project) => (int) $project['project_id'], $projects);
+if ($project_ids) {
+    $project_id_list = implode(',', $project_ids);
+
+    if ($has_author_snapshots) {
+        $snapshot_result = $conn->query(
+            "SELECT project_id, user_id, author_name, program, author_role
+               FROM research_author_snapshots
+              WHERE project_id IN ({$project_id_list})
+              ORDER BY project_id, display_order, author_snapshot_id"
+        );
+        if ($snapshot_result) {
+            while ($author = $snapshot_result->fetch_assoc()) {
+                $authors_by_project[(int) $author['project_id']][] = $author;
+            }
+            $snapshot_result->close();
+        }
+    }
+
+    $fallback_ids = array_values(array_filter(
+        $project_ids,
+        static fn($project_id) => empty($authors_by_project[$project_id])
+    ));
+    if ($fallback_ids) {
+        $fallback_id_list = implode(',', $fallback_ids);
+        $live_author_sql = "
+            SELECT project_id, user_id, author_name, program, author_role
+            FROM (
+                SELECT pm.project_id, u.user_id,
+                       TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS author_name,
+                       NULLIF(TRIM(u.program), '') AS program,
+                       pm.role AS author_role,
+                       CASE WHEN pm.role = 'lead' THEN 0 ELSE 1 END AS display_order
+                  FROM project_members pm
+                  JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
+                 WHERE pm.project_id IN ({$fallback_id_list})
+                UNION ALL
+                SELECT rp.project_id, u.user_id,
+                       TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS author_name,
+                       NULLIF(TRIM(u.program), '') AS program,
+                       'lead' AS author_role,
+                       0 AS display_order
+                  FROM research_projects rp
+                  JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+                 WHERE rp.project_id IN ({$fallback_id_list})
+                   AND NOT EXISTS (
+                       SELECT 1 FROM project_members pm
+                        WHERE pm.project_id = rp.project_id AND pm.user_id = u.user_id
+                   )
+            ) live_authors
+            ORDER BY project_id, display_order, user_id
+        ";
+        $live_author_result = $conn->query($live_author_sql);
+        if ($live_author_result) {
+            while ($author = $live_author_result->fetch_assoc()) {
+                $authors_by_project[(int) $author['project_id']][] = $author;
+            }
+            $live_author_result->close();
+        }
+    }
+}
 
 $is_logged_in = isLoggedIn();
 ?>
@@ -133,12 +302,12 @@ $is_logged_in = isLoggedIn();
         .archive-hero { min-height: 56vh; }
         .archive-hero .hero-container { grid-template-columns: 1.2fr 0.8fr; }
         .archive-hero .hero-content p { max-width: 620px; }
-        .archive-stat { display: inline-flex; gap: 8px; align-items: baseline; color: #D0D3E8; font-size: 0.9rem; }
-        .archive-stat strong { color: white; font-family: 'Poppins', sans-serif; font-size: 1.5rem; }
+        .archive-stat { display: flex; width: fit-content; gap: 8px; align-items: center; color: #D0D3E8; font-size: 0.9rem; line-height: 1.2; }
+        .archive-stat strong { display: block; color: white; font-family: 'Poppins', sans-serif; font-size: 1.5rem; line-height: 1; }
         .archive-visual-icon { font-size: 7rem; filter: drop-shadow(0 12px 30px rgba(91, 30, 188, 0.35)); }
         .archive-section { background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); }
         .archive-filter { max-width: 1200px; margin: 0 auto 32px; }
-        .archive-filter .card-body { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(160px, 1fr)) auto auto; gap: 16px; align-items: end; }
+        .archive-filter .card-body { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(150px, 1fr)) auto auto; gap: 16px; align-items: end; }
         .archive-filter .form-group { margin-bottom: 0; }
         .archive-filter .form-label { color: var(--text-dark); }
         .archive-filter .form-control { background: #fff; border-color: var(--border); color: var(--text-dark); }
@@ -155,7 +324,9 @@ $is_logged_in = isLoggedIn();
         .archive-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
         .archive-badge { background: rgba(91, 30, 188, 0.1); color: var(--primary); border-radius: 50px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; }
         .archive-year { color: var(--text-muted); font-size: 0.78rem; }
-        .archive-author { color: var(--text-light); font-size: 0.85rem; margin-bottom: 14px; }
+        .archive-authors { display: grid; gap: 6px; margin-bottom: 14px; }
+        .archive-author { color: var(--text-light); font-size: 0.85rem; margin: 0; }
+        .archive-program { display: inline-block; margin-left: 6px; color: var(--primary); font-size: 0.75rem; font-weight: 700; }
         .archive-abstract { color: var(--text-light); font-size: 0.9rem; line-height: 1.65; margin-bottom: 20px; }
         .archive-published { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text-muted); font-size: 0.78rem; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
         .archive-expand-label { color: var(--primary); font-weight: 700; white-space: nowrap; }
@@ -170,6 +341,11 @@ $is_logged_in = isLoggedIn();
         .archive-detail { min-width: 0; padding: 15px 16px; background: #fff; }
         .archive-detail span { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
         .archive-detail strong { display: block; color: var(--text-dark); font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+        .archive-detail-authors { grid-column: span 2; }
+        .archive-detail-status { grid-column: 1 / -1; }
+        .archive-detail-author + .archive-detail-author { margin-top: 7px; }
+        .archive-detail-author b { color: var(--text-dark); font-size: .82rem; }
+        .archive-detail-author small { color: var(--primary); font-size: .75rem; font-weight: 700; }
         .archive-empty { max-width: 700px; margin: 0 auto; text-align: center; padding: 56px 32px; }
         .archive-empty-icon { display: block; font-size: 2.5rem; margin-bottom: 12px; }
         @media (max-width: 1000px) {
@@ -182,6 +358,7 @@ $is_logged_in = isLoggedIn();
             .archive-filter .card-body, .archive-grid { grid-template-columns: 1fr; }
             .archive-card.is-expanded { grid-column: auto; }
             .archive-detail-grid { grid-template-columns: 1fr; }
+            .archive-detail-authors { grid-column: auto; }
             .archive-filter .btn, .archive-reset { width: 100%; text-align: center; }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -236,7 +413,7 @@ $is_logged_in = isLoggedIn();
             <div class="card-header">
                 <div>
                     <div class="card-title">Find Research</div>
-                    <div class="card-subtitle">Search the public catalog by title, abstract, category, or academic year.</div>
+                    <div class="card-subtitle">Search the public catalog by title, abstract, program, category, or academic year.</div>
                 </div>
             </div>
             <div class="card-body">
@@ -263,6 +440,15 @@ $is_logged_in = isLoggedIn();
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label" for="program">Program</label>
+                        <select class="form-control" id="program" name="program">
+                            <option value="">All programs</option>
+                            <?php foreach ($programs as $program): ?>
+                                <option value="<?php echo archive_escape($program); ?>"<?php echo $selected_program === $program ? ' selected' : ''; ?>><?php echo archive_escape($program); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <button class="btn btn-primary" type="submit">Search</button>
                     <a class="archive-reset" href="research-archive.php">Reset</a>
                 </form>
@@ -283,6 +469,14 @@ $is_logged_in = isLoggedIn();
                     $abstract_preview = function_exists('mb_substr') ? mb_substr($abstract, 0, 150) : substr($abstract, 0, 150);
                     $abstract_length = function_exists('mb_strlen') ? mb_strlen($abstract) : strlen($abstract);
                     $lead_name = trim(($project['lead_first_name'] ?? '') . ' ' . ($project['lead_last_name'] ?? ''));
+                    $project_authors = $authors_by_project[(int) $project['project_id']] ?? [];
+                    if (!$project_authors && $lead_name !== '') {
+                        $project_authors[] = [
+                            'author_name' => $lead_name,
+                            'program' => $project['lead_program'] ?? null,
+                            'author_role' => 'lead',
+                        ];
+                    }
                     $published_year = date('Y', strtotime($project['updated_at']));
                     $detail_id = 'archive-details-' . (int) $project['project_id'];
                     ?>
@@ -293,7 +487,15 @@ $is_logged_in = isLoggedIn();
                                 <span class="archive-badge"><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></span>
                                 <span class="archive-year"><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Academic year unavailable'); ?></span>
                             </div>
-                            <p class="archive-author"><strong>Lead author:</strong> <?php echo archive_escape($lead_name ?: 'Author unavailable'); ?><?php if ((int) $project['co_member_count'] > 0): ?> + <?php echo archive_escape($project['co_member_count']); ?> co-author<?php echo (int) $project['co_member_count'] === 1 ? '' : 's'; ?><?php endif; ?></p>
+                            <div class="archive-authors" aria-label="Student authors and programs">
+                                <?php if ($project_authors): ?>
+                                    <?php foreach ($project_authors as $author): ?>
+                                        <p class="archive-author"><strong><?php echo ($author['author_role'] ?? 'member') === 'lead' ? 'Lead author:' : 'Co-author:'; ?></strong> <?php echo archive_escape($author['author_name']); ?><span class="archive-program"><?php echo archive_escape($author['program'] ?: 'Program unavailable'); ?></span></p>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <p class="archive-author"><strong>Lead author:</strong> Author unavailable <span class="archive-program">Program unavailable</span></p>
+                                <?php endif; ?>
+                            </div>
                             <p class="archive-abstract"><?php echo archive_escape($abstract ? $abstract_preview . ($abstract_length > 150 ? '…' : '') : 'No abstract available.'); ?></p>
                             <div class="archive-expanded" id="<?php echo archive_escape($detail_id); ?>" hidden>
                                 <h3>Complete abstract</h3>
@@ -302,9 +504,9 @@ $is_logged_in = isLoggedIn();
                                     <div class="archive-detail"><span>Research area</span><strong><?php echo archive_escape($project['research_area'] ?: 'Not specified'); ?></strong></div>
                                     <div class="archive-detail"><span>Category</span><strong><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></strong></div>
                                     <div class="archive-detail"><span>Academic period</span><strong><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Unavailable'); ?></strong></div>
-                                    <div class="archive-detail"><span>Lead author</span><strong><?php echo archive_escape($lead_name ?: 'Author unavailable'); ?></strong></div>
-                                    <div class="archive-detail"><span>Research team</span><strong><?php echo (int) $project['co_member_count'] > 0 ? archive_escape($project['co_member_count']) . ' co-author' . ((int) $project['co_member_count'] === 1 ? '' : 's') : 'Lead author only'; ?></strong></div>
-                                    <div class="archive-detail"><span>Repository status</span><strong><?php echo archive_escape(ucfirst((string) $project['status'])); ?></strong></div>
+                                    <div class="archive-detail archive-detail-authors"><span>Student authors and programs</span><?php if ($project_authors): ?><?php foreach ($project_authors as $author): ?><div class="archive-detail-author"><b><?php echo archive_escape($author['author_name']); ?></b> <small><?php echo archive_escape($author['program'] ?: 'Program unavailable'); ?></small></div><?php endforeach; ?><?php else: ?><strong>Author information unavailable</strong><?php endif; ?></div>
+                                    <div class="archive-detail"><span>Research team</span><strong><?php echo count($project_authors) > 1 ? archive_escape(count($project_authors) - 1) . ' co-author' . (count($project_authors) === 2 ? '' : 's') : 'Lead author only'; ?></strong></div>
+                                    <div class="archive-detail archive-detail-status"><span>Repository status</span><strong><?php echo archive_escape(ucfirst((string) $project['status'])); ?></strong></div>
                                 </div>
                             </div>
                             <div class="archive-published"><span>Year published: <?php echo archive_escape($published_year); ?></span><span class="archive-expand-label">Read full record</span></div>

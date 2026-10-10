@@ -191,7 +191,11 @@ $applied_migration_count = count(array_filter($migration_rows, static function (
     return $migration['applied'] === true;
 }));
 $migration_count = count($migration_rows);
+$pending_migrations = array_values(array_filter($migration_rows, static function (array $migration): bool {
+    return $migration['applied'] !== true;
+}));
 $storage_folder_count = count($storage_rows);
+$diagnostics_checked_at = new DateTimeImmutable();
 
 renderAdminShell(
     $user,
@@ -213,6 +217,13 @@ renderAdminShell(
   @media(max-width:1100px){.settings-hero{grid-template-columns:1fr;gap:30px}.health-readout{grid-template-columns:repeat(3,1fr)}.health-row{grid-template-columns:32px 1fr}.health-value{grid-column:2}.settings-grid{grid-template-columns:1fr}.migration-card,.managed-section{grid-column:auto;grid-row:auto}}
   @media(max-width:760px){.settings-hero{min-height:0;padding:31px 24px 51px;border-radius:18px 18px 7px 7px}.settings-hero h2{font-size:40px}.health-readout{grid-template-columns:1fr}.health-row{grid-template-columns:34px 1fr auto}.health-value{grid-column:auto}.settings-metrics{grid-template-columns:repeat(4,minmax(150px,1fr));margin:-18px 12px 0;overflow-x:auto}.settings-metric{min-width:150px}.settings-grid{margin-top:28px}.settings-card-header,.managed-section{padding:23px 20px 20px}.environment-grid{grid-template-columns:1fr}.managed-list{grid-template-columns:1fr}.managed-list li:first-child,.managed-list li:last-child{border-radius:8px}.table-wrap{overflow:visible}.settings-table thead{display:none}.settings-table tbody{display:grid;gap:12px;padding:16px;background:#f6f8fa}.settings-table tbody tr{display:block;overflow:hidden;border:1px solid #e0e5eb;border-radius:12px;background:#fff}.settings-table tbody td{display:grid;grid-template-columns:94px minmax(0,1fr);width:100%;padding:11px 14px;border-top:1px solid #edf0f4;text-align:left;overflow-wrap:anywhere}.settings-table tbody td:first-child{padding:15px 14px;border-top:0}.settings-table tbody td:last-child{padding:13px 14px}.settings-table tbody td::before{content:attr(data-label);margin:2px 11px 0 0;color:#8a94a3;font:700 9px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase}.settings-table td[colspan]::before{display:none}.settings-note{padding:15px 20px}}
   @media(prefers-reduced-motion:reduce){.settings-table tbody tr{transition:none}}
+  .settings-signal{flex-wrap:wrap;row-gap:6px}.settings-signal time{color:#65738b;font-size:11px}
+  .settings-section-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:22px 0 18px;padding:12px 16px;border:1px solid #e2e7ee;border-radius:10px;background:#fff}.settings-section-nav span{margin-right:4px;color:#64748b;font-size:12px;font-weight:650}.settings-section-nav a{padding:7px 10px;border-radius:7px;color:#34445f;font-size:12px;font-weight:650;text-decoration:none}.settings-section-nav a:hover{background:#f2f5fa;color:#1d4ed8}.settings-section-nav a:focus-visible,.migration-alert a:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
+  .migration-alert{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:0 0 24px;padding:17px 20px;border:1px solid #f1d7a8;border-left:4px solid #d97706;border-radius:10px;background:#fff9ed;color:#654b20}.migration-alert strong{display:block;margin-bottom:4px;color:#7c4a03;font-size:14px}.migration-alert p{margin:0;color:#725b36;font-size:12px;line-height:1.6}.migration-alert a{flex:0 0 auto;color:#8b5e13;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+  .settings-note p+p{margin-top:8px}
+  .settings-section{scroll-margin-top:24px}.storage-card{grid-column:1/-1}
+  @media(max-width:600px){.migration-alert{align-items:flex-start;flex-direction:column}}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
 
 <div class="settings-workspace">
@@ -221,11 +232,14 @@ renderAdminShell(
       <div class="settings-kicker">System observatory &middot; Read-only diagnostics</div>
       <h2 id="settings-hero-title">Know the system before it needs attention.</h2>
       <p>Inspect the RMS runtime, database structure, and uploaded-file footprint from one operational view. Configuration values remain protected and nothing on this page can alter the system.</p>
-      <div class="settings-signal">Live diagnostics connected</div>
+      <div class="settings-signal">
+        <span>Live diagnostics connected</span>
+        <time datetime="<?php echo aset_escape($diagnostics_checked_at->format(DateTimeInterface::ATOM)); ?>">Last checked <?php echo aset_escape($diagnostics_checked_at->format('M j, Y g:i:s A T')); ?></time>
+      </div>
     </div>
     <div class="health-readout" aria-label="System health overview">
       <div class="health-row"><span class="health-code">01</span><span class="health-label">Migration coverage</span><strong class="health-value"><?php echo number_format($applied_migration_count); ?>/<?php echo number_format($migration_count); ?></strong></div>
-      <div class="health-row"><span class="health-code">02</span><span class="health-label">Readable uploads</span><strong class="health-value"><?php echo number_format($total_files); ?></strong></div>
+      <div class="health-row"><span class="health-code">02</span><span class="health-label">Readable upload files</span><strong class="health-value"><?php echo number_format($total_files); ?></strong></div>
       <div class="health-row"><span class="health-code">03</span><span class="health-label">File uploads</span><strong class="health-value"><?php echo $file_uploads_enabled ? 'Enabled' : 'Disabled'; ?></strong></div>
     </div>
   </section>
@@ -237,8 +251,30 @@ renderAdminShell(
     <article class="settings-metric metric-storage"><div class="metric-index">Uploads</div><div class="metric-value"><?php echo aset_escape(aset_format_bytes($total_bytes)); ?></div><div class="metric-label"><?php echo number_format($storage_folder_count); ?> folders scanned</div></article>
   </section>
 
+  <nav class="settings-section-nav" aria-label="Settings page sections">
+    <span>Jump to</span>
+    <a href="#environment">Environment</a>
+    <a href="#migrations">Database migrations</a>
+    <a href="#storage">Storage</a>
+    <a href="#ownership">Settings ownership</a>
+  </nav>
+
+  <?php if (!empty($pending_migrations)): ?>
+    <aside class="migration-alert" aria-labelledby="migration-alert-title">
+      <div>
+        <strong id="migration-alert-title"><?php echo number_format(count($pending_migrations)); ?> migration check<?php echo count($pending_migrations) === 1 ? '' : 's'; ?> not detected</strong>
+        <p>A missing schema marker is informational; this page does not determine whether an upgrade applies to this installation.
+          <?php if (in_array('003_add_email_verification.sql', array_column($pending_migrations, 'file'), true)): ?>
+            Email-verification migration 003 is intentionally unapplied because that feature is not implemented; no action is needed for current RMS functionality.
+          <?php endif; ?>
+        </p>
+      </div>
+      <a href="#migrations">Review database upgrade guidance</a>
+    </aside>
+  <?php endif; ?>
+
 <div class="settings-grid">
-  <section class="settings-card environment-card">
+  <section class="settings-card environment-card settings-section" id="environment">
     <div class="settings-card-header">
       <div>
         <div class="card-index">01 &middot; Runtime</div>
@@ -272,7 +308,7 @@ renderAdminShell(
     </div>
   </section>
 
-  <section class="settings-card migration-card">
+  <section class="settings-card migration-card settings-section" id="migrations">
     <div class="settings-card-header">
       <div>
         <div class="card-index">02 &middot; Schema</div>
@@ -299,15 +335,18 @@ renderAdminShell(
         </tbody>
       </table>
     </div>
-    <p class="settings-note"><strong>010_demo_accounts_resync.sql:</strong> data-only migration; run and verify manually when demo-account synchronization is needed.</p>
+    <div class="settings-note">
+      <p><strong>Upgrade guidance:</strong> Numbered migration scripts are for pre-September-2026 legacy databases. A fresh installation imported from <code>database/schema/rms_db.sql</code> needs no migrations; for a legacy upgrade, apply only applicable numbered scripts in order.</p>
+      <p><strong>010_demo_accounts_resync.sql:</strong> data-only migration; run and verify manually when demo-account synchronization is needed.</p>
+    </div>
   </section>
 
-  <section class="settings-card storage-card">
+  <section class="settings-card storage-card settings-section" id="storage">
     <div class="settings-card-header">
       <div>
         <div class="card-index">03 &middot; Filesystem</div>
         <h2>Storage</h2>
-        <p>Readable files currently stored in each configured uploads subfolder.</p>
+        <p>Counts regular files in configured upload folders that PHP can read. Unreadable files and folders that do not exist are excluded.</p>
       </div>
       <span class="read-only-badge">FILESYSTEM</span>
     </div>
@@ -344,7 +383,7 @@ renderAdminShell(
     </div>
   </section>
 
-  <section class="managed-section">
+  <section class="managed-section settings-section" id="ownership">
     <div class="card-index">04 &middot; Ownership</div>
     <h2>What settings are managed where</h2>
     <p>This diagnostics page intentionally does not change system configuration.</p>

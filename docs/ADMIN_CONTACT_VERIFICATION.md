@@ -1,8 +1,11 @@
 # Admin Contact System - Verification Complete ✅
 
-**Date:** August 29, 2026  
-**Time:** 05:55 UTC  
-**Status:** FULLY OPERATIONAL
+**Verification date:** August 29, 2026
+**Result at that time:** Admin contact flows passed the reported checks.
+
+> Historical verification record: page structure and navigation have since moved into role shells. This document does not verify current production configuration.
+
+**Current source check (October 10, 2026):** `admin-contact.php` uses `renderAdminShell()` and remains accessible to `admin` and `research_staff`. The admin shell links to Contact Messages. `contact-messages.php` uses `renderStaffShell()`, but the current staff shell does not include a Contact Messages link.
 
 ---
 
@@ -10,10 +13,10 @@
 
 ### ✅ Admin Contact Interface (`pages/admin/admin-contact.php`)
 
-**Status:** FULLY FUNCTIONAL
+**Historical status:** Reported functional on August 29, 2026.
 
 **File Details:**
-- **Lines:** 817 (complete standalone page)
+- **Shell:** Uses the shared admin shell; line counts are intentionally omitted because they change.
 - **Includes:** config.php, auth.php, email.php
 - **Authentication:** `requireRole(['admin', 'research_staff'])`
 - **Access:** Admin and research_staff roles
@@ -148,11 +151,9 @@ function requireRole($roles) {
 
 ## Admin Access Testing
 
-### Test Admin Account
-- **Email:** admin@rms.edu.ph
-- **Password:** Admin@123
-- **Role:** admin
-- **Status:** active
+### Local Test Account
+- Use the current local demo credentials in the root README or another active admin account.
+- Do not copy real deployment credentials into this document.
 
 ### Access URLs
 
@@ -160,8 +161,9 @@ function requireRole($roles) {
 - Admin Dashboard: `http://localhost/rms/pages/admin/admin-dashboard.php`
 - Contact Messages: `http://localhost/rms/pages/admin/admin-contact.php`
 
-**Or navigate via sidebar:**
-- Click "📨 Contact Messages" under Communication section
+**Admin navigation:** Click **Contact messages** under Communication in the admin shell.
+
+**Research staff:** `pages/staff/contact-messages.php` is not currently linked from the staff-shell navigation; use the direct URL. For email replies, `research_staff` can also access `pages/admin/admin-contact.php`.
 
 ---
 
@@ -214,7 +216,7 @@ function requireRole($roles) {
 | **Pagination** | 15 per page | 20 per page |
 | **Sidebar Nav** | Full admin nav | Staff nav |
 
-**Recommendation:** Both admin and research_staff roles should use `admin-contact.php` for full email reply functionality.
+**Current guidance:** Both pages permit `admin` and `research_staff`; use `admin-contact.php` when an email reply is needed. The staff page remains a separate, simpler interface.
 
 ---
 
@@ -227,9 +229,7 @@ SELECT contact_id, name, email, concern_type, status
 FROM contact_messages;
 ```
 
-**Results:**
-- Message 1: Jimwel A. Tolentino, jim@gmail.com, General Inquiry, pending
-- Message 2: Jimwel A. Tolentino, jimwel00028@gmail.com, General Inquiry, pending
+**Results:** The rows returned depend on the local database. Do not store real submitter names or email addresses in this report.
 
 ---
 
@@ -240,8 +240,7 @@ FROM contact_messages;
 **Step 1: Login**
 ```
 Navigate to: http://localhost/rms/public/login.php
-Email: admin@rms.edu.ph
-Password: Admin@123
+Use a local admin account. See the root README for optional demo-account guidance.
 ```
 
 **Step 2: Access Contact Messages**
@@ -253,7 +252,7 @@ Or direct: http://localhost/rms/pages/admin/admin-contact.php
 **Step 3: View Pending Messages**
 ```
 Default view shows "Pending" tab
-See 2 pending messages from Jimwel
+Review available pending test messages (counts depend on local database contents).
 Message details:
   - Name, email, concern type
   - Message content
@@ -264,7 +263,7 @@ Message details:
 ```
 Click "✉️ Reply via Email" button
 Modal opens with:
-  - Recipient: Jimwel A. Tolentino (jim@gmail.com)
+  - Recipient: test mailbox associated with the selected message
   - Reply message textarea
   - "Mark as resolved" checkbox (checked)
 
@@ -277,7 +276,7 @@ Click "Send Email Reply"
 
 **Step 5: Result**
 ```
-✅ Email sent to jim@gmail.com
+Email delivery was reported in the historical test; verify with a test mailbox in the target environment.
 ✅ Message marked as resolved
 ✅ Stored in database with admin's user_id
 ✅ Activity logged
@@ -303,7 +302,7 @@ Click "Send Email Reply"
 ### Created/Updated Files
 
 1. **`pages/staff/contact-messages.php`** - Complete rebuild (671 lines)
-2. **`pages/staff/staff-dashboard.php`** - Added Contact Messages nav link
+2. **`pages/staff/staff-dashboard.php`** - Historical standalone navigation edit; not present in the current shared staff-shell navigation
 3. **`pages/admin/admin-dashboard.php`** - Added Contact Messages nav link
 4. **`includes/auth.php`** - Fixed `requireRole()` to handle arrays
 
@@ -330,7 +329,7 @@ Click "Send Email Reply"
 - [x] Activity logging enabled
 - [x] Success/error alerts
 - [x] Professional email templates
-- [x] Complete sidebar navigation
+- [ ] Staff-shell navigation link (not currently present)
 - [x] Responsive design
 - [x] Modal interactions
 
@@ -338,17 +337,14 @@ Click "Send Email Reply"
 
 ## Production Readiness
 
-### ✅ Ready for Production
+### Reported complete in the 2026-08-29 test
 
-- Core functionality complete
-- Security measures in place
-- Authentication working
-- Navigation integrated
-- Documentation complete
+- The report recorded core functionality, authentication, and security checks as passing at that time.
+- This does not establish current production readiness.
 
 ### ⚠️ Required for Production
 
-1. **SMTP Configuration** - Configure email settings in `.env`:
+1. **SMTP Configuration** - Configure mail settings in the deployment's private `.env` file:
    ```
    MAIL_MAILER=smtp
    MAIL_HOST=smtp.gmail.com
@@ -368,7 +364,7 @@ Click "Send Email Reply"
 - Clear browser cookies/cache
 - Verify XAMPP MySQL is running
 - Check database has admin user
-- Password: Admin@123 (case-sensitive)
+- Use the current local demo credentials from the root README; do not store credentials in this report.
 
 ### Email Not Sending
 - Check `.env` SMTP configuration
@@ -386,7 +382,7 @@ Click "Send Email Reply"
 
 ## Conclusion
 
-✅ **Admin contact system is FULLY OPERATIONAL**
+The August 29 test reported the core admin contact flows working. This historical result does not establish current operational or production status.
 
 **What Works:**
 - ✅ Admin can login and access Contact Messages
@@ -406,16 +402,14 @@ Click "Send Email Reply"
 - ✅ Both admin and research_staff have access
 
 **Integration Complete:**
-- ✅ Navigation links in both admin and staff dashboards
+- ✅ Admin-shell navigation link exists
+- ⚠️ Staff-shell navigation link is still absent
 - ✅ Complete HTML structure in all pages
 - ✅ Professional RMS design system applied
 - ✅ Mobile responsive layouts
 
 ---
 
-**Verification Date:** 2026-08-29  
-**Verified By:** Claude (Kiro)  
-**Admin Status:** ✅ PRODUCTION READY  
-**Staff Status:** ✅ PRODUCTION READY  
-**Email System:** ✅ CONFIGURED (requires SMTP for production)
-
+**Historical verification date:** 2026-08-29
+**Current source review:** 2026-10-10
+**Current runtime verification:** Not performed by this document.

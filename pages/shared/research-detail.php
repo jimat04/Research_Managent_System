@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/admin-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
 requireLogin();
 
@@ -18,6 +19,12 @@ $role = (string) ($user['role'] ?? 'student');
 
 // Get project ID from URL
 $project_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+$deleted_column_check = $conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+$has_project_deleted_at = $deleted_column_check && $deleted_column_check->num_rows > 0;
+if ($deleted_column_check) {
+    $deleted_column_check->close();
+}
+$project_deleted_filter = $has_project_deleted_at ? ' AND rp.deleted_at IS NULL' : '';
 
 // Access control & fetch project
 $project = null;
@@ -30,7 +37,7 @@ if ($project_id > 0) {
         LEFT JOIN research_categories rc ON rp.category_id = rc.category_id
         LEFT JOIN academic_years aa ON rp.ay_id = aa.ay_id
         LEFT JOIN users u ON rp.created_by = u.user_id
-        WHERE rp.project_id = ?
+        WHERE rp.project_id = ?{$project_deleted_filter}
     ";
 
     $stmt = $conn->prepare($query);
@@ -43,8 +50,12 @@ if ($project_id > 0) {
             $project = $result->fetch_assoc();
 
             // Admin and Research Staff process projects system-wide.
-            if ($role === 'admin' || $role === 'research_staff') {
+            if ($role === 'admin') {
                 $has_access = true;
+            } elseif ($role === 'research_staff') {
+                $has_access = hasModulePermission($user_id, 'research_development', 'view', 'research_proposals')
+                    || hasModulePermission($user_id, 'research_development', 'view', 'research_review')
+                    || hasModulePermission($user_id, 'research_development', 'view', 'research_approval');
             } elseif ($role === 'student') {
                 // Students may only view projects they own or have joined.
                 if ((int) $project['created_by'] === $user_id) {
@@ -63,11 +74,25 @@ if ($project_id > 0) {
                     }
                 }
             } elseif ($role === 'faculty') {
+                if ((int) $project['created_by'] === $user_id) {
+                    $has_access = true;
+                }
+                if (!$has_access) {
+                    $member_stmt = $conn->prepare(
+                        'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1'
+                    );
+                    if ($member_stmt) {
+                        $member_stmt->bind_param('ii', $project_id, $user_id);
+                        $member_stmt->execute();
+                        $has_access = $member_stmt->get_result()->num_rows > 0;
+                        $member_stmt->close();
+                    }
+                }
                 // Faculty may view projects assigned to them as adviser.
-                $faculty_stmt = $conn->prepare(
+                if (!$has_access) $faculty_stmt = $conn->prepare(
                     'SELECT 1 FROM project_advisers WHERE project_id = ? AND adviser_id = ? LIMIT 1'
                 );
-                if ($faculty_stmt) {
+                if (!$has_access && $faculty_stmt) {
                     $faculty_stmt->bind_param('ii', $project_id, $user_id);
                     $faculty_stmt->execute();
                     $has_access = $faculty_stmt->get_result()->num_rows > 0;
@@ -100,7 +125,21 @@ if ($project_id > 0) {
     }
 }
 
-$is_project_student = ($role === 'student' && $has_access === true);
+$is_project_student = in_array($role, ['student', 'faculty'], true)
+    && $has_access
+    && (
+        (int) ($project['created_by'] ?? 0) === $user_id
+        || (function () use ($conn, $project_id, $user_id) {
+            $member_stmt = $conn->prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1');
+            if (!$member_stmt) return false;
+            $member_stmt->bind_param('ii', $project_id, $user_id);
+            $member_stmt->execute();
+            $is_member = $member_stmt->get_result()->num_rows > 0;
+            $member_stmt->close();
+            return $is_member;
+        })()
+    );
+$chapter_sequence_title_approved = in_array((string) ($project['status'] ?? ''), ['title_approved', 'approved', 'ongoing'], true);
 $back_links = [
     'student' => ['pages/student/my-research.php', 'Back to My Research'],
     'faculty' => ['pages/faculty/faculty-submissions.php', 'Back to My Submissions'],
@@ -176,6 +215,30 @@ if ($has_access && $project_id > 0) {
         $up_result = $up_stmt->get_result();
         while ($row = $up_result->fetch_assoc()) {
             $uploads[] = $row;
+        }
+
+        $submission_history = [];
+        if ($has_access && $project_id > 0) {
+            $history_stmt = $conn->prepare(
+                'SELECT v.submission_type, v.version_number, v.submitted_at, v.status,
+                        ch.chapter_number, r.decision, r.comments, r.reviewed_at,
+                        CONCAT(reviewer.first_name, " ", reviewer.last_name) AS reviewer_name
+                   FROM research_submission_versions v
+              LEFT JOIN chapters ch ON ch.chapter_id = v.chapter_id
+              LEFT JOIN research_submission_reviews r ON r.version_id = v.version_id
+              LEFT JOIN users reviewer ON reviewer.user_id = r.reviewer_id
+                  WHERE v.project_id = ?
+                  ORDER BY v.submitted_at DESC, v.version_number DESC, r.reviewed_at DESC'
+            );
+            if ($history_stmt) {
+                $history_stmt->bind_param('i', $project_id);
+                $history_stmt->execute();
+                $history_result = $history_stmt->get_result();
+                while ($history_row = $history_result->fetch_assoc()) {
+                    $submission_history[] = $history_row;
+                }
+                $history_stmt->close();
+            }
         }
         $up_stmt->close();
     }
@@ -485,16 +548,19 @@ if ($role === 'admin') {
           <div class="card-body">
             <?php if (empty($chapters)): ?>
               <div style="color: var(--text-light); text-align: center; padding: 24px;">
-                No chapters submitted yet.<?php echo $is_project_student ? ' Start with Chapter 1.' : ''; ?>
+                No chapters submitted yet.<?php echo $is_project_student && $chapter_sequence_title_approved ? ' Start with Chapter 1.' : ''; ?>
               </div>
-              <?php if ($is_project_student): ?>
+              <?php if ($is_project_student && $chapter_sequence_title_approved): ?>
                 <div style="display: flex; justify-content: center; gap: 8px;">
                   <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
                 </div>
+              <?php elseif ($is_project_student): ?>
+                <div style="color: var(--text-light); text-align:center;padding-bottom:16px;">Chapter 1 becomes available after the research title is approved.</div>
               <?php endif; ?>
             <?php else: ?>
               <div style="display: flex; flex-direction: column; gap: 12px;">
                 <?php for ($i = 1; $i <= 5; $i++): ?>
+                  <?php $chapter_sequence_available = $chapter_sequence_title_approved && ($i === 1 || (($chapters[$i - 1]['status'] ?? '') === 'approved')); ?>
                   <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: #f9fafb;">
                     <div style="flex: 1;">
                       <div style="font-weight: 500; color: var(--text-dark);">Ch. <?php echo $i; ?> — <?php echo htmlspecialchars($chapter_titles[$i]); ?></div>
@@ -520,16 +586,18 @@ if ($role === 'admin') {
                     </div>
                     <?php if ($is_project_student): ?>
                       <div>
-                        <?php if (!isset($chapters[$i])): ?>
+                        <?php if (!isset($chapters[$i]) && $chapter_sequence_available): ?>
                           <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
-                        <?php elseif ($chapters[$i]['status'] === 'draft'): ?>
+                        <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'draft' && $chapter_sequence_available): ?>
                           <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
-                        <?php elseif ($chapters[$i]['status'] === 'revision_required'): ?>
+                        <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'revision_required' && $chapter_sequence_available): ?>
                           <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
-                        <?php elseif (in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
+                        <?php elseif (isset($chapters[$i]) && in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
                           <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
-                        <?php elseif ($chapters[$i]['status'] === 'approved'): ?>
+                        <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'approved'): ?>
                           <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
+                        <?php else: ?>
+                          <span style="color:var(--text-light);font-size:12px">Locked until the previous stage is approved</span>
                         <?php endif; ?>
                       </div>
                     <?php endif; ?>
@@ -570,6 +638,30 @@ if ($role === 'admin') {
             <?php endif; ?>
           </div>
         </div>
+
+        <?php if ($submission_history): ?>
+        <div class="card research-submission-history">
+          <div class="card-header"><div class="card-title">Submission and Review History</div></div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Submission</th><th>Version</th><th>Submitted</th><th>Decision</th><th>Comments and recommendations</th></tr></thead>
+                <tbody>
+                  <?php foreach ($submission_history as $history): ?>
+                    <tr>
+                      <td><?php echo $history['submission_type'] === 'title' ? 'Research Title' : 'Chapter ' . (int) $history['chapter_number']; ?></td>
+                      <td><?php echo (int) $history['version_number']; ?> · <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $history['status'])), ENT_QUOTES, 'UTF-8'); ?></td>
+                      <td><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($history['submitted_at'])), ENT_QUOTES, 'UTF-8'); ?></td>
+                      <td><?php echo $history['decision'] ? htmlspecialchars(ucfirst($history['decision']), ENT_QUOTES, 'UTF-8') . ' · ' . htmlspecialchars($history['reviewer_name'] ?: 'Authorized reviewer', ENT_QUOTES, 'UTF-8') : 'Awaiting review'; ?></td>
+                      <td style="white-space:pre-wrap"><?php echo htmlspecialchars((string) ($history['comments'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
 
         <!-- RECENT UPLOADS CARD -->
         <div class="card research-documents">

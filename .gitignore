@@ -10,6 +10,17 @@ node_modules/
 
 # User uploads
 uploads/
+!uploads/
+uploads/*
+!uploads/publications/
+uploads/publications/*
+!uploads/publications/.htaccess
+!uploads/copyrights/
+uploads/copyrights/*
+!uploads/copyrights/.htaccess
+!uploads/copyright/
+uploads/copyright/*
+!uploads/copyright/.htaccess
 *.docx
 *.pdf
 ~$*

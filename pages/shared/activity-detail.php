@@ -30,7 +30,27 @@ function activityDetailStatusBadge(string $status): array
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$canManage = in_array($role, ['research_staff', 'admin'], true);
+$capacityPageInput = trim((string) ($_GET['capacity_page'] ?? ''));
+$capacityPage = in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
+    ? $capacityPageInput
+    : '';
+$canManageActivity = static function (string $activityType, string $selectedPage) use ($role, $userId): bool {
+    if ($role === 'admin') {
+        return true;
+    }
+    $pages = match ($activityType) {
+        'seminar' => ['seminars'],
+        'training' => ['trainings'],
+        'workshop' => ['workshops'],
+        default => [],
+    };
+    foreach ($pages as $pageKey) {
+        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey)) {
+            return true;
+        }
+    }
+    return false;
+};
 $activityId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 
 $activityCheck = $conn->query("SHOW TABLES LIKE 'research_activities'");
@@ -49,8 +69,29 @@ if ($activitiesAvailable && $activityId) {
     $stmt->close();
 }
 
+$canManage = $activity ? $canManageActivity((string) $activity['activity_type'], $capacityPage) : false;
+if ($role === 'research_staff' && $activity) {
+    $viewPages = match ((string) $activity['activity_type']) {
+        'seminar' => ['seminars'],
+        'training' => ['trainings'],
+        'workshop' => ['workshops'],
+        default => [],
+    };
+    $canView = false;
+    foreach ($viewPages as $pageKey) {
+        if (hasModulePermission($userId, 'research_capacity_building', 'view', $pageKey)) {
+            $canView = true;
+            break;
+        }
+    }
+    if (!$canView) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!in_array((string) ($user['role'] ?? ''), ['research_staff', 'admin'], true)) {
+    if (!$canManage) {
         header('Location: ' . SITE_URL . 'public/403.php');
         exit;
     }
@@ -199,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $participantCount = 0;
 $participants = [];
 $activeUsers = [];
-$canViewParticipants = $activity && ($canManage || (int) ($activity['created_by'] ?? 0) === $userId);
+$canViewParticipants = $activity && ($canManage || $role === 'admin' || (int) ($activity['created_by'] ?? 0) === $userId);
 if ($activity && $participantsAvailable) {
     $stmt = $conn->prepare('SELECT COUNT(*) AS participant_count FROM activity_participants WHERE activity_id = ?');
     $stmt->bind_param('i', $activityId);
@@ -234,7 +275,7 @@ elseif ($shell === 'staff') renderStaffShell($user, 'activities.php', $pageTitle
 elseif ($shell === 'faculty') renderFacultyShell($user, 'activities.php', $pageTitle, 'Research activity details');
 else renderStudentShell($user, 'activities.php', $pageTitle, 'Research activity details');
 
-$typeLabels = ['seminar' => 'Seminar', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
+$typeLabels = ['seminar' => 'Seminar', 'training' => 'Training', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
 $statusBadge = activityDetailStatusBadge((string) ($activity['status'] ?? ''));
 ?>
 
@@ -250,7 +291,7 @@ $statusBadge = activityDetailStatusBadge((string) ($activity['status'] ?? ''));
   <?php else: ?>
     <header class="detail-hero"><div class="detail-tags"><span class="badge type-badge"><?= activityDetailEscape($typeLabels[$activity['activity_type']] ?? 'Activity') ?></span><span class="badge tone-<?= activityDetailEscape($statusBadge['tone']) ?>"><?= activityDetailEscape($statusBadge['label']) ?></span></div><h1><?= activityDetailEscape($activity['title']) ?></h1><div class="detail-meta"><div class="meta-item"><span>Date and time</span><strong><?= activityDetailEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?><?= $activity['activity_time'] ? ' · ' . activityDetailEscape(date('g:i A', strtotime((string) $activity['activity_time']))) : '' ?></strong></div><div class="meta-item"><span>Venue</span><strong><?= activityDetailEscape($activity['venue'] ?: 'To be announced') ?></strong></div><div class="meta-item"><span>Speaker</span><strong><?= activityDetailEscape($activity['speaker'] ?: 'Not specified') ?></strong></div><div class="meta-item"><span>Organizer</span><strong><?= activityDetailEscape($activity['organizer'] ?: 'Not specified') ?></strong></div></div><?php if ($activity['description']): ?><p class="description"><?= nl2br(activityDetailEscape($activity['description'])) ?></p><?php endif; ?></header>
 
-    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId) ?>">Edit</a><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php if ($activity['status'] === 'scheduled'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><button class="button" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" onsubmit="return confirm('Delete this activity and all participant records? This cannot be undone.');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav><?php endif; ?>
+    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '')) ?>">Edit</a><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php if ($activity['status'] === 'scheduled'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><button class="button" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" onsubmit="return confirm('Delete this activity and all participant records? This cannot be undone.');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav><?php endif; ?>
 
     <section class="panel" aria-labelledby="participants-heading"><div class="panel-head"><div><h2 id="participants-heading">Participants</h2><p><?= $canViewParticipants ? 'Registered speakers, organizers, and attendees.' : 'Participant names are limited to authorized viewers.' ?></p></div><div class="count-mark" aria-label="<?= $participantCount ?> participants"><?= $participantCount ?></div></div>
       <?php if (!$canViewParticipants): ?><div class="privacy-note">You can see the participant count, but the participant list is private.</div>

@@ -6,6 +6,11 @@
  * Run from command line: php scripts/verify-messages-navigation.php
  */
 
+if (PHP_SAPI === 'cli') {
+    ini_set('session.save_path', sys_get_temp_dir());
+    ini_set('session.use_cookies', '0');
+}
+
 require_once __DIR__ . '/../includes/config.php';
 
 echo "\n";
@@ -58,7 +63,9 @@ if ($result) {
         $columns[] = $row['Field'];
     }
 
-    $required = ['contact_id', 'name', 'email', 'subject', 'message', 'status'];
+    // Public contact submissions use concern_type as their categorization;
+    // subject belongs to the separate internal messages table.
+    $required = ['contact_id', 'name', 'email', 'concern_type', 'message', 'status'];
     foreach ($required as $col) {
         if (in_array($col, $columns)) {
             $passed[] = "✓ contact_messages.$col column exists";

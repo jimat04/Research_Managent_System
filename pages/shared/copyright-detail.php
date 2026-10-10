@@ -29,25 +29,28 @@ function copyrightDetailStatusBadge(string $status): array
     };
 }
 
-function copyrightDetailSafeFileUrl(?string $relativePath): ?string
-{
-    $normalized = ltrim(str_replace('\\', '/', (string) $relativePath), '/');
-    if (!preg_match('#^uploads/copyrights/[A-Za-z0-9._-]+\.pdf$#Di', $normalized)) return null;
-
-    $uploadRoot = realpath(__DIR__ . '/../../uploads');
-    $resolved = realpath(__DIR__ . '/../../' . $normalized);
-    if (!$uploadRoot || !$resolved || !is_file($resolved)) return null;
-    $prefix = rtrim($uploadRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-    if (!str_starts_with($resolved, $prefix)) return null;
-
-    return SITE_URL . implode('/', array_map('rawurlencode', explode('/', $normalized)));
-}
-
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$canReview = in_array($role, ['research_staff', 'admin'], true);
+$canReview = $role === 'admin';
 $ownerRole = in_array($role, ['faculty', 'student'], true);
-$typeOptions = ['software' => 'Software', 'research' => 'Research', 'instructional_material' => 'Instructional material', 'module' => 'Module', 'other' => 'Other'];
+$typeOptions = [
+    'software' => 'Software',
+    'research' => 'Research',
+    'instructional_material' => 'Instructional material',
+    'module' => 'Module',
+    'other' => 'Other',
+    'patent' => 'Patent',
+    'utility_model' => 'Utility model',
+    'innovation' => 'Innovation',
+    'technology_transfer' => 'Technology transfer',
+];
+$staffCopyrightPages = static function (string $type): array {
+    return match ($type) {
+        'patent', 'utility_model' => ['patents_utility_models'],
+        'innovation', 'technology_transfer' => ['innovation_technology_transfer'],
+        default => ['copyrights'],
+    };
+};
 
 $tableCheck = $conn->query("SHOW TABLES LIKE 'copyright_applications'");
 $copyrightsAvailable = $tableCheck instanceof mysqli_result && $tableCheck->num_rows > 0;
@@ -56,7 +59,7 @@ if ($tableCheck instanceof mysqli_result) $tableCheck->free();
 $copyrightId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 $application = null;
 $loadApplication = static function (mysqli $connection, int $id): ?array {
-    $stmt = $connection->prepare('SELECT copyright_id, applicant_id, applicant_name, applicant_category, output_title, output_type, co_authors, date_completed, file_path, file_name, copyright_ref_no, status, created_at, updated_at FROM copyright_applications WHERE copyright_id = ? LIMIT 1');
+    $stmt = $connection->prepare('SELECT c.copyright_id, c.applicant_id, c.applicant_name, c.applicant_category, c.research_project_id, c.publication_id, c.output_title, c.output_type, c.co_authors, c.inventors, c.potential_partners, c.transfer_activities, c.agreement_reference, c.utilization_status, c.application_number, c.filing_date, c.date_completed, c.file_path, c.file_name, c.copyright_ref_no, c.registered_at, c.status, c.created_at, c.updated_at, rp.title AS research_project_title, p.research_title AS publication_title FROM copyright_applications c LEFT JOIN research_projects rp ON rp.project_id = c.research_project_id LEFT JOIN publications p ON p.publication_id = c.publication_id WHERE c.copyright_id = ? LIMIT 1');
     $stmt->bind_param('i', $id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: null;
@@ -64,6 +67,25 @@ $loadApplication = static function (mysqli $connection, int $id): ?array {
     return $row;
 };
 if ($copyrightsAvailable && $copyrightId) $application = $loadApplication($conn, $copyrightId);
+if ($application && $role === 'research_staff') {
+    $canViewApplication = false;
+    foreach ($staffCopyrightPages((string) $application['output_type']) as $pageKey) {
+        if (hasModulePermission($userId, 'intellectual_property_utilization', 'view', $pageKey)) {
+            $canViewApplication = true;
+        }
+        if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', $pageKey)) {
+            $canReview = true;
+        }
+    }
+    if (!$canViewApplication) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+}
+if ($application && !$canReview && (!$ownerRole || (int) $application['applicant_id'] !== $userId)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array((string) ($user['role'] ?? ''), ['research_staff', 'admin'], true)) {
@@ -109,12 +131,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $current = $loadApplication($conn, $postedId);
+    if ($current && $role === 'research_staff') {
+        $canManageApplication = false;
+        foreach ($staffCopyrightPages((string) $current['output_type']) as $pageKey) {
+            if (hasModulePermission($userId, 'intellectual_property_utilization', 'manage', $pageKey)) {
+                $canManageApplication = true;
+                break;
+            }
+        }
+        if (!$canManageApplication) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+    } elseif ($role !== 'admin') {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
     $transition = $transitions[$action];
     if (!$current) {
         $_SESSION['copyrights_flash'] = ['type' => 'error', 'message' => 'Copyright application not found.'];
     } else {
         if ($action === 'register') {
-            $stmt = $conn->prepare('UPDATE copyright_applications SET status = ?, copyright_ref_no = ? WHERE copyright_id = ? AND status = ?');
+            $stmt = $conn->prepare('UPDATE copyright_applications SET status = ?, copyright_ref_no = ?, registered_at = NOW() WHERE copyright_id = ? AND status = ?');
             $stmt->bind_param('ssis', $transition['to'], $referenceNo, $postedId, $transition['from']);
         } else {
             $stmt = $conn->prepare('UPDATE copyright_applications SET status = ? WHERE copyright_id = ? AND status = ?');
@@ -171,7 +209,12 @@ elseif ($shell === 'faculty') renderFacultyShell($user, 'copyrights.php', 'Copyr
 else renderStudentShell($user, 'copyrights.php', 'Copyright Details', $pageSubtitle);
 
 $badge = $application ? copyrightDetailStatusBadge((string) $application['status']) : copyrightDetailStatusBadge('');
-$fileUrl = $application ? copyrightDetailSafeFileUrl($application['file_path']) : null;
+$applicationScope = $application && in_array((string) $application['output_type'], ['patent', 'utility_model'], true)
+    ? 'patents_utility_models'
+    : ($application && in_array((string) $application['output_type'], ['innovation', 'technology_transfer'], true) ? 'innovation_technology_transfer' : '');
+$fileUrl = $application && trim((string) $application['file_path']) !== ''
+    ? SITE_URL . 'pages/shared/download-research-document.php?type=copyright&id=' . (int) $application['copyright_id']
+    : null;
 $canEdit = $application && ($canReview || ($ownerRole && (int) $application['applicant_id'] === $userId && $application['status'] === 'pending'));
 ?>
 
@@ -180,7 +223,7 @@ $canEdit = $application && ($canReview || ($ownerRole && (int) $application['app
 </style>
 
 <div class="copyright-detail">
-  <div class="detail-topline"><a class="back-link" href="<?= copyrightDetailEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">&larr; Back to Copyrights</a><?php if ($canEdit): ?><a class="action-button secondary" href="<?= copyrightDetailEscape(SITE_URL . 'pages/shared/copyright-form.php?id=' . (int) $application['copyright_id']) ?>">Edit application</a><?php endif; ?></div>
+  <div class="detail-topline"><a class="back-link" href="<?= copyrightDetailEscape(SITE_URL . 'pages/shared/copyrights.php' . ($applicationScope !== '' ? '?ip_scope=' . rawurlencode($applicationScope) : '')) ?>">&larr; Back to <?= $applicationScope === 'patents_utility_models' ? 'Patents / Utility Models' : ($applicationScope === 'innovation_technology_transfer' ? 'Innovation &amp; Technology Transfer' : 'Copyrights') ?></a><?php if ($canEdit): ?><a class="action-button secondary" href="<?= copyrightDetailEscape(SITE_URL . 'pages/shared/copyright-form.php?id=' . (int) $application['copyright_id'] . ($applicationScope !== '' ? '&amp;ip_scope=' . rawurlencode($applicationScope) : '')) ?>">Edit application</a><?php endif; ?></div>
   <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= copyrightDetailEscape($flash['message'] ?? '') ?></div><?php endif; ?>
 
   <?php if (!$application): ?>
@@ -189,9 +232,19 @@ $canEdit = $application && ($canReview || ($ownerRole && (int) $application['app
     <article class="detail-card">
       <header class="detail-hero"><div class="hero-meta"><span class="badge type-badge"><?= copyrightDetailEscape($typeOptions[$application['output_type']] ?? ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?></span><span class="badge tone-<?= copyrightDetailEscape($badge['tone']) ?>"><?= copyrightDetailEscape($badge['label']) ?></span></div><h1><?= copyrightDetailEscape($application['output_title']) ?></h1><p><?= copyrightDetailEscape($application['applicant_name'] ?: 'Unnamed applicant') ?> &middot; <?= copyrightDetailEscape(ucfirst((string) $application['applicant_category'])) ?></p></header>
       <div class="detail-grid">
-        <?php if ($application['copyright_ref_no']): ?><div class="detail-field"><span>Copyright reference no.</span><strong class="reference"><?= copyrightDetailEscape($application['copyright_ref_no']) ?></strong></div><?php endif; ?>
+        <?php if ($application['copyright_ref_no']): ?><div class="detail-field"><span><?= in_array($application['output_type'], ['patent', 'utility_model'], true) ? 'Registration number' : 'Copyright reference no.' ?></span><strong class="reference"><?= copyrightDetailEscape($application['copyright_ref_no']) ?></strong></div><?php endif; ?>
+        <?php if ($application['application_number']): ?><div class="detail-field"><span>Application number</span><strong class="reference"><?= copyrightDetailEscape($application['application_number']) ?></strong></div><?php endif; ?>
+        <?php if ($application['filing_date']): ?><div class="detail-field"><span>Filing date</span><strong><?= copyrightDetailEscape(date('F j, Y', strtotime((string) $application['filing_date']))) ?></strong></div><?php endif; ?>
         <div class="detail-field"><span>Date completed</span><strong><?= copyrightDetailEscape($application['date_completed'] ? date('F j, Y', strtotime((string) $application['date_completed'])) : 'Not recorded') ?></strong></div>
+        <?php if ($application['status'] === 'registered'): ?><div class="detail-field"><span>Date registered</span><strong><?= copyrightDetailEscape($application['registered_at'] ? date('F j, Y', strtotime((string) $application['registered_at'])) : 'Not recorded') ?></strong></div><?php endif; ?>
+        <?php if ($application['research_project_id']): ?><div class="detail-field"><span>Originating research project</span><strong><?= copyrightDetailEscape($application['research_project_title'] ?: 'Project #' . $application['research_project_id']) ?></strong></div><?php endif; ?>
+        <?php if ($application['publication_id']): ?><div class="detail-field"><span>Related research output</span><strong><?= copyrightDetailEscape($application['publication_title'] ?: 'Output #' . $application['publication_id']) ?></strong></div><?php endif; ?>
+        <?php if ($application['potential_partners']): ?><div class="detail-field"><span>Potential partners</span><p><?= copyrightDetailEscape($application['potential_partners']) ?></p></div><?php endif; ?>
+        <?php if ($application['agreement_reference']): ?><div class="detail-field"><span>Agreement reference</span><strong class="reference"><?= copyrightDetailEscape($application['agreement_reference']) ?></strong></div><?php endif; ?>
+        <?php if ($application['utilization_status']): ?><div class="detail-field"><span>Utilization status</span><strong><?= copyrightDetailEscape($application['utilization_status']) ?></strong></div><?php endif; ?>
+        <?php if ($application['inventors']): ?><div class="detail-field full"><span>Inventors / researchers</span><p><?= copyrightDetailEscape($application['inventors']) ?></p></div><?php endif; ?>
         <div class="detail-field full"><span>Co-authors</span><p><?= copyrightDetailEscape($application['co_authors'] ?: 'None recorded') ?></p></div>
+        <?php if ($application['transfer_activities']): ?><div class="detail-field full"><span>Technology-transfer activities</span><p><?= nl2br(copyrightDetailEscape($application['transfer_activities'])) ?></p></div><?php endif; ?>
         <div class="detail-field"><span>Supporting file</span><?php if ($fileUrl): ?><a class="text-link" href="<?= copyrightDetailEscape($fileUrl) ?>" download="<?= copyrightDetailEscape($application['file_name'] ?: 'copyright-application.pdf') ?>">Download <?= copyrightDetailEscape($application['file_name'] ?: 'copyright-application.pdf') ?></a><p class="file-note">The stored file was verified inside the copyright upload directory.</p><?php elseif ($application['file_path']): ?><strong>File unavailable</strong><p class="file-note">The stored file could not be safely resolved.</p><?php else: ?><strong>No file attached</strong><?php endif; ?></div>
         <div class="detail-field"><span>Submitted</span><strong><?= copyrightDetailEscape(date('F j, Y, g:i a', strtotime((string) $application['created_at']))) ?></strong></div>
         <div class="detail-field"><span>Last updated</span><strong><?= copyrightDetailEscape(date('F j, Y, g:i a', strtotime((string) $application['updated_at']))) ?></strong></div>

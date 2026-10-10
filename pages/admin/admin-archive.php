@@ -48,8 +48,54 @@ function arch_column_exists(mysqli $conn, string $table, string $column): bool {
     if ($res instanceof mysqli_result) { $res->free(); }
     return $exists;
 }
+function arch_capture_author_snapshots(mysqli $conn, int $project_id): bool {
+    $member_sql = "
+        INSERT IGNORE INTO research_author_snapshots
+            (project_id, user_id, author_name, program, author_role, display_order)
+        SELECT pm.project_id, u.user_id, TRIM(CONCAT(u.first_name, ' ', u.last_name)),
+               NULLIF(TRIM(u.program), ''), pm.role,
+               CASE WHEN pm.role = 'lead' THEN 0 ELSE 1 END
+          FROM project_members pm
+          JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
+         WHERE pm.project_id = ?
+    ";
+    $member_stmt = $conn->prepare($member_sql);
+    if (!$member_stmt) return false;
+    $member_stmt->bind_param('i', $project_id);
+    $member_ok = $member_stmt->execute();
+    $member_stmt->close();
+    if (!$member_ok) return false;
+
+    // Some legacy projects have no project_members lead row, so preserve the
+    // student owner as the lead author when they are not already represented.
+    $owner_sql = "
+        INSERT IGNORE INTO research_author_snapshots
+            (project_id, user_id, author_name, program, author_role, display_order)
+        SELECT rp.project_id, u.user_id, TRIM(CONCAT(u.first_name, ' ', u.last_name)),
+               NULLIF(TRIM(u.program), ''), 'lead', 0
+          FROM research_projects rp
+          JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+         WHERE rp.project_id = ?
+           AND NOT EXISTS (
+               SELECT 1 FROM project_members pm
+                WHERE pm.project_id = rp.project_id AND pm.user_id = u.user_id
+           )
+    ";
+    $owner_stmt = $conn->prepare($owner_sql);
+    if (!$owner_stmt) return false;
+    $owner_stmt->bind_param('i', $project_id);
+    $owner_ok = $owner_stmt->execute();
+    $owner_stmt->close();
+    return $owner_ok;
+}
 $pubtbl_exists    = (function () use ($conn) {
     $r = $conn->query("SHOW TABLES LIKE 'research_publication_tracking'");
+    $ok = $r instanceof mysqli_result && $r->num_rows > 0;
+    if ($r instanceof mysqli_result) { $r->free(); }
+    return $ok;
+})();
+$author_snapshots_exists = (function () use ($conn) {
+    $r = $conn->query("SHOW TABLES LIKE 'research_author_snapshots'");
     $ok = $r instanceof mysqli_result && $r->num_rows > 0;
     if ($r instanceof mysqli_result) { $r->free(); }
     return $ok;
@@ -251,6 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             // but only from a 'completed' state (never anything else — guards
                             // against accidentally archiving a draft).
                             $flipped_project = false;
+                            $author_snapshot_saved = true;
                             if ($new_status === 'archived' && $proj_status === 'completed') {
                                 $ps_upd = $conn->prepare("UPDATE research_projects SET status = 'archived', updated_at = NOW() WHERE project_id = ? AND status = 'completed'" . $rp_deleted_filter);
                                 if ($ps_upd) {
@@ -260,15 +307,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     $ps_upd->close();
                                 }
                             }
+                            if ($new_status === 'archived' && ($flipped_project || $proj_status === 'archived')) {
+                                $author_snapshot_saved = $author_snapshots_exists
+                                    && arch_capture_author_snapshots($conn, $project_id);
+                            }
 
                             logActivity(
                                 'Updated archive status to "' . $new_status . '" for project #' . $project_id . ' ("' . $title . '")'
                                 . ($flipped_project ? ' — project also moved to archived' : ''),
                                 'publication_tracking'
                             );
-                            $arch_flash['ok'] = $flipped_project
-                                ? 'Archive status updated and project moved to archived.'
-                                : 'Archive status updated.';
+                            if ($flipped_project && !$author_snapshot_saved) {
+                                $arch_flash['err'] = 'The project was archived, but student program attribution could not be preserved. Apply migration 011 and retry the archive update.';
+                            } else {
+                                $arch_flash['ok'] = $flipped_project
+                                    ? 'Archive status updated, project moved to archived, and student program attribution preserved.'
+                                    : ($new_status === 'archived'
+                                        ? 'Archive status updated and student program attribution preserved.'
+                                        : 'Archive status updated.');
+                            }
                         }
                     } else {
                         $arch_flash['err'] = 'Unknown action.';

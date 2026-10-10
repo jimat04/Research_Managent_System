@@ -1,8 +1,10 @@
-# RMS Project - Recommendations for Further Development
+# RMS Project - Historical Recommendations for Further Development
 
 **Date:** August 28, 2026  
 **Project:** Research Management System (RMS)  
-**Current Status:** Functional, Organized, Ready for Enhancement
+**Status at time of writing:** Functional, Organized, Ready for Enhancement
+
+> This is an August 2026 recommendation snapshot, not a current status audit. Several recommendations below (including `.env` configuration, `.htaccess` protections, MIME-checked uploads, custom error pages, and login rate limiting) have since been implemented or changed. Treat every `Status` field and proposed priority as historical; verify the current source and `TODO.md` before planning work. This document does not certify security or production readiness.
 
 ---
 
@@ -24,7 +26,7 @@
 ### Priority: HIGH ⚠️
 
 #### 1.1 Add `.htaccess` Security Rules
-**Status:** Missing  
+**Status at time of writing:** Missing
 **Risk:** High  
 **Impact:** Prevents direct access to sensitive directories
 
@@ -54,7 +56,7 @@ Deny from all
 ```
 
 #### 1.2 Environment Variables for Sensitive Data
-**Status:** Database credentials in `includes/config.php`  
+**Status at time of writing:** Database credentials in `includes/config.php`
 **Risk:** Medium  
 **Impact:** Prevents credential exposure in version control
 
@@ -76,7 +78,7 @@ define('DB_PASS', $_ENV['DB_PASS']);
 ```
 
 #### 1.3 File Upload Security
-**Status:** Basic upload handling exists  
+**Status at time of writing:** Basic upload handling exists
 **Risk:** Medium  
 **Impact:** Prevents malicious file uploads
 
@@ -89,7 +91,7 @@ define('DB_PASS', $_ENV['DB_PASS']);
 - Add virus scanning integration
 
 #### 1.4 SQL Injection Prevention Audit
-**Status:** Prepared statements used, but check all queries  
+**Status at time of writing:** Prepared statements used, but check all queries
 **Risk:** Medium  
 **Impact:** Critical data protection
 
@@ -99,7 +101,7 @@ define('DB_PASS', $_ENV['DB_PASS']);
 - Add query logging for debugging
 
 #### 1.5 XSS Protection Enhancement
-**Status:** Using `htmlspecialchars()`, but inconsistent  
+**Status at time of writing:** Using `htmlspecialchars()`, but inconsistent
 **Risk:** Medium  
 **Impact:** Prevents script injection
 

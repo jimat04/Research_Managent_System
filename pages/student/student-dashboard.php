@@ -147,7 +147,10 @@ else renderStudentShell($user, $currentPage, $greeting, $pageSubtitle);
   <header class="module-greeting"><div><p class="module-kicker">Personal research summary</p><h1><?= personalDashboardEscape($greeting) ?></h1><p>Review your submitted outputs and keep track of upcoming institution-wide research activities.</p></div><div class="greeting-meta"><strong><?= personalDashboardEscape($roleLabel) ?></strong><span><?= personalDashboardEscape(date('l, F j, Y')) ?></span></div></header>
 
   <nav class="quick-links" aria-label="Research module shortcuts">
-    <a class="quick-link primary" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">Research Activities</a>
+    <a class="quick-link primary" href="<?= personalDashboardEscape(SITE_URL . 'pages/student/my-research.php') ?>">My Research</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/student/submit-research.php') ?>">Submit Research Title</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/student/submit-chapter.php') ?>">Submit a Chapter</a>
+    <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">Research Activities</a>
     <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Publications</a>
     <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Copyrights</a>
     <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">Repository</a>

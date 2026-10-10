@@ -198,6 +198,7 @@ $awaiting_final_count = count($awaiting_final);
 
 // Get all research projects with filters
 $status_filter = $_GET['status'] ?? '';
+$queue_filter = $_GET['queue'] ?? '';
 $search = $_GET['search'] ?? '';
 
 $where_clauses = [];
@@ -212,6 +213,10 @@ if (!empty($status_filter)) {
         $params[] = $status_filter;
         $types .= 's';
     }
+}
+
+if ($queue_filter === 'review') {
+    $where_clauses[] = "rp.status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review', 'for_revision', 'revision_required')";
 }
 
 if (!empty($search)) {
@@ -248,6 +253,52 @@ $projects = $stmt->get_result();
 $visible_projects = $projects->num_rows;
 $committee_review_total = $research_crec + $research_erec;
 $finished_total = $research_completed + $research_archived;
+
+$author_project_rows = ['faculty' => [], 'student' => []];
+$author_researcher_counts = ['faculty' => 0, 'student' => 0];
+$author_project_capped = ['faculty' => false, 'student' => false];
+$author_project_query = "
+    SELECT u.user_id, u.first_name, u.last_name, u.department, u.program,
+           rp.project_id, rp.title, rp.status
+      FROM (
+          SELECT project_id, created_by AS user_id
+            FROM research_projects
+          UNION
+          SELECT project_id, user_id
+            FROM project_members
+      ) AS project_authors
+      INNER JOIN research_projects rp ON rp.project_id = project_authors.project_id
+      INNER JOIN users u ON u.user_id = project_authors.user_id
+     WHERE u.role = ? AND u.deleted_at IS NULL" . $rp_deleted_filter_alias . "
+     ORDER BY u.last_name ASC, u.first_name ASC, rp.created_at DESC, rp.project_id DESC
+     LIMIT 101
+";
+
+foreach (['faculty', 'student'] as $author_role) {
+    $author_stmt = $conn->prepare($author_project_query);
+    if (!$author_stmt) {
+        throw new RuntimeException('Unable to prepare research authorship listing: ' . $conn->error);
+    }
+    $author_stmt->bind_param('s', $author_role);
+    if (!$author_stmt->execute()) {
+        $error = $author_stmt->error;
+        $author_stmt->close();
+        throw new RuntimeException('Unable to load research authorship listing: ' . $error);
+    }
+
+    $author_result = $author_stmt->get_result();
+    $author_project_capped[$author_role] = $author_result->num_rows > 100;
+    $researcher_ids = [];
+    while ($author_row = $author_result->fetch_assoc()) {
+        if (count($author_project_rows[$author_role]) >= 100) {
+            break;
+        }
+        $author_project_rows[$author_role][] = $author_row;
+        $researcher_ids[(int) $author_row['user_id']] = true;
+    }
+    $author_researcher_counts[$author_role] = count($researcher_ids);
+    $author_stmt->close();
+}
 
 // Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
 ?>
@@ -545,6 +596,25 @@ $finished_total = $research_completed + $research_archived;
   .queue-count { display:grid; place-items:center; min-width:78px; min-height:68px; padding:10px; border:1px solid #e5d5b3; border-radius:12px; background:#fff; color:#8a6424; text-align:center; }
   .queue-count strong { display:block; font-size:24px; line-height:1; font-variant-numeric:tabular-nums; }
   .queue-count span { display:block; margin-top:5px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  .author-directory-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:28px; }
+  .author-directory { min-width:0; overflow:hidden; border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:0 10px 28px rgba(31,42,63,.05); }
+  .author-directory-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:22px 24px 18px; border-bottom:1px solid #e8ecf1; }
+  .author-directory-header .section-eyebrow { margin-bottom:7px; }
+  .author-directory-header .section-title { font-size:21px; }
+  .author-directory-header .section-copy { margin-top:7px; font-size:12px; }
+  .author-directory-count { flex:0 0 auto; padding:7px 9px; border:1px solid #e5d5b3; border-radius:8px; background:#fbf7ed; color:#8a6424; font-size:11px; font-weight:700; white-space:nowrap; }
+  .author-table-wrap { overflow-x:auto; }
+  .research-workspace .author-table { width:100%; min-width:540px; border-collapse:collapse; }
+  .research-workspace .author-table th { padding:11px 14px; font-size:9px; }
+  .research-workspace .author-table th:first-child,.research-workspace .author-table td:first-child { padding-left:24px; }
+  .research-workspace .author-table th:last-child,.research-workspace .author-table td:last-child { padding-right:24px; }
+  .research-workspace .author-table td { padding:13px 14px; font-size:12px; }
+  .author-profile-link { color:#263247; font-weight:680; text-decoration:none; }
+  .author-profile-link:hover,.author-project-link:hover { color:#8a6424; text-decoration:underline; text-underline-offset:2px; }
+  .author-profile-link:focus-visible,.author-project-link:focus-visible { outline:3px solid rgba(211,163,72,.28); outline-offset:3px; border-radius:2px; }
+  .author-project-link { color:#315b8c; font-weight:650; text-decoration:none; }
+  .author-status { display:inline-flex; padding:4px 7px; border:1px solid #dfe3e8; border-radius:6px; background:#f4f5f6; color:#525e6d; font-size:10px; font-weight:680; white-space:nowrap; }
+  .author-limit-note { margin:0; padding:12px 24px; border-top:1px solid #edf0f4; color:#687386; font-size:11px; line-height:1.5; }
 
   .research-workspace .table-wrap { overflow-x:auto; border:0; border-radius:0; }
   .research-table { width:100%; min-width:1040px; border-collapse:collapse; }
@@ -592,6 +662,7 @@ $finished_total = $research_completed + $research_archived;
 
   @media(max-width:1120px){.research-hero{grid-template-columns:1fr;gap:32px}.lifecycle-snapshot{grid-template-columns:repeat(3,1fr)}.snapshot-row{grid-template-columns:34px 1fr}.snapshot-value{grid-column:2}.research-metrics{grid-template-columns:repeat(5,minmax(150px,1fr));overflow-x:auto}}
   @media(max-width:768px){.research-hero{min-height:0;padding:30px 24px 50px;border-radius:18px 18px 7px 7px}.research-hero h2{font-size:38px}.lifecycle-snapshot{grid-template-columns:1fr}.snapshot-row{grid-template-columns:36px 1fr auto}.snapshot-value{grid-column:auto}.research-metrics{margin:-18px 12px 0}.research-metric{min-width:150px}.decision-header,.directory-header{align-items:stretch;padding:25px 20px 20px;flex-direction:column}.queue-count{width:100%;grid-template-columns:auto auto;justify-content:center;gap:8px;min-height:48px}.queue-count span{margin:0}.research-workspace .filter-bar{grid-template-columns:1fr;padding:14px 20px 18px}.research-workspace .filter-bar .btn{width:100%}.research-table{min-width:0}.research-table thead{display:none}.research-table tbody{display:grid;gap:12px;padding:16px;background:#f6f8fa}.research-table tbody tr{display:block;overflow:hidden;border:1px solid #e0e5eb;border-radius:12px;background:#fff}.research-table tbody td{display:grid;grid-template-columns:92px minmax(0,1fr);width:100%;padding:12px 14px;border-top:1px solid #edf0f4;text-align:left;overflow-wrap:anywhere}.research-table tbody td:first-child{padding:16px 14px;border-top:0}.research-table tbody td:last-child{padding:14px}.research-table tbody td::before{content:attr(data-label);margin:2px 12px 0 0;color:#8a94a3;font:700 9px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase}.research-table tbody td:first-child::before{display:none}.row-actions{min-width:0}.row-actions .btn,.row-actions form{flex:1 1 auto}.row-actions form .btn{width:100%}.empty-row{display:block!important}.empty-row::before{display:none}.afa-modal{padding:12px}.afa-modal-content{max-height:calc(100dvh - 24px)}.afa-modal-header,.afa-modal-body,.afa-modal-footer{padding-left:22px;padding-right:22px}}
+  @media(max-width:768px){.research-workspace .author-table{min-width:0}.author-directory-header{padding:20px}.author-directory-count{font-size:10px}}
   @media(prefers-reduced-motion:reduce){.research-workspace .btn,.research-table tbody tr{transition:none}.afa-modal.open,.afa-modal-content{animation:none}}
 </style>
 <?php
@@ -631,6 +702,60 @@ renderAdminShell(
       <article class="research-metric metric-review"><div class="metric-index">Committees</div><div class="metric-value"><?php echo $committee_review_total; ?></div><div class="metric-label">Under review</div></article>
       <article class="research-metric metric-implementation"><div class="metric-index">Delivery</div><div class="metric-value"><?php echo $research_ongoing; ?></div><div class="metric-label">In implementation</div></article>
       <article class="research-metric metric-finished"><div class="metric-index">Record</div><div class="metric-value"><?php echo $finished_total; ?></div><div class="metric-label">Completed or archived</div></article>
+    </section>
+
+    <section class="author-directory-grid" aria-label="Research project authors">
+      <?php foreach (['faculty' => 'Faculty', 'student' => 'Students'] as $author_role => $author_label): ?>
+        <section class="author-directory" aria-labelledby="<?php echo $author_role; ?>-authors-title">
+          <div class="author-directory-header">
+            <div>
+              <div class="section-eyebrow">Research contributors</div>
+              <h3 class="section-title" id="<?php echo $author_role; ?>-authors-title"><?php echo $author_label; ?></h3>
+              <p class="section-copy">Researchers linked as project owners or team members, with their authored RMS projects.</p>
+            </div>
+            <span class="author-directory-count"><?php echo number_format($author_researcher_counts[$author_role]); ?> researchers</span>
+          </div>
+          <?php if (empty($author_project_rows[$author_role])): ?>
+            <div class="empty-state">
+              <div class="empty-state-mark" aria-hidden="true">00</div>
+              <strong>No <?php echo strtolower($author_label); ?> authors found</strong>
+              <p>Authorship appears here when an account owns or joins a research project.</p>
+            </div>
+          <?php else: ?>
+            <div class="author-table-wrap">
+              <table class="research-table author-table">
+                <thead>
+                  <tr><th>Researcher</th><th>Research project</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($author_project_rows[$author_role] as $author_project): ?>
+                    <tr>
+                      <td data-label="Researcher">
+                        <a class="author-profile-link" href="<?php echo SITE_URL; ?>pages/admin/admin-researchers.php?id=<?php echo (int) $author_project['user_id']; ?>">
+                          <?php echo htmlspecialchars(trim($author_project['first_name'] . ' ' . $author_project['last_name']), ENT_QUOTES, 'UTF-8'); ?>
+                        </a>
+                        <div class="person-meta"><?php
+                          $author_affiliation = $author_role === 'faculty' ? $author_project['department'] : $author_project['program'];
+                          echo htmlspecialchars((string) ($author_affiliation ?: 'Affiliation not recorded'), ENT_QUOTES, 'UTF-8');
+                        ?></div>
+                      </td>
+                      <td data-label="Research project">
+                        <a class="author-project-link" href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo (int) $author_project['project_id']; ?>">
+                          <?php echo htmlspecialchars($author_project['title'], ENT_QUOTES, 'UTF-8'); ?>
+                        </a>
+                      </td>
+                      <td data-label="Status"><span class="author-status"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $author_project['status'])), ENT_QUOTES, 'UTF-8'); ?></span></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+            <?php if ($author_project_capped[$author_role]): ?>
+              <p class="author-limit-note">Showing the 100 most recent researcher-project links in this section. Refine the main project list below to review individual records.</p>
+            <?php endif; ?>
+          <?php endif; ?>
+        </section>
+      <?php endforeach; ?>
     </section>
 
     <?php if ($admin_flash['ok'] !== ''): ?>

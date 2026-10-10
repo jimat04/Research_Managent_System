@@ -4,6 +4,36 @@
   try {
     document.documentElement.classList.add('motion-ready');
 
+    var autoRevealSelectors = [
+      '.admin-page-content > *',
+      '.faculty-page-content > *',
+      '.staff-page-content > *',
+      '.student-page-content > *',
+      '.dashboard-card',
+      '.stat-card',
+      '.panel',
+      '.card',
+      '.module-card',
+      '.content-panel',
+      '.section',
+      '.table-wrap',
+      '.report-card',
+      '.record-card'
+    ];
+
+    autoRevealSelectors.forEach(function (selector) {
+      var nodes = document.querySelectorAll(selector);
+      Array.prototype.forEach.call(nodes, function (element, index) {
+        if (element.hasAttribute('data-reveal') || element.closest('[data-reveal]')) return;
+        element.setAttribute('data-reveal', '');
+        if (index > 0 && index % 6 === 0) {
+          element.setAttribute('data-reveal-delay', '1');
+        } else if (index > 0 && index % 4 === 0) {
+          element.setAttribute('data-reveal-delay', '2');
+        }
+      });
+    });
+
     var revealElements = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
     var countupElements = Array.prototype.slice.call(document.querySelectorAll('[data-countup]'));
     var countedElements = new WeakSet();

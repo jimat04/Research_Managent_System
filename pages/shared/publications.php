@@ -46,8 +46,31 @@ if ($tableCheck instanceof mysqli_result) {
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
+$staffPublicationPageModules = [
+    'journal_publications' => 'publication_dissemination',
+    'conference_presentations' => 'publication_dissemination',
+    'research_repository' => 'publication_dissemination',
+    'research_outputs' => 'research_implementation_outputs',
+];
+$staffPublicationManagePages = [
+    'journal_publications' => $role === 'research_staff' && hasModulePermission($userId, 'publication_dissemination', 'manage', 'journal_publications'),
+    'conference_presentations' => $role === 'research_staff' && hasModulePermission($userId, 'publication_dissemination', 'manage', 'conference_presentations'),
+    'research_outputs' => $role === 'research_staff' && hasModulePermission($userId, 'research_implementation_outputs', 'manage', 'research_outputs'),
+];
+$staffCanManagePublicationType = static function (string $type) use ($staffPublicationManagePages): bool {
+    $pageKey = match ($type) {
+        'journal' => 'journal_publications',
+        'conference' => 'conference_presentations',
+        default => '',
+    };
+    return $pageKey !== '' && ($staffPublicationManagePages[$pageKey] ?? false);
+};
+$staffCanManagePublication = static function (string $type, string $status) use ($staffCanManagePublicationType, $staffPublicationManagePages): bool {
+    return $staffCanManagePublicationType($type)
+        || ($status === 'published' && ($staffPublicationManagePages['research_outputs'] ?? false));
+};
 $ownScope = in_array($role, ['faculty', 'student'], true);
-$canReview = in_array($role, ['research_staff', 'admin'], true);
+$canReview = $role === 'admin';
 $flash = $_SESSION['publications_flash'] ?? null;
 unset($_SESSION['publications_flash']);
 $statusOptions = ['submitted' => 'Submitted', 'under_review' => 'Under review', 'accepted' => 'Accepted', 'published' => 'Published'];
@@ -58,16 +81,106 @@ $statusInput = trim((string) ($_GET['status'] ?? ''));
 $status = preg_match('/^(submitted|under_review|accepted|published)$/D', $statusInput) ? $statusInput : '';
 $typeInput = trim((string) ($_GET['publication_type'] ?? ''));
 $publicationType = preg_match('/^(journal|conference|book_chapter|other)$/D', $typeInput) ? $typeInput : '';
-$filtersActive = $query !== '' || $status !== '' || $publicationType !== '';
+$repositoryRequested = (string) ($_GET['repository'] ?? '') === '1';
+$staffPageKey = '';
+$staffScopeSql = '';
+$staffScopeSqlP = '';
+if ($role === 'research_staff') {
+    if ($repositoryRequested) {
+        $staffPageKey = 'research_repository';
+        if ($publicationType !== '' || ($status !== '' && $status !== 'published')) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+        $status = 'published';
+        $staffScopeSql = " AND status = 'published'";
+        $staffScopeSqlP = " AND p.status = 'published'";
+    } elseif ($publicationType === 'journal') {
+        $staffPageKey = 'journal_publications';
+        $staffScopeSql = " AND publication_type = 'journal'";
+        $staffScopeSqlP = " AND p.publication_type = 'journal'";
+    } elseif ($publicationType === 'conference') {
+        $staffPageKey = 'conference_presentations';
+        $staffScopeSql = " AND publication_type = 'conference'";
+        $staffScopeSqlP = " AND p.publication_type = 'conference'";
+    } elseif ($publicationType === '' && $status === 'published') {
+        $staffPageKey = 'research_outputs';
+        $staffScopeSql = " AND status = 'published'";
+        $staffScopeSqlP = " AND p.status = 'published'";
+    } else {
+        foreach (['journal_publications', 'conference_presentations', 'research_outputs', 'research_repository'] as $candidatePage) {
+            $candidateModule = $staffPublicationPageModules[$candidatePage] ?? '';
+            if ($candidateModule !== '' && hasModulePermission($userId, $candidateModule, 'view', $candidatePage)) {
+                header('Location: ' . SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($candidatePage));
+                exit;
+            }
+        }
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+    $staffPermissionModule = $staffPublicationPageModules[$staffPageKey] ?? '';
+    if ($staffPermissionModule === '') {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+    requireModulePermission($staffPermissionModule, 'view', $staffPageKey);
+    if ($staffPageKey === 'journal_publications' || $staffPageKey === 'conference_presentations') {
+        $typeOptions = [$publicationType => $typeOptions[$publicationType]];
+    }
+    $canReview = hasModulePermission($userId, $staffPermissionModule, 'manage', $staffPageKey);
+}
+$yearInput = trim((string) ($_GET['year'] ?? ''));
+$year = preg_match('/^\d{4}$/D', $yearInput) ? (int) $yearInput : 0;
+$programInput = trim((string) ($_GET['program'] ?? ''));
+$yearOptions = [];
+$programOptions = [];
+if ($publicationsAvailable) {
+    $yearSql = 'SELECT DISTINCT YEAR(publication_date) AS publication_year FROM publications WHERE publication_date IS NOT NULL';
+    if ($ownScope) $yearSql .= ' AND researcher_id = ?';
+    $yearSql .= $staffScopeSql;
+    $yearSql .= ' ORDER BY publication_year DESC';
+    $stmt = $conn->prepare($yearSql);
+    $result = publicationsRun($stmt, $ownScope ? 'i' : '', $ownScope ? [$userId] : []);
+    while ($row = $result->fetch_assoc()) $yearOptions[] = (int) $row['publication_year'];
+    $stmt->close();
+
+    $programSql = "SELECT DISTINCT u.program FROM users u INNER JOIN publications p ON p.researcher_id = u.user_id WHERE u.deleted_at IS NULL AND u.role IN ('faculty', 'student') AND u.program IS NOT NULL AND TRIM(u.program) <> ''";
+    if ($ownScope) $programSql .= ' AND p.researcher_id = ?';
+    $programSql .= $staffScopeSqlP;
+    $programSql .= ' ORDER BY u.program ASC';
+    $stmt = $conn->prepare($programSql);
+    $result = publicationsRun($stmt, $ownScope ? 'i' : '', $ownScope ? [$userId] : []);
+    while ($row = $result->fetch_assoc()) $programOptions[(string) $row['program']] = (string) $row['program'];
+    $stmt->close();
+}
+$yearFilter = in_array($year, $yearOptions, true) ? $year : 0;
+$programFilter = isset($programOptions[$programInput]) ? $programInput : '';
+$filtersActive = $query !== '' || $status !== '' || $publicationType !== '' || $yearFilter > 0 || $programFilter !== '';
+
+$view = match ($status) {
+    'submitted' => 'manuscripts',
+    'published' => 'published',
+    'under_review' => 'monitoring',
+    default => 'overview',
+};
 
 $stats = ['published' => 0, 'under_review' => 0, 'total' => 0];
+$manuscriptStats = ['submitted' => 0, 'under_review' => 0, 'oldest_pending_days' => null];
+$publishedStats = ['total' => 0, 'this_year' => 0];
+$publishedByType = array_fill_keys(array_keys($typeOptions), 0);
+$pipelineCounts = array_fill_keys(array_keys($statusOptions), 0);
 $publications = [];
 $recentPublished = [];
+$awaitingReview = [];
+$publishedRecent = [];
 if ($publicationsAvailable) {
     $statsSql = "SELECT COUNT(*) AS total, COALESCE(SUM(status = 'published'), 0) AS published, COALESCE(SUM(status = 'under_review'), 0) AS under_review FROM publications";
     if ($ownScope) {
         $statsSql .= ' WHERE researcher_id = ?';
+    } elseif ($staffScopeSql !== '') {
+        $statsSql .= ' WHERE 1 = 1';
     }
+    $statsSql .= $staffScopeSql;
     $stmt = $conn->prepare($statsSql);
     $statsRow = publicationsRun($stmt, $ownScope ? 'i' : '', $ownScope ? [$userId] : [])->fetch_assoc() ?: [];
     foreach (array_keys($stats) as $key) {
@@ -75,32 +188,127 @@ if ($publicationsAvailable) {
     }
     $stmt->close();
 
-    $sql = 'SELECT publication_id, research_title, researcher_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, status FROM publications WHERE 1 = 1';
+    $scopeTypes = $ownScope ? 'i' : '';
+    $scopeParams = $ownScope ? [$userId] : [];
+
+    $manuscriptScopeSql = $ownScope ? " WHERE researcher_id = ?" : ($staffScopeSql !== '' ? ' WHERE 1 = 1' : '');
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(status = 'submitted'), 0) AS submitted, COALESCE(SUM(status = 'under_review'), 0) AS under_review, TIMESTAMPDIFF(DAY, MIN(CASE WHEN status IN ('submitted', 'under_review') THEN created_at END), NOW()) AS oldest_pending_days FROM publications" . $manuscriptScopeSql . $staffScopeSql);
+    $manuscriptRow = publicationsRun($stmt, $scopeTypes, $scopeParams)->fetch_assoc() ?: [];
+    $manuscriptStats['submitted'] = (int) ($manuscriptRow['submitted'] ?? 0);
+    $manuscriptStats['under_review'] = (int) ($manuscriptRow['under_review'] ?? 0);
+    $manuscriptStats['oldest_pending_days'] = $manuscriptRow['oldest_pending_days'] !== null ? (int) $manuscriptRow['oldest_pending_days'] : null;
+    $stmt->close();
+
+    $yearStart = date('Y') . '-01-01';
+    $yearSql = "SELECT COUNT(*) AS total, COALESCE(SUM(publication_date >= ?), 0) AS this_year FROM publications WHERE status = 'published'";
+    if ($ownScope) $yearSql .= ' AND researcher_id = ?';
+    if ($role === 'research_staff' && $staffPageKey !== 'research_outputs' && $staffPageKey !== 'research_repository') {
+        $yearSql .= $staffScopeSql;
+    }
+    $stmt = $conn->prepare($yearSql);
+    $yearTypes = 's' . $scopeTypes;
+    $yearParams = array_merge([$yearStart], $scopeParams);
+    $publishedRow = publicationsRun($stmt, $yearTypes, $yearParams)->fetch_assoc() ?: [];
+    $publishedStats['total'] = (int) ($publishedRow['total'] ?? 0);
+    $publishedStats['this_year'] = (int) ($publishedRow['this_year'] ?? 0);
+    $stmt->close();
+
+    $typeSql = "SELECT publication_type, COUNT(*) AS total FROM publications WHERE status = 'published'";
+    if ($ownScope) $typeSql .= ' AND researcher_id = ?';
+    if ($role === 'research_staff' && $staffPageKey !== 'research_outputs' && $staffPageKey !== 'research_repository') {
+        $typeSql .= $staffScopeSql;
+    }
+    $typeSql .= ' GROUP BY publication_type';
+    $stmt = $conn->prepare($typeSql);
+    $result = publicationsRun($stmt, $scopeTypes, $scopeParams);
+    while ($typeRow = $result->fetch_assoc()) {
+        if (isset($publishedByType[$typeRow['publication_type']])) {
+            $publishedByType[$typeRow['publication_type']] = (int) $typeRow['total'];
+        }
+    }
+    $stmt->close();
+
+    $pipelineSql = 'SELECT status, COUNT(*) AS total FROM publications';
+    if ($ownScope) $pipelineSql .= ' WHERE researcher_id = ?';
+    elseif ($staffScopeSql !== '') $pipelineSql .= ' WHERE 1 = 1';
+    $pipelineSql .= $staffScopeSql;
+    $pipelineSql .= ' GROUP BY status';
+    $stmt = $conn->prepare($pipelineSql);
+    $result = publicationsRun($stmt, $scopeTypes, $scopeParams);
+    while ($pipelineRow = $result->fetch_assoc()) {
+        if (isset($pipelineCounts[$pipelineRow['status']])) {
+            $pipelineCounts[$pipelineRow['status']] = (int) $pipelineRow['total'];
+        }
+    }
+    $stmt->close();
+
+    $awaitingSql = "SELECT publication_id, research_title, researcher_name, created_at FROM publications WHERE status = 'submitted'";
+    if ($ownScope) $awaitingSql .= ' AND researcher_id = ?';
+    $awaitingSql .= $staffScopeSql;
+    $awaitingSql .= ' ORDER BY created_at DESC, publication_id DESC LIMIT 5';
+    $stmt = $conn->prepare($awaitingSql);
+    $result = publicationsRun($stmt, $scopeTypes, $scopeParams);
+    while ($row = $result->fetch_assoc()) $awaitingReview[] = $row;
+    $stmt->close();
+
+    $publishedRecentSql = "SELECT p.publication_id, p.research_title, p.researcher_name, p.journal_publisher, p.publication_date, p.doi_identifier, rp.title AS research_project_title FROM publications p LEFT JOIN research_projects rp ON rp.project_id = p.research_project_id WHERE p.status = 'published'";
+    if ($ownScope) $publishedRecentSql .= ' AND researcher_id = ?';
+    if ($role === 'research_staff' && $staffPageKey !== 'research_outputs' && $staffPageKey !== 'research_repository') {
+        $publishedRecentSql .= $staffScopeSql;
+    }
+    $publishedRecentSql .= ' ORDER BY publication_date DESC, publication_id DESC LIMIT 5';
+    $stmt = $conn->prepare($publishedRecentSql);
+    $result = publicationsRun($stmt, $scopeTypes, $scopeParams);
+    while ($row = $result->fetch_assoc()) $publishedRecent[] = $row;
+    $stmt->close();
+
+    $sql = 'SELECT p.publication_id, p.research_title, p.researcher_id, p.research_project_id, p.researcher_name, p.researcher_category, p.publication_type, p.journal_publisher, p.publication_date, p.status, p.file_path, p.file_name, rp.title AS research_project_title FROM publications p LEFT JOIN research_projects rp ON rp.project_id = p.research_project_id WHERE 1 = 1';
     $params = [];
     $types = '';
     if ($ownScope) {
-        $sql .= ' AND researcher_id = ?';
+        $sql .= ' AND p.researcher_id = ?';
         $params[] = $userId;
         $types .= 'i';
+    }
+    $sql .= $staffScopeSqlP;
+    if ($view === 'manuscripts') {
+        $sql .= " AND p.status IN ('submitted', 'under_review')";
+    } elseif ($view === 'published') {
+        $sql .= " AND p.status = 'published'";
+    } elseif ($view === 'monitoring') {
+        $sql .= " AND p.status IN ('submitted', 'under_review', 'accepted')";
     }
     if ($query !== '') {
         $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
         $like = '%' . $escaped . '%';
-        $sql .= " AND (research_title LIKE ? ESCAPE '\\\\' OR researcher_name LIKE ? ESCAPE '\\\\' OR journal_publisher LIKE ? ESCAPE '\\\\')";
+        $sql .= " AND (p.research_title LIKE ? ESCAPE '\\\\' OR p.researcher_name LIKE ? ESCAPE '\\\\' OR p.journal_publisher LIKE ? ESCAPE '\\\\')";
         array_push($params, $like, $like, $like);
         $types .= 'sss';
     }
-    if ($status !== '') {
-        $sql .= ' AND status = ?';
+    $statusIsViewPreset = ($view === 'manuscripts' && $status === 'submitted')
+        || ($view === 'published' && $status === 'published')
+        || ($view === 'monitoring' && $status === 'under_review');
+    if ($status !== '' && !$statusIsViewPreset) {
+        $sql .= ' AND p.status = ?';
         $params[] = $status;
         $types .= 's';
     }
     if ($publicationType !== '') {
-        $sql .= ' AND publication_type = ?';
+        $sql .= ' AND p.publication_type = ?';
         $params[] = $publicationType;
         $types .= 's';
     }
-    $sql .= ' ORDER BY publication_date DESC, publication_id DESC LIMIT 250';
+    if ($yearFilter > 0) {
+        $sql .= ' AND YEAR(p.publication_date) = ?';
+        $params[] = $yearFilter;
+        $types .= 'i';
+    }
+    if ($programFilter !== '') {
+        $sql .= ' AND EXISTS (SELECT 1 FROM users pu WHERE pu.user_id = p.researcher_id AND pu.program = ? AND pu.deleted_at IS NULL)';
+        $params[] = $programFilter;
+        $types .= 's';
+    }
+    $sql .= ' ORDER BY p.publication_date DESC, p.publication_id DESC LIMIT 250';
     $stmt = $conn->prepare($sql);
     $result = publicationsRun($stmt, $types, $params);
     while ($row = $result->fetch_assoc()) {
@@ -118,39 +326,172 @@ if ($publicationsAvailable) {
     }
 }
 
+$oldestPendingLabel = $manuscriptStats['oldest_pending_days'] === null
+    ? '—'
+    : $manuscriptStats['oldest_pending_days'] . ' days';
+$typeBreakdown = [];
+foreach ($typeOptions as $typeKey => $typeLabel) {
+    $typeBreakdown[] = $typeLabel . ' ' . $publishedByType[$typeKey];
+}
+$typeBreakdownLine = implode(' · ', $typeBreakdown);
+$maxPipelineCount = max($pipelineCounts ?: [0]);
+
+$viewConfig = [
+    'overview' => [
+        'title' => 'Publication record',
+        'kicker' => 'Research dissemination',
+        'description' => $ownScope ? 'Track your submitted work while keeping sight of recently published institutional research.' : 'Monitor faculty and student publication outputs from submission through publication.',
+        'stats' => [
+            ['value' => $stats['published'], 'label' => 'Published'],
+            ['value' => $stats['under_review'], 'label' => 'Under review'],
+            ['value' => $stats['total'], 'label' => 'Total'],
+        ],
+        'panel' => $ownScope ? 'all_recent' : 'none',
+        'panel_title' => 'Recent publications (all)',
+        'shell_page' => SITE_URL . 'pages/shared/publications.php',
+        'directory_title' => $ownScope ? 'My publications' : 'Publication directory',
+    ],
+    'manuscripts' => [
+        'title' => 'Manuscripts',
+        'kicker' => 'Submission queue',
+        'description' => $ownScope ? 'Follow work awaiting its first review or moving through peer review.' : 'Track new submissions and manuscripts currently under review.',
+        'stats' => [
+            ['value' => $manuscriptStats['submitted'], 'label' => 'Submitted'],
+            ['value' => $manuscriptStats['under_review'], 'label' => 'Under review'],
+            ['value' => $oldestPendingLabel, 'label' => $ownScope ? 'Oldest of your pending work' : 'Oldest pending'],
+        ],
+        'panel' => 'awaiting_review',
+        'panel_title' => 'Awaiting first review',
+        'shell_page' => SITE_URL . 'pages/shared/publications.php?status=submitted',
+        'directory_title' => $ownScope ? 'My manuscripts' : 'Manuscript queue',
+    ],
+    'published' => [
+        'title' => 'Published Research',
+        'kicker' => 'Published outputs',
+        'description' => 'Browse published research and its journal, conference, and book-chapter records.',
+        'stats' => [
+            ['value' => $publishedStats['total'], 'label' => 'Published total'],
+            ['value' => $publishedStats['this_year'], 'label' => 'Published this year'],
+            ['value' => 'By type', 'label' => 'Publication type mix', 'detail' => $typeBreakdownLine],
+        ],
+        'panel' => 'published_recent',
+        'panel_title' => 'Recent publications',
+        'shell_page' => SITE_URL . 'pages/shared/publications.php?status=published',
+        'directory_title' => $ownScope ? 'My published work' : 'Published research directory',
+    ],
+    'monitoring' => [
+        'title' => 'Publication Monitoring',
+        'kicker' => 'Review pipeline',
+        'description' => 'See how publication submissions are progressing through review and publication.',
+        'stats' => [
+            ['value' => $pipelineCounts['submitted'], 'label' => 'Submitted'],
+            ['value' => $pipelineCounts['under_review'], 'label' => 'Under review'],
+            ['value' => $pipelineCounts['accepted'], 'label' => 'Accepted'],
+            ['value' => $pipelineCounts['published'], 'label' => 'Published'],
+        ],
+        'panel' => 'pipeline',
+        'panel_title' => 'Pipeline',
+        'shell_page' => SITE_URL . 'pages/shared/publications.php?status=under_review',
+        'directory_title' => $ownScope ? 'My active submissions' : 'Active review pipeline',
+    ],
+];
+$pageConfig = $viewConfig[$view];
+if (($role === 'admin' || $role === 'research_staff') && $view === 'published' && $repositoryRequested) {
+    $pageConfig['title'] = 'Research Repository';
+    $pageConfig['kicker'] = 'Institutional repository';
+    $pageConfig['description'] = 'Browse published research records with year, program, and researcher filters.';
+    $pageConfig['shell_page'] = SITE_URL . 'pages/shared/publications.php?status=published&repository=1';
+    $pageConfig['directory_title'] = 'Published research repository';
+}
+$viewQuery = match ($view) {
+    'manuscripts' => '?status=submitted',
+    'published' => '?status=published',
+    'monitoring' => '?status=under_review',
+    default => '',
+};
+if ($role === 'admin' && $view === 'published' && (string) ($_GET['repository'] ?? '') === '1') {
+    $viewQuery = '?status=published&repository=1';
+}
+if ($role === 'research_staff' && in_array($staffPageKey, ['journal_publications', 'conference_presentations'], true)) {
+    $viewQuery = '?publication_type=' . rawurlencode($publicationType);
+    if ($status !== '') $viewQuery .= '&status=' . rawurlencode($status);
+} elseif ($role === 'research_staff' && $staffPageKey === 'research_outputs') {
+    $viewQuery = '?status=published';
+} elseif ($role === 'research_staff' && $staffPageKey === 'research_repository') {
+    $viewQuery = '?status=published&repository=1';
+}
+
 $shell = match ($role) {
     'admin' => 'admin',
     'research_staff' => 'staff',
     'faculty' => 'faculty',
     default => 'student',
 };
-$subtitle = $ownScope ? 'Your publication record and recent institutional outputs' : 'Institutional publication monitoring';
-if ($shell === 'admin') renderAdminShell($user, 'publications.php', 'Publications', $subtitle);
-elseif ($shell === 'staff') renderStaffShell($user, 'publications.php', 'Publications', $subtitle);
-elseif ($shell === 'faculty') renderFacultyShell($user, 'publications.php', 'Publications', $subtitle);
-else renderStudentShell($user, 'publications.php', 'Publications', $subtitle);
+if ($shell === 'admin') {
+    $originalGet = $_GET;
+    if ($view === 'overview') unset($_GET['status']);
+    renderAdminShell($user, $pageConfig['shell_page'], $pageConfig['title'], $pageConfig['description']);
+    $_GET = $originalGet;
+} elseif ($shell === 'staff') renderStaffShell($user, 'publications.php', $pageConfig['title'], $pageConfig['description']);
+elseif ($shell === 'faculty') renderFacultyShell($user, 'publications.php', $pageConfig['title'], $pageConfig['description']);
+else renderStudentShell($user, 'publications.php', $pageConfig['title'], $pageConfig['description']);
 ?>
 
 <style>
 .module-hub{max-width:1320px;margin:0 auto;color:#172033}.module-intro{display:flex;justify-content:space-between;gap:24px;align-items:end;margin:0 0 24px;padding:28px 30px;border-left:5px solid #315b9f;border-radius:4px 18px 18px 4px;background:#eef3fb}.module-kicker{margin:0 0 7px;color:#315b9f;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.module-intro h1{margin:0;font-size:clamp(25px,3vw,38px);line-height:1.08;letter-spacing:-.035em}.module-intro p{max-width:650px;margin:10px 0 0;color:#526176;line-height:1.6}.intro-actions{display:flex;gap:9px;flex-wrap:wrap}.repository-link,.hub-button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;box-sizing:border-box;border:1px solid #315b9f;border-radius:9px;padding:0 15px;font-size:12px;font-weight:800;text-decoration:none;white-space:nowrap;transition:transform .18s ease,background .18s ease}.repository-link{color:#315b9f}.hub-button{background:#315b9f;color:#fff;font:inherit;cursor:pointer}.repository-link:hover{background:#fff;color:#24477e;transform:translateY(-1px)}.hub-button:hover{background:#24477e;color:#fff;transform:translateY(-1px)}.hub-button.secondary{border-color:#cbd5e1;background:#fff;color:#475569}.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}.stat-card{padding:20px 22px;border:1px solid #dfe5ee;border-radius:14px;background:#fff}.stat-card strong{display:block;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}.stat-card span{display:block;margin-top:8px;color:#64748b;font-size:12px;font-weight:700}.hub-panel{margin-bottom:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 12px 30px rgba(30,50,70,.05)}.panel-head{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px 20px;border-bottom:1px solid #e8edf3}.panel-head h2{margin:0;font-size:17px}.panel-head p{margin:4px 0 0;color:#64748b;font-size:12px}.filter-form{display:grid;grid-template-columns:minmax(220px,1fr) 170px 180px auto;gap:12px;align-items:end;padding:20px}.field label{display:block;margin-bottom:6px;color:#526176;font-size:11px;font-weight:800}.field input,.field select{width:100%;min-height:43px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;background:#fff;color:#172033;font:inherit;font-size:13px}.field input:focus,.field select:focus,.hub-button:focus-visible,.repository-link:focus-visible,.row-link:focus-visible{border-color:#315b9f;outline:3px solid rgba(49,91,159,.12);outline-offset:2px}.filter-actions{display:flex;gap:8px}.table-wrap{overflow-x:auto}.hub-table{width:100%;min-width:1080px;border-collapse:collapse}.hub-table th{padding:12px 16px;background:#f8fafc;color:#64748b;text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase}.hub-table td{padding:15px 16px;border-top:1px solid #edf1f5;font-size:13px;vertical-align:middle}.title-cell{max-width:320px;font-weight:750;line-height:1.4}.title-cell a,.recent-item a{color:#172033;text-decoration:none}.title-cell a:hover,.recent-item a:hover{color:#315b9f}.muted{color:#64748b}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:10px;font-weight:800;white-space:nowrap}.tone-warning{background:#fef3c7;color:#92400e}.tone-review{background:#ede9fe;color:#5b21b6}.tone-info{background:#cffafe;color:#155e75}.tone-success{background:#dcfce7;color:#166534}.tone-neutral{background:#e2e8f0;color:#475569}.row-actions{display:flex;gap:9px;white-space:nowrap}.row-link{color:#315b9f;font-size:11px;font-weight:800;text-decoration:none}.recent-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}.recent-item{padding:18px 20px;min-width:0}.recent-item+.recent-item{border-left:1px solid #edf1f5}.recent-item strong{display:block;font-size:13px;line-height:1.45}.recent-item span{display:block;margin-top:6px;color:#64748b;font-size:11px;line-height:1.45}.flash{margin-bottom:18px;padding:13px 16px;border:1px solid;border-radius:11px;font-size:13px;font-weight:650}.flash-success{border-color:#bbdfcf;background:#eefaf4;color:#166534}.flash-error{border-color:#fecaca;background:#fff1f2;color:#991b1b}.empty-state{padding:48px 24px;text-align:center}.empty-mark{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 14px;border-radius:13px;background:#e8eef9;color:#315b9f;font-size:21px}.empty-state h2{margin:0;font-size:17px}.empty-state p{max-width:480px;margin:7px auto 0;color:#64748b;font-size:13px;line-height:1.55}@media(max-width:980px){.filter-form{grid-template-columns:1fr 1fr}.recent-list{grid-template-columns:repeat(2,1fr)}.recent-item+.recent-item{border-left:0;border-top:1px solid #edf1f5}}@media(max-width:640px){.module-intro{display:block;padding:24px 21px}.intro-actions{margin-top:18px}.stat-grid,.filter-form,.recent-list{grid-template-columns:1fr}.filter-actions,.hub-button,.repository-link{width:100%}}
 </style>
 
-<div class="module-hub">
-  <header class="module-intro"><div><p class="module-kicker">Research dissemination</p><h1>Publication record</h1><p><?= publicationsEscape($ownScope ? 'Track your submitted work while keeping sight of recently published institutional research.' : 'Monitor faculty and student publication outputs from submission through publication.') ?></p></div><div class="intro-actions"><a class="hub-button" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-form.php') ?>">+ Add Publication</a><a class="repository-link" href="<?= publicationsEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">Open Repository</a></div></header>
-  <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= publicationsEscape($flash['message'] ?? '') ?></div><?php endif; ?>
-  <section class="stat-grid" aria-label="Publication statistics"><article class="stat-card"><strong><?= $stats['published'] ?></strong><span>Published</span></article><article class="stat-card"><strong><?= $stats['under_review'] ?></strong><span>Under review</span></article><article class="stat-card"><strong><?= $stats['total'] ?></strong><span>Total</span></article></section>
+<style>
+.stat-card small{display:block;margin-top:7px;color:#64748b;font-size:10px;line-height:1.5}
+.stat-grid-four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pipeline-list{display:grid;gap:17px;padding:22px 24px 24px}
+.pipeline-row{display:grid;grid-template-columns:minmax(150px,190px) minmax(0,1fr);align-items:center;gap:18px}
+.pipeline-label{display:flex;justify-content:space-between;gap:12px;color:#526176;font-size:12px}
+.pipeline-label strong{color:#172033;font-variant-numeric:tabular-nums}
+.pipeline-track{height:10px;overflow:hidden;border-radius:99px;background:#edf1f6}
+.pipeline-track span{display:block;height:100%;border-radius:inherit;background:#315b9f;transition:width .25s ease}
+@media(max-width:980px){.stat-grid-four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.stat-grid-four{grid-template-columns:1fr}.pipeline-row{grid-template-columns:1fr;gap:7px}.pipeline-list{padding:18px}}
+</style>
 
-  <?php if ($ownScope): ?>
+<style>
+.module-hub .filter-form{grid-template-columns:minmax(210px,1.5fr) 140px 145px 110px minmax(150px,1fr) auto}
+@media(max-width:980px){.module-hub .filter-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.module-hub .filter-form{grid-template-columns:1fr}}
+</style>
+<div class="module-hub">
+  <header class="module-intro"><div><p class="module-kicker"><?= publicationsEscape($pageConfig['kicker']) ?></p><h1><?= publicationsEscape($pageConfig['title']) ?></h1><p><?= publicationsEscape($pageConfig['description']) ?></p></div><div class="intro-actions"><?php if ($role !== 'research_staff' || ($canReview && in_array($staffPageKey, ['journal_publications', 'conference_presentations'], true))): ?><a class="hub-button" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-form.php' . ($role === 'research_staff' ? '?publication_type=' . rawurlencode($publicationType) : '')) ?>">+ Add Publication</a><?php endif; ?><?php if ($view === 'overview' && $role !== 'research_staff'): ?><a class="repository-link" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publications.php?status=published') ?>">Open Repository</a><?php endif; ?></div></header>
+  <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= publicationsEscape($flash['message'] ?? '') ?></div><?php endif; ?>
+  <section class="stat-grid<?= count($pageConfig['stats']) === 4 ? ' stat-grid-four' : '' ?>" aria-label="Publication statistics"><?php foreach ($pageConfig['stats'] as $card): ?><article class="stat-card"><strong><?= publicationsEscape((string) $card['value']) ?></strong><span><?= publicationsEscape($card['label']) ?></span><?php if (!empty($card['detail'])): ?><small><?= publicationsEscape($card['detail']) ?></small><?php endif; ?></article><?php endforeach; ?></section>
+
+  <?php if ($pageConfig['panel'] === 'all_recent' && $ownScope): ?>
   <section class="hub-panel" aria-labelledby="recent-publications-heading"><div class="panel-head"><div><h2 id="recent-publications-heading">Recent publications (all)</h2><p>The five latest published outputs across the institution.</p></div></div>
     <?php if (!$publicationsAvailable || !$recentPublished): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#128214;</div><h2>No published outputs yet</h2><p><?= $publicationsAvailable ? 'Published institutional work will appear here.' : 'The publications module is not installed on this database.' ?></p></div>
     <?php else: ?><div class="recent-list"><?php foreach ($recentPublished as $item): ?><article class="recent-item"><strong><a href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $item['publication_id']) ?>"><?= publicationsEscape($item['research_title']) ?></a></strong><span><?= publicationsEscape($item['researcher_name'] ?: 'Unnamed researcher') ?></span><span><?= publicationsEscape($item['journal_publisher'] ?: 'Publisher not recorded') ?><?= $item['publication_date'] ? ' · ' . publicationsEscape(date('M Y', strtotime((string) $item['publication_date']))) : '' ?></span></article><?php endforeach; ?></div><?php endif; ?>
   </section>
   <?php endif; ?>
 
-  <section class="hub-panel" aria-labelledby="publication-directory-heading"><div class="panel-head"><div><h2 id="publication-directory-heading"><?= $ownScope ? 'My publications' : 'Publication directory' ?></h2><p><?= count($publications) ?> <?= count($publications) === 1 ? 'record' : 'records' ?> in view</p></div></div>
-    <form class="filter-form" method="get" action="<?= publicationsEscape(SITE_URL . 'pages/shared/publications.php') ?>"><div class="field"><label for="publication-q">Title, researcher, or publisher</label><input id="publication-q" name="q" type="search" maxlength="150" value="<?= publicationsEscape($query) ?>" placeholder="Search publications"></div><div class="field"><label for="publication-status">Status</label><select id="publication-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= publicationsEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= publicationsEscape($label) ?></option><?php endforeach; ?></select></div><div class="field"><label for="publication-type">Publication type</label><select id="publication-type" name="publication_type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= publicationsEscape($value) ?>" <?= $publicationType === $value ? 'selected' : '' ?>><?= publicationsEscape($label) ?></option><?php endforeach; ?></select></div><div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publications.php') ?>">Clear</a><?php endif; ?></div></form>
+  <?php if ($pageConfig['panel'] === 'awaiting_review'): ?>
+  <section class="hub-panel" aria-labelledby="awaiting-review-heading"><div class="panel-head"><div><h2 id="awaiting-review-heading">Awaiting first review</h2><p>The five newest submissions, ordered by submission time.</p></div></div>
+    <?php if (!$publicationsAvailable || !$awaitingReview): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#128221;</div><h2>No manuscripts awaiting first review</h2><p><?= $publicationsAvailable ? 'New submissions will appear here when they are filed.' : 'The publications module is not installed on this database.' ?></p></div>
+    <?php else: ?><div class="recent-list"><?php foreach ($awaitingReview as $item): ?><article class="recent-item"><strong><a href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $item['publication_id']) ?>"><?= publicationsEscape($item['research_title']) ?></a></strong><span><?= publicationsEscape($item['researcher_name'] ?: 'Unnamed researcher') ?></span><span>Submitted <?= publicationsEscape(date('M j, Y', strtotime((string) $item['created_at']))) ?></span></article><?php endforeach; ?></div><?php endif; ?>
+  </section>
+  <?php elseif ($pageConfig['panel'] === 'published_recent'): ?>
+  <section class="hub-panel" aria-labelledby="published-recent-heading"><div class="panel-head"><div><h2 id="published-recent-heading">Recent publications</h2><p>The five newest published records<?= $ownScope ? ' from your own submissions' : ' across the institution' ?>.</p></div></div>
+    <?php if (!$publicationsAvailable || !$publishedRecent): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#128214;</div><h2>No published records yet</h2><p><?= $publicationsAvailable ? 'Published work will appear here.' : 'The publications module is not installed on this database.' ?></p></div>
+    <?php else: ?><div class="recent-list"><?php foreach ($publishedRecent as $item): ?><article class="recent-item"><strong><a href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $item['publication_id']) ?>"><?= publicationsEscape($item['research_title']) ?></a></strong><span><?= publicationsEscape($item['journal_publisher'] ?: 'Publisher not recorded') ?><?= $item['publication_date'] ? ' · ' . publicationsEscape(date('M j, Y', strtotime((string) $item['publication_date']))) : '' ?></span><?php if (!empty($item['doi_identifier'])): ?><span>DOI: <?= publicationsEscape($item['doi_identifier']) ?></span><?php endif; ?></article><?php endforeach; ?></div><?php endif; ?>
+  </section>
+  <?php elseif ($pageConfig['panel'] === 'pipeline'): ?>
+  <section class="hub-panel" aria-labelledby="pipeline-heading"><div class="panel-head"><div><h2 id="pipeline-heading">Pipeline</h2><p>Submission volume by current publication status.</p></div></div>
+    <?php if (!$publicationsAvailable || array_sum($pipelineCounts) === 0): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#8635;</div><h2>No publications in the pipeline</h2><p><?= $publicationsAvailable ? 'Submission counts will appear here as work enters the review process.' : 'The publications module is not installed on this database.' ?></p></div>
+    <?php else: ?><div class="pipeline-list"><?php foreach ($statusOptions as $stage => $stageLabel): $stageCount = $pipelineCounts[$stage]; $barWidth = $maxPipelineCount > 0 ? round(($stageCount / $maxPipelineCount) * 100, 1) : 0; ?><div class="pipeline-row"><div class="pipeline-label"><span><?= publicationsEscape($stageLabel) ?></span><strong><?= $stageCount ?></strong></div><div class="pipeline-track" role="img" aria-label="<?= publicationsEscape($stageLabel . ': ' . $stageCount) ?>"><span style="width: <?= number_format($barWidth, 1, '.', '') ?>%"></span></div></div><?php endforeach; ?></div><?php endif; ?>
+  </section>
+  <?php endif; ?>
+
+  <section class="hub-panel" aria-labelledby="publication-directory-heading"><div class="panel-head"><div><h2 id="publication-directory-heading"><?= publicationsEscape($pageConfig['directory_title']) ?></h2><p><?= count($publications) ?> <?= count($publications) === 1 ? 'record' : 'records' ?> in view</p></div></div>
+    <form class="filter-form" method="get" action="<?= publicationsEscape(SITE_URL . 'pages/shared/publications.php') ?>"><?php if ($role === 'admin' && $repositoryRequested): ?><input type="hidden" name="repository" value="1"><?php elseif ($role === 'research_staff' && $staffPageKey === 'research_repository'): ?><input type="hidden" name="repository" value="1"><?php endif; ?><?php if ($role === 'research_staff'): ?><?php if ($staffPageKey === 'research_outputs' || $staffPageKey === 'research_repository'): ?><input type="hidden" name="status" value="published"><?php elseif (in_array($staffPageKey, ['journal_publications', 'conference_presentations'], true)): ?><input type="hidden" name="publication_type" value="<?= publicationsEscape($publicationType) ?>"><?php endif; ?><?php endif; ?><div class="field"><label for="publication-q">Title, researcher, or publisher</label><input id="publication-q" name="q" type="search" maxlength="150" value="<?= publicationsEscape($query) ?>" placeholder="Search publications"></div><?php if ($role !== 'research_staff' || in_array($staffPageKey, ['journal_publications', 'conference_presentations'], true)): ?><div class="field"><label for="publication-status">Status</label><select id="publication-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= publicationsEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= publicationsEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><?php if ($role !== 'research_staff'): ?><div class="field"><label for="publication-type">Publication type</label><select id="publication-type" name="publication_type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= publicationsEscape($value) ?>" <?= $publicationType === $value ? 'selected' : '' ?>><?= publicationsEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="field"><label for="publication-year">Year</label><select id="publication-year" name="year"><option value="">Any year</option><?php foreach ($yearOptions as $optionYear): ?><option value="<?= $optionYear ?>" <?= $yearFilter === $optionYear ? 'selected' : '' ?>><?= $optionYear ?></option><?php endforeach; ?></select></div><div class="field"><label for="publication-program">Research program</label><select id="publication-program" name="program"><option value="">All programs</option><?php foreach ($programOptions as $program): ?><option value="<?= publicationsEscape($program) ?>" <?= $programFilter === $program ? 'selected' : '' ?>><?= publicationsEscape($program) ?></option><?php endforeach; ?></select></div><div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publications.php' . $viewQuery) ?>">Clear</a><?php endif; ?></div></form>
     <?php if (!$publicationsAvailable || !$publications): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#8635;</div><h2><?= $publicationsAvailable ? 'No publications found' : 'Publications are unavailable' ?></h2><p><?= $publicationsAvailable ? ($ownScope ? 'No submissions match your current search and filters.' : 'Adjust the search or filters to see more publication records.') : 'Apply database migration 012 to enable this module.' ?></p></div>
-    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><th>Title</th><th>Researcher</th><th>Type</th><th>Journal / publisher</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach ($publications as $publication): $badge = publicationsStatusBadge((string) $publication['status']); $detailUrl = SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $publication['publication_id']; $canEdit = $canReview || ($ownScope && (int) $publication['researcher_id'] === $userId && $publication['status'] === 'submitted'); ?><tr><td class="title-cell"><a href="<?= publicationsEscape($detailUrl) ?>"><?= publicationsEscape($publication['research_title']) ?></a></td><td><?= publicationsEscape($publication['researcher_name'] ?: '—') ?><div class="muted"><?= publicationsEscape(ucfirst((string) $publication['researcher_category'])) ?></div></td><td><?= publicationsEscape($typeOptions[$publication['publication_type']] ?? ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?></td><td class="muted"><?= publicationsEscape($publication['journal_publisher'] ?: '—') ?></td><td><?= publicationsEscape($publication['publication_date'] ? date('M j, Y', strtotime((string) $publication['publication_date'])) : '—') ?></td><td><span class="badge tone-<?= publicationsEscape($badge['tone']) ?>"><?= publicationsEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= publicationsEscape($detailUrl) ?>">View</a><?php if ($canEdit): ?><a class="row-link" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-form.php?id=' . (int) $publication['publication_id']) ?>">Edit</a><?php endif; ?></div></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><th>Title</th><th>Researcher</th><th>Research project</th><th>Type</th><th>Journal / publisher</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach ($publications as $publication): $badge = publicationsStatusBadge((string) $publication['status']); $detailUrl = SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $publication['publication_id']; $canEdit = $role === 'admin' || ($ownScope && (int) $publication['researcher_id'] === $userId && $publication['status'] === 'submitted') || ($role === 'research_staff' && $staffCanManagePublication((string) $publication['publication_type'], (string) $publication['status'])); ?><tr><td class="title-cell"><a href="<?= publicationsEscape($detailUrl) ?>"><?= publicationsEscape($publication['research_title']) ?></a></td><td><?= publicationsEscape($publication['researcher_name'] ?: '—') ?><div class="muted"><?= publicationsEscape(ucfirst((string) $publication['researcher_category'])) ?></div></td><td><?= publicationsEscape($publication['research_project_title'] ?: 'Not linked') ?></td><td><?= publicationsEscape($typeOptions[$publication['publication_type']] ?? ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?></td><td class="muted"><?= publicationsEscape($publication['journal_publisher'] ?: '—') ?></td><td><?= publicationsEscape($publication['publication_date'] ? date('M j, Y', strtotime((string) $publication['publication_date'])) : '—') ?></td><td><span class="badge tone-<?= publicationsEscape($badge['tone']) ?>"><?= publicationsEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= publicationsEscape($detailUrl) ?>">View</a><?php if (trim((string) $publication['file_path']) !== ''): ?><a class="row-link" href="<?= publicationsEscape(SITE_URL . 'pages/shared/download-research-document.php?type=publication&amp;id=' . (int) $publication['publication_id']) ?>">Download</a><?php endif; ?><?php if ($canEdit): ?><a class="row-link" href="<?= publicationsEscape(SITE_URL . 'pages/shared/publication-form.php?id=' . (int) $publication['publication_id']) ?>">Edit</a><?php endif; ?></div></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
   </section>
 </div>
 

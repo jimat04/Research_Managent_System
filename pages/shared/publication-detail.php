@@ -43,25 +43,23 @@ function publicationDetailDoiUrl(?string $identifier): ?string
     return 'https://doi.org/' . str_replace('%2F', '/', rawurlencode($doi));
 }
 
-function publicationDetailSafeFileUrl(?string $relativePath): ?string
-{
-    $normalized = ltrim(str_replace('\\', '/', (string) $relativePath), '/');
-    if (!preg_match('#^uploads/publications/[A-Za-z0-9._-]+\.pdf$#Di', $normalized)) return null;
-
-    $uploadRoot = realpath(__DIR__ . '/../../uploads');
-    $resolved = realpath(__DIR__ . '/../../' . $normalized);
-    if (!$uploadRoot || !$resolved || !is_file($resolved)) return null;
-    $prefix = rtrim($uploadRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-    if (!str_starts_with($resolved, $prefix)) return null;
-
-    return SITE_URL . implode('/', array_map('rawurlencode', explode('/', $normalized)));
-}
-
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$canReview = in_array($role, ['research_staff', 'admin'], true);
+$canReview = $role === 'admin';
 $ownerRole = in_array($role, ['faculty', 'student'], true);
 $typeOptions = ['journal' => 'Journal', 'conference' => 'Conference', 'book_chapter' => 'Book chapter', 'other' => 'Other'];
+$staffPublicationPages = static function (array $row): array {
+    $pages = match ((string) ($row['publication_type'] ?? '')) {
+        'journal' => [['module' => 'publication_dissemination', 'page' => 'journal_publications']],
+        'conference' => [['module' => 'publication_dissemination', 'page' => 'conference_presentations']],
+        default => [],
+    };
+    if (($row['status'] ?? '') === 'published') {
+        $pages[] = ['module' => 'research_implementation_outputs', 'page' => 'research_outputs'];
+        $pages[] = ['module' => 'publication_dissemination', 'page' => 'research_repository'];
+    }
+    return $pages;
+};
 
 $tableCheck = $conn->query("SHOW TABLES LIKE 'publications'");
 $publicationsAvailable = $tableCheck instanceof mysqli_result && $tableCheck->num_rows > 0;
@@ -70,7 +68,7 @@ if ($tableCheck instanceof mysqli_result) $tableCheck->free();
 $publicationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 $publication = null;
 $loadPublication = static function (mysqli $connection, int $id): ?array {
-    $stmt = $connection->prepare('SELECT publication_id, research_title, researcher_id, researcher_name, researcher_category, publication_type, journal_publisher, publication_date, doi_identifier, file_path, file_name, status, created_at, updated_at FROM publications WHERE publication_id = ? LIMIT 1');
+    $stmt = $connection->prepare('SELECT p.publication_id, p.research_title, p.researcher_id, p.research_project_id, p.researcher_name, p.researcher_category, p.publication_type, p.journal_publisher, p.publication_date, p.doi_identifier, p.file_path, p.file_name, p.status, p.created_at, p.updated_at, rp.title AS research_project_title FROM publications p LEFT JOIN research_projects rp ON rp.project_id = p.research_project_id WHERE p.publication_id = ? LIMIT 1');
     $stmt->bind_param('i', $id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: null;
@@ -78,6 +76,31 @@ $loadPublication = static function (mysqli $connection, int $id): ?array {
     return $row;
 };
 if ($publicationsAvailable && $publicationId) $publication = $loadPublication($conn, $publicationId);
+if ($publication && $role === 'research_staff') {
+    $staffPages = $staffPublicationPages($publication);
+    $canViewPublication = false;
+    foreach ($staffPages as $scope) {
+        if (hasModulePermission($userId, $scope['module'], 'view', $scope['page'])) {
+            $canViewPublication = true;
+        }
+        if (hasModulePermission($userId, $scope['module'], 'manage', $scope['page'])) {
+            $canReview = true;
+        }
+    }
+    if (!$canViewPublication) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+}
+if ($publication && !$canReview && !(
+    $ownerRole && (
+        (int) $publication['researcher_id'] === $userId
+        || $publication['status'] === 'published'
+    )
+)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array((string) ($user['role'] ?? ''), ['research_staff', 'admin'], true)) {
@@ -111,6 +134,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $current = $loadPublication($conn, $postedId);
+    if ($current && $role === 'research_staff') {
+        $canManagePublication = false;
+        foreach ($staffPublicationPages($current) as $scope) {
+            if (hasModulePermission($userId, $scope['module'], 'manage', $scope['page'])) {
+                $canManagePublication = true;
+                break;
+            }
+        }
+        if (!$canManagePublication) {
+            header('Location: ' . SITE_URL . 'public/403.php');
+            exit;
+        }
+    } elseif ($role !== 'admin') {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
     $transition = $transitions[$action];
     if (!$current) {
         $_SESSION['publications_flash'] = ['type' => 'error', 'message' => 'Publication not found.'];
@@ -158,7 +197,9 @@ else renderStudentShell($user, 'publications.php', 'Publication Details', $pageS
 
 $badge = $publication ? publicationDetailStatusBadge((string) $publication['status']) : publicationDetailStatusBadge('');
 $doiUrl = $publication ? publicationDetailDoiUrl($publication['doi_identifier']) : null;
-$fileUrl = $publication ? publicationDetailSafeFileUrl($publication['file_path']) : null;
+$fileUrl = $publication && trim((string) $publication['file_path']) !== ''
+    ? SITE_URL . 'pages/shared/download-research-document.php?type=publication&id=' . (int) $publication['publication_id']
+    : null;
 $canEdit = $publication && ($canReview || ($ownerRole && (int) $publication['researcher_id'] === $userId && $publication['status'] === 'submitted'));
 ?>
 
@@ -177,6 +218,7 @@ $canEdit = $publication && ($canReview || ($ownerRole && (int) $publication['res
       <header class="detail-hero"><div class="hero-meta"><span class="badge type-badge"><?= publicationDetailEscape($typeOptions[$publication['publication_type']] ?? ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?></span><span class="badge tone-<?= publicationDetailEscape($badge['tone']) ?>"><?= publicationDetailEscape($badge['label']) ?></span></div><h1><?= publicationDetailEscape($publication['research_title']) ?></h1><p><?= publicationDetailEscape($publication['researcher_name'] ?: 'Unnamed researcher') ?> &middot; <?= publicationDetailEscape(ucfirst((string) $publication['researcher_category'])) ?></p></header>
       <div class="detail-grid">
         <div class="detail-field"><span>Journal / publisher</span><strong><?= publicationDetailEscape($publication['journal_publisher'] ?: 'Not recorded') ?></strong></div>
+        <div class="detail-field"><span>Originating research project</span><strong><?= publicationDetailEscape($publication['research_project_title'] ?: 'Not linked') ?></strong></div>
         <div class="detail-field"><span>Publication date</span><strong><?= publicationDetailEscape($publication['publication_date'] ? date('F j, Y', strtotime((string) $publication['publication_date'])) : 'Not recorded') ?></strong></div>
         <div class="detail-field"><span>DOI / identifier</span><?php if ($publication['doi_identifier']): ?><p><?= publicationDetailEscape($publication['doi_identifier']) ?></p><?php if ($doiUrl): ?><a class="text-link" href="<?= publicationDetailEscape($doiUrl) ?>" target="_blank" rel="noopener noreferrer">Open DOI / identifier</a><?php endif; ?><?php else: ?><strong>Not recorded</strong><?php endif; ?></div>
         <div class="detail-field"><span>Research file</span><?php if ($fileUrl): ?><a class="text-link" href="<?= publicationDetailEscape($fileUrl) ?>" download="<?= publicationDetailEscape($publication['file_name'] ?: 'publication.pdf') ?>">Download <?= publicationDetailEscape($publication['file_name'] ?: 'publication.pdf') ?></a><p class="file-note">The stored file was verified inside the publication upload directory.</p><?php elseif ($publication['file_path']): ?><strong>File unavailable</strong><p class="file-note">The stored file could not be safely resolved.</p><?php else: ?><strong>No file attached</strong><?php endif; ?></div>

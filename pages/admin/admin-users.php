@@ -53,6 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                     $insert_stmt->bind_param('sssssssssssss', $role, $first_name, $last_name, $email, $password_hash, $student_id, $contact, $department, $specialization, $academic_rank, $is_reviewer, $office, $status);
 
                     if ($insert_stmt->execute()) {
+                        $newUserId = (int) $conn->insert_id;
+                        if ($role === 'research_staff') {
+                            seedDefaultStaffPermissions($newUserId, true);
+                        }
                         logActivity("Created user account: {$first_name} {$last_name} ({$email})", 'user_management');
                         $success = "User {$first_name} {$last_name} created successfully.";
                     } else {
@@ -137,6 +141,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                         $success = "User {$target_user['name']} {$action_label} successfully.";
                     } else {
                         $error = 'Failed to update user status.';
+                    }
+                }
+            }
+        }
+
+        // SAVE STAFF PERMISSIONS
+        elseif ($action === 'save_staff_permissions') {
+            $user_id = (int) ($_POST['user_id'] ?? 0);
+            $target_stmt = $conn->prepare('SELECT user_id, role, CONCAT(first_name, " ", last_name) AS name FROM users WHERE user_id = ? LIMIT 1');
+            if (!$target_stmt) {
+                $error = 'Unable to load staff account.';
+            } else {
+                $target_stmt->bind_param('i', $user_id);
+                $target_stmt->execute();
+                $target_user = $target_stmt->get_result()->fetch_assoc();
+                $target_stmt->close();
+
+                if (!$target_user) {
+                    $error = 'Staff member not found.';
+                } elseif ((string) $target_user['role'] !== 'research_staff') {
+                    $error = 'Permissions can only be managed for research staff accounts.';
+                } else {
+                    $moduleAccess = $_POST['module_access'] ?? [];
+                    if (!is_array($moduleAccess)) {
+                        $moduleAccess = [];
+                    }
+                    $saved = saveStaffPermissionCollection($user_id, $moduleAccess);
+                    if ($saved) {
+                        logActivity("Updated staff permissions for {$target_user['name']} (ID: {$user_id})", 'user_management');
+                        $success = "Permissions updated for {$target_user['name']}.";
+                    } else {
+                        $error = 'Failed to save staff permissions.';
                     }
                 }
             }
@@ -450,6 +486,55 @@ $visible_users = $users->num_rows;
   .hero-action-primary { background: #d3a348; color: #182033; }
   .hero-action-secondary { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.055); color: #fff; }
   .hero-action-secondary:hover { border-color: #e8bd67; background: rgba(255,255,255,.1); }
+
+  .permission-grid {
+    display: grid;
+    gap: 16px;
+    max-height: 60vh;
+    overflow: auto;
+    padding-right: 6px;
+  }
+  .permission-block {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+    padding: 18px;
+  }
+  .permission-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .permission-subpages {
+    display: grid;
+    gap: 10px;
+  }
+  .permission-subpage {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #edf2f7;
+  }
+  .permission-levels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+  .permission-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #475467;
+  }
+  .permission-option.compact { font-size: 11px; }
+  .permission-option input { accent-color: #5b1ebc; }
+  .modal-large { max-width: 980px; width: min(90vw, 980px); }
 
   .table-wrap { overflow-x: auto; }
   .user-table { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: auto; }
@@ -774,6 +859,10 @@ renderAdminShell(
                         <button type="button" class="btn btn-sm btn-success" onclick='confirmToggleStatus(<?php echo (int) $u['user_id']; ?>, <?php echo json_encode($u['status'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>, <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Activate</button>
                       <?php endif; ?>
 
+                      <?php if ($u['role'] === 'research_staff'): ?>
+                        <button type="button" class="btn btn-secondary btn-sm" data-permissions='<?php echo json_encode(getStaffPermissionMatrix((int) $u['user_id']), JSON_HEX_APOS | JSON_HEX_QUOT); ?>' onclick='openStaffPermissionsModal(<?php echo (int) $u['user_id']; ?>, <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>, this.dataset.permissions)'>Permissions</button>
+                      <?php endif; ?>
+
                       <button type="button" class="btn btn-secondary btn-sm" onclick='openResetPasswordModal(<?php echo (int) $u['user_id']; ?>, <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Reset password</button>
                       </div>
                     <?php else: ?>
@@ -794,6 +883,74 @@ renderAdminShell(
         </table>
       </div>
     </section>
+</div>
+
+<!-- STAFF PERMISSIONS MODAL -->
+<div class="modal-overlay" id="staffPermissionsModal" aria-hidden="true">
+  <div class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="staffPermissionsTitle" tabindex="-1">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="staffPermissionsTitle">Staff permissions</div>
+        <div class="modal-subtitle" id="staffPermissionsName">Review module access</div>
+      </div>
+    </div>
+
+    <form method="POST" action="admin-users.php" id="staffPermissionsForm">
+      <input type="hidden" name="action" value="save_staff_permissions">
+      <input type="hidden" name="user_id" id="staffPermissionsUserId">
+      <?php echo csrfField(); ?>
+
+      <div class="permission-grid">
+        <p class="permission-guidance">Research staff receive view-only access by default. To grant control, choose Manage only for the specific subpage this staff member should operate.</p>
+        <?php foreach (rmsPermissionModules() as $module_key => $module_data): ?>
+          <section class="permission-block">
+            <div class="permission-header">
+              <div>
+                <strong><?php echo htmlspecialchars($module_data['label'], ENT_QUOTES, 'UTF-8'); ?></strong>
+              </div>
+              <div class="permission-levels">
+                <label class="permission-option">
+                  <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][access]" value="none" checked>
+                  <span>No access</span>
+                </label>
+                <label class="permission-option">
+                  <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][access]" value="view">
+                  <span>View</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="permission-subpages">
+              <?php foreach ($module_data['pages'] as $subpage_key => $page_label): ?>
+                <div class="permission-subpage">
+                  <span><?php echo htmlspecialchars($page_label, ENT_QUOTES, 'UTF-8'); ?></span>
+                  <div class="permission-levels compact">
+                    <label class="permission-option compact">
+                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="none" checked>
+                      <span>None</span>
+                    </label>
+                    <label class="permission-option compact">
+                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="view">
+                      <span>View</span>
+                    </label>
+                    <label class="permission-option compact">
+                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="manage">
+                      <span>Manage</span>
+                    </label>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </section>
+        <?php endforeach; ?>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeStaffPermissionsModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save permissions</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- CREATE USER MODAL -->
@@ -1148,6 +1305,49 @@ function openEditModal(userData) {
 
 function closeEditModal() {
   hideModal('editModal');
+}
+
+function openStaffPermissionsModal(userId, userName, permissionsJson) {
+  showModal('staffPermissionsModal');
+  document.getElementById('staffPermissionsUserId').value = userId;
+  document.getElementById('staffPermissionsName').textContent = 'Manage access for ' + userName;
+
+  let permissions = {};
+  try {
+    permissions = permissionsJson ? JSON.parse(permissionsJson) : {};
+  } catch (error) {
+    permissions = {};
+  }
+
+  document.querySelectorAll('#staffPermissionsForm input[type="radio"]').forEach((input) => {
+    input.checked = false;
+  });
+
+  document.querySelectorAll('#staffPermissionsForm input[name$="[access]"]').forEach((input) => {
+    input.checked = (input.value === 'none');
+  });
+
+  Object.entries(permissions).forEach(([moduleKey, moduleData]) => {
+    if (!moduleData || typeof moduleData !== 'object') return;
+    const moduleLevel = moduleData.access || 'none';
+    const moduleSelector = '#staffPermissionsForm input[name="module_access[' + moduleKey + '][access]"]';
+    document.querySelectorAll(moduleSelector).forEach((radio) => {
+      radio.checked = (radio.value === moduleLevel);
+    });
+
+    if (moduleData.pages && typeof moduleData.pages === 'object') {
+      Object.entries(moduleData.pages).forEach(([subpageKey, subpageLevel]) => {
+        const pageSelector = '#staffPermissionsForm input[name="module_access[' + moduleKey + '][pages][' + subpageKey + ']"]';
+        document.querySelectorAll(pageSelector).forEach((radio) => {
+          radio.checked = (radio.value === (subpageLevel || 'none'));
+        });
+      });
+    }
+  });
+}
+
+function closeStaffPermissionsModal() {
+  hideModal('staffPermissionsModal');
 }
 
 // RESET PASSWORD MODAL

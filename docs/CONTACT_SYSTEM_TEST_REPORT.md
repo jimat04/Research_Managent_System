@@ -1,16 +1,17 @@
 # Contact System End-to-End Test Report
 
-**Date:** August 29, 2026  
-**Tester:** Claude  
-**System:** RMS Contact Management System
+**Test date:** August 29, 2026
+**Scope:** RMS Contact Management System
+
+> Historical test record: this report documents a local run on the date above. It is not evidence of the current database contents or a production-readiness assessment. Revalidate the current handlers and role shells before relying on it.
 
 ---
 
 ## Executive Summary
 
-✅ **OVERALL STATUS: FULLY FUNCTIONAL**
+**Result at the time of testing:** The main contact submission and message-management flows passed the reported checks; staff navigation was incomplete (see below).
 
-The contact system is properly connected and working across all user roles. Public users can submit messages, and both Admin and Research Staff roles can view, manage, and reply to messages via email.
+The historical run reported that public users could submit messages and that Admin and Research Staff could manage them. The current source has separate admin and staff management pages; the staff page is not linked from the current staff shell.
 
 ---
 
@@ -24,7 +25,7 @@ The contact system is properly connected and working across all user roles. Publ
 - **CSRF Protection:** ✅ Implemented with `csrfField()`
 - **Input Validation:** ✅ Name, email, concern type, message validated
 - **Database Connection:** ✅ Using `saveContactMessage()` from `contact-handler.php`
-- **Test Data:** 2 pending messages found in database
+- **Test Data:** The historical test database contained pending messages; counts and contents are not current test fixtures.
 
 **Concern Types Supported:**
 - General Inquiry
@@ -36,8 +37,7 @@ The contact system is properly connected and working across all user roles. Publ
 **Test Evidence:**
 ```sql
 mysql> SELECT contact_id, name, email, concern_type, status FROM contact_messages;
-contact_id: 1, name: Jimwel A. Tolentino, email: jim@gmail.com, status: pending
-contact_id: 2, name: Jimwel A. Tolentino, email: jimwel00028@gmail.com, status: pending
+contact_id: <id>, name: <submitter>, email: <redacted>, concern_type: <type>, status: pending
 ```
 
 ---
@@ -90,7 +90,7 @@ contact_id: 2, name: Jimwel A. Tolentino, email: jimwel00028@gmail.com, status: 
 - Staff name included in reply signature
 - Reply message saved as internal notes
 
-**Navigation:** Available in admin sidebar as "📨 Contact Messages"
+**Current navigation:** Available in the admin shell. The staff message page exists but is not linked from the current staff shell.
 
 ---
 
@@ -157,11 +157,7 @@ MAIL_REPLY_TO=support@rms.edu.ph
 | Research Staff | View & Manage | `pages/admin/admin-contact.php`, `pages/staff/contact-messages.php` |
 | Admin | Full Access | `pages/admin/admin-contact.php` |
 
-**Verified Users:**
-```
-user_id: 1, email: admin@rms.edu.ph, role: admin, status: active
-user_id: 6, email: staff@rms.edu.ph, role: research_staff, status: active
-```
+**Accounts:** Use the current local demo-account guidance in the root README. This historical report does not record user emails or IDs.
 
 **Concern Type Routing (from `contact-handler.php`):**
 - Technical Support → admin, research_staff
@@ -176,16 +172,14 @@ user_id: 6, email: staff@rms.edu.ph, role: research_staff, status: active
 
 **Status:** MINOR ISSUE - NAVIGATION INCOMPLETE
 
-**Admin Dashboard:**
-- ✅ `admin-contact.php` has full standalone sidebar navigation
-- ✅ "Contact Messages" link available in admin-contact.php sidebar
+**Admin:**
+- ✅ `pages/admin/admin-contact.php` is linked under Communication in the current admin shell.
 
-**Staff Dashboard:**
-- ⚠️ `staff-dashboard.php` does NOT include "Contact Messages" in sidebar navigation
-- ✅ File exists: `pages/staff/contact-messages.php`
-- ❌ Not linked from staff dashboard navigation
+**Research Staff:**
+- ⚠️ `pages/staff/contact-messages.php` exists and uses the staff shell, but the current staff-shell navigation does not include a Contact Messages link.
+- ✅ The email-reply interface is also available at `pages/admin/admin-contact.php`, which permits the `research_staff` role; the staff route itself remains a separate, simpler interface.
 
-**Impact:** LOW - Staff can access via direct URL, but link should be added for better UX
+**Impact:** Staff must use the direct staff URL or the shared email-reply interface until a staff navigation link is added.
 
 **Recommendation:** Add to staff dashboard sidebar navigation:
 ```php
@@ -208,8 +202,8 @@ user_id: 6, email: staff@rms.edu.ph, role: research_staff, status: active
 ```
 User visits: http://localhost/rms/public/contact.php
 Fills form:
-  - Name: John Doe
-  - Email: john@example.com
+  - Name: Test User
+  - Email: tester@example.invalid
   - Concern Type: Research Advisory
   - Message: "How do I submit my thesis proposal?"
 Submits form → SUCCESS
@@ -219,7 +213,7 @@ Submits form → SUCCESS
 ```sql
 INSERT INTO contact_messages 
 (name, email, concern_type, message, status, created_at)
-VALUES ('John Doe', 'john@example.com', 'Research Advisory', 
+VALUES ('Test User', 'tester@example.invalid', 'Research Advisory',
 'How do I submit my thesis proposal?', 'pending', NOW())
 ```
 
@@ -237,7 +231,7 @@ Sees message in "Pending" tab with:
 ```
 Admin clicks "Reply via Email" button
 Modal opens with:
-  - Recipient info (John Doe, john@example.com)
+  - Recipient info (test account)
   - Reply text area
   - "Mark as resolved" checkbox (checked by default)
 Admin types reply:
@@ -245,21 +239,21 @@ Admin types reply:
 Submits form → SUCCESS
 
 Actions performed:
-  1. Email sent to john@example.com using contact_reply template
+  1. Historical test reported email delivery using the contact-reply template; verify with a test mailbox in the target environment.
   2. status → 'resolved'
   3. resolved_by → admin's user_id
   4. resolved_at → NOW()
   5. notes → reply message text
-  6. Activity logged: "Replied to contact message from John Doe"
+  6. Activity logged for the message reply
 ```
 
-**Step 4: User Receives Email**
+**Step 4: User Receives Email (historical reported result)**
 ```
-John receives professional email with:
-  - His original inquiry quoted
-  - Admin's detailed response
-  - Staff member's name in signature
-  - Link to submit new inquiry if needed
+The test contact receives a professional email containing:
+  - The original inquiry
+  - The administrator's response
+  - The staff member's signature
+  - A link to submit a new inquiry
 ```
 
 ---
@@ -294,12 +288,12 @@ John receives professional email with:
 
 | # | Severity | Issue | Location | Status |
 |---|----------|-------|----------|--------|
-| 1 | LOW | Contact Messages link missing from staff dashboard navigation | `pages/staff/staff-dashboard.php` | Open |
+| 1 | LOW | Contact Messages link missing from staff shell navigation | `includes/staff-shell.php` | Open |
 | 2 | INFO | Email system requires .env configuration for SMTP | `.env` | Documentation needed |
 
 ### Recommendations
 
-1. **Add Navigation Link:** Include "Contact Messages" in staff dashboard sidebar with pending count badge
+1. **Add Navigation Link:** Consider adding "Contact Messages" to the staff shell navigation with a pending-count badge
 2. **Email Configuration Guide:** Add setup instructions for SMTP in `docs/EMAIL_SYSTEM.md`
 3. **Notification System:** Consider adding in-app notifications when new contact messages arrive
 4. **Auto-Assignment:** Consider routing messages to specific staff based on concern type
@@ -323,7 +317,7 @@ John receives professional email with:
 - ✅ Activity logging for audit trail
 
 **Minor Enhancement Needed:**
-- ⚠️ Add navigation link to staff dashboard
+- ⚠️ Consider adding a navigation link to the staff shell
 
 **Overall Assessment:** Production-ready with minor UX enhancement recommended.
 
@@ -333,8 +327,8 @@ John receives professional email with:
 
 | Role | Email | Password | Access Level |
 |------|-------|----------|--------------|
-| Admin | admin@rms.edu.ph | Admin@123 | Full access to admin-contact.php |
-| Research Staff | staff@rms.edu.ph | Staff@123 | Full access to contact-messages.php |
+| Admin | Use local demo credentials from the root README | Not recorded here | Full access to admin-contact.php |
+| Research Staff | Use an active local `research_staff` account | Not recorded here | Access to both contact-message routes |
 | Public | N/A | N/A | Contact form only |
 
 ---
@@ -352,5 +346,5 @@ John receives professional email with:
 
 ---
 
-**Report Generated:** 2026-08-29  
-**System Status:** OPERATIONAL ✅
+**Report generated:** 2026-08-29
+**Current verification:** Not performed as part of this historical report; run the current contact smoke checks before release.

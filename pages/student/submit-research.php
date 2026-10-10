@@ -2,9 +2,11 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
-requireRole('student');
+requireRole(['student', 'faculty']);
 
 $user = getCurrentUser();
 $user_id = (int) $user['user_id'];
@@ -117,6 +119,11 @@ $errors = [];
 $success = false;
 $success_message = '';
 $new_project_id = null;
+$submission_nonce = $_SESSION['research_title_submission_nonce'] ?? '';
+if (!is_string($submission_nonce) || $submission_nonce === '') {
+    $submission_nonce = bin2hex(random_bytes(32));
+    $_SESSION['research_title_submission_nonce'] = $submission_nonce;
+}
 
 // Form field defaults
 $title = '';
@@ -172,6 +179,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'submitted'], true) ? $_POST['status'] : 'draft';
     if ($status === 'proposal') $status = 'submitted';
     if (!in_array($status, ['draft', 'submitted'], true)) $status = 'draft';
+    if (isset($_POST['status'])
+        && (!is_string($_POST['submission_nonce'] ?? null)
+            || !hash_equals($submission_nonce, (string) $_POST['submission_nonce']))) {
+        $errors[] = 'This form was already submitted or has expired. Reload the page before trying again.';
+    }
 
     // Raw co-researcher IDs from the form (hidden inputs).
     // Server-side validation re-checks existence, role, and active status.
@@ -295,7 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 throw new Exception("Query error: " . $conn->error);
             }
 
-            $insert_stmt->bind_param("siisssi", $title, $category_id, $ay_id, $research_area, $abstract, $status, $user_id);
+            $initial_project_status = 'draft';
+            $insert_stmt->bind_param("siisssi", $title, $category_id, $ay_id, $research_area, $abstract, $initial_project_status, $user_id);
             if (!$insert_stmt->execute()) {
                 throw new Exception("Insert failed: " . $insert_stmt->error);
             }
@@ -349,7 +362,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     'maxSize' => 10000, // 10MB
                     'accept' => ['.pdf', '.doc', '.docx'],
                     'projectId' => $new_project_id,
-                    'type' => 'proposal'
+                    'type' => 'proposal',
+                    'workflowType' => 'title'
                 ], $_FILES, $conn);
 
                 if (!$upload_result['success']) {
@@ -358,6 +372,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
                 $upload_id = $upload_result['upload_id'];
                 $file_uploaded = true;
+            }
+
+            if ($status === 'submitted') {
+                $submit_project = $conn->prepare("UPDATE research_projects SET status = 'submitted', updated_at = NOW() WHERE project_id = ? AND created_by = ? AND status = 'draft'");
+                if (!$submit_project) {
+                    throw new Exception('Unable to prepare title submission.');
+                }
+                $submit_project->bind_param('ii', $new_project_id, $user_id);
+                if (!$submit_project->execute() || $submit_project->affected_rows !== 1) {
+                    throw new Exception('The research title could not be submitted.');
+                }
+                $submit_project->close();
+                rms_capture_submission_version(
+                    $conn,
+                    (int) $new_project_id,
+                    null,
+                    'title',
+                    $user_id,
+                    [
+                        'title' => $title,
+                        'category_id' => (int) $category_id,
+                        'ay_id' => (int) $ay_id,
+                        'research_area' => $research_area,
+                        'abstract' => $abstract
+                    ],
+                    $upload_id ? [(int) $upload_id] : []
+                );
             }
 
             // Log activity
@@ -413,6 +454,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $success_message = $status === 'draft'
                 ? 'Research project saved as draft successfully.'
                 : 'Research project submitted for review successfully.';
+            $submission_nonce = bin2hex(random_bytes(32));
+            $_SESSION['research_title_submission_nonce'] = $submission_nonce;
             $_SESSION['crc_picks'] = [];
             $crc_picks = [];
 
@@ -471,7 +514,11 @@ if ($crc_search_query !== '') {
     }
 }
 
-renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in your research details and upload your proposal document for CREC review.');
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShell($user, 'submit-research', 'Submit New Research', 'Save a title draft or submit it for authorized review.');
+} else {
+    renderStudentShell($user, 'submit-research', 'Submit New Research', 'Save a title draft or submit it for authorized review.');
+}
 ?>
 
 <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/file-uploader.css">
@@ -520,7 +567,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
     <div class="hero-copy">
       <p class="hero-eyebrow">Research proposal workspace</p>
       <h1 id="submission-title">Shape your idea into a clear proposal.</h1>
-      <p class="hero-description">Organize the essentials, assemble your team, and prepare one review-ready document for CREC.</p>
+      <p class="hero-description">Organize the research title information and prepare it for authorized administrative review.</p>
     </div>
     <div class="hero-checklist" aria-label="Proposal sections">
       <p class="hero-checklist-label">Four parts to complete</p>
@@ -562,6 +609,7 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
 <?php if (!$success): ?>
 <form method="POST" enctype="multipart/form-data" action="<?php echo SITE_URL; ?>pages/student/submit-research.php" class="form-guard">
   <?php echo csrfField(); ?>
+  <input type="hidden" name="submission_nonce" value="<?php echo htmlspecialchars($submission_nonce, ENT_QUOTES, 'UTF-8'); ?>">
   <?php foreach ($crc_selected_ids as $crc_sid): ?>
     <input type="hidden" name="co_researchers[]" value="<?php echo (int) $crc_sid; ?>">
   <?php endforeach; ?>
@@ -823,4 +871,10 @@ renderStudentShell($user, 'submit-research', 'Submit New Research', 'Fill in you
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <script src="../../js/app-forms.js" defer></script>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>

@@ -143,30 +143,92 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         'Overview' => [
             [SITE_URL . 'pages/staff/staff-dashboard.php', 'Dashboard', '📊', true, 0],
         ],
-        'Research Modules' => [
-            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
-            [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true, 0],
-            [SITE_URL . 'pages/shared/copyrights.php',       'Copyrights',          '&#169;', true, 0],
-            [SITE_URL . 'pages/shared/research-archive.php', 'Repository',          '&#128451;', true, 0],
-        ],
-        'Communication' => [
-            [SITE_URL . 'pages/shared/messages.php',         'Messages',         '💬', true, 0],
-            [SITE_URL . 'pages/shared/notifications.php',    'Notifications',    '🔔', true, 0],
-        ],
-        'Account' => [
-            [SITE_URL . 'pages/shared/profile.php',          'Profile', '👤', true, 0],
-        ],
+    ];
+    $moduleIcons = [
+        'seminars' => '📋', 'trainings' => '🎓', 'workshops' => '🛠️',
+        'research_proposals' => '📝', 'research_review' => '🔎', 'research_approval' => '✅',
+        'ongoing_research' => '🔄', 'completed_research' => '🏁', 'research_outputs' => '📊',
+        'journal_publications' => '📚', 'conference_presentations' => '🎤', 'research_repository' => '🗄️',
+        'copyrights' => '©️', 'patents_utility_models' => '💡', 'innovation_technology_transfer' => '🚀',
+    ];
+    $permissionMatrix = ($shell_user['role'] ?? '') === 'admin'
+        ? []
+        : getStaffPermissionMatrix((int) ($user['user_id'] ?? 0));
+    foreach (rmsPermissionModules() as $moduleKey => $module) {
+        $moduleItems = [];
+        foreach ($module['pages'] as $pageKey => $label) {
+            $level = ($shell_user['role'] ?? '') === 'admin'
+                ? 'manage'
+                : ($permissionMatrix[$moduleKey]['pages'][$pageKey] ?? 'none');
+            if (!in_array($level, ['view', 'manage'], true)) {
+                continue;
+            }
+            $moduleItems[] = [
+                SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($pageKey),
+                $label,
+                $moduleIcons[$pageKey] ?? '📄',
+                true,
+                0,
+            ];
+        }
+        if ($moduleItems) {
+            $nav[$module['label']] = $moduleItems;
+        }
+    }
+    $nav['Communication'] = [
+        [SITE_URL . 'pages/shared/messages.php', 'Messages', '💬', true, 0],
+        [SITE_URL . 'pages/shared/notifications.php', 'Notifications', '🔔', true, 0],
+    ];
+    $nav['Account'] = [
+        [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
     ];
 
     // Active-state matcher. Matches either the full target (e.g.
     // 'http://localhost/rms/pages/shared/profile.php') or the bare basename,
     // so shared pages highlight correctly when visited.
     $current_basename = basename(str_replace('\\', '/', (string) $current_page));
-    $is_active = function ($href) use ($current_page, $current_basename) {
+    if ($current_basename !== '' && !str_contains($current_basename, '.')) {
+        $current_basename .= '.php';
+    }
+    $current_module_key = trim((string) ($_GET['module_page'] ?? ''));
+    if ($current_module_key === '') {
+        $current_module_key = match ($current_basename) {
+            'activities.php' => match ((string) ($_GET['type'] ?? '')) {
+                'seminar' => 'seminars',
+                'training' => 'trainings',
+                'workshop' => 'workshops',
+                default => '',
+            },
+            'publications.php' => match (true) {
+                (string) ($_GET['repository'] ?? '') === '1' => 'research_repository',
+                (string) ($_GET['publication_type'] ?? '') === 'journal' => 'journal_publications',
+                (string) ($_GET['publication_type'] ?? '') === 'conference' => 'conference_presentations',
+                (string) ($_GET['status'] ?? '') === 'published' => 'research_outputs',
+                default => '',
+            },
+            'copyrights.php' => match (true) {
+                in_array((string) ($_GET['ip_scope'] ?? ''), ['patents_utility_models', 'innovation_technology_transfer'], true) => (string) $_GET['ip_scope'],
+                in_array((string) ($_GET['output_type'] ?? ''), ['patent', 'utility_model'], true) => 'patents_utility_models',
+                in_array((string) ($_GET['output_type'] ?? ''), ['innovation', 'technology_transfer'], true) => 'innovation_technology_transfer',
+                default => 'copyrights',
+            },
+            'research-archive.php' => 'completed_research',
+            'staff-submissions.php' => 'research_proposals',
+            'staff-crec.php' => 'research_review',
+            'staff-milestones.php' => 'ongoing_research',
+            default => '',
+        };
+    }
+    $is_active = function ($href) use ($current_page, $current_basename, $current_module_key) {
         if ($href === $current_page) {
             return true;
         }
-        $href_basename = basename(str_replace('\\', '/', (string) $href));
+        $target = parse_url((string) $href);
+        $href_basename = basename(str_replace('\\', '/', (string) ($target['path'] ?? '')));
+        if ($href_basename === 'admin-research-module.php') {
+            parse_str((string) ($target['query'] ?? ''), $targetQuery);
+            return $current_module_key !== '' && $current_module_key === (string) ($targetQuery['module'] ?? '');
+        }
         return $current_basename !== '' && $current_basename === $href_basename;
     };
 
@@ -275,6 +337,7 @@ function renderStaffShellClose() {
   </main>
 </div><!-- /.staff-dashboard -->
 <?php renderLogoutTransition(); ?>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
   const button = document.querySelector('.staff-mobile-menu-btn');

@@ -29,6 +29,14 @@ requireRole('research_staff');
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$canViewResearchReview = hasModulePermission($user_id, 'research_development', 'view', 'research_review');
+$canViewResearchApproval = hasModulePermission($user_id, 'research_development', 'view', 'research_approval');
+if (!$canViewResearchReview && !$canViewResearchApproval) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$canManageResearchReview = hasModulePermission($user_id, 'research_development', 'manage', 'research_review');
+$canManageResearchApproval = hasModulePermission($user_id, 'research_development', 'manage', 'research_approval');
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function se($value) {
@@ -202,6 +210,14 @@ $form3_extra_select_sql = $form3_full
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $actionPage = match ((string) $_POST['action']) {
+        'erec_endorse', 'erec_return_revision', 'erec_reject' => 'research_approval',
+        default => 'research_review',
+    };
+    if (!hasModulePermission($user_id, 'research_development', 'manage', $actionPage)) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['module_error'] = 'Your session has expired. Please refresh the page and try again.';
@@ -737,6 +753,7 @@ if ($project_reviews_exists) {
             u.student_id,
             u.email,
             rc.category_name,
+            up.upload_id AS proposal_upload_id,
             up.file_name  AS proposal_file_name,
             up.file_path  AS proposal_file_path,
             up.original_name AS proposal_original_name,
@@ -750,7 +767,7 @@ if ($project_reviews_exists) {
         LEFT JOIN users u  ON u.user_id = rp.created_by
         LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
         LEFT JOIN (
-            SELECT u1.project_id, u1.file_name, u1.file_path, u1.original_name
+            SELECT u1.project_id, u1.upload_id, u1.file_name, u1.file_path, u1.original_name
               FROM uploads u1
               JOIN (
                   SELECT project_id, MIN(upload_id) AS first_upload_id
@@ -797,6 +814,7 @@ if ($project_reviews_exists) {
             u.student_id,
             u.email,
             rc.category_name,
+            up.upload_id AS proposal_upload_id,
             up.file_name  AS proposal_file_name,
             up.file_path  AS proposal_file_path,
             up.original_name AS proposal_original_name,
@@ -810,7 +828,7 @@ if ($project_reviews_exists) {
         LEFT JOIN users u  ON u.user_id = rp.created_by
         LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
         LEFT JOIN (
-            SELECT u1.project_id, u1.file_name, u1.file_path, u1.original_name
+            SELECT u1.project_id, u1.upload_id, u1.file_name, u1.file_path, u1.original_name
               FROM uploads u1
               JOIN (
                   SELECT project_id, MIN(upload_id) AS first_upload_id
@@ -1225,6 +1243,9 @@ $stage_sections = [
 <?php foreach ($stage_sections as $stage_key => $stage_section):
     $stage_projects = $projects_by_stage[$stage_key] ?? [];
     $is_erec_stage = $stage_key === 'erec';
+    $canViewStage = $is_erec_stage ? $canViewResearchApproval : $canViewResearchReview;
+    $canManageStage = $is_erec_stage ? $canManageResearchApproval : $canManageResearchReview;
+    if (!$canViewStage) continue;
 ?>
 <section class="review-stage" aria-labelledby="<?php echo se($stage_key); ?>-review-heading">
   <div class="stage-heading">
@@ -1273,7 +1294,7 @@ $stage_sections = [
                 : '—';
 
             $proposal_url  = !empty($row['proposal_file_path'])
-                ? SITE_URL . $row['proposal_file_path']
+                ? SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . (int) $row['proposal_upload_id']
                 : '';
             $proposal_name = $row['proposal_original_name'] ?? 'proposal file';
 
@@ -1346,11 +1367,14 @@ $stage_sections = [
                 <span class="badge-status <?php echo se($b_class); ?>"><?php echo se($b_label); ?></span>
               </td>
               <td>
+                <?php if ($canManageStage): ?>
                 <div class="row-actions">
+                  <?php if ($canManageResearchReview): ?>
                   <button type="button" class="btn btn-secondary btn-sm"
                           onclick="openReviewersModal(<?php echo (int) $row['project_id']; ?>, '<?php echo se(addslashes($row['title'])); ?>', '<?php echo se(strtoupper($stage_key)); ?>')">
                     👥 <?php echo se(strtoupper($stage_key)); ?> Reviewers
                   </button>
+                  <?php endif; ?>
                   <?php if ($can_endorse): ?>
                     <form method="POST" style="display: inline;">
                       <?php echo csrfField(); ?>
@@ -1375,6 +1399,9 @@ $stage_sections = [
                     ✕ Reject
                   </button>
                 </div>
+                <?php else: ?>
+                  <span class="text-muted">View only</span>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -1386,6 +1413,7 @@ $stage_sections = [
 </section>
 <?php endforeach; ?>
 
+<?php if ($canManageResearchReview || $canManageResearchApproval): ?>
 <!-- Manage Reviewers modal -->
 <div id="reviewersModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reviewersModalTitle">
   <div class="modal-content">
@@ -1406,6 +1434,7 @@ $stage_sections = [
         </div>
       </div>
 
+      <?php if ($canManageResearchReview): ?>
       <form method="POST" id="assignForm">
         <?php echo csrfField(); ?>
         <input type="hidden" name="action" value="assign_reviewer">
@@ -1423,10 +1452,13 @@ $stage_sections = [
           <button type="submit" class="btn btn-primary" id="rv_assign_btn">Assign Reviewer</button>
         </div>
       </form>
+      <?php endif; ?>
     </div>
   </div>
 </div>
+<?php endif; ?>
 
+<?php if ($canManageResearchReview || $canManageResearchApproval): ?>
 <!-- Return-for-revision modal -->
 <div id="returnModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="returnModalTitle">
   <div class="modal-content">
@@ -1488,7 +1520,9 @@ $stage_sections = [
     </form>
   </div>
 </div>
+<?php endif; ?>
 
+<?php if ($canManageResearchReview || $canManageResearchApproval): ?>
 <script>
   // Server-rendered data passed to JS
   const reviewersByProject = <?php
@@ -1772,5 +1806,6 @@ $stage_sections = [
   });
   rejectField.addEventListener('input', () => rejectField.classList.remove('invalid'));
 </script>
+<?php endif; ?>
 
 <?php renderStaffShellClose(); ?>

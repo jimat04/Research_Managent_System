@@ -1,8 +1,9 @@
-# Custom Error Pages Complete ✅
+# Custom Error Pages — Historical Implementation Record
 
-**Completed:** 2026-08-28 08:06 UTC  
-**Duration:** ~8 minutes  
-**Status:** ✅ All 3 error pages created and configured
+**Implemented:** 2026-08-28
+**Current source reviewed:** 2026-10-10
+
+The current handlers are under `public/`; the root `.htaccess` points Apache to those paths. This records the original implementation and is not a current deployment test.
 
 ---
 
@@ -10,23 +11,23 @@
 
 ### 1. Created Error Pages
 
-**404.php - Page Not Found**
+**`public/404.php` - Page Not Found**
 - Professional design matching RMS branding
 - Glass-morphism card with blue theme
 - Search icon (🔍)
 - Quick links to login, about, and contact
-- Logs 404s to database for analytics
+- Contains an optional database logging branch; logging is not guaranteed because the current page's config existence check targets `public/includes/config.php`, not the project `includes/config.php`.
 - Mobile responsive
 
-**403.php - Access Denied** ⭐ CRITICAL
-- Referenced in `auth.php:50` but didn't exist (would cause errors!)
+**`public/403.php` - Access Denied** ⭐ CRITICAL
+- The page was missing when this historical implementation was written.
 - Red/danger color theme
 - Lock icon (🔒)
 - Clear permission denial message
 - Link to contact support
 - Mobile responsive
 
-**500.php - Internal Server Error**
+**`public/500.php` - Internal Server Error**
 - Orange/warning color theme
 - Warning icon (⚠️)
 - Error ID generation for support tickets
@@ -38,9 +39,9 @@
 Updated `.htaccess` to use custom error pages:
 ```apache
 # Custom Error Pages
-ErrorDocument 403 /rms/403.php
-ErrorDocument 404 /rms/404.php
-ErrorDocument 500 /rms/500.php
+ErrorDocument 403 /rms/public/403.php
+ErrorDocument 404 /rms/public/404.php
+ErrorDocument 500 /rms/public/500.php
 ```
 
 ---
@@ -80,43 +81,29 @@ All error pages include:
 
 ## Code Highlights
 
-### 403.php - Critical Fix
-This was referenced in `includes/auth.php:50`:
+### `public/403.php` - Access denied
+The current authorization helper redirects to the public error page:
 ```php
-if (!$ok) {
-    header('Location: ' . SITE_URL . '403.php');  // ← Was broken!
-    exit();
-}
+header('Location: ' . SITE_URL . 'public/403.php');
 ```
 
 Now when users try to access restricted pages:
 1. `requireRole()` checks permissions
-2. If denied → redirects to `403.php`
+2. If denied → redirects to `public/403.php`
 3. Shows professional "Access Denied" page
-4. No more PHP errors!
+4. The redirect depends on the configured `SITE_URL`.
 
-### 404.php - Analytics
-Logs all 404s to database:
+### `public/404.php` - Optional logging
+The page contains this database insert branch:
 ```php
 $stmt = $conn->prepare("INSERT INTO system_logs (log_type, message, ip_address, created_at) VALUES ('404', ?, ?, NOW())");
 ```
 
-Useful for:
-- Finding broken links
-- Identifying missing pages users expect
-- Security monitoring (scan attempts)
+However, the current config-path check does not load `includes/config.php` from the `public/` directory, so `$conn` may be unavailable and logging should not be assumed to work.
 
-### 500.php - Resilient
-Won't crash even if config is broken:
-```php
-try {
-    include_once __DIR__ . '/includes/config.php';
-} catch (Exception $e) {
-    // Use defaults - don't fail
-}
-```
+### `public/500.php` - Fallback behavior
 
-Critical for error recovery!
+The handler sets HTTP 500 and uses a fallback `SITE_URL` when configuration is unavailable. Its current config-path check points under `public/`, so it does not load the project's `includes/config.php` in the normal layout. Verify the configured base path when deploying outside `/rms/`.
 
 ---
 
@@ -125,24 +112,17 @@ Critical for error recovery!
 To test each error page:
 
 **403 - Access Denied:**
-```
-1. Login as student
-2. Try to access http://localhost/rms/pages/admin-dashboard.php
-3. Should redirect to 403.php
-```
+1. Log in as a student.
+2. Visit `http://localhost/rms/pages/admin/admin-dashboard.php`.
+3. Confirm access is denied or redirected to `public/403.php`.
 
 **404 - Not Found:**
-```
-1. Visit http://localhost/rms/nonexistent-page.php
-2. Should show 404.php
-```
+1. Visit `http://localhost/rms/a-page-that-does-not-exist.php`.
+2. Confirm the configured 404 page appears.
 
 **500 - Server Error:**
-```
-1. Temporarily break includes/config.php
-2. Visit any page
-3. Should show 500.php (or simulate with direct access)
-```
+1. In a local development environment, visit `http://localhost/rms/public/500.php`.
+2. Confirm the error page renders. This directly exercises the page; it does not simulate an application failure.
 
 ---
 
@@ -158,21 +138,9 @@ Breakpoint: `768px`
 
 ---
 
-## Next Steps
+## Historical implementation plan
 
-From PRIORITY_PLAN.md:
-
-**Today (Remaining - 2 hours):**
-1. ✅ ~~Migrate to .env~~ (DONE - 15 min)
-2. ✅ ~~Create 403.php~~ (DONE - 8 min)
-3. ✅ ~~Create 404.php~~ (DONE - included)
-4. ✅ ~~Create 500.php~~ (DONE - included)
-
-**Status:** Day 1 objectives COMPLETE! 🎉
-
-**Tuesday (Tomorrow):**
-1. 🔴 SQL injection audit (4 hours) - NEXT PRIORITY
-2. 🔴 Begin backup system (4 hours)
+The original week-one plan marked these error pages complete. Its remaining audit and backup items are stale; use the current planning/progress documents before picking up work.
 
 ---
 
@@ -180,46 +148,22 @@ From PRIORITY_PLAN.md:
 
 ```
 /rms/
-├── 403.php          (new - 175 lines)
-├── 404.php          (new - 200 lines)
-├── 500.php          (new - 190 lines)
-└── .htaccess        (updated - added ErrorDocument directives)
+├── public/
+│   ├── 403.php      (access denied)
+│   ├── 404.php      (not found)
+│   └── 500.php      (server error)
+└── .htaccess        (ErrorDocument directives)
 ```
+
+This layout reflects the current repository tree; file line counts and original task timing from the initial report are omitted because they do not help verify the current behavior.
 
 ---
 
 ## Impact Assessment
 
-**Time Saved:** Original estimate was 2 hours, completed in 8 minutes  
-**Critical Bug Fixed:** 403.php was referenced but missing  
-**User Experience:** Professional error pages vs. Apache defaults  
-**Security:** No longer exposes server details in errors
+**Historical issue fixed:** the referenced 403 handler was missing at implementation time
+The pages provide branded error responses. The repository state alone does not prove that Apache routes every error correctly or that every handler avoids exposing details; use the local checks above to verify the target configuration.
 
 ---
 
-## TIER 2 Progress Update
-
-**Custom Error Pages (TIER 2 #7):**
-- Original estimate: 2-4 hours
-- Actual time: 8 minutes
-- Status: ✅ 100% Complete
-- Priority: 🟡 HIGH → ✅ DONE
-
----
-
-## Week 1 Status Update
-
-### Monday (Day 1) - Original Plan:
-- ✅ Morning: Add `.htaccess` files (DONE earlier)
-- ✅ Afternoon: Move credentials to `.env` (DONE - 15 min)
-- ✅ **BONUS:** Created all custom error pages (8 min)
-
-**Day 1 Status:** 🎉 **150% Complete** (did more than planned!)
-
-**Time Remaining Today:** Can start SQL audit or take a well-deserved break!
-
----
-
-**Status:** ✅ TIER 2 #7 COMPLETE  
-**Next:** SQL Injection Audit (TIER 1 #5)  
-**Overall Progress:** 40% of Week 1 goals (up from 30%)
+**Implementation record:** The error pages and ErrorDocument directives exist in the current source tree. Rerun the local checks above after changing Apache paths or deployment configuration.

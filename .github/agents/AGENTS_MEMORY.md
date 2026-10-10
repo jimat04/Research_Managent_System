@@ -152,3 +152,19 @@ This file documents all agents defined in `.github/agents/` for the **Research M
 | `rms-page-builder` | `rms-db` (schema), `rms-ui` (new CSS classes), `rms-security-auth` (CSRF tokens) |
 | `rms-security-auth` | All agents (security concerns escalated to it) |
 | `rms-ui` | `rms-page-builder` (component requests), `rms-security-auth` (form token styling) |
+
+---
+
+## Local Claude Skills
+
+Checked 2026-10-10. Skill definitions are stored under `C:\Users\jimwe\.claude\skills\`; each skill's `SKILL.md` contains its full instructions. There are no Claude agent definitions in `C:\Users\jimwe\.claude\agents\` or project `.claude/agents/`. The RMS-specific agents above are defined as GitHub Copilot agents in `.github/agents/`.
+
+### Design and UI
+
+`banner-design`, `brand`, `brand-guidelines`, `brandkit`, `canvas-design`, `design`, `design-system`, `design-taste-frontend`, `design-taste-frontend-v1`, `frontend-design`, `gpt-taste`, `high-end-visual-design`, `imagegen-frontend-mobile`, `imagegen-frontend-web`, `image-to-code`, `industrial-brutalist-ui`, `minimalist-ui`, `redesign-existing-projects`, `stitch-design-taste`, `ui-styling`, `ui-ux-pro-max`.
+
+### Other capabilities
+
+`find-skills` (discover/install skills), `full-output-enforcement` (complete code output), `slides` (slide creation), `webapp-testing` (web app testing), `web-artifacts-builder` (web artifacts).
+
+When a request matches a skill, read and follow that skill's `SKILL.md`; this index is a local discovery aid, not a replacement for the skill instructions.

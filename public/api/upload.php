@@ -43,7 +43,7 @@ $uploadConfig = [
         'type' => 'proposal'
     ],
     'chapters' => [
-        'accept' => ['.pdf'],
+        'accept' => ['.pdf', '.doc', '.docx'],
         'maxSize' => 10000, // 10MB
         'type' => 'chapter'
     ],
@@ -59,7 +59,12 @@ $uploadConfig = [
     ]
 ];
 
-$config = $uploadConfig[$folderTarget] ?? $uploadConfig['proposals'];
+if (!isset($uploadConfig[$folderTarget])) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid upload destination']);
+    exit;
+}
+$config = $uploadConfig[$folderTarget];
 
 // Detect input name (check both singular and array formats)
 $inputName = null;
@@ -81,7 +86,10 @@ $result = handleRmsUpload([
     'accept' => $config['accept'],
     'projectId' => $projectId,
     'chapterId' => $chapterId,
-    'type' => $config['type']
+    'type' => $config['type'],
+    'workflowType' => in_array($folderTarget, ['proposals', 'chapters'], true)
+        ? ($folderTarget === 'proposals' ? 'title' : 'chapter')
+        : null
 ], $_FILES, $conn);
 
 // Return JSON response

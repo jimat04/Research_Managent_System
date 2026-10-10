@@ -223,6 +223,7 @@ function renderStudentShellClose() {
   </main>
 </div><!-- /.student-dashboard -->
 <?php renderLogoutTransition(); ?>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
   const button = document.querySelector('.student-mobile-menu-btn');

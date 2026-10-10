@@ -2,9 +2,11 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
-requireRole('student');
+requireRole(['student', 'faculty']);
 
 $user = getCurrentUser();
 $user_id = $user['user_id'];
@@ -67,6 +69,7 @@ $project = null;
 $chapter = null;
 $content = [];
 $current_upload = null;
+$chapter_review_history = [];
 $chapter_has_review_activity = false;
 $invalid_chapter = $chapter_number < 1 || $chapter_number > 5;
 
@@ -152,6 +155,7 @@ if ($sch_picker_mode === 'project') {
         WHERE (rp.created_by = ? OR EXISTS (
             SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?
         ))" . $rp_deleted_filter . "
+        AND rp.status IN ('title_approved','approved','ongoing')
         ORDER BY rp.updated_at DESC, rp.project_id DESC");
     if ($sch_pp_stmt) {
         $sch_pp_stmt->bind_param('ii', $user_id, $user_id);
@@ -216,6 +220,25 @@ if (!$invalid_chapter && $project) {
             $chapter_has_review_activity = $review_stmt->get_result()->num_rows > 0;
             $review_stmt->close();
         }
+
+        $history_stmt = $conn->prepare(
+            'SELECT v.version_number, r.decision, r.comments, r.reviewed_at,
+                    CONCAT(u.first_name, " ", u.last_name) AS reviewer_name
+               FROM research_submission_versions v
+               JOIN research_submission_reviews r ON r.version_id = v.version_id
+          LEFT JOIN users u ON u.user_id = r.reviewer_id
+              WHERE v.chapter_id = ? AND v.submission_type = \'chapter\'
+              ORDER BY v.version_number DESC, r.reviewed_at DESC, r.review_id DESC'
+        );
+        if ($history_stmt) {
+            $history_stmt->bind_param('i', $chapter['chapter_id']);
+            $history_stmt->execute();
+            $history_result = $history_stmt->get_result();
+            while ($history_row = $history_result->fetch_assoc()) {
+                $chapter_review_history[] = $history_row;
+            }
+            $history_stmt->close();
+        }
     }
 
     // uploads.deleted_at is present in some installations but not in the supplied base dump.
@@ -239,42 +262,46 @@ if (!$invalid_chapter && $project) {
     }
 }
 
+$chapter_stage_available = $project
+    && in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing'], true);
+if ($chapter_stage_available && $chapter_number > 1) {
+    $previous_stmt = $conn->prepare(
+        "SELECT status FROM chapters WHERE project_id = ? AND chapter_number = ? AND deleted_at IS NULL LIMIT 1"
+    );
+    if ($previous_stmt) {
+        $previous_number = $chapter_number - 1;
+        $previous_stmt->bind_param('ii', $project_id, $previous_number);
+        $previous_stmt->execute();
+        $previous_status = (string) ($previous_stmt->get_result()->fetch_assoc()['status'] ?? '');
+        $previous_stmt->close();
+        $chapter_stage_available = $previous_status === 'approved';
+    } else {
+        $chapter_stage_available = false;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !$invalid_chapter && $project) {
     if (isset($_POST['withdraw_submission'])) {
-        if (!$chapter || $chapter['status'] !== 'submitted') {
-            $errors[] = 'Only a submitted chapter that has not entered review can be withdrawn.';
-        } elseif ($chapter_has_review_activity) {
-            $errors[] = 'This chapter can no longer be withdrawn because faculty review has already started.';
+        $errors[] = 'Submitted chapter versions are locked and cannot be withdrawn or edited.';
+    } elseif (isset($_POST['remove_attachment'])) {
+        $editable_for_attachment = $chapter_stage_available
+            && (!$chapter || in_array((string) $chapter['status'], ['draft', 'revision_required'], true));
+        $requested_upload_id = (int) ($_POST['upload_id'] ?? 0);
+        if (!$editable_for_attachment
+            || !$current_upload
+            || $requested_upload_id !== (int) $current_upload['upload_id']
+            || !deleteRmsUpload($requested_upload_id, $conn)) {
+            $errors[] = 'This attachment cannot be removed because it is not editable or is part of a submitted version.';
         } else {
-            // Re-check status and review activity in the UPDATE to prevent a
-            // race with a faculty action occurring after the page was loaded.
-            $withdraw_stmt = $conn->prepare("UPDATE chapters ch
-                SET status = 'draft', submitted_at = NULL, updated_at = NOW()
-                WHERE ch.chapter_id = ?
-                  AND ch.project_id = ?
-                  AND ch.status = 'submitted'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM comments c WHERE c.chapter_id = ch.chapter_id
-                  )");
-            if (!$withdraw_stmt) {
-                $errors[] = 'Unable to prepare the withdrawal. Please try again.';
-            } else {
-                $withdraw_stmt->bind_param('ii', $chapter['chapter_id'], $project_id);
-                $withdraw_stmt->execute();
-                if ($withdraw_stmt->affected_rows === 1) {
-                    $chapter['status'] = 'draft';
-                    $chapter['submitted_at'] = null;
-                    $success = 'Chapter submission withdrawn. You can edit and submit it again.';
-                    logActivity('Chapter submission withdrawn', 'chapters');
-                } else {
-                    $errors[] = 'This chapter can no longer be withdrawn because review has already started.';
-                }
-                $withdraw_stmt->close();
-            }
+            header('Location: ' . SITE_URL . 'pages/student/submit-chapter.php?project_id=' . $project_id . '&chapter=' . $chapter_number . '&attachment_removed=1');
+            exit();
         }
     } else {
+    if (!$chapter_stage_available) {
+        $errors[] = 'Chapter submission is available only after title approval, and each later chapter unlocks after the previous chapter is approved.';
+    }
     $submitted_content = [];
     foreach ($chapter_fields[$chapter_number] as $field => $label) {
         $submitted_content[$field] = isset($_POST[$field]) ? trim($_POST[$field]) : '';
@@ -316,17 +343,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
     if (empty($errors)) {
         $new_status = $is_submit ? 'submitted' : 'draft';
+        $uploaded_file_path = '';
         $conn->begin_transaction();
         try {
+            $project_lock = $conn->prepare("SELECT status FROM research_projects WHERE project_id = ? AND (created_by = ? OR EXISTS (SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?)) FOR UPDATE");
+            if (!$project_lock) {
+                throw new Exception('Unable to verify project authorization.');
+            }
+            $project_lock->bind_param('iiii', $project_id, $user_id, $project_id, $user_id);
+            if (!$project_lock->execute()) {
+                throw new Exception('Unable to verify project authorization.');
+            }
+            $locked_project = $project_lock->get_result()->fetch_assoc();
+            $project_lock->close();
+            if (!$locked_project || !in_array((string) $locked_project['status'], ['title_approved', 'approved', 'ongoing'], true)) {
+                throw new Exception('Chapter submission requires an approved research title.');
+            }
+            if ($chapter_number > 1) {
+                $prior_lock = $conn->prepare("SELECT status FROM chapters WHERE project_id = ? AND chapter_number = ? AND deleted_at IS NULL FOR UPDATE");
+                if (!$prior_lock) {
+                    throw new Exception('Unable to verify the required previous chapter.');
+                }
+                $previous_number = $chapter_number - 1;
+                $prior_lock->bind_param('ii', $project_id, $previous_number);
+                $prior_lock->execute();
+                $prior_status = (string) ($prior_lock->get_result()->fetch_assoc()['status'] ?? '');
+                $prior_lock->close();
+                if ($prior_status !== 'approved') {
+                    throw new Exception('The previous chapter must be approved before proceeding.');
+                }
+            }
             if (!$chapter) {
                 $insert_stmt = $conn->prepare("INSERT INTO chapters
                     (project_id, chapter_number, chapter_title, status, version, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, 1, NOW(), NOW())");
+                    VALUES (?, ?, ?, 'draft', 1, NOW(), NOW())");
                 if (!$insert_stmt) {
                     throw new Exception('Unable to prepare chapter insert.');
                 }
                 $chapter_title = $chapter_titles[$chapter_number];
-                $insert_stmt->bind_param('iiss', $project_id, $chapter_number, $chapter_title, $new_status);
+                $insert_stmt->bind_param('iis', $project_id, $chapter_number, $chapter_title);
                 if (!$insert_stmt->execute()) {
                     throw new Exception('Unable to save chapter.');
                 }
@@ -344,21 +399,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 $content_insert->close();
             } else {
                 $chapter_id = $chapter['chapter_id'];
-                $new_version = (int) $chapter['version'];
-                if ($chapter['status'] === 'revision_required') {
-                    $new_version++;
+                $chapter_lock = $conn->prepare("SELECT status FROM chapters WHERE chapter_id = ? AND project_id = ? FOR UPDATE");
+                if (!$chapter_lock) {
+                    throw new Exception('Unable to verify that the chapter is still editable.');
                 }
-                $update_chapter = $is_submit
-                    ? $conn->prepare('UPDATE chapters SET status = ?, version = ?, submitted_at = NOW(), updated_at = NOW() WHERE chapter_id = ?')
-                    : $conn->prepare('UPDATE chapters SET status = ?, version = ?, submitted_at = NULL, updated_at = NOW() WHERE chapter_id = ?');
-                if (!$update_chapter) {
-                    throw new Exception('Unable to prepare chapter update.');
+                $chapter_lock->bind_param('ii', $chapter_id, $project_id);
+                $chapter_lock->execute();
+                $locked_chapter = $chapter_lock->get_result()->fetch_assoc();
+                $chapter_lock->close();
+                if (!$locked_chapter || !in_array((string) $locked_chapter['status'], ['draft', 'revision_required'], true)) {
+                    throw new Exception('This submitted chapter version is locked.');
                 }
-                $update_chapter->bind_param('sii', $new_status, $new_version, $chapter_id);
-                if (!$update_chapter->execute()) {
-                    throw new Exception('Unable to update chapter.');
-                }
-                $update_chapter->close();
             }
 
             $set_parts = [];
@@ -379,40 +430,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $content_update->close();
 
             if ($file_valid) {
-                $chapters_dir = __DIR__ . '/../../uploads/chapters';
-                if (!is_dir($chapters_dir) && !@mkdir($chapters_dir, 0755, true)) {
-                    throw new Exception('Unable to create the chapter upload directory.');
+                $upload_result = handleRmsUpload([
+                    'inputName' => 'chapter_file',
+                    'folderTarget' => 'chapters',
+                    'maxSize' => 10000,
+                    'accept' => ['.pdf', '.doc', '.docx'],
+                    'projectId' => $project_id,
+                    'chapterId' => $chapter_id,
+                    'type' => 'chapter',
+                    'workflowType' => 'chapter'
+                ], $_FILES, $conn);
+                if (!$upload_result['success']) {
+                    throw new Exception((string) $upload_result['error']);
                 }
-                $safe_file_name = uniqid('ch_', true) . '.' . $file_extension;
-                $full_path = $chapters_dir . '/' . $safe_file_name;
-                if (!move_uploaded_file($_FILES['chapter_file']['tmp_name'], $full_path)) {
-                    throw new Exception('Unable to save the uploaded chapter file.');
-                }
+                $uploaded_file_path = (string) $upload_result['file_path'];
+            }
 
-                if ($current_upload && $uploads_have_deleted_at) {
-                    $delete_upload = $conn->prepare('UPDATE uploads SET deleted_at = NOW() WHERE upload_id = ?');
-                    if ($delete_upload) {
-                        $delete_upload->bind_param('i', $current_upload['upload_id']);
-                        $delete_upload->execute();
-                        $delete_upload->close();
-                    }
-                }
+            $status_update = $conn->prepare(
+                $is_submit
+                    ? "UPDATE chapters SET status = 'submitted', submitted_at = NOW(), updated_at = NOW() WHERE chapter_id = ? AND project_id = ? AND status IN ('draft','revision_required')"
+                    : "UPDATE chapters SET status = 'draft', submitted_at = NULL, updated_at = NOW() WHERE chapter_id = ? AND project_id = ? AND status IN ('draft','revision_required')"
+            );
+            if (!$status_update) {
+                throw new Exception('Unable to prepare chapter status update.');
+            }
+            $status_update->bind_param('ii', $chapter_id, $project_id);
+            if (!$status_update->execute() || ($is_submit && $status_update->affected_rows !== 1)) {
+                throw new Exception('This chapter is no longer editable.');
+            }
+            $status_update->close();
 
-                $original_name = $_FILES['chapter_file']['name'];
-                $file_path = '../../uploads/chapters/' . $safe_file_name;
-                $file_size = (int) $_FILES['chapter_file']['size'];
-                $mime_type = $_FILES['chapter_file']['type'];
-                $upload_insert = $conn->prepare("INSERT INTO uploads
-                    (project_id, chapter_id, uploaded_by, type, original_name, file_name, file_path, file_size, mime_type, upload_date)
-                    VALUES (?, ?, ?, 'chapter', ?, ?, ?, ?, ?, NOW())");
-                if (!$upload_insert) {
-                    throw new Exception('Unable to prepare upload record.');
+            if ($is_submit) {
+                $attachment_ids = [];
+                $attachment_stmt = $conn->prepare("SELECT upload_id FROM uploads WHERE project_id = ? AND chapter_id = ? AND type = 'chapter' ORDER BY upload_id DESC LIMIT 1");
+                if (!$attachment_stmt) {
+                    throw new Exception('Unable to load chapter supporting documents.');
                 }
-                $upload_insert->bind_param('iiisssis', $project_id, $chapter_id, $user_id, $original_name, $safe_file_name, $file_path, $file_size, $mime_type);
-                if (!$upload_insert->execute()) {
-                    throw new Exception('Unable to save the upload record.');
+                $attachment_stmt->bind_param('ii', $project_id, $chapter_id);
+                $attachment_stmt->execute();
+                $attachment_row = $attachment_stmt->get_result()->fetch_assoc();
+                $attachment_stmt->close();
+                if ($attachment_row) {
+                    $attachment_ids[] = (int) $attachment_row['upload_id'];
                 }
-                $upload_insert->close();
+                $version_id = rms_capture_submission_version(
+                    $conn,
+                    $project_id,
+                    (int) $chapter_id,
+                    'chapter',
+                    $user_id,
+                    [
+                        'chapter_number' => $chapter_number,
+                        'chapter_title' => $chapter_titles[$chapter_number],
+                        'content' => $submitted_content
+                    ],
+                    $attachment_ids
+                );
+                $version_query = $conn->prepare('SELECT version_number FROM research_submission_versions WHERE version_id = ?');
+                if (!$version_query) {
+                    throw new Exception('Unable to load the chapter submission version.');
+                }
+                $version_query->bind_param('i', $version_id);
+                $version_query->execute();
+                $new_version = (int) ($version_query->get_result()->fetch_assoc()['version_number'] ?? 1);
+                $version_query->close();
+                $chapter_version = $conn->prepare('UPDATE chapters SET version = ? WHERE chapter_id = ?');
+                if (!$chapter_version) {
+                    throw new Exception('Unable to update the chapter version number.');
+                }
+                $chapter_version->bind_param('ii', $new_version, $chapter_id);
+                if (!$chapter_version->execute()) {
+                    throw new Exception('Unable to update the chapter version number.');
+                }
+                $chapter_version->close();
             }
 
             logActivity($is_submit ? 'Chapter submitted' : 'Chapter saved as draft', 'chapters');
@@ -421,7 +511,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             exit();
         } catch (Exception $exception) {
             $conn->rollback();
-            $errors[] = 'Unable to save chapter. Please try again.';
+            if ($uploaded_file_path !== '') {
+                $orphaned_path = realpath(__DIR__ . '/../../' . $uploaded_file_path);
+                $uploads_root = realpath(__DIR__ . '/../../uploads');
+                if ($orphaned_path && $uploads_root && strpos($orphaned_path, $uploads_root . DIRECTORY_SEPARATOR) === 0 && is_file($orphaned_path)) {
+                    unlink($orphaned_path);
+                }
+            }
+            $errors[] = 'Unable to save chapter: ' . $exception->getMessage();
         }
     }
     $content = array_merge($content, $submitted_content);
@@ -431,8 +528,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 $page_title = $invalid_chapter ? 'Invalid chapter' : ($chapter_titles[$chapter_number] ?? 'Submit Chapter');
 $current_status = $chapter['status'] ?? null;
 $status_badge = $current_status && isset($status_badges[$current_status]) ? $status_badges[$current_status] : $status_badges['draft'];
-$can_edit_chapter = !$chapter || in_array($current_status, ['draft', 'revision_required'], true);
-$can_withdraw_chapter = $chapter && $current_status === 'submitted' && !$chapter_has_review_activity;
+$can_edit_chapter = $chapter_stage_available && (!$chapter || in_array($current_status, ['draft', 'revision_required'], true));
+$can_withdraw_chapter = false;
 
 // Page title + subtitle for the picker states.
 $sch_page_title    = 'Submit Chapter';
@@ -448,12 +545,13 @@ if ($sch_picker_mode === 'project') {
     $sch_page_subtitle = 'We could not find that project on your account.';
 }
 
-renderStudentShell(
-    $user,
-    'submit-chapter',
-    $sch_picker_mode !== '' ? $sch_page_title : $page_title,
-    $sch_picker_mode !== '' ? $sch_page_subtitle : ($project ? htmlspecialchars($project['title']) : 'Upload a new chapter draft.')
-);
+$shell_title = $sch_picker_mode !== '' ? $sch_page_title : $page_title;
+$shell_subtitle = $sch_picker_mode !== '' ? $sch_page_subtitle : ($project ? htmlspecialchars($project['title']) : 'Upload a new chapter draft.');
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShell($user, 'submit-chapter', $shell_title, $shell_subtitle);
+} else {
+    renderStudentShell($user, 'submit-chapter', $shell_title, $shell_subtitle);
+}
 ?>
 
 <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/file-uploader.css">
@@ -724,8 +822,8 @@ renderStudentShell(
   <?php if (empty($sch_student_projects)): ?>
     <div class="card picker-empty">
       <div class="ico">📭</div>
-      <h3 style="margin: 0 0 8px; color: #111827;">No research projects yet</h3>
-      <p style="margin: 0 0 24px; color: #64748B;">Submit your first research proposal to start uploading chapters.</p>
+      <h3 style="margin: 0 0 8px; color: #111827;">No approved research titles yet</h3>
+      <p style="margin: 0 0 24px; color: #64748B;">Chapter 1 becomes available after an Administrator or authorized staff member approves your research title.</p>
       <a href="<?php echo SITE_URL; ?>pages/student/submit-research.php" class="btn btn-primary">+ Submit Your First Research</a>
     </div>
   <?php else: ?>
@@ -744,7 +842,7 @@ renderStudentShell(
         }
         $status_class = '';
         $status_label = ucwords(str_replace('_', ' ', $pstatus));
-        if (in_array($pstatus, ['approved','ongoing'], true))      { $status_class = 'badge-success'; }
+        if (in_array($pstatus, ['title_approved','approved','ongoing'], true)) { $status_class = 'badge-success'; }
         elseif (in_array($pstatus, ['submitted','under_review','under_crec_review','under_erec_review'], true)) { $status_class = 'badge-info'; }
         elseif (in_array($pstatus, ['for_revision','revision_required'], true)) { $status_class = 'badge-warning'; }
         elseif ($pstatus === 'completed') { $status_class = 'badge-success'; }
@@ -774,8 +872,11 @@ renderStudentShell(
   <?php endif; ?>
 
 <?php elseif ($sch_picker_mode === 'chapter' && $sch_resolved_project): ?>
+  <?php if (!in_array((string) $sch_resolved_project['status'], ['title_approved', 'approved', 'ongoing'], true)): ?>
+    <div class="card picker-empty"><div class="ico">🔒</div><h3>Title approval required</h3><p>Chapter submission remains locked until an Administrator or authorized staff member approves this research title.</p><a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-primary">View My Research</a></div>
+  <?php else: ?>
   <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;">Choose a chapter</h1>
-  <p style="margin: 0 0 24px; color: #64748B;">Pick a chapter of <strong><?php echo htmlspecialchars((string) $sch_resolved_project['title']); ?></strong> to upload or edit. Each chapter follows the EARIST Research Manual 2015 structure.</p>
+  <p style="margin: 0 0 24px; color: #64748B;">Choose a chapter of <strong><?php echo htmlspecialchars((string) $sch_resolved_project['title']); ?></strong>. Later chapters unlock only after the previous chapter is approved.</p>
   <div class="picker-grid">
     <?php for ($n = 1; $n <= 5; $n++):
       $ch_row = $sch_project_chapters[$n] ?? null;
@@ -783,8 +884,9 @@ renderStudentShell(
       $ch_status_label = $ch_status !== '' ? ucwords(str_replace('_', ' ', $ch_status)) : 'Not Started';
       $ch_num_class = $ch_status !== '' ? $ch_status : 'draft';
       $ch_version = (int) ($ch_row['version'] ?? 0);
+      $is_chapter_unlocked = $n === 1 || (($sch_project_chapters[$n - 1]['status'] ?? '') === 'approved');
     ?>
-      <a class="picker-item" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project_id; ?>&chapter=<?php echo (int) $n; ?>">
+      <?php if ($is_chapter_unlocked || $ch_row): ?><a class="picker-item" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project_id; ?>&chapter=<?php echo (int) $n; ?>"><?php else: ?><div class="picker-item" aria-disabled="true"><?php endif; ?>
         <div class="picker-item-head">
           <div class="picker-num <?php echo htmlspecialchars($ch_num_class); ?>"><?php echo (int) $n; ?></div>
           <div style="text-align: right;">
@@ -795,10 +897,11 @@ renderStudentShell(
           </div>
         </div>
         <div class="picker-item-title"><?php echo htmlspecialchars((string) ($chapter_titles[$n] ?? ('Chapter ' . $n))); ?></div>
-        <div class="picker-item-sub">Click to <?php echo $ch_status === 'approved' ? 'view' : 'open'; ?> this chapter →</div>
-      </a>
+        <div class="picker-item-sub"><?php echo $is_chapter_unlocked || $ch_row ? 'Open this chapter →' : 'Locked until the previous chapter is approved'; ?></div>
+      <?php if ($is_chapter_unlocked || $ch_row): ?></a><?php else: ?></div><?php endif; ?>
     <?php endfor; ?>
   </div>
+  <?php endif; ?>
 
 <?php elseif ($sch_picker_mode === 'chapter'): ?>
   <div class="card picker-empty">
@@ -826,8 +929,15 @@ renderStudentShell(
   <h1 style="margin: 0 0 8px; color: #111827; font-size: 28px;"><?php echo htmlspecialchars($chapter_titles[$chapter_number]); ?></h1>
   <p style="margin: 0 0 20px; color: #64748B;"><?php echo htmlspecialchars($project['title']); ?> · <?php if ($current_status): ?><span class="<?php echo htmlspecialchars($status_badge['class']); ?>" <?php echo $status_badge['style'] ? 'style="' . htmlspecialchars($status_badge['style']) . '"' : ''; ?>><?php echo ucwords(str_replace('_', ' ', $current_status)); ?></span><?php else: ?><span class="badge">Not Started</span><?php endif; ?> · Version <?php echo (int) ($chapter['version'] ?? 1); ?></p>
 
+  <?php if (isset($_GET['attachment_removed'])): ?><div class="alert alert-success">Draft attachment removed.</div><?php endif; ?>
   <?php if ($success): ?><div class="alert alert-success"><strong>Chapter updated.</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
   <?php if (!empty($errors)): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+  <?php if (!$chapter_stage_available): ?><div class="alert alert-error">This chapter is locked. Title approval is required first, and later chapters unlock only after the previous chapter is approved.</div><?php endif; ?>
+  <?php if ($chapter_review_history): ?>
+    <div class="card" style="margin-bottom:20px"><div class="card-header"><div class="card-title">Review feedback and history</div></div>
+      <?php foreach ($chapter_review_history as $review): ?><div style="padding:12px 0;border-top:1px solid #E5E7EB"><strong>Version <?php echo (int) $review['version_number']; ?> · <?php echo htmlspecialchars(ucfirst($review['decision']), ENT_QUOTES, 'UTF-8'); ?></strong><small style="display:block;color:#64748B;margin-top:4px"><?php echo htmlspecialchars($review['reviewer_name'] ?: 'Authorized reviewer', ENT_QUOTES, 'UTF-8'); ?> · <?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($review['reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?></small><p style="white-space:pre-wrap;color:#334155"><?php echo htmlspecialchars($review['comments'], ENT_QUOTES, 'UTF-8'); ?></p></div><?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 
   <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="project_id" value="<?php echo $project_id; ?>"><input type="hidden" name="chapter" value="<?php echo $chapter_number; ?>">
@@ -860,7 +970,7 @@ renderStudentShell(
           'chapterId' => $chapter['chapter_id'] ?? null
       ]); ?>
       <small class="text-muted">A document is optional when saving a draft. Add written content or a file before submitting for review.</small>
-      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo htmlspecialchars($current_upload['file_path']); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($current_upload['original_name']); ?></a><?php if ($can_edit_chapter): ?><div style="color: #64748B; font-size: 13px;">Uploading a new file will replace this.</div><?php endif; ?></div><?php endif; ?>
+      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_upload['upload_id']; ?>"><?php echo htmlspecialchars($current_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a> · <?php echo number_format(((int) $current_upload['file_size']) / 1024, 1); ?> KB<?php if ($can_edit_chapter): ?><div style="color: #64748B; font-size: 13px;">New uploads are kept as separate files; submitted-version attachments remain preserved.</div><button type="submit" class="btn btn-secondary" name="remove_attachment" value="1" style="margin-top:8px">Remove draft attachment</button><input type="hidden" name="upload_id" value="<?php echo (int) $current_upload['upload_id']; ?>"><?php endif; ?></div><?php endif; ?>
     </div></div>
 
     <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
@@ -870,7 +980,6 @@ renderStudentShell(
         <button type="submit" name="submit_review" class="btn btn-primary"><?php echo $current_status === 'revision_required' ? 'Resubmit for Review' : 'Submit for Review'; ?></button>
       <?php elseif ($can_withdraw_chapter): ?>
         <button type="button" class="btn btn-secondary" disabled>Awaiting Review</button>
-        <button type="submit" name="withdraw_submission" class="btn" style="background: #EA580C; border-color: #EA580C; color: #fff;" onclick="return confirm('Withdraw this chapter submission and reopen it for editing?');">Withdraw &amp; Edit</button>
       <?php elseif (in_array($current_status, ['submitted', 'under_review'], true)): ?>
         <button type="button" class="btn btn-secondary" disabled>Awaiting Review</button>
       <?php elseif ($current_status === 'approved'): ?>
@@ -885,4 +994,10 @@ renderStudentShell(
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <script src="../../js/app-forms.js" defer></script>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>

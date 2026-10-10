@@ -1,41 +1,48 @@
 # RMS Agents Analysis & Recommendations
 
-**Date:** August 28, 2026  
-**Location:** `.github/agents/`  
-**Total Agents:** 6 specialized agents
+**Original analysis:** August 28, 2026
+**Inventory updated:** October 10, 2026
+**Location:** `.github/agents/`
+**Current RMS Agents:** 7 specialized agents
 
 ---
 
 ## 📊 Current Agent Overview
 
-Your RMS project has a well-structured agent system with 6 specialized agents, each with clear responsibilities:
+The current RMS inventory contains seven specialized Copilot agents:
 
-| Agent | Status | Purpose | Tools | User-Invocable |
-|-------|--------|---------|-------|----------------|
-| **rms-db** | ✅ Active | Database schema & queries | Full
-`AGENTS_MEMORY.md` serves as a comprehensive guide showing:
-- What each agent does
-- What tools they use
-- How they interact
-- Key conventions
+| Agent | Purpose |
+|-------|---------|
+| `rms-db` | MySQL schema, migrations, seed data, and prepared-statement queries |
+| `rms-debug` | XAMPP troubleshooting and runtime issue diagnosis |
+| `rms-doc` | README, TODO, and inline documentation maintenance |
+| `rms-page-builder` | Role-specific procedural PHP pages |
+| `rms-security-auth` | RMS authentication, authorization, and security work |
+| `rms-testing` | PHPUnit, integration, security tests, fixtures, and coverage |
+| `rms-ui` | RMS styling, components, responsiveness, and accessibility |
+
+Agent instructions are in `.github/agents/`; the project-specific summary and cross-references are in `AGENTS_MEMORY.md`.
+
+## Local Claude Skills
+
+The local Claude profile contains 26 skills under `C:\Users\jimwe\.claude\skills\`, each with its own `SKILL.md`. No Claude agent files were found in `C:\Users\jimwe\.claude\agents\` or the project `.claude\agents\` directory. These are separate from the RMS Copilot agents listed above.
+
+**Design and UI:** `banner-design`, `brand`, `brand-guidelines`, `brandkit`, `canvas-design`, `design`, `design-system`, `design-taste-frontend`, `design-taste-frontend-v1`, `frontend-design`, `gpt-taste`, `high-end-visual-design`, `imagegen-frontend-mobile`, `imagegen-frontend-web`, `image-to-code`, `industrial-brutalist-ui`, `minimalist-ui`, `redesign-existing-projects`, `stitch-design-taste`, `ui-styling`, `ui-ux-pro-max`.
+
+**Other capabilities:** `find-skills`, `full-output-enforcement`, `slides`, `webapp-testing`, `web-artifacts-builder`.
+
+Read a matching skill's `SKILL.md` before applying its guidance. `AGENTS_MEMORY.md` also keeps this local skill index.
 
 ---
 
-## ⚠️ Issues & Gaps Identified
+## ⚠️ Gaps & Follow-up Recommendations
 
-### 1. **Missing Agent: Testing/QA**
-**Problem:** No dedicated agent for testing  
-**Impact:** Manual testing only, bugs caught late
+The recommendations below originated in the August 28 analysis. The inventory has since changed; in particular, a testing agent now exists. Treat proposed agents and work as a backlog, not as a description of the current inventory.
 
-**Recommendation:** Create `rms-testing.agent.md`
-```markdown
-# RMS Testing Agent
-- Write PHPUnit tests
-- Create test data fixtures
-- Integration testing
-- Security testing
-- Load testing
-```
+### 1. **Testing/QA Agent Added**
+`rms-testing.agent.md` now exists and owns automated-test authoring and execution. The repository's project guidance still reports no automated test/build/lint system configured, so the agent's presence does not imply that test infrastructure is already in place.
+
+**Follow-up:** Confirm test dependencies, test suites, and repeatable commands before treating automated testing as an operational capability.
 
 ### 2. **Missing Agent: Deployment**
 **Problem:** No deployment automation  
@@ -218,8 +225,10 @@ Based on your project's current state and needs:
 
 ### Priority 2: Create New Agents
 
-#### 1. Create `rms-testing.agent.md`
+#### 1. Testing agent (implemented)
 **Purpose:** Automated testing and quality assurance
+
+The original analysis proposed a testing agent; `rms-testing.agent.md` now exists. The sample definition below is historical and is superseded by that agent file.
 
 ```markdown
 ---
@@ -427,7 +436,7 @@ Issue with...
 3. ✅ Add debugging scenarios to `rms-debug.agent.md`
 
 ### Phase 2: Short-term (2-4 Weeks)
-1. ⏳ Create `rms-testing.agent.md`
+1. ✅ Create `rms-testing.agent.md` (implemented)
 2. ⏳ Create `rms-performance.agent.md`
 3. ⏳ Create `rms-backup.agent.md`
 4. ⏳ Enhance `rms-doc.agent.md` with more doc types
@@ -452,13 +461,14 @@ Issue with...
 - ⚠️ **Security:** Good, needs expansion (rms-security-auth)
 - ⚠️ **Debugging:** Good (rms-debug)
 - ⚠️ **Documentation:** Good (rms-doc)
-- ❌ **Testing:** Missing
+- ✅ **Testing agent:** Available (rms-testing)
+- ⚠️ **Test infrastructure:** Not configured per project guidance
 - ❌ **Performance:** Missing
 - ❌ **Backup:** Missing
 - ❌ **Deployment:** Missing
 
 ### Recommended Priority
-1. 🔴 **Critical:** Testing, Backup
+1. 🔴 **Critical:** Automated test infrastructure, Backup
 2. 🟡 **Important:** Performance, Enhanced Security
 3. 🟢 **Nice to Have:** Deployment, API (future)
 
@@ -504,7 +514,7 @@ Review agent effectiveness quarterly:
 4. ⏳ Update `AGENTS_MEMORY.md` with invocation guide
 
 ### Next Week:
-1. ⏳ Create `rms-testing.agent.md`
+1. ✅ Create `rms-testing.agent.md` (implemented)
 2. ⏳ Create `rms-backup.agent.md`
 3. ⏳ Run security audit using enhanced `rms-security-auth`
 
@@ -526,16 +536,17 @@ Review agent effectiveness quarterly:
 ✅ Consistent conventions
 
 ### Gaps:
-❌ No testing agent  
-❌ No performance agent  
-❌ No backup/recovery agent  
-❌ Security agent needs expansion
+✅ Testing agent exists (`rms-testing.agent.md`)
+⚠️ Automated test infrastructure is not configured per project guidance
+❌ No dedicated performance agent
+❌ No dedicated backup/recovery agent
+⚠️ Review security-agent recommendations against current security requirements
 
 ### Recommendation:
-**Start by creating `rms-testing.agent.md` and `rms-backup.agent.md` this week.** These are critical for production readiness. Then expand `rms-security-auth.agent.md` with the OWASP checklist.
+**Prioritize repeatable test infrastructure and backup/recovery procedures.** Consider dedicated performance or deployment agents when the project needs justify them. Review `rms-security-auth.agent.md` before deciding whether its guidance needs further expansion.
 
 ---
 
-**Generated:** August 28, 2026 15:37 (UTC+8)  
-**Status:** Comprehensive Analysis Complete  
-**Next Review:** November 28, 2026
+**Original analysis generated:** August 28, 2026 15:37 (UTC+8)
+**Inventory refreshed:** October 10, 2026
+**Next review:** Reconcile the remaining backlog with actual project priorities

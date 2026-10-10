@@ -1,8 +1,10 @@
-# .htaccess Security Implementation - Complete! ✅
+# .htaccess Security Implementation — Historical Record
 
 **Date:** August 28, 2026 15:54 (UTC+8)  
 **Task:** Priority #1 - Highest ROI Security Improvement  
 **Status:** ✅ COMPLETE
+
+> Historical implementation report. The current root, `database/`, `config/`, `includes/`, and `uploads/` `.htaccess` files were source-checked on October 10, 2026; no Apache runtime/security test was run for this refresh. Do not treat the original checkboxes, ratings, or claims below as current validation.
 
 ---
 
@@ -12,8 +14,8 @@
 
 1. **`/.htaccess`** - Root security configuration
    - Directory listing disabled
-   - SQL injection protection
-   - XSS protection headers
+   - Legacy query-string filters for selected patterns (not a substitute for prepared statements)
+   - Browser security headers (not a substitute for output escaping or a CSP)
    - Clickjacking prevention
    - MIME sniffing prevention
    - Sensitive files hidden (.env, composer.json, etc.)
@@ -43,16 +45,16 @@
 
 ## 🔒 Security Features Enabled
 
-### Protection Against:
-- ✅ **Direct file access** - Database files can't be downloaded
-- ✅ **Malicious uploads** - PHP files in uploads won't execute
-- ✅ **Directory listing** - Can't browse folder contents
-- ✅ **SQL injection** - URL-based injection attempts blocked
-- ✅ **XSS attacks** - Security headers prevent script injection
-- ✅ **Clickjacking** - X-Frame-Options prevents iframe embedding
-- ✅ **MIME sniffing** - Prevents browser from guessing file types
-- ✅ **Credential exposure** - .env files protected
-- ✅ **Information leakage** - Server signature hidden
+### Controls described by this configuration (not a complete security boundary):
+- **Direct file access** - Deny rules are present for database and configuration directories; response behavior has not been retested here.
+- **Uploaded PHP** - Rules are present to deny PHP execution in uploads; response behavior has not been retested here.
+- **Directory listing** - `Options -Indexes` is configured; runtime behavior depends on Apache honoring the file.
+- ⚠️ **Selected query-string patterns** - blocked by rewrite rules; application SQL still requires prepared statements
+- ⚠️ **Browser security headers** - configured; they do not prevent all XSS
+- **Clickjacking** - `X-Frame-Options: SAMEORIGIN` is configured.
+- **MIME sniffing** - `X-Content-Type-Options: nosniff` is configured.
+- **Credential exposure** - Root rules deny dotfiles, including `.env`; deployment behavior has not been tested.
+- **Information leakage** - `ServerSignature Off` is configured.
 
 ---
 
@@ -60,7 +62,7 @@
 
 ### You MUST Test These URLs:
 
-#### ❌ Should Get 403 Forbidden:
+#### Verify protected resources are not served:
 ```
 http://localhost/rms/database/schema/rms_db.sql
 http://localhost/rms/config/settings.json
@@ -68,11 +70,11 @@ http://localhost/rms/includes/config.php
 http://localhost/rms/uploads/
 ```
 
-#### ✅ Should Work Normally:
+#### Verify the public entry points still work:
 ```
 http://localhost/rms/index.php
-http://localhost/rms/login.php
-http://localhost/rms/about.php
+http://localhost/rms/public/login.php
+http://localhost/rms/public/about.php
 ```
 
 ---
@@ -114,7 +116,7 @@ Verify your site still works:
 
 ## 📊 Before vs After
 
-### BEFORE (Vulnerable):
+### Original report's "before" examples (historical):
 ```
 ❌ http://localhost/rms/database/schema/rms_db.sql
    → Downloads entire database schema!
@@ -129,7 +131,7 @@ Verify your site still works:
    → Could execute malicious code!
 ```
 
-### AFTER (Protected):
+### Expected behavior to re-test against current Apache configuration:
 ```
 ✅ http://localhost/rms/database/schema/rms_db.sql
    → 403 Forbidden
@@ -171,8 +173,8 @@ Verify your site still works:
    - Can't enumerate resources
 
 5. **Code Injection**
-   - XSS attacks blocked by headers
-   - SQL injection attempts filtered
+   - Selected query-string patterns filtered (not general SQL injection protection)
+   - Security headers configured (not complete XSS protection)
    - Clickjacking prevented
 
 ---
@@ -184,13 +186,7 @@ Verify your site still works:
 - **Files Created:** 5 files
 - **Lines of Code:** ~120 lines
 
-### Security Improvement:
-- **Before:** 1/10 (Vulnerable)
-- **After:** 8/10 (Well Protected)
-- **Improvement:** +700% security boost
-
-### ROI Score: ⭐⭐⭐⭐⭐
-**This is the HIGHEST ROI security task possible!**
+No security score, percentage improvement, or production-readiness measurement was made as part of this documentation refresh.
 
 ---
 
@@ -203,24 +199,17 @@ Verify your site still works:
 - ❌ Session hijacking (need secure session config)
 - ❌ Weak passwords (need password policy)
 
-### These require additional work:
-- Move credentials to .env (Next priority!)
-- Implement backup system
-- Add file upload MIME validation
-- Audit all SQL queries
+### Historical "what's next" list
+
+The original next-step checklist is superseded: `.env` configuration and server-side MIME validation are present in current source. Backups and query review must be checked against the current backlog and source before planning.
 
 ---
 
 ## 🚀 What's Next (Priority Order)
 
-### Completed:
-- ✅ #1: .htaccess security files (DONE!)
+### Current files
 
-### Next Up:
-- ⏳ #2: Move credentials to .env (90 minutes)
-- ⏳ #3: Implement backup system (2 days)
-- ⏳ #4: File upload security (4 hours)
-- ⏳ #5: SQL injection audit (4 hours)
+The five `.htaccess` files listed above exist in the current repository. Validate behavior using the deployment's Apache version, `AllowOverride` configuration, and URL base path.
 
 ---
 
@@ -268,7 +257,7 @@ C:\xampp\htdocs\rms\
 
 ## ✅ Verification Checklist
 
-Before considering this task complete, verify:
+Re-run these checks in the target Apache environment before relying on them:
 
 - [ ] All 5 .htaccess files exist
 - [ ] Apache has been restarted
@@ -302,20 +291,10 @@ Before considering this task complete, verify:
 
 ## 🎉 Congratulations!
 
-**You've just completed the HIGHEST priority security task!**
-
-Your RMS system is now significantly more secure. This 30-minute investment protects against:
-- Database theft
-- Credential exposure
-- Malicious uploads
-- Directory listing
-- Information disclosure
-
-**Next Priority:** Move database credentials to `.env` file (90 minutes)
+This source-level review confirms the intended configuration files are present. It does not certify the deployment, uploaded-file access policy, or overall system security.
 
 ---
 
 **Implementation Date:** August 28, 2026 15:54 (UTC+8)  
 **Implemented By:** Claude Code  
-**Status:** ✅ COMPLETE AND VERIFIED  
-**Next Review:** Test in browser after Apache restart
+**Historical status:** Marked complete on August 28, 2026. Retest after Apache or path configuration changes.

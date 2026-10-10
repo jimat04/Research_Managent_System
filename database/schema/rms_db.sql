@@ -1,4 +1,4 @@
--- Canonical fresh-install schema - matches live DB as of 2026-09 including migrations 002-012.
+-- Canonical fresh-install schema - matches live DB as of 2026-10 including migrations 002-016.
 -- For LEGACY databases use the numbered migrations instead.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -152,6 +152,25 @@ CREATE TABLE `contact_messages` (
   KEY `fk_resolved_by` (`resolved_by`),
   CONSTRAINT `fk_contact_resolved_by` FOREIGN KEY (`resolved_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `schema_migrations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `schema_migrations` (
+  `migration_key` varchar(160) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `checksum` char(64) NOT NULL,
+  `status` enum('applied','failed') NOT NULL DEFAULT 'applied',
+  `verification_method` enum('executed','verified_existing') DEFAULT NULL,
+  `applied_at` datetime DEFAULT NULL,
+  `verified_at` datetime DEFAULT NULL,
+  `execution_ms` decimal(12,3) DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  PRIMARY KEY (`migration_key`),
+  UNIQUE KEY `uq_schema_migrations_filename` (`filename`),
+  KEY `idx_schema_migrations_status` (`status`),
+  KEY `idx_schema_migrations_applied_at` (`applied_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `defense_schedule`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -385,7 +404,7 @@ CREATE TABLE `research_projects` (
   `ay_id` int(10) unsigned DEFAULT NULL,
   `research_area` varchar(150) DEFAULT NULL,
   `abstract` text DEFAULT NULL,
-  `status` enum('draft','proposal','submitted','under_review','under_crec_review','under_erec_review','for_revision','revision_required','rejected','approved','ongoing','progress_report','terminal_review','completed','archived') NOT NULL DEFAULT 'draft',
+  `status` enum('draft','proposal','submitted','under_review','under_crec_review','under_erec_review','for_revision','revision_required','rejected','title_approved','approved','ongoing','progress_report','terminal_review','completed','archived') NOT NULL DEFAULT 'draft',
   `created_by` int(10) unsigned NOT NULL COMMENT 'student user_id',
   `student_id` int(10) unsigned DEFAULT NULL,
   `adviser_id` int(10) unsigned DEFAULT NULL,
@@ -505,6 +524,9 @@ CREATE TABLE `users` (
   `contact` varchar(30) DEFAULT NULL,
   `avatar` varchar(255) DEFAULT NULL,
   `status` enum('active','pending','suspended') NOT NULL DEFAULT 'pending',
+  `email_verified` tinyint(1) DEFAULT 0,
+  `email_verification_token` varchar(64) DEFAULT NULL,
+  `email_verification_expires` datetime DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -513,10 +535,53 @@ CREATE TABLE `users` (
   UNIQUE KEY `email` (`email`),
   KEY `idx_role` (`role`),
   KEY `idx_status` (`status`),
+  KEY `idx_verification_token` (`email_verification_token`),
   KEY `idx_users_deleted_at` (`deleted_at`),
   KEY `idx_users_role_status` (`role`,`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `research_submission_version_uploads`;
+DROP TABLE IF EXISTS `research_submission_reviews`;
+DROP TABLE IF EXISTS `research_submission_versions`;
+CREATE TABLE `research_submission_versions` (
+  `version_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(10) unsigned NOT NULL,
+  `chapter_id` int(10) unsigned DEFAULT NULL,
+  `submission_type` enum('title','chapter') NOT NULL,
+  `version_number` smallint(5) unsigned NOT NULL,
+  `submitted_by` int(10) unsigned NOT NULL,
+  `submitted_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `status` enum('submitted','returned','approved') NOT NULL DEFAULT 'submitted',
+  `snapshot_json` longtext NOT NULL,
+  PRIMARY KEY (`version_id`),
+  KEY `idx_submission_versions_project` (`project_id`,`submission_type`,`submitted_at`),
+  KEY `idx_submission_versions_chapter` (`chapter_id`,`version_number`),
+  CONSTRAINT `fk_submission_versions_project` FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_submission_versions_chapter` FOREIGN KEY (`chapter_id`) REFERENCES `chapters` (`chapter_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_submission_versions_submitter` FOREIGN KEY (`submitted_by`) REFERENCES `users` (`user_id`) ON DELETE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `research_submission_reviews` (
+  `review_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `version_id` int(10) unsigned NOT NULL,
+  `reviewer_id` int(10) unsigned DEFAULT NULL,
+  `decision` enum('approved','returned') NOT NULL,
+  `comments` text NOT NULL,
+  `reviewed_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`review_id`),
+  KEY `idx_submission_reviews_version` (`version_id`,`reviewed_at`),
+  KEY `idx_submission_reviews_reviewer` (`reviewer_id`,`reviewed_at`),
+  CONSTRAINT `fk_submission_reviews_version` FOREIGN KEY (`version_id`) REFERENCES `research_submission_versions` (`version_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_submission_reviews_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `research_submission_version_uploads` (
+  `version_id` int(10) unsigned NOT NULL,
+  `upload_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`version_id`,`upload_id`),
+  KEY `idx_submission_version_uploads_upload` (`upload_id`),
+  CONSTRAINT `fk_submission_version_uploads_version` FOREIGN KEY (`version_id`) REFERENCES `research_submission_versions` (`version_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_submission_version_uploads_upload` FOREIGN KEY (`upload_id`) REFERENCES `uploads` (`upload_id`) ON DELETE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
 -- Research activity, publication, and copyright modules (Migration 012)
@@ -525,7 +590,7 @@ CREATE TABLE `users` (
 
 CREATE TABLE IF NOT EXISTS `research_activities` (
   `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
-  `activity_type` enum('seminar','presentation','workshop','forum') NOT NULL,
+  `activity_type` enum('seminar','training','presentation','workshop','forum') NOT NULL,
   `title` varchar(255) NOT NULL,
   `activity_date` date NOT NULL,
   `activity_time` time DEFAULT NULL,
@@ -556,6 +621,7 @@ CREATE TABLE IF NOT EXISTS `publications` (
   `publication_id` int unsigned NOT NULL AUTO_INCREMENT,
   `research_title` varchar(500) NOT NULL,
   `researcher_id` int unsigned DEFAULT NULL,
+  `research_project_id` int unsigned DEFAULT NULL,
   `researcher_name` varchar(255) DEFAULT NULL COMMENT 'Denormalized for non-user authors',
   `researcher_category` enum('faculty','student') NOT NULL DEFAULT 'faculty',
   `publication_type` enum('journal','conference','book_chapter','other') NOT NULL DEFAULT 'journal',
@@ -570,7 +636,9 @@ CREATE TABLE IF NOT EXISTS `publications` (
   PRIMARY KEY (`publication_id`),
   KEY `idx_publications_researcher_id` (`researcher_id`),
   KEY `idx_publications_status` (`status`),
-  KEY `idx_publications_publication_date` (`publication_date`)
+  KEY `idx_publications_publication_date` (`publication_date`),
+  KEY `idx_publications_research_project_id` (`research_project_id`),
+  CONSTRAINT `fk_publications_research_project` FOREIGN KEY (`research_project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `copyright_applications` (
@@ -578,19 +646,33 @@ CREATE TABLE IF NOT EXISTS `copyright_applications` (
   `applicant_id` int unsigned DEFAULT NULL,
   `applicant_name` varchar(255) DEFAULT NULL,
   `applicant_category` enum('faculty','student') NOT NULL DEFAULT 'faculty',
+  `research_project_id` int unsigned DEFAULT NULL,
+  `publication_id` int unsigned DEFAULT NULL,
   `output_title` varchar(500) NOT NULL,
-  `output_type` enum('software','research','instructional_material','module','other') NOT NULL DEFAULT 'research',
+  `output_type` enum('software','research','instructional_material','module','other','patent','utility_model','innovation','technology_transfer') NOT NULL DEFAULT 'research',
   `co_authors` varchar(500) DEFAULT NULL,
+  `inventors` varchar(500) DEFAULT NULL,
+  `potential_partners` varchar(500) DEFAULT NULL,
+  `transfer_activities` text DEFAULT NULL,
+  `agreement_reference` varchar(120) DEFAULT NULL,
+  `utilization_status` varchar(120) DEFAULT NULL,
   `date_completed` date DEFAULT NULL,
   `file_path` varchar(500) DEFAULT NULL,
   `file_name` varchar(255) DEFAULT NULL,
   `copyright_ref_no` varchar(120) DEFAULT NULL,
+  `application_number` varchar(120) DEFAULT NULL,
+  `filing_date` date DEFAULT NULL,
+  `registered_at` datetime DEFAULT NULL,
   `status` enum('pending','under_review','registered','rejected') NOT NULL DEFAULT 'pending',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`copyright_id`),
   KEY `idx_copyright_applications_applicant_id` (`applicant_id`),
-  KEY `idx_copyright_applications_status` (`status`)
+  KEY `idx_copyright_applications_status` (`status`),
+  KEY `idx_copyright_applications_research_project_id` (`research_project_id`),
+  KEY `idx_copyright_applications_publication_id` (`publication_id`),
+  CONSTRAINT `fk_copyright_applications_research_project` FOREIGN KEY (`research_project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_copyright_applications_publication` FOREIGN KEY (`publication_id`) REFERENCES `publications` (`publication_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

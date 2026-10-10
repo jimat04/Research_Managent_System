@@ -216,10 +216,75 @@ function handleRmsUpload($options, $files, $conn) {
         'accept' => ['.pdf', '.doc', '.docx'],
         'projectId' => null,
         'chapterId' => null,
-        'type' => 'proposal'
+        'type' => 'proposal',
+        'workflowType' => null
     ];
 
     $opts = array_merge($defaults, $options);
+
+    if ($opts['projectId'] !== null) {
+        $projectId = (int) $opts['projectId'];
+        $chapterId = $opts['chapterId'] !== null ? (int) $opts['chapterId'] : 0;
+        $deletedCheck = $conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+        $deletedFilter = $deletedCheck && $deletedCheck->num_rows > 0 ? ' AND rp.deleted_at IS NULL' : '';
+        if ($deletedCheck) {
+            $deletedCheck->close();
+        }
+        $access = $conn->prepare(
+            'SELECT rp.created_by, rp.status,
+                    EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?) AS is_member
+               FROM research_projects rp
+              WHERE rp.project_id = ?' . $deletedFilter . '
+              LIMIT 1'
+        );
+        if (!$access) {
+            return ['success' => false, 'error' => 'Unable to verify project access'];
+        }
+        $access->bind_param('ii', $user_id, $projectId);
+        if (!$access->execute()) {
+            $access->close();
+            return ['success' => false, 'error' => 'Unable to verify project access'];
+        }
+        $project = $access->get_result()->fetch_assoc();
+        $access->close();
+        $role = (string) ($_SESSION['role'] ?? '');
+        $staffAuthorized = $role === 'research_staff'
+            && function_exists('hasModulePermission')
+            && (
+                hasModulePermission($user_id, 'research_development', 'manage', 'research_proposals')
+                || hasModulePermission($user_id, 'research_development', 'manage', 'research_review')
+            );
+        if (!$project || (
+            (int) $project['created_by'] !== $user_id
+            && !(int) $project['is_member']
+            && $role !== 'admin'
+            && !$staffAuthorized
+        )) {
+            return ['success' => false, 'error' => 'You are not allowed to upload files for this project'];
+        }
+        if ($opts['workflowType'] === 'title'
+            && !in_array((string) $project['status'], ['draft', 'for_revision', 'revision_required'], true)) {
+            return ['success' => false, 'error' => 'Submitted title attachments are locked'];
+        }
+        if ($opts['workflowType'] === 'chapter') {
+            if (!in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing'], true) || $chapterId <= 0) {
+                return ['success' => false, 'error' => 'Chapter uploads require an approved research title'];
+            }
+            $chapterAccess = $conn->prepare(
+                "SELECT status FROM chapters WHERE chapter_id = ? AND project_id = ? AND deleted_at IS NULL LIMIT 1"
+            );
+            if (!$chapterAccess) {
+                return ['success' => false, 'error' => 'Unable to verify chapter access'];
+            }
+            $chapterAccess->bind_param('ii', $chapterId, $projectId);
+            $chapterAccess->execute();
+            $chapterStatus = (string) ($chapterAccess->get_result()->fetch_assoc()['status'] ?? '');
+            $chapterAccess->close();
+            if (!in_array($chapterStatus, ['draft', 'revision_required'], true)) {
+                return ['success' => false, 'error' => 'Submitted chapter attachments are locked'];
+            }
+        }
+    }
 
     // FIX #2: Folder whitelist - defense in depth
     $allowedFolders = ['proposals', 'chapters', 'defense', 'manuscripts'];
@@ -404,14 +469,81 @@ function deleteRmsUpload($uploadId, $conn) {
         return false;
     }
 
-    // Delete physical file
-    $filePath = __DIR__ . '/../' . $upload['file_path'];
-    if (file_exists($filePath)) {
-        unlink($filePath);
+    $user_id = (int) ($_SESSION['user_id'] ?? 0);
+    if ($user_id <= 0) {
+        return false;
+    }
+    $deletedCheck = $conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+    $deletedFilter = $deletedCheck && $deletedCheck->num_rows > 0 ? ' AND rp.deleted_at IS NULL' : '';
+    if ($deletedCheck) {
+        $deletedCheck->close();
+    }
+    $access = $conn->prepare(
+        "SELECT rp.created_by, rp.status,
+                EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?) AS is_member,
+                EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = ?) AS submitted_version
+           FROM research_projects rp
+          WHERE rp.project_id = ?' . $deletedFilter . '
+          LIMIT 1"
+    );
+    if (!$access) {
+        return false;
+    }
+    $access->bind_param('iii', $user_id, $uploadId, $upload['project_id']);
+    if (!$access->execute()) {
+        $access->close();
+        return false;
+    }
+    $project = $access->get_result()->fetch_assoc();
+    $access->close();
+    if (!$project || (int) $project['submitted_version'] === 1) {
+        return false;
+    }
+    $role = (string) ($_SESSION['role'] ?? '');
+    if ($role !== 'admin' && (int) $project['created_by'] !== $user_id && !(int) $project['is_member']) {
+        return false;
+    }
+    if (empty($upload['chapter_id'])) {
+        if (!in_array((string) $project['status'], ['draft', 'for_revision', 'revision_required'], true)) {
+            return false;
+        }
+    } else {
+        if (!in_array((string) $project['status'], ['approved', 'ongoing'], true)) {
+            return false;
+        }
+        $chapter = $conn->prepare('SELECT status FROM chapters WHERE chapter_id = ? AND project_id = ? LIMIT 1');
+        if (!$chapter) {
+            return false;
+        }
+        $chapter->bind_param('ii', $upload['chapter_id'], $upload['project_id']);
+        $chapter->execute();
+        $chapter_status = (string) ($chapter->get_result()->fetch_assoc()['status'] ?? '');
+        $chapter->close();
+        if (!in_array($chapter_status, ['draft', 'revision_required'], true)) {
+            return false;
+        }
     }
 
-    // Delete database record
-    $stmt = $conn->prepare('DELETE FROM uploads WHERE upload_id = ?');
+    $uploadsRoot = realpath(UPLOADS_DIR);
+    $filePath = realpath(__DIR__ . '/../' . $upload['file_path']);
+    $fileIsInsideUploads = $uploadsRoot && $filePath
+        && strpos($filePath, rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) === 0;
+    $deletedCheck = $conn->query("SHOW COLUMNS FROM uploads LIKE 'deleted_at'");
+    $hasDeletedAt = $deletedCheck && $deletedCheck->num_rows > 0;
+    if ($deletedCheck) {
+        $deletedCheck->close();
+    }
+    $stmt = $hasDeletedAt
+        ? $conn->prepare('UPDATE uploads SET deleted_at = NOW() WHERE upload_id = ?')
+        : $conn->prepare('DELETE FROM uploads WHERE upload_id = ?');
+    if (!$stmt) {
+        return false;
+    }
     $stmt->bind_param('i', $uploadId);
-    return $stmt->execute();
+    $ok = $stmt->execute();
+    $stmt->close();
+    if ($ok && $fileIsInsideUploads && is_file($filePath)) {
+        unlink($filePath);
+    }
+    return $ok;
 }

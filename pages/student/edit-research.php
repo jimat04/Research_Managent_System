@@ -11,9 +11,11 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
-requireRole('student');
+requireRole(['student', 'faculty']);
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
@@ -138,6 +140,19 @@ if (!$project) {
 }
 
 $is_locked = !in_array($project['status'], ['draft', 'for_revision', 'revision_required'], true);
+$upload_deleted_column = $conn->query("SHOW COLUMNS FROM uploads LIKE 'deleted_at'");
+$upload_deleted_filter = $upload_deleted_column && $upload_deleted_column->num_rows > 0 ? ' AND deleted_at IS NULL' : '';
+if ($upload_deleted_column) {
+    $upload_deleted_column->close();
+}
+$title_upload_stmt = $conn->prepare("SELECT upload_id, original_name, file_size FROM uploads WHERE project_id = ? AND chapter_id IS NULL AND type = 'proposal'" . $upload_deleted_filter . " ORDER BY upload_id DESC LIMIT 1");
+$current_title_upload = null;
+if ($title_upload_stmt) {
+    $title_upload_stmt->bind_param('i', $project_id);
+    $title_upload_stmt->execute();
+    $current_title_upload = $title_upload_stmt->get_result()->fetch_assoc() ?: null;
+    $title_upload_stmt->close();
+}
 
 // Form field defaults — pre-fill from DB on first GET
 $title          = (string) $project['title'];
@@ -150,6 +165,18 @@ $abstract       = (string) ($project['abstract']    ?? '');
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (($_POST['action'] ?? '') === 'remove_attachment') {
+        $requested_upload_id = (int) ($_POST['upload_id'] ?? 0);
+        if ($is_locked
+            || !$current_title_upload
+            || $requested_upload_id !== (int) $current_title_upload['upload_id']
+            || !deleteRmsUpload($requested_upload_id, $conn)) {
+            $errors[] = 'This attachment cannot be removed because it is not editable or is part of a submitted version.';
+        } else {
+            header('Location: ' . SITE_URL . 'pages/student/edit-research.php?id=' . $project_id . '&attachment_removed=1');
+            exit;
+        }
+    }
     // Lock the form on submit too — re-verify status server-side
     if ($is_locked) {
         $errors[] = 'This project can no longer be edited because it is already ' . $project['status'] . '.';
@@ -161,6 +188,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     $research_area  = isset($_POST['research_area'])  ? trim($_POST['research_area'])  : '';
     $abstract       = isset($_POST['abstract'])       ? trim($_POST['abstract'])       : '';
     $action = isset($_POST['action']) ? $_POST['action'] : 'save';
+    if ($action === 'resubmit'
+        && !$current_title_upload
+        && (!isset($_FILES['proposal_file']) || ($_FILES['proposal_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)) {
+        $errors[] = 'A proposal document is required to resubmit this title.';
+    }
 
     if (empty($title)) {
         $errors[] = 'Project Title is required.';
@@ -205,17 +237,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     if (empty($errors)) {
         $conn->begin_transaction();
         try {
+            $lock_stmt = $conn->prepare('SELECT status FROM research_projects WHERE project_id = ? AND created_by = ? FOR UPDATE');
+            if (!$lock_stmt) {
+                throw new Exception('Unable to verify that this title is still editable.');
+            }
+            $lock_stmt->bind_param('ii', $project_id, $user_id);
+            if (!$lock_stmt->execute()) {
+                throw new Exception('Unable to verify that this title is still editable.');
+            }
+            $locked_project = $lock_stmt->get_result()->fetch_assoc();
+            $lock_stmt->close();
+            $editable_statuses = ['draft', 'for_revision', 'revision_required'];
+            if (!$locked_project || !in_array((string) $locked_project['status'], $editable_statuses, true)) {
+                throw new Exception('This title is no longer editable.');
+            }
             $upd = $conn->prepare("
                 UPDATE research_projects
                 SET title = ?, category_id = ?, ay_id = ?, research_area = ?, abstract = ?, updated_at = NOW()
                 WHERE project_id = ? AND created_by = ?
+                  AND status IN ('draft','for_revision','revision_required')
             ");
             if (!$upd) {
                 throw new Exception('Query error: ' . $conn->error);
             }
             $upd->bind_param('siissii', $title, $category_id, $ay_id, $research_area, $abstract, $project_id, $user_id);
             if (!$upd->execute()) {
-                throw new Exception('Update failed: ' . $upd->error);
+                throw new Exception('This title is no longer editable.');
             }
             $upd->close();
 
@@ -228,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     'accept'       => ['.pdf', '.doc', '.docx'],
                     'projectId'    => $project_id,
                     'type'         => 'proposal',
+                    'workflowType' => 'title',
                 ], $_FILES, $conn);
 
                 if (!$upload_result['success']) {
@@ -237,12 +285,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
             // If resubmitting after revision, move status back to 'submitted'
             $new_status = null;
-            if ($action === 'resubmit' && in_array($project['status'], ['for_revision', 'revision_required', 'draft'], true)) {
+            if ($action === 'resubmit' && in_array((string) $locked_project['status'], $editable_statuses, true)) {
                 $new_status = 'submitted';
-                $status_upd = $conn->prepare("UPDATE research_projects SET status = 'submitted' WHERE project_id = ?");
-                $status_upd->bind_param('i', $project_id);
-                $status_upd->execute();
+                $status_upd = $conn->prepare("UPDATE research_projects SET status = 'submitted', updated_at = NOW() WHERE project_id = ? AND created_by = ? AND status IN ('draft','for_revision','revision_required')");
+                if (!$status_upd) {
+                    throw new Exception('Unable to prepare title resubmission.');
+                }
+                $status_upd->bind_param('ii', $project_id, $user_id);
+                if (!$status_upd->execute() || $status_upd->affected_rows !== 1) {
+                    throw new Exception('This title is no longer available for resubmission.');
+                }
                 $status_upd->close();
+                $attachment_ids = [];
+                $attachment_stmt = $conn->prepare("SELECT upload_id FROM uploads WHERE project_id = ? AND chapter_id IS NULL AND type = 'proposal' ORDER BY upload_id DESC LIMIT 1");
+                if (!$attachment_stmt) {
+                    throw new Exception('Unable to load title supporting documents.');
+                }
+                $attachment_stmt->bind_param('i', $project_id);
+                $attachment_stmt->execute();
+                $attachment_row = $attachment_stmt->get_result()->fetch_assoc();
+                $attachment_stmt->close();
+                if ($attachment_row) {
+                    $attachment_ids[] = (int) $attachment_row['upload_id'];
+                }
+                rms_capture_submission_version(
+                    $conn,
+                    $project_id,
+                    null,
+                    'title',
+                    $user_id,
+                    [
+                        'title' => $title,
+                        'category_id' => $category_id,
+                        'ay_id' => $ay_id,
+                        'research_area' => $research_area,
+                        'abstract' => $abstract
+                    ],
+                    $attachment_ids
+                );
                 if (function_exists('createNotification')) {
                     $notification_title = 'Project resubmitted';
                     $student_message = 'Your project "' . $title . '" has been resubmitted for review.';
@@ -566,7 +646,11 @@ if ($crc_search_query !== '' && !$crc_team_full) {
     }));
 }
 
-renderStudentShell($user, 'my-research', $page_title, 'Update your research project details.');
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShell($user, 'my-research', $page_title, 'Update your research project details.');
+} else {
+    renderStudentShell($user, 'my-research', $page_title, 'Update your research project details.');
+}
 ?>
 
 <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/file-uploader.css">
@@ -792,6 +876,7 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
   </div>
 <?php else: ?>
 
+<?php if (isset($_GET['attachment_removed'])): ?><div class="alert alert-success">Draft attachment removed.</div><?php endif; ?>
 <form method="POST" enctype="multipart/form-data" class="form-guard">
   <?php echo csrfField(); ?>
   <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
@@ -866,6 +951,11 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
       <div class="card-title">Proposal Document</div>
       <p class="card-sub">Optionally upload a new version of your proposal</p>
     </div>
+    <?php if ($current_title_upload): ?>
+      <p>Current document: <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_title_upload['upload_id']; ?>"><?php echo htmlspecialchars($current_title_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a> · <?php echo number_format(((int) $current_title_upload['file_size']) / 1024, 1); ?> KB</p>
+      <button type="submit" name="action" value="remove_attachment" class="btn btn-secondary" onclick="return confirm('Remove this draft attachment?');">Remove draft attachment</button>
+      <input type="hidden" name="upload_id" value="<?php echo (int) $current_title_upload['upload_id']; ?>">
+    <?php endif; ?>
     <?php
     echo renderFileUploader([
       'inputName'          => 'proposal_file',
@@ -1046,4 +1136,10 @@ renderStudentShell($user, 'my-research', $page_title, 'Update your research proj
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <script src="../../js/app-forms.js" defer></script>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>

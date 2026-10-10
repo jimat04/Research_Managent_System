@@ -2,8 +2,9 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 
-requireRole('student');
+requireRole(['student', 'faculty']);
 $user = getCurrentUser();
 $user_id = (int) $user['user_id'];
 
@@ -20,7 +21,13 @@ $query = "
     SELECT rp.project_id, rp.title, rp.category_id, rp.ay_id, rp.status,
            rp.created_by, rp.created_at, rp.updated_at, rc.category_name,
            aa.label AS ay_label, aa.semester, u.first_name, u.last_name,
-           (SELECT COUNT(*) FROM chapters WHERE project_id = rp.project_id AND status = 'approved') AS approved_chapters
+           (SELECT COUNT(*) FROM chapters WHERE project_id = rp.project_id AND status = 'approved') AS approved_chapters,
+           (SELECT r.comments
+              FROM research_submission_versions v
+              JOIN research_submission_reviews r ON r.version_id = v.version_id
+             WHERE v.project_id = rp.project_id AND v.submission_type = 'title'
+             ORDER BY v.version_number DESC, r.reviewed_at DESC, r.review_id DESC
+             LIMIT 1) AS latest_title_feedback
     FROM research_projects rp
     LEFT JOIN research_categories rc ON rp.category_id = rc.category_id
     LEFT JOIN academic_years aa ON rp.ay_id = aa.ay_id
@@ -64,12 +71,16 @@ $status_display = [
     'draft' => 'Draft', 'submitted' => 'Submitted', 'under_review' => 'Under Review',
     'under_crec_review' => 'CREC Review', 'under_erec_review' => 'EREC Review',
     'for_revision' => 'For Revision', 'revision_required' => 'Revision Required',
-    'approved' => 'Approved', 'ongoing' => 'Ongoing', 'proposal' => 'Proposal',
+    'title_approved' => 'Title Approved', 'approved' => 'Approved', 'ongoing' => 'Ongoing', 'proposal' => 'Proposal',
     'in_progress' => 'In Progress', 'for_defense' => 'For Defense',
     'completed' => 'Completed', 'archived' => 'Archived',
 ];
 
-renderStudentShell($user, 'my-research', 'My Research', 'Track your projects through review, implementation, and completion.');
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShell($user, 'my-research', 'My Research', 'Track your research title and chapter submissions.');
+} else {
+    renderStudentShell($user, 'my-research', 'My Research', 'Track your research title and chapter submissions.');
+}
 ?>
 
 <style>
@@ -156,14 +167,16 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your projects thr
         elseif (in_array($status, ['approved', 'ongoing', 'completed'], true)) $badge_class = 'success';
         $approved_chapters = min(5, (int) $project['approved_chapters']);
         $progress_percent = $approved_chapters * 20;
-        $project_url = SITE_URL . 'pages/student/research-detail.php?id=' . (int) $project['project_id'];
-        $can_edit = in_array($status, ['draft', 'for_revision', 'revision_required'], true);
+        $project_url = SITE_URL . 'pages/shared/research-detail.php?id=' . (int) $project['project_id'];
+        $is_owner = (int) $project['created_by'] === $user_id;
+        $can_edit = $is_owner && in_array($status, ['draft', 'for_revision', 'revision_required'], true);
         $lead_name = trim(($project['first_name'] ?? '') . ' ' . ($project['last_name'] ?? ''));
         ?>
         <article class="project-record" data-title="<?php echo htmlspecialchars(strtolower($project['title']), ENT_QUOTES, 'UTF-8'); ?>" data-status="<?php echo htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?>" style="--row-index:<?php echo (int) $index; ?>">
           <div>
             <div class="project-title-row"><a class="project-title" href="<?php echo htmlspecialchars($project_url, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8'); ?></a><span class="status-badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($status_label, ENT_QUOTES, 'UTF-8'); ?></span></div>
             <p class="project-description"><?php echo htmlspecialchars($project['category_name'] ?? 'Uncategorized research', ENT_QUOTES, 'UTF-8'); ?></p>
+            <?php if (!empty($project['latest_title_feedback'])): ?><p class="project-description"><strong>Latest review feedback:</strong> <?php echo nl2br(htmlspecialchars($project['latest_title_feedback'], ENT_QUOTES, 'UTF-8')); ?></p><?php endif; ?>
             <div class="project-progress" aria-label="<?php echo $approved_chapters; ?> of 5 chapters approved"><span class="project-progress-track" aria-hidden="true"><span class="project-progress-fill" style="--chapter-progress:<?php echo $progress_percent; ?>%"></span></span><span class="project-progress-label"><?php echo $approved_chapters; ?>/5 chapters</span></div>
           </div>
           <div class="project-details">
@@ -178,6 +191,7 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your projects thr
               <?php else: ?>
                 <span class="project-action disabled" aria-disabled="true" title="Editing is disabled while this project is in review.">Edit locked</span>
               <?php endif; ?>
+              <?php if (in_array($status, ['title_approved', 'approved', 'ongoing'], true)): ?><a class="project-action view" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">Submit chapters</a><?php endif; ?>
             </div>
           </div>
         </article>
@@ -185,7 +199,7 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your projects thr
     </section>
     <section class="no-results" id="noResults" hidden><div class="empty-icon" aria-hidden="true">⌕</div><h2>No matching projects</h2><p>Try a different title or choose another project status.</p></section>
   <?php else: ?>
-    <section class="research-empty"><div class="empty-icon" aria-hidden="true">📁</div><h2>No research projects yet</h2><p>Create your first proposal and follow it through CREC and EREC review, implementation, and completion.</p><a class="research-primary-action" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">Start a proposal</a></section>
+    <section class="research-empty"><div class="empty-icon" aria-hidden="true">📁</div><h2>No research titles yet</h2><p>Create a title draft, submit it for review, and begin Chapter 1 after it is approved.</p><a class="research-primary-action" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">Start a title submission</a></section>
   <?php endif; ?>
 </div>
 
@@ -217,4 +231,10 @@ renderStudentShell($user, 'my-research', 'My Research', 'Track your projects thr
 })();
 </script>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>

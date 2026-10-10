@@ -73,163 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . SITE_URL . 'pages/faculty/faculty-review.php' . $tab_qs);
         exit;
     }
-
-    $action     = (string) ($_POST['action'] ?? '');
-    $chapter_id = (int)    ($_POST['chapter_id'] ?? 0);
-
-    if ($chapter_id < 1 || !in_array($action, ['approve', 'revise'], true)) {
-        $_SESSION['module_error'] = 'Invalid review request.';
-        header('Location: ' . SITE_URL . 'pages/faculty/faculty-review.php');
-        exit;
-    }
-
-    $feedback = trim((string) ($_POST['feedback'] ?? ''));
-    if (mb_strlen($feedback) > 2000) {
-        $feedback = mb_substr($feedback, 0, 2000);
-    }
-
-    // Verify the chapter belongs to a project where this faculty is the
-    // adviser. If 0 rows, refuse — protects against hand-crafted POSTs
-    // from faculty who are not the project's adviser.
-    $ver_sql =
-        "SELECT ch.chapter_id, ch.project_id, ch.chapter_number, ch.chapter_title, ch.status,
-                rp.title AS project_title, rp.created_by
-           FROM chapters ch
-           JOIN research_projects rp ON rp.project_id = ch.project_id
-           JOIN project_advisers pa ON pa.project_id = ch.project_id
-          WHERE ch.chapter_id = ?
-            AND pa.adviser_id = ?" . $rp_deleted_filter . "
-          LIMIT 1";
-    $ver_stmt = $conn->prepare($ver_sql);
-    if (!$ver_stmt) {
-        $_SESSION['module_error'] = 'Could not verify chapter ownership.';
-        header('Location: ' . SITE_URL . 'pages/faculty/faculty-review.php');
-        exit;
-    }
-    $ver_stmt->bind_param('ii', $chapter_id, $user_id);
-    $ver_stmt->execute();
-    $chap = $ver_stmt->get_result()->fetch_assoc();
-    $ver_stmt->close();
-
-    if (!$chap) {
-        $_SESSION['module_error'] = 'Chapter not found, or you are not the adviser for this project.';
-        header('Location: ' . SITE_URL . 'pages/faculty/faculty-review.php');
-        exit;
-    }
-
-    // Apply the action in a transaction.
-    $conn->begin_transaction();
-    $ok = true;
-    $new_status   = '';
-    $comment_type = '';
-    $notif_title  = '';
-    $notif_type   = 'info';
-
-    if ($action === 'approve') {
-        $new_status   = 'approved';
-        $comment_type = 'approval';
-        $notif_title  = 'Chapter approved';
-        $notif_type   = 'success';
-        $upd = $conn->prepare(
-            "UPDATE chapters
-                SET status = ?, approved_at = NOW(), approved_by = ?
-              WHERE chapter_id = ?"
-        );
-        if ($upd) {
-            $upd->bind_param('sii', $new_status, $user_id, $chapter_id);
-            $ok = $ok && $upd->execute();
-            $upd->close();
-        } else {
-            $ok = false;
-        }
-    } else { // revise
-        $new_status   = 'revision_required';
-        $comment_type = (stripos($feedback, 'suggest') !== false) ? 'suggestion' : 'correction';
-        $notif_title  = 'Chapter needs revision';
-        $notif_type   = 'warning';
-        $upd = $conn->prepare(
-            "UPDATE chapters
-                SET status = ?, approved_at = NULL, approved_by = NULL
-              WHERE chapter_id = ?"
-        );
-        if ($upd) {
-            $upd->bind_param('si', $new_status, $chapter_id);
-            $ok = $ok && $upd->execute();
-            $upd->close();
-        } else {
-            $ok = false;
-        }
-    }
-
-    // Insert feedback row. Best-effort: skip silently if the comments
-    // table is unavailable or the feedback was empty. The status
-    // update still lands.
-    if ($ok && $feedback !== '') {
-        $ins = $conn->prepare(
-            "INSERT INTO comments (chapter_id, faculty_id, comment, type) VALUES (?, ?, ?, ?)"
-        );
-        if ($ins) {
-            $ins->bind_param('iiss', $chapter_id, $user_id, $feedback, $comment_type);
-            $ins->execute();
-            $ins->close();
-        }
-    }
-
-    // Bump research_projects.updated_at to keep "last activity" fresh.
-    if ($ok) {
-        $tou = $conn->prepare("UPDATE research_projects SET updated_at = NOW() WHERE project_id = ?");
-        if ($tou) {
-            $tou->bind_param('i', $chap['project_id']);
-            $tou->execute();
-            $tou->close();
-        }
-    }
-
-    if ($ok) {
-        $conn->commit();
-        logActivity(
-            ($action === 'approve' ? 'Approved' : 'Requested revision on')
-            . " chapter " . (int) $chap['chapter_number']
-            . " (project #" . (int) $chap['project_id'] . ")",
-            'faculty-review'
-        );
-
-        // Compose the notification body for the student owner.
-        $ch_label = 'Chapter ' . (int) $chap['chapter_number']
-                  . ($chap['chapter_title'] !== '' ? ' — ' . $chap['chapter_title'] : '');
-        $notif_msg = $ch_label . ' was '
-                   . ($action === 'approve' ? 'approved' : 'returned for revision')
-                   . ' on "' . $chap['project_title'] . '".';
-        if ($feedback !== '') {
-            $snippet = mb_strlen($feedback) > 140 ? mb_substr($feedback, 0, 140) . '…' : $feedback;
-            $notif_msg .= ' Feedback: "' . $snippet . '"';
-        }
-        $notif_link = SITE_URL . 'pages/student/submit-chapter.php?project_id=' . (int) $chap['project_id']
-                    . '&chapter=' . (int) $chap['chapter_number'];
-
-        // Best-effort — createNotification() returns false if the
-        // notifications table is missing. Same pattern as messages.php.
-        if ((int) $chap['created_by'] > 0 && (int) $chap['created_by'] !== $user_id) {
-            createNotification(
-                (int) $chap['created_by'],
-                $notif_title,
-                $notif_msg,
-                $notif_type,
-                $notif_link
-            );
-        }
-
-        $_SESSION['module_success'] = $action === 'approve'
-            ? 'Chapter approved. The student has been notified.'
-            : 'Revision requested. The student has been notified.';
-    } else {
-        $conn->rollback();
-        $_SESSION['module_error'] = 'The review could not be saved. Please try again.';
-    }
-
-    $tab_qs = isset($_GET['tab']) && $_GET['tab'] === 'recent' ? '?tab=recent' : '?tab=pending';
-    header('Location: ' . SITE_URL . 'pages/faculty/faculty-review.php' . $tab_qs);
-    exit;
+    http_response_code(403);
+    exit('Research title and chapter decisions are handled by authorized Administrators and Research Staff.');
 }
 
 // ------------------------------------------------------------------
@@ -253,6 +98,10 @@ if ($tab === 'pending') {
                   WHERE u.chapter_id = ch.chapter_id
                     AND u.type = 'chapter'
                   ORDER BY u.upload_date DESC LIMIT 1) AS chapter_file_name,
+                (SELECT u.upload_id FROM uploads u
+                  WHERE u.chapter_id = ch.chapter_id
+                    AND u.type = 'chapter'
+                  ORDER BY u.upload_date DESC LIMIT 1) AS chapter_upload_id,
                 (SELECT u.file_path FROM uploads u
                   WHERE u.chapter_id = ch.chapter_id
                     AND u.type = 'chapter'
@@ -289,6 +138,10 @@ if ($tab === 'pending') {
                   WHERE u.chapter_id = ch.chapter_id
                     AND u.type = 'chapter'
                   ORDER BY u.upload_date DESC LIMIT 1) AS chapter_file_name,
+                (SELECT u.upload_id FROM uploads u
+                  WHERE u.chapter_id = ch.chapter_id
+                    AND u.type = 'chapter'
+                  ORDER BY u.upload_date DESC LIMIT 1) AS chapter_upload_id,
                 (SELECT u.file_path FROM uploads u
                   WHERE u.chapter_id = ch.chapter_id
                     AND u.type = 'chapter'
@@ -818,6 +671,7 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
                    ? implode(', ', $student_names[$pid])
                    : '—';
       $file_path   = (string) ($r['chapter_file_path'] ?? '');
+      $file_upload_id = (int) ($r['chapter_upload_id'] ?? 0);
       $file_orig   = (string) ($r['chapter_file_original'] ?? '');
   ?>
     <article class="frev-card<?php echo $tab === 'pending' ? ' frev-card--pending' : ''; ?>">
@@ -847,7 +701,7 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
 
         <?php if ($file_path !== ''): ?>
           <a class="frev-file"
-             href="<?php echo frev_se($file_path); ?>" target="_blank" rel="noopener">
+             href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo $file_upload_id; ?>">
             📄 <?php echo frev_se($file_orig !== '' ? $file_orig : 'View file'); ?>
           </a>
         <?php else: ?>
@@ -856,29 +710,14 @@ renderFacultyShell($user, 'faculty-review.php', 'Review Queue', $subtitle);
       </div>
 
       <?php if ($tab === 'pending'): ?>
-        <form method="post" action="faculty-review.php?tab=pending">
-          <?php echo csrfField(); ?>
-          <input type="hidden" name="chapter_id" value="<?php echo $cid; ?>">
-          <label class="frev-feedback-label" for="frev-feedback-<?php echo $cid; ?>">Feedback for the student <span style="font-weight:500;color:#94A3B8;">(optional)</span></label>
-          <textarea class="frev-feedback" id="frev-feedback-<?php echo $cid; ?>" name="feedback" maxlength="2000"
-                    placeholder="Optional feedback — visible to the student and stored in the chapter history…"></textarea>
-          <div class="frev-actions">
-            <button type="submit" name="action" value="approve" class="btn btn-primary">
-              ✅ Approve chapter
-            </button>
-            <button type="submit" name="action" value="revise" class="btn btn-secondary"
-                    style="color:#EA580C;border-color:rgba(234,88,12,0.35);background:rgba(234,88,12,0.04);">
-              ✏️ Request revision
-            </button>
-          </div>
-        </form>
+        <p class="frev-card-meta">Official chapter decisions are made by an Administrator or authorized Research Staff member.</p>
       <?php else: ?>
         <div class="frev-card-meta" style="margin-top:4px;">
           <?php if ($approved_at): ?>
             <span>📅 <?php echo frev_se(date('M d, Y \a\t h:i A', strtotime((string) $approved_at))); ?></span>
           <?php endif; ?>
           <?php if ($file_path !== ''): ?>
-            <a class="frev-file" href="<?php echo frev_se($file_path); ?>" target="_blank" rel="noopener">
+            <a class="frev-file" href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo $file_upload_id; ?>">
               📄 <?php echo frev_se($file_orig !== '' ? $file_orig : 'View file'); ?>
             </a>
           <?php endif; ?>

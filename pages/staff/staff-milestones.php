@@ -31,6 +31,12 @@ requireRole(['research_staff', 'admin']);
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$canViewMilestones = hasRole('admin') || hasModulePermission($user_id, 'research_implementation_outputs', 'view', 'ongoing_research');
+if (!$canViewMilestones) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$canManageMilestones = hasRole('admin') || hasModulePermission($user_id, 'research_implementation_outputs', 'manage', 'ongoing_research');
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function smil_se($value) {
@@ -265,6 +271,10 @@ function smil_mirror_sibling(
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    if (!$canManageMilestones) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $_SESSION['module_error'] = 'Your session has expired. Please refresh the page and try again.';
     } else {
@@ -1268,6 +1278,7 @@ renderStaffShell(
                 <?php endif; ?>
               </td>
               <td>
+                <?php if ($canManageMilestones): ?>
                 <?php if ($is_actionable): ?>
                   <div class="row-actions">
                     <form method="POST" style="display: inline;">
@@ -1309,6 +1320,9 @@ renderStaffShell(
                     <span style="font-size: 12px; color: #94A3B8;">No further action</span>
                   <?php endif; ?>
                 <?php endif; ?>
+                <?php else: ?>
+                  <span style="font-size: 12px; color: #94A3B8;">View only</span>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -1318,6 +1332,7 @@ renderStaffShell(
   <?php endif; ?>
 </div>
 
+<?php if ($canManageMilestones): ?>
 <!-- Reject modal (used for both docs and reports) -->
 <div id="rejectModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rejectModalTitle">
   <div class="modal-content">
@@ -1446,5 +1461,6 @@ renderStaffShell(
   });
   rejectField.addEventListener('input', () => rejectField.classList.remove('invalid'));
 </script>
+<?php endif; ?>
 
 <?php renderStaffShellClose(); ?>

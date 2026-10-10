@@ -15,6 +15,9 @@ if (!$user) {
     header('Location: ' . SITE_URL . 'public/login.php');
     exit;
 }
+if (($user['role'] ?? '') === 'research_staff') {
+    requireModulePermission('research_implementation_outputs', 'view', 'completed_research');
+}
 
 function archiveColumns(mysqli $conn, string $table): array
 {

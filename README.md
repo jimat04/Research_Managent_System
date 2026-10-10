@@ -50,6 +50,11 @@ A PHP and MySQL research management system for students, faculty advisers, resea
    pre-September-2026 legacy databases. The unnumbered
    `database/migrations/rms_db_migration.sql` script is superseded and retained
    only for legacy history; do not run it after importing the canonical schema.
+   For an existing database, apply the applicable numbered migrations in order.
+   Migration 011 enables archived researcher-author snapshots; migration 013
+   adds and backfills copyright registration dates required by the registry and
+   admin output reports. Migration 014 stores trainings as a distinct research
+   activity type. These migrations are not needed after a fresh schema import.
 
 7. Open the app — the root `index.php` redirects to the public entry point:
 

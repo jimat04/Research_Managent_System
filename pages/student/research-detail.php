@@ -596,7 +596,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
             Uploaded <?php echo date('M d, Y', strtotime($proposal_doc['upload_date'])); ?>
           </div>
         </div>
-        <a href="<?php echo SITE_URL; ?>public/download.php?id=<?php echo (int) $proposal_doc['upload_id']; ?>" class="btn btn-secondary btn-sm">⬇ Download</a>
+        <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $proposal_doc['upload_id']; ?>" class="btn btn-secondary btn-sm">⬇ Download</a>
       </div>
     <?php else: ?>
       <div class="empty" style="padding: 20px;">
