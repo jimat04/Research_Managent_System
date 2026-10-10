@@ -314,7 +314,7 @@ if ($role === 'admin') {
   <section class="submission-review-hero" aria-labelledby="submission-review-heading">
     <div>
       <p class="submission-review-eyebrow"><?php echo htmlspecialchars($section['eyebrow'], ENT_QUOTES, 'UTF-8'); ?> · RESEARCH DEVELOPMENT</p>
-      <h2 id="submission-review-heading"><?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
+      <h2 id="submission-review-heading">Title intake queue</h2>
       <p class="submission-review-hero-copy"><?php echo htmlspecialchars($section['description'], ENT_QUOTES, 'UTF-8'); ?></p>
     </div>
     <div class="submission-review-path">

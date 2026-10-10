@@ -809,7 +809,7 @@ renderAdminShell(
                         <div class="identity-meta">
                           Account #<?php echo (int) $u['user_id']; ?>
                           <?php if ($u['is_reviewer'] == 1): ?>
-                            <span class="reviewer-mark" title="CREC/EREC Reviewer">&bull; Committee reviewer</span>
+                            <span class="reviewer-mark" title="Legacy reviewer flag">&bull; Legacy reviewer flag</span>
                           <?php endif; ?>
                         </div>
                       </div>
@@ -1031,7 +1031,7 @@ renderAdminShell(
         </div>
         <div class="form-check">
           <input type="checkbox" name="is_reviewer" id="createReviewer" value="1">
-          <label for="createReviewer">CREC/EREC Reviewer</label>
+          <label for="createReviewer">Legacy reviewer flag</label>
         </div>
       </div>
 
@@ -1153,7 +1153,7 @@ renderAdminShell(
         </div>
         <div class="form-check">
           <input type="checkbox" name="is_reviewer" id="editReviewer" value="1">
-          <label for="editReviewer">CREC/EREC Reviewer</label>
+          <label for="editReviewer">Legacy reviewer flag</label>
         </div>
       </div>
 

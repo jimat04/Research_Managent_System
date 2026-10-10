@@ -635,14 +635,19 @@ test.describe.serial('RMS browser end-to-end smoke and role checks', () => {
     const destinations = [
       ['seminars', 'Seminars', 'pages/shared/activities.php'], ['trainings', 'Trainings', 'pages/shared/activities.php'], ['workshops', 'Workshops', 'pages/shared/activities.php'],
       ['research_proposals', 'Research Proposals', 'pages/shared/research-submission-review.php'], ['research_review', 'Research Review', 'pages/shared/research-submission-review.php'], ['research_approval', 'Research Approval', 'pages/shared/research-submission-review.php'],
-      ['ongoing_research', 'Ongoing Research', 'pages/admin/admin-research.php'], ['completed_research', 'Completed Research', 'pages/admin/admin-research.php'], ['research_outputs', 'Research Outputs', 'pages/shared/publications.php'],
+      ['ongoing_research', 'Ongoing Research', 'pages/shared/implementation-outputs.php?view=ongoing&module_page=ongoing_research'], ['completed_research', 'Completed Research', 'pages/shared/implementation-outputs.php?view=completed&module_page=completed_research'], ['research_outputs', 'Research Outputs', 'pages/shared/implementation-outputs.php?view=outputs&module_page=research_outputs'],
       ['journal_publications', 'Journal Publications', 'pages/shared/publications.php'], ['conference_presentations', 'Conference Presentations', 'pages/shared/publications.php'], ['research_repository', 'Research Repository', 'pages/shared/publications.php'],
       ['copyrights', 'Copyrights', 'pages/shared/copyrights.php'], ['patents_utility_models', 'Patents / Utility Models', 'pages/shared/copyrights.php'], ['innovation_technology_transfer', 'Innovation & Technology Transfer', 'pages/shared/copyrights.php'],
     ];
     for (const [module, label, targetPath] of destinations) {
       await page.goto(`pages/admin/admin-research-module.php?module=${module}`);
-      expect(new URL(page.url()).pathname).toContain(targetPath);
-      expect(new URL(page.url()).searchParams.get('module_page')).toBe(module);
+      const resolvedUrl = new URL(page.url());
+      const [targetPathname, targetQuery = ''] = targetPath.split('?');
+      expect(resolvedUrl.pathname).toContain(targetPathname);
+      if (targetQuery) {
+        expect(resolvedUrl.search).toBe(`?${targetQuery}`);
+      }
+      expect(resolvedUrl.searchParams.get('module_page')).toBe(module);
       await expect(page.locator('body')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
       await expect(page.locator('.admin-nav-subitem.active[aria-current="page"]')).toHaveCount(1);
       await expect(page.locator('.admin-nav-subitem.active[aria-current="page"]')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));

@@ -361,7 +361,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
       <?php if ($capacityPage !== ''): ?><input type="hidden" name="capacity_page" value="<?= activityFormEscape($capacityPage) ?>"><?php endif; ?>
       <?php if ($isEdit && $activityId): ?><input type="hidden" name="activity_id" value="<?= (int) $activityId ?>"><?php endif; ?>
       <div class="form-grid">
-        <div class="field"><label for="activity-type">Type <span class="required">*</span></label><?php if ($capacityPage !== '' && isset($capacityPageTypes[$capacityPage])): ?><input id="activity-type" type="text" value="<?= activityFormEscape($selectedActivityLabel) ?>" readonly aria-readonly="true"><input type="hidden" name="activity_type" value="<?= activityFormEscape($values['activity_type']) ?>"><?php else: ?><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select><?php endif; ?></div>
+        <div class="field"><label for="activity-type">Type <span class="required">*</span></label><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select></div>
         <div class="field"><label for="activity-date">Date <span class="required">*</span></label><input id="activity-date" name="activity_date" type="date" value="<?= activityFormEscape($values['activity_date']) ?>" required></div>
         <div class="field full"><label for="activity-title">Title <span class="required">*</span></label><input id="activity-title" name="title" type="text" maxlength="255" value="<?= activityFormEscape($values['title']) ?>" required></div>
         <div class="field"><label for="activity-time">Time</label><input id="activity-time" name="activity_time" type="time" value="<?= activityFormEscape($values['activity_time']) ?>"></div>
@@ -410,7 +410,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
           </div>
         <?php endif; ?>
       </div>
-      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Create ' . activityFormEscape($selectedActivityLabel) ?></button></div>
+      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Create Activity' ?></button></div>
     </form>
   </section>
 </div>

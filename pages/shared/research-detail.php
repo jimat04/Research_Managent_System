@@ -16,6 +16,9 @@ if (!$user) {
 }
 $user_id = (int) $user['user_id'];
 $role = (string) ($user['role'] ?? 'student');
+$flash_success = $_SESSION['module_success'] ?? null;
+$flash_error   = $_SESSION['module_error'] ?? null;
+unset($_SESSION['module_success'], $_SESSION['module_error']);
 
 // Get project ID from URL
 $project_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -471,6 +474,12 @@ if ($role === 'admin') {
   @media(max-width:760px){.research-project-page .research-summary-body{grid-template-columns:1fr;padding:28px 23px!important}.research-progress-summary{min-width:0;width:100%;box-sizing:border-box}.research-project-page .card-header{align-items:flex-start;flex-direction:column;padding:20px}.research-project-page .card-body{padding:19px 20px}.research-project-page .research-chapters .card-body>div>div,.research-project-page .research-team .card-body>div>div{align-items:flex-start!important;flex-direction:column!important;gap:10px!important}.research-project-page table{min-width:700px}}
 </style>
 <div class="research-project-page">
+      <?php if ($flash_success): ?>
+        <div class="alert alert-success">✅ <?php echo htmlspecialchars((string) $flash_success, ENT_QUOTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
+      <?php if ($flash_error): ?>
+        <div class="alert alert-error">❌ <?php echo htmlspecialchars((string) $flash_error, ENT_QUOTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
       <!-- BREADCRUMB -->
       <div class="research-breadcrumb">
         <a class="research-back" href="<?php echo htmlspecialchars($back_url, ENT_QUOTES, 'UTF-8'); ?>">← <?php echo htmlspecialchars($back_label, ENT_QUOTES, 'UTF-8'); ?></a>

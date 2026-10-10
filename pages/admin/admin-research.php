@@ -596,8 +596,8 @@ renderAdminShell(
                     $status_labels = [
                       'draft' => 'Draft',
                       'proposal' => 'Proposal',
-                      'under_crec_review' => 'CREC Review',
-                      'under_erec_review' => 'EREC Review',
+                      'under_crec_review' => 'Committee Review (legacy)',
+                      'under_erec_review' => 'Ethics Review (legacy)',
                       'approved' => 'Approved',
                       'title_approved' => 'Title Approved',
                       'ongoing' => 'Ongoing',
