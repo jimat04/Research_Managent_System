@@ -440,7 +440,13 @@ async function expectDbProject(title, status, projectId = 0) {
 
 async function createActivity(page, type, capacityPage, title, recipientScope, recipientIds = []) {
   await page.goto(`pages/shared/activity-form.php?capacity_page=${capacityPage}&type=${type}`);
-  await page.locator('#activity-type').selectOption(type);
+  if (capacityPage) {
+    const activityType = page.locator('#activity-type');
+    await expect(activityType).toHaveAttribute('readonly', '');
+    await expect(activityType).toHaveValue(type.charAt(0).toUpperCase() + type.slice(1));
+  } else {
+    await page.locator('#activity-type').selectOption(type);
+  }
   await page.locator('#activity-date').fill('2030-01-15');
   await page.locator('#activity-title').fill(title);
   await page.locator('#activity-time').fill('09:30');
@@ -451,7 +457,7 @@ async function createActivity(page, type, capacityPage, title, recipientScope, r
   for (const recipientId of recipientIds) {
     await page.locator(`input[name="recipient_user_ids[]"][value="${recipientId}"]`).check();
   }
-  await page.getByRole('button', { name: /create activity/i }).click();
+  await page.getByRole('button', { name: /create (activity|seminar|training|workshop)/i }).click();
   await expect(page.locator('body')).toContainText(title);
   const activity = loadActivity(title);
   expect(activity.activity_type).toBe(type);
@@ -1061,7 +1067,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     await expect(page).toHaveURL(/403\.php/);
     await page.goto('pages/shared/research-submission-review.php?module_page=research_proposals');
     await expect(page).toHaveURL(/research-submission-review\.php\?module_page=research_proposals/);
-    await expect(page.getByRole('heading', { name: 'Research Proposals' })).toBeVisible();
+    await expect(page.locator('#submission-review-heading')).toHaveText('Research Proposals');
     await expect(page.getByRole('button', { name: /approve|return for revision/i })).toHaveCount(0);
 
     await login(page, adminEmail, adminPassword, 'admin');
@@ -1075,7 +1081,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     await login(page, workflowStaffEmail, testPassword, 'research_staff');
     await page.goto('pages/shared/research-submission-review.php?module_page=research_review');
     await expect(page).toHaveURL(/research-submission-review\.php\?module_page=research_review/);
-    await expect(page.getByRole('heading', { name: 'Research Review' })).toBeVisible();
+    await expect(page.locator('#submission-review-heading')).toHaveText('Research Review');
     await expectNoServerErrors(page);
   });
 });
