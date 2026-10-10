@@ -33,10 +33,8 @@ http://localhost/rms/
 | Faculty (reviewer) | jreyes@rms.edu.ph | Faculty@123 |
 | Student | jdelacruz@rms.edu.ph | Student@123 |
 | Student | areyes@rms.edu.ph | Student@123 |
-| Staff (EREC Office) | EREC@rms.edu.ph | Staff@123 |
-| Staff (CREC Office) | CREC@rms.edu.ph | Staff@123 |
-| Staff (Office of Research Services) | ORS@rms.edu.ph | Staff@123 |
-| Staff (Graduate School Office) | graduate@rms.edu.ph | Staff@123 |
+| Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
+| Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
 
 Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
 

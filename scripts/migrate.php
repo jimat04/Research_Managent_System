@@ -192,6 +192,57 @@ function verify_demo_accounts_resync(mysqli $conn): ?bool
     return true;
 }
 
+function verify_staff_demo_accounts(mysqli $conn): ?bool
+{
+    $expected = [
+        'staff1@rms.edu.ph' => ['staff1', 'EREC Office'],
+        'staff2@rms.edu.ph' => ['staff2', 'CREC Office'],
+    ];
+    $stmt = $conn->prepare('SELECT role, first_name, last_name, office, status, deleted_at FROM users WHERE email = ? LIMIT 1');
+    if (!$stmt) {
+        return null;
+    }
+
+    foreach ($expected as $email => [$name, $office]) {
+        $stmt->bind_param('s', $email);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $row = $stmt->get_result()->fetch_assoc();
+        if (!$row
+            || $row['role'] !== 'research_staff'
+            || $row['first_name'] !== $name
+            || $row['last_name'] !== ''
+            || $row['office'] !== $office
+            || $row['status'] !== 'active'
+            || $row['deleted_at'] !== null) {
+            $stmt->close();
+            return false;
+        }
+    }
+    $stmt->close();
+
+    $stmt = $conn->prepare('SELECT role, status, deleted_at FROM users WHERE email = ? LIMIT 1');
+    if (!$stmt) {
+        return null;
+    }
+    foreach (['ORS@rms.edu.ph', 'graduate@rms.edu.ph'] as $email) {
+        $stmt->bind_param('s', $email);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $row = $stmt->get_result()->fetch_assoc();
+        if ($row && ($row['role'] !== 'research_staff' || $row['status'] !== 'suspended' || $row['deleted_at'] === null)) {
+            $stmt->close();
+            return false;
+        }
+    }
+    $stmt->close();
+    return true;
+}
+
 function tracking_table_sql(): string
 {
     return <<<'SQL'
@@ -283,6 +334,7 @@ function verify_migration(mysqli $conn, string $filename): ?bool
             && migration_index_exists($conn, 'research_submission_versions', 'idx_submission_versions_project'),
         '018_research_title_approval_status.sql' =>
             migration_enum_contains($conn, 'research_projects', 'status', 'title_approved'),
+        '019_staff1_staff2_demo_accounts.sql' => verify_staff_demo_accounts($conn),
         'add_contact_messages_table.sql' =>
             migration_table_exists($conn, 'contact_messages')
             && migration_column_exists($conn, 'contact_messages', 'concern_type'),

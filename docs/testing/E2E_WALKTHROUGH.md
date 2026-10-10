@@ -50,10 +50,8 @@ Use a separate local test dataset/account set for this checklist. Follow top to 
 | Faculty (2nd) | jreyes@rms.edu.ph | Faculty@123 |
 | Student (lead) | jdelacruz@rms.edu.ph | Student@123 |
 | Student (co-researcher) | areyes@rms.edu.ph | Student@123 |
-| Staff (EREC Office) | EREC@rms.edu.ph | Staff@123 |
-| Staff (CREC Office) | CREC@rms.edu.ph | Staff@123 |
-| Staff (Office of Research Services) | ORS@rms.edu.ph | Staff@123 |
-| Staff (Graduate School Office) | graduate@rms.edu.ph | Staff@123 |
+| Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
+| Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
 
 Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
 

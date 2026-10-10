@@ -44,8 +44,7 @@ function archiveDetailLabel(?string $value): string
 }
 
 $schemaTables = [
-    'research_projects', 'project_members', 'project_advisers',
-    'project_advisers_history', 'defense_schedule', 'research_publication_tracking',
+    'research_projects', 'project_members', 'defense_schedule', 'research_publication_tracking',
 ];
 $columns = [];
 foreach ($schemaTables as $table) {
@@ -57,8 +56,6 @@ $projectId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, [
 ]);
 $project = null;
 $proponents = [];
-$currentAdvisers = [];
-$formerAdvisers = [];
 $finalDefense = null;
 $publication = null;
 
@@ -109,46 +106,6 @@ if ($project) {
                 'name' => (string) $row['member_name'],
                 'role' => $row['member_role'] === 'lead' ? 'Lead proponent' : 'Member',
             ];
-        }
-        $stmt->close();
-    }
-
-    if (!empty($columns['project_advisers'])
-        && isset($columns['project_advisers']['project_id'], $columns['project_advisers']['adviser_id'])) {
-        $stmt = $conn->prepare(
-            "SELECT pa.adviser_id, CONCAT_WS(' ', u.first_name, u.last_name) AS adviser_name
-             FROM project_advisers pa
-             JOIN users u ON u.user_id = pa.adviser_id
-             WHERE pa.project_id = ? AND pa.adviser_id IS NOT NULL
-             ORDER BY u.last_name, u.first_name"
-        );
-        $stmt->bind_param('i', $projectId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $currentAdvisers[] = $row;
-        }
-        $stmt->close();
-    }
-
-    $historyColumns = $columns['project_advisers_history'];
-    if (isset($historyColumns['project_id'], $historyColumns['adviser_id'])) {
-        $assignedSelect = isset($historyColumns['assigned_at']) ? 'pah.assigned_at' : 'NULL AS assigned_at';
-        $removedSelect = isset($historyColumns['removed_at']) ? 'pah.removed_at' : 'NULL AS removed_at';
-        $orderBy = isset($historyColumns['removed_at']) ? 'pah.removed_at DESC' : 'u.last_name, u.first_name';
-        $stmt = $conn->prepare(
-            "SELECT pah.adviser_id, {$assignedSelect}, {$removedSelect},
-                    CONCAT_WS(' ', u.first_name, u.last_name) AS adviser_name
-             FROM project_advisers_history pah
-             JOIN users u ON u.user_id = pah.adviser_id
-             WHERE pah.project_id = ?
-             ORDER BY {$orderBy}"
-        );
-        $stmt->bind_param('i', $projectId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $formerAdvisers[] = $row;
         }
         $stmt->close();
     }
@@ -382,7 +339,6 @@ if ($shell === 'admin') {
                 <dl class="detail-facts">
                     <div class="detail-fact"><dt>Archive status</dt><dd><?= archiveDetailEscape(archiveDetailLabel($project['status'])) ?></dd></div>
                     <div class="detail-fact"><dt>Research team</dt><dd><?= count($proponents) ?> <?= count($proponents) === 1 ? 'proponent' : 'proponents' ?></dd></div>
-                    <div class="detail-fact"><dt>Adviser record</dt><dd><?= count($currentAdvisers) ?> current<?= $formerAdvisers ? ' · ' . count($formerAdvisers) . ' former' : '' ?></dd></div>
                 </dl>
             </aside>
         </div>
@@ -390,11 +346,11 @@ if ($shell === 'admin') {
         <div class="detail-section-head">
             <div>
                 <h2>People behind the research</h2>
-                <p>Recorded proponents and academic advisers for this project.</p>
+                <p>Recorded proponents for this project.</p>
             </div>
-            <span class="detail-section-count"><?= count($proponents) + count($currentAdvisers) + count($formerAdvisers) ?> people</span>
+            <span class="detail-section-count"><?= count($proponents) ?> people</span>
         </div>
-        <section class="detail-panel detail-people" aria-label="Research team and advisers">
+        <section class="detail-panel detail-people" aria-label="Research proponents">
             <div class="detail-people-group">
                 <div class="detail-group-title"><h3>Proponents</h3><span><?= count($proponents) ?> recorded</span></div>
                 <div class="people-list">
@@ -415,39 +371,6 @@ if ($shell === 'admin') {
                         </div>
                     <?php endforeach; ?>
                 </div>
-            </div>
-
-            <div class="detail-people-group">
-                <div class="detail-group-title"><h3>Advisers</h3><span><?= count($currentAdvisers) + count($formerAdvisers) ?> recorded</span></div>
-                <?php if (!$currentAdvisers && !$formerAdvisers): ?>
-                    <p class="detail-empty-copy">No adviser information is recorded for this project.</p>
-                <?php else: ?>
-                    <div class="people-list">
-                        <?php foreach ($currentAdvisers as $adviser): ?>
-                            <div class="person-row">
-                                <div class="person-identity">
-                                    <span class="person-initials" aria-hidden="true">AD</span>
-                                    <span class="person-name"><?= archiveDetailEscape($adviser['adviser_name']) ?></span>
-                                </div>
-                                <span class="person-tag current">Current</span>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php foreach ($formerAdvisers as $adviser): ?>
-                            <div class="person-row">
-                                <div class="person-identity">
-                                    <span class="person-initials" aria-hidden="true">AD</span>
-                                    <div>
-                                        <div class="person-name"><?= archiveDetailEscape($adviser['adviser_name']) ?></div>
-                                        <?php if (!empty($adviser['removed_at'])): ?>
-                                            <div class="person-meta">Until <?= archiveDetailEscape(date('M j, Y', strtotime($adviser['removed_at']))) ?></div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <span class="person-tag former">Former</span>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
             </div>
         </section>
 

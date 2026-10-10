@@ -733,16 +733,14 @@ INSERT INTO `users` (`user_id`, `role`, `first_name`, `last_name`, `email`, `pas
 (3, 'faculty', 'Jose', 'Reyes', 'jreyes@rms.edu.ph', '$2y$12$0nZJcBqFuoWRifjqAJWJnugpalK5Zqz.vkd4UP5kYT1D.v8hbBhSG', NULL, 'College of Computer Studies', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
 (4, 'student', 'Juan', 'Dela Cruz', 'jdelacruz@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00001', 'College of Computer Studies', NULL, NULL, NULL, 0, 'BSIT', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:58:09', NULL),
 (5, 'student', 'Anna', 'Reyes', 'areyes@rms.edu.ph', '$2y$12$C/ZwpxqDQ2LheFFOAnN4VOvGhqigkGgldLLFbNB/C8.UhFfTXRRCK', '2024-00002', 'College of Computer Studies', NULL, NULL, NULL, 0, 'BSIT', NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
-(6, 'research_staff', 'EREC', 'Staff', 'EREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'EREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
-(7, 'research_staff', 'CREC', 'Staff', 'CREC@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'CREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
-(8, 'research_staff', 'ORS', 'Staff', 'ORS@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Office of Research Services', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
-(9, 'research_staff', 'Graduate', 'Staff', 'graduate@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'Graduate School Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL);
+(6, 'research_staff', 'staff1', '', 'staff1@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'EREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL),
+(7, 'research_staff', 'staff2', '', 'staff2@rms.edu.ph', '$2y$12$F5/mP1LrsQuBfPnIPMobKe2d6aaz3xuF7IYCGoz/lVl6qXXxkCDSq', NULL, NULL, 'CREC Office', NULL, NULL, 0, NULL, NULL, NULL, NULL, 'active', NULL, '2026-05-30 17:49:59', '2026-05-30 18:57:54', NULL);
 
 -- DEMO: Research activity records for fresh-install previews.
 INSERT INTO `research_activities` (`activity_id`, `activity_type`, `title`, `activity_date`, `activity_time`, `venue`, `speaker`, `organizer`, `description`, `status`, `created_by`) VALUES
-(1, 'seminar', 'Responsible Research and Publication Ethics', '2026-10-08', '09:00:00', 'EARIST Cavite Audio-Visual Room', 'Dr. Maria Santos', 'Office of Research Services', 'Orientation on ethical research conduct and responsible publication.', 'scheduled', 8),
+(1, 'seminar', 'Responsible Research and Publication Ethics', '2026-10-08', '09:00:00', 'EARIST Cavite Audio-Visual Room', 'Dr. Maria Santos', 'EREC Office', 'Orientation on ethical research conduct and responsible publication.', 'scheduled', 6),
 (2, 'workshop', 'Intellectual Property Documentation Workshop', '2026-08-21', '13:30:00', 'Research and Innovation Center', 'Engr. Jose Reyes', 'CREC', 'Hands-on preparation of copyright application materials.', 'completed', 7),
-(3, 'forum', 'Student Research Forum 2026', '2026-11-14', NULL, 'Campus Multipurpose Hall', NULL, 'Graduate School Office', 'Interdisciplinary student research exchange.', 'scheduled', 9);
+(3, 'forum', 'Student Research Forum 2026', '2026-11-14', NULL, 'Campus Multipurpose Hall', NULL, 'CREC Office', 'Interdisciplinary student research exchange.', 'scheduled', 7);
 
 -- DEMO: Activity participant records, including linked users and a named guest.
 INSERT INTO `activity_participants` (`participant_id`, `activity_id`, `user_id`, `participant_name`, `role`, `attended`) VALUES
