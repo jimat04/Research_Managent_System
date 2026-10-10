@@ -22,6 +22,11 @@ $capacityPageInput = trim((string) ($_POST['capacity_page'] ?? $_GET['capacity_p
 $capacityPage = in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
     ? $capacityPageInput
     : '';
+$capacityPageTypes = [
+    'seminars' => 'seminar',
+    'trainings' => 'training',
+    'workshops' => 'workshop',
+];
 $requestedType = trim((string) ($_GET['type'] ?? ''));
 if ($capacityPage === '') {
     $capacityPage = match ($requestedType) {
@@ -84,7 +89,10 @@ if ($editRequested && !$activityId) {
 }
 $isEdit = $activityId !== null;
 $values = [
-    'activity_type' => isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions), 'title' => '', 'activity_date' => '', 'activity_time' => '',
+    'activity_type' => $capacityPage !== '' && isset($capacityPageTypes[$capacityPage])
+        ? $capacityPageTypes[$capacityPage]
+        : (isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions)),
+    'title' => '', 'activity_date' => '', 'activity_time' => '',
     'venue' => '', 'speaker' => '', 'organizer' => '', 'description' => '', 'status' => 'scheduled',
 ];
 $errors = [];
@@ -150,15 +158,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $errors[] = 'Your form expired. Please try again.';
     }
-    $postedCapacityPage = trim((string) ($_POST['capacity_page'] ?? ''));
+    $postedCapacityPage = trim((string) ($_POST['capacity_page'] ?? $_GET['capacity_page'] ?? ''));
     $capacityPage = in_array($postedCapacityPage, ['seminars', 'trainings', 'workshops'], true)
         ? $postedCapacityPage
-        : '';
+        : match ($requestedType) {
+            'seminar' => 'seminars',
+            'training' => 'trainings',
+            'workshop' => 'workshops',
+            default => '',
+        };
     $postedId = filter_var($_POST['activity_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
     $isEdit = $postedId !== null;
     $activityId = $postedId;
     foreach (['activity_type', 'title', 'activity_date', 'activity_time', 'venue', 'speaker', 'organizer', 'description'] as $field) {
         $values[$field] = trim((string) ($_POST[$field] ?? ''));
+    }
+
+    if (isset($capacityPageTypes[$capacityPage])) {
+        $lockedActivityType = $capacityPageTypes[$capacityPage];
+        if ($values['activity_type'] !== '' && $values['activity_type'] !== $lockedActivityType) {
+            $errors[] = 'The activity type must match the selected ' . rtrim($capacityPage, 's') . ' page.';
+        }
+        $values['activity_type'] = $lockedActivityType;
     }
 
     if (!preg_match('/^(seminar|training|presentation|workshop|forum)$/D', $values['activity_type'])) {
@@ -305,8 +326,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $shell = $role === 'admin' ? 'admin' : 'staff';
-$pageTitle = $isEdit ? 'Edit Activity' : 'Add Activity';
-$pageSubtitle = $isEdit ? 'Update the activity details; status changes remain on the detail page' : 'Schedule a seminar, training, presentation, workshop, or forum';
+$activityTypeLabels = [
+    'seminar' => 'Seminar',
+    'training' => 'Training',
+    'presentation' => 'Presentation',
+    'workshop' => 'Workshop',
+    'forum' => 'Forum',
+];
+$selectedActivityLabel = $activityTypeLabels[$values['activity_type']] ?? 'Activity';
+$pageTitle = ($isEdit ? 'Edit ' : 'Add ') . $selectedActivityLabel;
+$pageSubtitle = $isEdit
+    ? 'Update the ' . strtolower($selectedActivityLabel) . ' details; status changes remain on the detail page'
+    : 'Schedule a ' . strtolower($selectedActivityLabel) . ' and set who should be notified';
+$activityListUrl = SITE_URL . 'pages/shared/activities.php?type=' . rawurlencode((string) $values['activity_type']);
+if ($capacityPage !== '') {
+    $activityListUrl .= '&capacity_page=' . rawurlencode($capacityPage);
+}
 if ($shell === 'admin') renderAdminShell($user, 'activities.php', $pageTitle, $pageSubtitle);
 else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
 ?>
@@ -317,7 +352,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
 </style>
 
 <div class="activity-form-page">
-  <header class="form-heading"><div><h1><?= activityFormEscape($pageTitle) ?></h1><p><?= activityFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId : SITE_URL . 'pages/shared/activities.php') ?>">← Back</a></header>
+  <header class="form-heading"><div><h1><?= activityFormEscape($pageTitle) ?></h1><p><?= activityFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">← Back</a></header>
   <?php if ($errors): ?><div class="form-errors" role="alert"><strong>Review the following:</strong><ul><?php foreach ($errors as $error): ?><li><?= activityFormEscape($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
   <section class="form-card">
     <?php if ($isEdit): ?><div class="form-status">Current status: <strong><?= activityFormEscape(ucfirst($values['status'])) ?></strong>. Use the activity detail page to complete or cancel it.</div><?php endif; ?>
@@ -326,7 +361,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
       <?php if ($capacityPage !== ''): ?><input type="hidden" name="capacity_page" value="<?= activityFormEscape($capacityPage) ?>"><?php endif; ?>
       <?php if ($isEdit && $activityId): ?><input type="hidden" name="activity_id" value="<?= (int) $activityId ?>"><?php endif; ?>
       <div class="form-grid">
-        <div class="field"><label for="activity-type">Type <span class="required">*</span></label><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select></div>
+        <div class="field"><label for="activity-type">Type <span class="required">*</span></label><?php if ($capacityPage !== '' && isset($capacityPageTypes[$capacityPage])): ?><input id="activity-type" type="text" value="<?= activityFormEscape($selectedActivityLabel) ?>" readonly aria-readonly="true"><input type="hidden" name="activity_type" value="<?= activityFormEscape($values['activity_type']) ?>"><?php else: ?><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select><?php endif; ?></div>
         <div class="field"><label for="activity-date">Date <span class="required">*</span></label><input id="activity-date" name="activity_date" type="date" value="<?= activityFormEscape($values['activity_date']) ?>" required></div>
         <div class="field full"><label for="activity-title">Title <span class="required">*</span></label><input id="activity-title" name="title" type="text" maxlength="255" value="<?= activityFormEscape($values['title']) ?>" required></div>
         <div class="field"><label for="activity-time">Time</label><input id="activity-time" name="activity_time" type="time" value="<?= activityFormEscape($values['activity_time']) ?>"></div>
@@ -375,7 +410,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
           </div>
         <?php endif; ?>
       </div>
-      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId : SITE_URL . 'pages/shared/activities.php') ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Create activity' ?></button></div>
+      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Create ' . activityFormEscape($selectedActivityLabel) ?></button></div>
     </form>
   </section>
 </div>

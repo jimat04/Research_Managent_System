@@ -934,9 +934,15 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     .module-ip .module-pill { background: rgba(245, 124, 0, 0.08); color: #b45309; }
     .admin-monitoring-dashboard > .module-summary-grid {
       grid-column: 1 / -1;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       grid-auto-rows: 1fr;
       gap: 16px;
+    }
+    .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(-n + 3) {
+      grid-column: span 2;
+    }
+    .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(n + 4) {
+      grid-column: span 3;
     }
     @media (max-width: 768px) {
       body.admin-body .admin-dashboard > .admin-main {
@@ -947,9 +953,51 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     @media (max-width: 1180px) {
       .module-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+    @media (max-width: 900px) {
+      .admin-monitoring-dashboard > .module-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: auto;
+      }
+      .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(n) {
+        grid-column: span 1;
+      }
+      .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(5) {
+        grid-column: 1 / -1;
+      }
+    }
     @media (max-width: 640px) {
       .module-summary-grid { grid-template-columns: 1fr; }
+      .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(n) {
+        grid-column: 1 / -1;
+      }
     }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-greeting .module-kicker { font-size: 12px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-greeting p:not(.module-kicker) { font-size: 15px; line-height: 1.6; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card { font-size: 13px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-label,
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-meta > span:last-child { font-size: 12px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card { gap: 13px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card .module-pill { font-size: 10px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card p { font-size: 15px; line-height: 1.4; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card small { font-size: 13px; line-height: 1.55; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-metric span { font-size: 13px; line-height: 1.45; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-links a { font-size: 14px; line-height: 1.45; padding-block: 8px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-links a span:last-child { font-size: 12px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .stat-card > span { font-size: 12px; line-height: 1.45; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .stat-card > small { font-size: 11px; line-height: 1.5; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .panel-head h2 { font-size: 18px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .panel-head p,
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .panel-link { font-size: 13px; line-height: 1.5; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .chart-legend { font-size: 12px; line-height: 1.5; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .dashboard-chart-panel { padding: 20px 20px 26px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .event-table th { font-size: 11px; line-height: 1.4; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .event-table td { font-size: 12px; line-height: 1.5; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .event-table .badge { font-size: 11px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .action-link { font-size: 12px; line-height: 1.45; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-donut span { font-size: 11px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-legend-row { font-size: 12px; line-height: 1.45; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-legend-row strong { font-size: 13px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-legend-row small { font-size: 11px; line-height: 1.45; }
   </style>
 
   <section class="module-summary-grid" aria-label="Research module overview">

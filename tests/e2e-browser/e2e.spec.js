@@ -438,16 +438,6 @@ async function expectDbProject(title, status, projectId = 0) {
   return project;
 }
 
-async function submitMilestone(page, projectId, slot, remarks) {
-  await page.goto(`pages/student/submit-milestone.php?project_id=${projectId}`);
-  const form = page.locator(`form:has(input[name="slot"][value="${slot}"])`);
-  await expect(form).toHaveCount(1);
-  await form.locator('input[name="milestone_file"]').setInputFiles(pdfUpload);
-  await form.locator('textarea[name="remarks"]').fill(remarks);
-  await form.getByRole('button', { name: /submit|resubmit/i }).click();
-  await expect(page.locator('body')).toContainText(/submitted|success/i);
-}
-
 async function createActivity(page, type, capacityPage, title, recipientScope, recipientIds = []) {
   await page.goto(`pages/shared/activity-form.php?capacity_page=${capacityPage}&type=${type}`);
   await page.locator('#activity-type').selectOption(type);
@@ -556,6 +546,13 @@ test.describe.serial('RMS browser end-to-end smoke and role checks', () => {
     expect(Number(user.user_id)).toBe(disposableUserId);
     expect(Number(user.email_verified)).toBe(1);
     expect(user.email_verification_token).toBeNull();
+  });
+
+  test('milestone submission page stays unavailable to students', async ({ page }) => {
+    await login(page, disposableEmail, disposablePassword, 'student');
+    await page.goto('pages/student/submit-milestone.php?project_id=1');
+    await expect(page).toHaveURL(/pages\/researcher\/my-research\.php$/);
+    await expect(page.locator('form input[name="milestone_file"]')).toHaveCount(0);
   });
 
   test('reused and invalid verification tokens are rejected', async ({ page }) => {
@@ -1057,9 +1054,10 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     await expect(page.getByRole('link', { name: /add|create/i })).toHaveCount(0);
     await page.goto('pages/shared/activities.php?capacity_page=trainings&type=training');
     await expect(page).toHaveURL(/403\.php/);
-    await page.goto('pages/staff/staff-submissions.php');
-    await expect(page).toHaveURL(/staff-submissions\.php/);
-    await expect(page.getByRole('button', { name: /forward|return to crec/i })).toHaveCount(0);
+    await page.goto('pages/shared/research-submission-review.php?module_page=research_proposals');
+    await expect(page).toHaveURL(/research-submission-review\.php\?module_page=research_proposals/);
+    await expect(page.getByRole('heading', { name: 'Research Proposals' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /approve|return for revision/i })).toHaveCount(0);
 
     await login(page, adminEmail, adminPassword, 'admin');
     await setStaffPermissions(page, workflowStaffEmail, {
@@ -1070,8 +1068,9 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
       intellectual_property_utilization: { copyrights: 'manage', patents_utility_models: 'manage', innovation_technology_transfer: 'manage' },
     });
     await login(page, workflowStaffEmail, testPassword, 'research_staff');
-    await page.goto('pages/staff/staff-crec.php');
-    await expect(page.locator('body')).toContainText(/review|no committee/i);
+    await page.goto('pages/shared/research-submission-review.php?module_page=research_review');
+    await expect(page).toHaveURL(/research-submission-review\.php\?module_page=research_review/);
+    await expect(page.getByRole('heading', { name: 'Research Review' })).toBeVisible();
     await expectNoServerErrors(page);
   });
 });

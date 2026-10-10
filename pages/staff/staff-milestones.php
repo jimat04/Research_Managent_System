@@ -30,6 +30,11 @@ requireLogin();
 requireRole(['research_staff', 'admin']);
 
 $user    = getCurrentUser();
+header('Location: ' . SITE_URL . ($user['role'] === 'admin'
+    ? 'pages/admin/admin-dashboard.php'
+    : 'pages/staff/staff-dashboard.php'));
+exit;
+
 $user_id = (int) $user['user_id'];
 $canViewMilestones = hasRole('admin') || hasModulePermission($user_id, 'research_implementation_outputs', 'view', 'ongoing_research');
 if (!$canViewMilestones) {

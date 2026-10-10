@@ -30,11 +30,60 @@ $type_filter = in_array((string) ($_GET['type'] ?? ''), ['title', 'chapter'], tr
 $module_page = in_array((string) ($_GET['module_page'] ?? ''), ['research_proposals', 'research_review', 'research_approval'], true)
     ? (string) $_GET['module_page']
     : '';
-$page_title = [
-    'research_proposals' => 'Research Proposals',
-    'research_review' => 'Research Review',
-    'research_approval' => 'Research Approval',
-][$module_page] ?? 'Research Submission Review';
+$section_config = [
+    'research_proposals' => [
+        'title' => 'Research Proposals',
+        'eyebrow' => 'TITLE INTAKE',
+        'description' => 'A dedicated view of researcher-submitted titles, their supporting documents, and their review history.',
+        'empty_title' => 'No versioned title submissions to display',
+        'empty_description' => 'This page lists submissions preserved by the current review workflow. Older project records are not added to that history automatically and remain available in Research Management.',
+        'guide_title' => 'What belongs in this section',
+        'guide_items' => ['Research title and abstract', 'Research area and category', 'Proposal file, when provided'],
+        'next_title' => 'Looking for an older record?',
+        'next_description' => 'Open Research Management to view submitted project records that predate the versioned review history.',
+        'next_href' => SITE_URL . 'pages/admin/admin-research.php?status=submitted',
+        'next_label' => 'Open submitted research records',
+        'type' => 'title',
+        'status' => '',
+        'accent' => 'proposals',
+    ],
+    'research_review' => [
+        'title' => 'Research Review',
+        'eyebrow' => 'AWAITING A DECISION',
+        'description' => 'Review the latest title and chapter versions that are awaiting an authorized decision.',
+        'empty_title' => 'No submissions are waiting for review',
+        'empty_description' => 'Submitted versions appear here until an authorized reviewer approves them or returns them with recommendations.',
+        'guide_title' => 'Review checklist',
+        'guide_items' => ['Read the locked submitted version', 'Check any attached supporting documents', 'Approve or return with clear recommendations'],
+        'next_title' => 'Review outcome',
+        'next_description' => 'Approved versions are kept in Research Approval with their decision history.',
+        'next_module' => 'research_approval',
+        'next_label' => 'View Research Approval',
+        'type' => '',
+        'status' => 'submitted',
+        'accent' => 'review',
+    ],
+    'research_approval' => [
+        'title' => 'Research Approval',
+        'eyebrow' => 'APPROVED SUBMISSIONS',
+        'description' => 'A record of title and chapter versions approved by an administrator or authorized staff member.',
+        'empty_title' => 'No submissions have been approved yet',
+        'empty_description' => 'Once a reviewer approves a submitted title or chapter, its preserved version and review history will be listed here.',
+        'guide_title' => 'Approval records include',
+        'guide_items' => ['The exact version that was approved', 'Who submitted it and when', 'Reviewer decision and submission history'],
+        'next_title' => 'Nothing to approve here?',
+        'next_description' => 'Submissions still awaiting a decision are listed in Research Review.',
+        'next_module' => 'research_review',
+        'next_label' => 'Open Research Review',
+        'type' => '',
+        'status' => 'approved',
+        'accent' => 'approval',
+    ],
+];
+$section = $section_config[$module_page] ?? null;
+$page_title = $section['title'] ?? 'Research Submission Review';
+$type_filter = $section['type'] ?? $type_filter;
+$status_filter = $section['status'] ?? '';
 
 $flash = ['success' => '', 'error' => ''];
 if (!empty($_SESSION['module_error'])) {
@@ -109,13 +158,14 @@ $sql = "
            AND newer.version_number > v.version_number
      )
        AND (? = '' OR v.submission_type = ?)
+       AND (? = '' OR v.status = ?)
   ORDER BY v.submitted_at DESC, v.version_id DESC
      LIMIT 100";
 $queue_stmt = $conn->prepare($sql);
 if (!$queue_stmt) {
     throw new RuntimeException('Unable to prepare research submission queue: ' . $conn->error);
 }
-$queue_stmt->bind_param('ss', $type_filter, $type_filter);
+$queue_stmt->bind_param('ssss', $type_filter, $type_filter, $status_filter, $status_filter);
 if (!$queue_stmt->execute()) {
     throw new RuntimeException('Unable to load research submission queue: ' . $queue_stmt->error);
 }
@@ -188,12 +238,30 @@ foreach ($items as &$item) {
 unset($item);
 
 if ($role === 'admin') {
-    renderAdminShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, 'Review title and chapter submissions separately.');
+    renderAdminShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, $section['description'] ?? 'Review title and chapter submissions separately.');
 } else {
-    renderStaffShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, 'Review title and chapter submissions according to your assigned permissions.');
+    renderStaffShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, $section['description'] ?? 'Review title and chapter submissions according to your assigned permissions.');
 }
 ?>
 <style>
+  .submission-review-workspace{max-width:1440px;margin:0 auto;padding-bottom:32px}
+  .submission-review-tabs{display:flex;gap:8px;overflow-x:auto;margin:0 0 22px;padding:4px 2px 10px}
+  .submission-review-tab{display:flex;align-items:center;gap:9px;flex:0 0 auto;padding:11px 15px;border:1px solid #e2e8f0;border-radius:11px;background:#fff;color:#475569;text-decoration:none;font-size:13px;font-weight:600;transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+  .submission-review-tab:hover{border-color:#fdba74;color:#9a3412;transform:translateY(-1px)}
+  .submission-review-tab[aria-current="page"]{border-color:#fed7aa;background:#fff7ed;color:#9a3412;box-shadow:0 5px 16px rgba(154,52,18,.08)}
+  .submission-review-tab-index{display:grid;place-items:center;width:23px;height:23px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px}
+  .submission-review-tab[aria-current="page"] .submission-review-tab-index{background:#ea580c;color:#fff}
+  .submission-review-hero{position:relative;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(250px,.8fr);gap:28px;overflow:hidden;margin-bottom:22px;padding:clamp(24px,4vw,38px);border:1px solid #e5e7eb;border-radius:20px;background:radial-gradient(ellipse at 90% 10%,rgba(245,124,0,.09),transparent 44%),#fff;box-shadow:0 10px 28px rgba(30,41,59,.04)}
+  .submission-review-hero:before{position:absolute;inset:0 auto 0 0;width:4px;background:#f57c00;content:""}
+  .submission-review-eyebrow{margin:0 0 12px;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.14em}
+  .submission-review-hero h2{max-width:700px;margin:0;color:#111827;font-size:clamp(25px,3.2vw,38px);font-weight:700;letter-spacing:-.04em;line-height:1.13;text-wrap:balance}
+  .submission-review-hero-copy{max-width:62ch;margin:14px 0 0;color:#64748b;font-size:14px;line-height:1.7}
+  .submission-review-path{align-self:center;padding:20px 22px;border-left:1px solid #e2e8f0}
+  .submission-review-path-label{margin:0 0 13px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .submission-review-path ol{display:grid;gap:12px;margin:0;padding:0;list-style:none}
+  .submission-review-path li{display:flex;align-items:center;gap:11px;color:#475569;font-size:13px;line-height:1.45}
+  .submission-review-path li span{display:grid;place-items:center;flex:0 0 25px;height:25px;border:1px solid #fed7aa;border-radius:8px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:700}
+  .submission-review-section-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.58fr);gap:20px;align-items:start}
   .submission-review-grid{display:grid;gap:20px}
   .submission-review-card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:24px}
   .submission-review-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
@@ -208,20 +276,69 @@ if ($role === 'admin') {
   .submission-review-actions button{border:0;border-radius:9px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
   .submission-review-actions .approve{background:#0d9488;color:#fff}
   .submission-review-actions .return{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
-  .submission-review-empty{padding:36px;background:#fff;border:1px dashed #cbd5e1;border-radius:16px;text-align:center;color:#64748b}
+  .submission-review-empty{min-height:255px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:clamp(24px,4vw,38px);border:1px dashed #cbd5e1;border-radius:16px;background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);color:#64748b}
+  .submission-review-empty-mark{display:grid;place-items:center;width:48px;height:48px;margin-bottom:20px;border:1px solid #fed7aa;border-radius:15px;background:#fff7ed;color:#c2410c;font-size:22px}
+  .submission-review-empty h3{margin:0;color:#111827;font-size:20px;letter-spacing:-.025em}
+  .submission-review-empty p{max-width:58ch;margin:9px 0 0;font-size:14px;line-height:1.7}
+  .submission-review-guide{padding:23px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}
+  .submission-review-guide h3{margin:0;color:#111827;font-size:15px}
+  .submission-review-guide p{margin:9px 0 0;color:#64748b;font-size:13px;line-height:1.65}
+  .submission-review-guide ul{display:grid;gap:11px;margin:18px 0 0;padding:0;list-style:none}
+  .submission-review-guide li{display:flex;gap:10px;color:#475569;font-size:13px;line-height:1.55}
+  .submission-review-guide li:before{flex:0 0 auto;color:#c2410c;font-weight:700;content:"✓"}
+  .submission-review-guide-link{display:inline-flex;align-items:center;gap:8px;margin-top:20px;color:#9a3412;font-size:13px;font-weight:700;text-decoration:none}
+  .submission-review-guide-link:hover{text-decoration:underline}
   .review-alert{padding:12px 16px;margin:0 0 18px;border-radius:10px}
   .review-alert.success{background:#dcfce7;color:#166534}.review-alert.error{background:#fee2e2;color:#991b1b}
   .review-history{padding-left:18px;color:#64748b}
   .review-history li{margin:8px 0}
-  @media(max-width:700px){.submission-review-card{padding:18px}}
+  .submission-review-tab:focus-visible,.submission-review-guide-link:focus-visible{outline:2px solid #f57c00;outline-offset:3px}
+  @media(max-width:850px){.submission-review-hero,.submission-review-section-layout{grid-template-columns:1fr}.submission-review-path{border-top:1px solid #e2e8f0;border-left:0;padding:18px 0 0}}
+  @media(max-width:700px){.submission-review-card{padding:18px}.submission-review-tabs{margin-right:-12px}.submission-review-hero{gap:20px}}
+  @media(prefers-reduced-motion:reduce){.submission-review-tab{transition:none}}
 </style>
+
+<div class="submission-review-workspace">
+<?php if ($section): ?>
+  <nav class="submission-review-tabs" aria-label="Research development sections">
+    <?php foreach ([
+        'research_proposals' => ['01', 'Research Proposals'],
+        'research_review' => ['02', 'Research Review'],
+        'research_approval' => ['03', 'Research Approval'],
+    ] as $key => [$index, $label]): ?>
+      <a class="submission-review-tab" href="<?php echo SITE_URL; ?>pages/admin/admin-research-module.php?module=<?php echo rawurlencode($key); ?>"<?php echo $module_page === $key ? ' aria-current="page"' : ''; ?>>
+        <span class="submission-review-tab-index"><?php echo $index; ?></span><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>
+      </a>
+    <?php endforeach; ?>
+  </nav>
+  <section class="submission-review-hero" aria-labelledby="submission-review-heading">
+    <div>
+      <p class="submission-review-eyebrow"><?php echo htmlspecialchars($section['eyebrow'], ENT_QUOTES, 'UTF-8'); ?> · RESEARCH DEVELOPMENT</p>
+      <h2 id="submission-review-heading"><?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
+      <p class="submission-review-hero-copy"><?php echo htmlspecialchars($section['description'], ENT_QUOTES, 'UTF-8'); ?></p>
+    </div>
+    <div class="submission-review-path">
+      <p class="submission-review-path-label">Submission pathway</p>
+      <ol>
+        <li><span>01</span>Researcher submits a title or chapter</li>
+        <li><span>02</span>Authorized staff review the locked version</li>
+        <li><span>03</span>Approval or revision feedback is recorded</li>
+      </ol>
+    </div>
+  </section>
+<?php endif; ?>
 
 <?php if ($flash['success'] !== ''): ?><div class="review-alert success"><?php echo htmlspecialchars($flash['success'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
 <?php if ($flash['error'] !== ''): ?><div class="review-alert error"><?php echo htmlspecialchars($flash['error'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
 
-<div class="submission-review-grid">
+<div class="<?php echo $section ? 'submission-review-section-layout' : 'submission-review-grid'; ?>">
+  <div class="submission-review-grid">
   <?php if (!$items): ?>
-    <div class="submission-review-empty">No title or chapter submissions are available in the review history.</div>
+    <section class="submission-review-empty" aria-live="polite">
+      <span class="submission-review-empty-mark" aria-hidden="true"><?php echo $section && $section['accent'] === 'approval' ? '✓' : ($section && $section['accent'] === 'review' ? '⌕' : '▤'); ?></span>
+      <h3><?php echo htmlspecialchars($section['empty_title'] ?? 'No title or chapter submissions are available yet', ENT_QUOTES, 'UTF-8'); ?></h3>
+      <p><?php echo htmlspecialchars($section['empty_description'] ?? 'Submitted title and chapter versions will appear here with their review history.', ENT_QUOTES, 'UTF-8'); ?></p>
+    </section>
   <?php endif; ?>
   <?php foreach ($items as $item): ?>
     <article class="submission-review-card">
@@ -285,6 +402,26 @@ if ($role === 'admin') {
       <?php endif; ?>
     </article>
   <?php endforeach; ?>
+  </div>
+  <?php if ($section): ?>
+    <aside class="submission-review-guide">
+      <h3><?php echo htmlspecialchars($section['guide_title'], ENT_QUOTES, 'UTF-8'); ?></h3>
+      <p>Every entry is taken from a preserved submission version; this page does not create sample records.</p>
+      <ul>
+        <?php foreach ($section['guide_items'] as $guide_item): ?>
+          <li><?php echo htmlspecialchars($guide_item, ENT_QUOTES, 'UTF-8'); ?></li>
+        <?php endforeach; ?>
+      </ul>
+      <div class="submission-review-section">
+        <h3><?php echo htmlspecialchars($section['next_title'], ENT_QUOTES, 'UTF-8'); ?></h3>
+        <p><?php echo htmlspecialchars($section['next_description'], ENT_QUOTES, 'UTF-8'); ?></p>
+        <a class="submission-review-guide-link" href="<?php echo htmlspecialchars($section['next_href'] ?? (SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($section['next_module'])), ENT_QUOTES, 'UTF-8'); ?>">
+          <?php echo htmlspecialchars($section['next_label'], ENT_QUOTES, 'UTF-8'); ?> <span aria-hidden="true">→</span>
+        </a>
+      </div>
+    </aside>
+  <?php endif; ?>
+</div>
 </div>
 
 <?php

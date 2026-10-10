@@ -123,10 +123,10 @@ Secondary pages (e.g., `messages.php`) delegate to `pages/shared/module-page.php
 ## Main Features
 
 - **Authentication** — login with role tabs and wrong-role guidance, login rate limiting, public registration, email verification links, and role-based approval (students activate immediately; faculty/staff wait for admin approval)
-- **Student workflow** — create/submit research, upload chapters and proposals, track the CREC/EREC status workflow and manual milestones, view adviser feedback
-- **Faculty workflow** — assigned advisees, submission review queue, EREC evaluation and OVPREIS Form No. 3 scoring, revision requests, approvals, comments, and reports (CREC review itself is handled by Research Staff in `pages/staff/staff-crec.php`)
+- **Student workflow** — create/submit research, upload chapters and proposals, track title and chapter review decisions, submit manual milestones, and view adviser feedback
+- **Faculty workflow** — submit research titles and chapters, manage research they own or collaborate on, and submit milestone documents for those projects
 - **Admin tools** — analytics dashboard, user management, research oversight, archive, reports, activity logs, and database backups
-- **Research office staff** — staff dashboard, submissions inbox, CREC review workbench, defense scheduling, milestone verification queue, and contact-message management
+- **Research office staff** — staff dashboard, v3 title and chapter review queue, defense scheduling, milestone verification, revision returns, document verification, and contact-message management
 - **Shared modules** — messaging, notifications, profiles, calendar, and cross-role research detail (calendar / settings / view-research / shared `research-archive` are placeholder stubs routed through `pages/shared/module-page.php`)
 - **Email notifications** — registration verification, account approval, and contact-form replies via PHPMailer (SMTP or `mail()`)
 - **Public site** — homepage, about, features, contact form, public research archive, and branded error pages

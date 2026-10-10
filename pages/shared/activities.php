@@ -213,6 +213,16 @@ $typeLabels = [
     'workshop' => 'Workshops',
     'forum' => 'Forums',
 ];
+$typeSingularLabels = [
+    'seminar' => 'Seminar',
+    'training' => 'Training',
+    'presentation' => 'Presentation',
+    'workshop' => 'Workshop',
+    'forum' => 'Forum',
+];
+$createActivityLabel = $view !== 'overview' && isset($typeSingularLabels[$view])
+    ? '+ Add ' . $typeSingularLabels[$view]
+    : '+ Add Activity';
 $stats = ['participants' => 0];
 $upcoming = [];
 $attendanceSummary = [];
@@ -577,6 +587,11 @@ if ($shell === 'admin') {
   background: linear-gradient(100deg, rgba(234, 247, 245, .7), rgba(255, 255, 255, .88));
   text-align: left;
 }
+body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
+  padding: 18px 21px;
+  color: var(--activity-copy);
+  text-align: left;
+}
 .empty-mark {
   display: grid;
   width: 42px;
@@ -777,7 +792,7 @@ if ($shell === 'admin') {
 <div class="module-hub">
   <header class="module-intro">
     <div><p class="module-kicker"><?= activitiesEscape($pageConfig['kicker']) ?></p><h1><?= activitiesEscape($pageConfig['title']) ?></h1><p><?= activitiesEscape($pageConfig['description']) ?></p></div>
-    <?php if ($canManage): ?><a class="hub-button" href="<?= activitiesEscape($createActivityUrl) ?>">+ Add Activity</a><?php endif; ?>
+    <?php if ($canManage): ?><a class="hub-button" href="<?= activitiesEscape($createActivityUrl) ?>"><?= activitiesEscape($createActivityLabel) ?></a><?php endif; ?>
   </header>
   <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= activitiesEscape($flash['message'] ?? '') ?></div><?php endif; ?>
   <section class="stat-grid" aria-label="Activity statistics">

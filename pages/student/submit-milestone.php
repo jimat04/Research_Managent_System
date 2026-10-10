@@ -1,8 +1,8 @@
 <?php
 /**
- * Student — Submit Milestone Document
+ * Researcher — Submit Milestone Document
  *
- * Lets a student submit Research-Manual milestone documents/reports:
+ * Lets a student or faculty researcher submit Research-Manual milestone documents/reports:
  *   - MOU  (Memorandum of Research Undertaking) → research_documents
  *   - NDA  (Non-Disclosure Agreement)          → research_documents
  *   - Midway Progress Report                    → research_reports
@@ -11,7 +11,7 @@
  *
  * The four tables (`research_documents`, `research_reports`) already exist;
  * this page is the first place that actually INSERTs/UPDATEs them from a
- * student upload. The companion `progress-tracking.php` only reads them.
+ * researcher upload. The companion `progress-tracking.php` only reads them.
  *
  * Storage layout (mirrors submit-chapter.php):
  *   - Files go to uploads/milestones/<safe_name>
@@ -33,10 +33,14 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/faculty-shell.php';
 
-requireRole('student');
+requireRole(['student', 'faculty']);
 
 $user    = getCurrentUser();
+header('Location: ' . SITE_URL . 'pages/researcher/my-research.php');
+exit;
+
 $user_id = (int) $user['user_id'];
 
 // ── local helpers (escape + display) ─────────────────────────────────────
@@ -161,7 +165,7 @@ $tbl_advisers = msub_table_exists($conn, 'project_advisers');
 $project_id = isset($_GET['project_id']) ? (int) $_GET['project_id']
          : (isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0);
 
-// ── fetch all student's projects (owned OR member) for the switcher ─────
+// ── fetch all researcher's projects (owned OR member) for the switcher ──
 $projects = [];
 $ps = $conn->prepare("
     SELECT rp.project_id, rp.title, rp.status
@@ -607,7 +611,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'milestones'
                     );
 
-                    $student_name = trim(
+                    $researcher_name = trim(
                         (string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? '')
                     );
 
@@ -624,14 +628,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $adv_stmt->bind_param('i', $project_id);
                             $adv_stmt->execute();
                             $adv_res = $adv_stmt->get_result();
-                            $link = 'pages/student/submit-milestone.php?project_id=' . $project_id;
+                            $link = 'pages/shared/research-detail.php?id=' . $project_id;
                             while ($adv_row = $adv_res->fetch_assoc()) {
                                 $adv_id = (int) $adv_row['adviser_id'];
                                 if ($adv_id > 0 && $adv_id !== $user_id) {
                                     createNotification(
                                         $adv_id,
                                         'Milestone submitted',
-                                        ($student_name !== '' ? $student_name . ' submitted ' : 'A student submitted ')
+                                        ($researcher_name !== '' ? $researcher_name . ' submitted ' : 'A researcher submitted ')
                                             . $slot['label']
                                             . ' for "' . (string) $project['title'] . '".',
                                         'info',
@@ -656,11 +660,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             createNotification(
                                 (int) $staff_row['user_id'],
                                 'Final Bound Report submitted',
-                                ($student_name !== '' ? $student_name : 'A student')
+                                ($researcher_name !== '' ? $researcher_name : 'A researcher')
                                     . ' submitted the Final Bound Report for "'
                                     . (string) $project['title'] . '".',
-                                'info',
-                                'pages/staff/staff-milestones.php'
+                                'info'
                             );
                         }
                         $staff_stmt->close();
@@ -764,7 +767,18 @@ if ($project) {
     $page_subtitle = 'Upload milestone files for "' . (string) $project['title'] . '".';
 }
 
-renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
+$return_url = ($user['role'] ?? '') === 'faculty'
+    ? SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id
+    : SITE_URL . 'pages/student/progress-tracking.php?project_id=' . $project_id;
+$return_label = ($user['role'] ?? '') === 'faculty'
+    ? '← Back to Project'
+    : '← Back to Progress Tracking';
+
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShell($user, 'submit-milestone', $page_title, $page_subtitle);
+} else {
+    renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
+}
 ?>
 
 <style>
@@ -925,7 +939,7 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
   </div>
 
   <div style="margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-    <a class="msub-link" href="<?php echo SITE_URL; ?>pages/student/progress-tracking.php?project_id=<?php echo $project_id; ?>">← Back to Progress Tracking</a>
+    <a class="msub-link" href="<?php echo msub_se($return_url); ?>"><?php echo msub_se($return_label); ?></a>
     <?php if ($project): ?>
       <span style="color: #94A3B8;">·</span>
       <a class="msub-link" href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo $project_id; ?>">View Project</a>
@@ -1059,7 +1073,7 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
               ?>
             </button>
             <a class="msub-btn msub-btn-secondary"
-               href="<?php echo SITE_URL; ?>pages/student/progress-tracking.php?project_id=<?php echo $project_id; ?>">
+               href="<?php echo msub_se($return_url); ?>">
               Cancel
             </a>
           </div>
@@ -1081,4 +1095,10 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
 
 <script src="../../js/app-forms.js" defer></script>
 
-<?php renderStudentShellClose(); ?>
+<?php
+if (($user['role'] ?? '') === 'faculty') {
+    renderFacultyShellClose();
+} else {
+    renderStudentShellClose();
+}
+?>

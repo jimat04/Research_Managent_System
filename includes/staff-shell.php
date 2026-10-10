@@ -62,8 +62,8 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $stat_contact   = 0;
     $stat_pending   = 0;
     $stat_crec      = 0;
-    $stat_milestones = 0;
     $stat_defenses  = 0;
+    $stat_revisions = 0;
     if (isset($conn)) {
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
@@ -79,42 +79,6 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             $stat_crec = (int) ($committee_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
             $committee_count_stmt->close();
         }
-        // Pending milestone verifications: research_documents + research_reports
-        // with status 'submitted'. Both tables are added by a migration and may
-        // not exist on every install — check SHOW TABLES first so the shell
-        // renders cleanly on older schemas.
-        $milestone_present = ['documents' => false, 'reports' => false];
-        $tbl_check = $conn->query("SHOW TABLES");
-        if ($tbl_check) {
-            while ($trow = $tbl_check->fetch_array()) {
-                if ($trow[0] === 'research_documents') $milestone_present['documents'] = true;
-                if ($trow[0] === 'research_reports')   $milestone_present['reports']   = true;
-            }
-            $tbl_check->close();
-        }
-        $milestone_parts = [];
-        if ($milestone_present['documents']) {
-            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_documents WHERE status = 'submitted'";
-        }
-        if ($milestone_present['reports']) {
-            $milestone_parts[] = "SELECT COUNT(*) AS c FROM research_reports rr WHERE rr.status = 'submitted'
-                AND NOT EXISTS (
-                    SELECT 1 FROM research_documents rd
-                    WHERE rd.project_id = rr.project_id
-                      AND rd.document_type IN ('progress_report','terminal_report')
-                )";
-        }
-        if (!empty($milestone_parts)) {
-            $milestone_sql = implode(' UNION ALL ', $milestone_parts);
-            $milestone_res = $conn->query($milestone_sql);
-            if ($milestone_res) {
-                while ($mrow = $milestone_res->fetch_assoc()) {
-                    $stat_milestones += (int) ($mrow['c'] ?? 0);
-                }
-                $milestone_res->close();
-            }
-        }
-
         // Upcoming defenses (status scheduled/rescheduled with date >= now).
         // defense_schedule is in the main schema, but defend against older
         // installs that may not have it yet.
@@ -130,6 +94,28 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
                 $stat_defenses = (int) ($def_res->fetch_assoc()['c'] ?? 0);
                 $def_res->close();
             }
+        }
+
+        $project_deleted_clause = '';
+        $project_deleted_check = $conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
+        if ($project_deleted_check) {
+            $project_deleted_clause = $project_deleted_check->num_rows > 0 ? ' AND deleted_at IS NULL' : '';
+            $project_deleted_check->close();
+        }
+        $chapter_deleted_clause = '';
+        $chapter_deleted_check = $conn->query("SHOW COLUMNS FROM chapters LIKE 'deleted_at'");
+        if ($chapter_deleted_check) {
+            $chapter_deleted_clause = $chapter_deleted_check->num_rows > 0 ? ' AND deleted_at IS NULL' : '';
+            $chapter_deleted_check->close();
+        }
+        $revision_res = $conn->query("
+            SELECT
+                (SELECT COUNT(*) FROM research_projects WHERE status IN ('for_revision','revision_required')" . $project_deleted_clause . ")
+                + (SELECT COUNT(*) FROM chapters WHERE status = 'revision_required'" . $chapter_deleted_clause . ") AS c
+        ");
+        if ($revision_res) {
+            $stat_revisions = (int) ($revision_res->fetch_assoc()['c'] ?? 0);
+            $revision_res->close();
         }
     }
 
@@ -157,6 +143,9 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     foreach (rmsPermissionModules() as $moduleKey => $module) {
         $moduleItems = [];
         foreach ($module['pages'] as $pageKey => $label) {
+            if ($pageKey === 'ongoing_research') {
+                continue;
+            }
             $level = ($shell_user['role'] ?? '') === 'admin'
                 ? 'manage'
                 : ($permissionMatrix[$moduleKey]['pages'][$pageKey] ?? 'none');
@@ -175,6 +164,14 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             $nav[$module['label']] = $moduleItems;
         }
     }
+    $nav['Research Lifecycle'] = [
+        [SITE_URL . 'pages/staff/staff-defense.php', 'Defense Schedule', '🗓️', true, $stat_defenses],
+        [SITE_URL . 'pages/staff/staff-revisions.php', 'Revision Returns', '↩️', true, $stat_revisions],
+    ];
+    $nav['Research Services'] = [
+        [SITE_URL . 'pages/staff/document-verification.php', 'Document Verification', '📄', true, 0],
+        [SITE_URL . 'pages/staff/contact-messages.php', 'Contact Messages', '✉️', true, $stat_contact],
+    ];
     $nav['Communication'] = [
         [SITE_URL . 'pages/shared/messages.php', 'Messages', '💬', true, 0],
         [SITE_URL . 'pages/shared/notifications.php', 'Notifications', '🔔', true, 0],
@@ -213,9 +210,6 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
                 default => 'copyrights',
             },
             'research-archive.php' => 'completed_research',
-            'staff-submissions.php' => 'research_proposals',
-            'staff-crec.php' => 'research_review',
-            'staff-milestones.php' => 'ongoing_research',
             default => '',
         };
     }

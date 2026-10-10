@@ -8,33 +8,36 @@ requireRole('admin');
 $user = getCurrentUser();
 
 // Get report statistics
-$total_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users")->fetch_assoc()['count'] ?? 0);
-$total_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects")->fetch_assoc()['count'] ?? 0);
-$completed_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'completed'")->fetch_assoc()['count'] ?? 0);
-$archived_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE status = 'archived'")->fetch_assoc()['count'] ?? 0);
+$total_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$total_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$completed_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE deleted_at IS NULL AND status = 'completed'")->fetch_assoc()['count'] ?? 0);
+$archived_research = (int) ($conn->query("SELECT COUNT(*) as count FROM research_projects WHERE deleted_at IS NULL AND status = 'archived'")->fetch_assoc()['count'] ?? 0);
 
 // Get monthly research submissions (last 6 months)
 $monthly_submissions = [];
+$monthly_count_stmt = $conn->prepare('SELECT COUNT(*) AS count FROM research_projects WHERE deleted_at IS NULL AND created_at >= ? AND created_at < ?');
 for ($i = 5; $i >= 0; $i--) {
     $month_start = date('Y-m-01', strtotime("-{$i} months"));
-    $month_end = date('Y-m-t', strtotime("-{$i} months"));
+  $month_end = date('Y-m-01', strtotime($month_start . ' +1 month'));
     $month_label = date('M Y', strtotime("-{$i} months"));
 
-    $count_query = $conn->query("SELECT COUNT(*) as count FROM research_projects WHERE created_at BETWEEN '{$month_start}' AND '{$month_end}'");
-    $count = (int) ($count_query->fetch_assoc()['count'] ?? 0);
+  $monthly_count_stmt->bind_param('ss', $month_start, $month_end);
+  $monthly_count_stmt->execute();
+  $count = (int) ($monthly_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
 
     $monthly_submissions[] = [
         'month' => $month_label,
         'count' => $count
     ];
 }
+$monthly_count_stmt->close();
 
 // Get research by department
 $dept_query = $conn->query("
     SELECT u.department, COUNT(*) as count
     FROM research_projects rp
     LEFT JOIN users u ON rp.created_by = u.user_id
-    WHERE u.department IS NOT NULL AND u.department != ''
+    WHERE rp.deleted_at IS NULL AND u.department IS NOT NULL AND u.department != ''
     GROUP BY u.department
     ORDER BY count DESC
     LIMIT 10
@@ -48,6 +51,7 @@ while ($row = $dept_query->fetch_assoc()) {
 $status_query = $conn->query("
     SELECT status, COUNT(*) as count
     FROM research_projects
+    WHERE deleted_at IS NULL
     GROUP BY status
     ORDER BY count DESC
 ");
@@ -56,7 +60,12 @@ while ($row = $status_query->fetch_assoc()) {
     $research_by_status[] = $row;
 }
 
-$active_research = max(0, $total_research - $completed_research - $archived_research);
+$active_research = 0;
+foreach ($research_by_status as $status_row) {
+  if (!in_array($status_row['status'], ['completed', 'archived', 'rejected'], true)) {
+    $active_research += (int) $status_row['count'];
+  }
+}
 $completion_total = $completed_research + $archived_research;
 $completion_rate = $total_research > 0 ? round(($completion_total / $total_research) * 100, 1) : 0;
 $current_month_count = $monthly_submissions ? (int) $monthly_submissions[count($monthly_submissions) - 1]['count'] : 0;
@@ -67,11 +76,18 @@ $max_dept_count = $research_by_dept ? max(array_column($research_by_dept, 'count
 $status_labels = [
     'draft' => 'Draft',
     'proposal' => 'Proposal',
+  'submitted' => 'Submitted',
+  'under_review' => 'Under Review',
     'under_crec_review' => 'CREC Review',
     'under_erec_review' => 'EREC Review',
+  'for_revision' => 'For Revision',
+  'revision_required' => 'Revision Required',
+  'rejected' => 'Rejected',
+  'title_approved' => 'Title Approved',
     'approved' => 'Approved',
-    'in_progress' => 'In Progress',
     'ongoing' => 'Ongoing',
+  'progress_report' => 'Progress Report',
+  'terminal_review' => 'Terminal Review',
     'completed' => 'Completed',
     'archived' => 'Archived',
 ];
@@ -149,7 +165,7 @@ renderAdminShell(
     $user,
     'admin-reports',
     'Reports & Analytics',
-    'Institute-wide research performance and portfolio activity.'
+    'Operational reporting across the institute research workflow.'
 );
 
 // Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
@@ -167,30 +183,89 @@ renderAdminShell(
 </style>
 <style>
   .module-reports{margin-top:38px}
-  .module-reports-heading{margin:0 0 16px}
+  .module-reports-heading{margin:0 0 16px;padding-inline:20px}
   .module-reports-heading h2{margin:0;color:#1c2639;font-size:26px;letter-spacing:-.03em}
   .module-reports-heading p{margin:7px 0 0;color:#687386;font-size:13px;line-height:1.55}
   .module-report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+  .module-report-grid[data-report-count="1"]{grid-template-columns:1fr}
+  .module-report-grid[data-report-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .module-report-grid>.panel-implementation{grid-column:1/-1;width:100%}
   .module-report-card{overflow:hidden;border:1px solid #dfe5ed;border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(31,42,63,.045)}
   .module-report-card header{padding:19px 20px;border-bottom:1px solid #e8ecf1}
   .module-report-card h3{margin:0;color:#1c2639;font-size:16px}
-  .module-report-card header p{margin:6px 0 0;color:#687386;font-size:11px;line-height:1.5}
+  .module-report-card header p{max-width:42ch;margin:7px 0 0;color:#5d6b81;font-size:13px;line-height:1.55}
   .module-report-list{display:grid;gap:0;padding:8px 20px}
-  .module-report-row{display:flex;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid #f0f2f5;color:#475569;font-size:12px}
+  .module-report-row{display:flex;justify-content:space-between;gap:15px;padding:11px 0;border-bottom:1px solid #e9edf2;color:#435166;font-size:13px;line-height:1.45}
   .module-report-row:last-child{border-bottom:0}
-  .module-report-row strong{color:#192235;font-variant-numeric:tabular-nums}
+  .module-report-row strong{color:#192235;font-size:13px;font-variant-numeric:tabular-nums}
   .module-report-card footer{padding:0 20px 18px}
-  .module-report-card footer a{color:#7c5417;font-size:11px;font-weight:750;text-decoration:none}
-  .module-report-empty{padding:18px 20px;color:#687386;font-size:12px}
-  @media(max-width:1000px){.module-report-grid{grid-template-columns:1fr 1fr}}
-  @media(max-width:680px){.module-report-grid{grid-template-columns:1fr}.module-reports-heading h2{font-size:22px}}
+  .module-report-card footer a{color:#9a4d00;font-size:12px;font-weight:700;text-decoration:none}
+  .module-report-card footer a:hover{text-decoration:underline;text-underline-offset:3px}
+  .module-report-empty{padding:18px 20px;color:#5d6b81;font-size:13px;line-height:1.55}
+  .report-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px 20px;margin:26px 0 0;padding:20px 22px;border:1px solid #dfe5ed;border-radius:12px;background:#fff;box-shadow:0 4px 14px rgba(31,42,63,.035)}
+  .report-controls-copy{grid-column:1;grid-row:1}
+  .report-controls-copy strong{display:block;color:#192235;font-size:16px;line-height:1.3}
+  .report-controls-copy span{display:block;max-width:58ch;margin-top:5px;color:#5d6b81;font-size:13px;line-height:1.5}
+  .report-controls-actions{display:contents}
+  .report-print-heading{display:none}
+  .report-selector{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:0;border:0;background:transparent}
+  .report-choice{display:flex;align-items:flex-start;gap:9px;min-height:48px;padding:11px 10px;border:1px solid #e3e7ed;border-radius:8px;background:#f8fafc;color:#405069;font-size:12px;font-weight:600;line-height:1.35;cursor:pointer;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease}
+  .report-choice:has(input:checked){border-color:#f57c00;background:#fff8f0;color:#713900;box-shadow:inset 3px 0 #f57c00}
+  .report-choice input{flex:0 0 16px;width:16px;height:16px;margin:1px 0 0;accent-color:#f57c00}
+  .report-choice:focus-within,.report-print:focus-visible{outline:2px solid #f57c00;outline-offset:2px}
+  .report-print{grid-column:2;grid-row:1;justify-self:end;min-height:44px;padding:10px 16px;border:1px solid #f57c00;border-radius:8px;background:#f57c00;color:#fff;font-family:inherit;font-size:13px;font-weight:700;line-height:1.2;white-space:nowrap;cursor:pointer;transition:background-color .16s ease,border-color .16s ease,transform .16s ease}
+  .report-choice:hover{border-color:#f57c00;color:#713900}
+  .report-print:hover{border-color:#ea580c;background:#ea580c}
+  .report-print:active{transform:translateY(1px)}
+  .report-print:disabled{border-color:#aeb7c3;background:#aeb7c3;cursor:not-allowed;transform:none}
+  .report-page[hidden]{display:none!important}
+  .report-page-heading{display:none}
+  @media(max-width:1000px){.module-report-grid{grid-template-columns:1fr 1fr}.report-selector{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:900px){.report-controls{display:flex;align-items:stretch;flex-direction:column}.report-controls-actions{display:flex;width:100%;align-items:stretch;flex-direction:column;gap:12px}.report-selector{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}.report-print{align-self:flex-start}}
+  @media(max-width:680px){.module-reports .module-report-grid{grid-template-columns:1fr}.module-reports-heading h2{font-size:22px}.report-selector{grid-template-columns:1fr}.report-choice{min-height:42px}}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .reports-hero{color:#192235!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .reports-hero h2{color:#192235!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .reports-hero-copy>p{color:#5d6b81!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .hero-stat{border-color:#dfe5ed!important;background:#f7f9fd!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .hero-stat-code{color:#f57c00!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .hero-stat-label{color:#526074!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .hero-stat-value{color:#192235!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .reports-note{color:#526074!important}
+  body.admin-body .admin-dashboard .admin-page-content .reports-workspace .reports-hero{border-left-color:#f57c00!important}
+  .report-eyebrow{color:#a64b00}
+  .report-bar-label{font-size:13px}
+  .report-bar-value{font-size:12px}
+  .report-bar-track{height:12px;border-radius:6px}
+  .report-bar-fill{background:#f57c00}
+  .panel-status .report-bar-fill{background:#37618f}
+  .panel-department .report-bar-fill{background:#bd5e08}
+  @media print{
+    body.admin-body,.admin-page-content{background:#fff!important}
+    .admin-sidebar,.admin-topbar,.admin-skip-link,.admin-sidebar-scrim,.report-controls,.reports-hero,.report-metrics,.module-reports-heading,.module-report-card footer{display:none!important}
+    .admin-main,.admin-dashboard.is-collapsed .admin-main{margin:0!important}
+    .admin-page-content{min-height:0!important;padding:0!important}
+    .reports-workspace{max-width:none!important}
+    .reports-workspace{padding:0!important;border:0!important;box-shadow:none!important}
+    .report-page:not([data-report-print-active]){display:none!important}
+    .report-page[data-report-print-active]{display:block!important}
+    .report-page[data-report-print-active]:not([data-report-print-first]){break-before:page;page-break-before:always}
+    .report-page[data-report-print-active]:not([data-report-print-last]){break-after:page;page-break-after:always}
+    .report-page-heading{display:block;margin:0 0 12px;color:#192235;font-size:20px;font-weight:700}
+    .report-metric,.report-panel,.module-report-card{break-inside:avoid;box-shadow:none!important}
+    .analytics-grid{display:block!important;margin:0!important;padding:0!important}
+    .report-panel{width:100%;margin:0 0 12px}
+    .module-reports{margin:0!important}
+    .module-report-grid{display:block!important}
+    .module-report-card{width:100%;margin:0!important}
+    a{color:inherit!important;text-decoration:none!important}
+  }
 </style>
 <div class="reports-workspace">
   <section class="reports-hero" aria-labelledby="reports-hero-title">
     <div class="reports-hero-copy">
-      <div class="reports-kicker">Research intelligence &middot; Institute portfolio</div>
-      <h2 id="reports-hero-title">See where the research portfolio is moving.</h2>
-      <p>Read submission momentum, lifecycle distribution, and department participation from a single executive view.</p>
+      <div class="reports-kicker">Administration &middot; Research workflow</div>
+      <h2 id="reports-hero-title">Track research from proposal to impact.</h2>
+      <p>Review live indicators across research development, capacity building, implementation, dissemination, and intellectual property.</p>
       <div class="reports-note">Live figures generated from the current RMS database.</div>
     </div>
     <div class="hero-stats" aria-label="Portfolio indicators">
@@ -207,7 +282,22 @@ renderAdminShell(
     <article class="report-metric metric-archive"><div class="metric-index">Repository</div><div class="metric-value"><?php echo (int) $archived_research; ?></div><div class="metric-label">Archived projects</div></article>
   </section>
 
-  <div class="analytics-grid">
+  <section class="report-controls" aria-label="Report selection and printing">
+    <div class="report-controls-copy"><strong id="selected-report-title" aria-live="polite">1 report selected</strong><span id="selected-report-description">Choose one or more workflow reports. Each selected report prints on a separate page.</span></div>
+    <div class="report-controls-actions">
+      <div class="report-selector" role="group" aria-label="Select report pages">
+        <label class="report-choice"><input type="checkbox" data-report-choice="development" value="development" checked><span>Research Development</span></label>
+        <label class="report-choice"><input type="checkbox" data-report-choice="capacity" value="capacity"><span>Capacity Building</span></label>
+        <label class="report-choice"><input type="checkbox" data-report-choice="implementation" value="implementation"><span>Implementation &amp; Outputs</span></label>
+        <label class="report-choice"><input type="checkbox" data-report-choice="dissemination" value="dissemination"><span>Publication &amp; Dissemination</span></label>
+        <label class="report-choice"><input type="checkbox" data-report-choice="ip" value="ip"><span>IP &amp; Utilization</span></label>
+      </div>
+      <button class="report-print" type="button" id="print-report">Print selected report (1)</button>
+    </div>
+  </section>
+
+  <section class="report-page analytics-grid" data-report-page="development" data-report-title="Research Development">
+    <h2 class="report-page-heading">Research Development</h2>
     <section class="report-panel panel-trend" aria-labelledby="submission-trend-title">
       <header class="report-panel-header">
         <div><div class="report-eyebrow">Submission pulse</div><h3 class="report-title" id="submission-trend-title">Six-month intake</h3><p class="report-copy">Monthly project creation reveals the current pace of institute research activity.</p></div>
@@ -249,33 +339,13 @@ renderAdminShell(
       <?php endif; ?>
     </section>
 
-    <section class="report-panel panel-wide panel-department" aria-labelledby="department-distribution-title">
-      <header class="report-panel-header">
-        <div><div class="report-eyebrow">Institute participation</div><h3 class="report-title" id="department-distribution-title">Research by department</h3><p class="report-copy">The ten departments with the largest representation in the current portfolio.</p></div>
-        <span class="report-tag">TOP 10</span>
-      </header>
-      <?php if (empty($research_by_dept)): ?>
-        <div class="report-empty"><div class="report-empty-mark">00</div><strong>No department data</strong><p>Department participation will appear when project owners have department records.</p></div>
-      <?php else: ?>
-        <div class="report-chart">
-          <?php foreach ($research_by_dept as $data):
-            $width = ((int) $data['count'] / $max_dept_count) * 100;
-          ?>
-            <div class="report-bar">
-              <span class="report-bar-label"><?php echo htmlspecialchars($data['department'], ENT_QUOTES, 'UTF-8'); ?></span>
-              <div class="report-bar-track"><div class="report-bar-fill" style="--bar-size:<?php echo htmlspecialchars(number_format($width, 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>%"></div></div>
-              <span class="report-bar-value"><?php echo (int) $data['count']; ?> proj.</span>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </section>
-  </div>
+  </section>
 
   <section class="module-reports" id="module-portfolio" aria-labelledby="module-reports-heading">
-    <header class="module-reports-heading"><h2 id="module-reports-heading">Research modules and intellectual outputs</h2><p>Live operational reports for events, publication outcomes, copyright applications, and registered outputs.</p></header>
+    <header class="module-reports-heading"><h2 id="module-reports-heading">Operational workflow indicators</h2><p>Current activity and output records from the corresponding RMS modules.</p></header>
     <div class="module-report-grid">
-      <article class="module-report-card">
+      <article class="module-report-card report-page" data-report-page="capacity" data-report-title="Capacity Building">
+        <h2 class="report-page-heading">Capacity Building</h2>
         <header><h3>Research activities</h3><p>Seminar, presentation, and participation totals recorded in the activity module.</p></header>
         <?php if ($moduleTables['research_activities']): ?>
           <div class="module-report-list">
@@ -289,7 +359,33 @@ renderAdminShell(
         <footer><a href="<?= htmlspecialchars(SITE_URL . 'pages/shared/activities.php', ENT_QUOTES, 'UTF-8') ?>">Open activity records</a></footer>
       </article>
 
-      <article class="module-report-card">
+      <section class="report-page analytics-grid panel-implementation" data-report-page="implementation" data-report-title="Implementation &amp; Outputs">
+        <h2 class="report-page-heading">Implementation &amp; Outputs</h2>
+        <section class="report-panel panel-wide panel-department" aria-labelledby="department-distribution-title">
+          <header class="report-panel-header">
+            <div><div class="report-eyebrow">Institute participation</div><h3 class="report-title" id="department-distribution-title">Research by department</h3><p class="report-copy">The ten departments with the largest representation in the current portfolio.</p></div>
+            <span class="report-tag">TOP 10</span>
+          </header>
+          <?php if (empty($research_by_dept)): ?>
+            <div class="report-empty"><div class="report-empty-mark">00</div><strong>No department data</strong><p>Department participation will appear when project owners have department records.</p></div>
+          <?php else: ?>
+            <div class="report-chart">
+              <?php foreach ($research_by_dept as $data):
+                $width = ((int) $data['count'] / $max_dept_count) * 100;
+              ?>
+                <div class="report-bar">
+                  <span class="report-bar-label"><?php echo htmlspecialchars($data['department'], ENT_QUOTES, 'UTF-8'); ?></span>
+                  <div class="report-bar-track"><div class="report-bar-fill" style="--bar-size:<?php echo htmlspecialchars(number_format($width, 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>%"></div></div>
+                  <span class="report-bar-value"><?php echo (int) $data['count']; ?> proj.</span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </section>
+      </section>
+
+      <article class="module-report-card report-page" data-report-page="dissemination" data-report-title="Publication &amp; Dissemination">
+        <h2 class="report-page-heading">Publication &amp; Dissemination</h2>
         <header><h3>Publication monitoring</h3><p>Submissions tracked from first review through publication.</p></header>
         <?php if ($moduleTables['publications']): ?>
           <div class="module-report-list">
@@ -304,7 +400,8 @@ renderAdminShell(
         <footer><a href="<?= htmlspecialchars(SITE_URL . 'pages/shared/publications.php?status=under_review', ENT_QUOTES, 'UTF-8') ?>">Open publication monitoring</a></footer>
       </article>
 
-      <article class="module-report-card">
+      <article class="module-report-card report-page" data-report-page="ip" data-report-title="IP &amp; Utilization">
+        <h2 class="report-page-heading">IP &amp; Utilization</h2>
         <header><h3>Copyrights and research outputs</h3><p>Application stages, registered outputs, and registrations completed this year.</p></header>
         <?php if ($moduleTables['copyright_applications']): ?>
           <div class="module-report-list">
@@ -322,6 +419,50 @@ renderAdminShell(
     </div>
   </section>
 </div>
+
+<script>
+(() => {
+  const workspace = document.querySelector('.reports-workspace');
+  const choices = Array.from(workspace.querySelectorAll('[data-report-choice]'));
+  const pages = Array.from(workspace.querySelectorAll('[data-report-page]'));
+  const moduleReports = workspace.querySelector('#module-portfolio');
+  const moduleGrid = workspace.querySelector('.module-report-grid');
+  const title = workspace.querySelector('#selected-report-title');
+  const description = workspace.querySelector('#selected-report-description');
+  const printButton = workspace.querySelector('#print-report');
+
+  const updateSelection = () => {
+    const selectedChoices = choices.filter((choice) => choice.checked);
+    const selectedReports = new Set(selectedChoices.map((choice) => choice.value));
+    const selectedPages = pages.filter((page) => selectedReports.has(page.dataset.reportPage));
+
+    pages.forEach((page) => {
+      const isSelected = selectedReports.has(page.dataset.reportPage);
+      page.hidden = !isSelected;
+      page.toggleAttribute('data-report-print-active', isSelected);
+      page.toggleAttribute('data-report-print-first', isSelected && selectedPages[0] === page);
+      page.toggleAttribute('data-report-print-last', isSelected && selectedPages[selectedPages.length - 1] === page);
+    });
+    const selectedModuleCards = selectedPages.filter((page) => page.classList.contains('module-report-card'));
+    moduleGrid.dataset.reportCount = String(Math.max(1, selectedModuleCards.length));
+    moduleReports.hidden = !selectedPages.some((page) => page.closest('#module-portfolio'));
+
+    const count = selectedChoices.length;
+    title.textContent = `${count} ${count === 1 ? 'report' : 'reports'} selected`;
+    description.textContent = count > 0
+      ? 'Each selected report prints on a separate page.'
+      : 'Select at least one report to enable printing.';
+    printButton.textContent = `Print selected ${count === 1 ? 'report' : 'reports'} (${count})`;
+    printButton.disabled = count === 0;
+  };
+
+  choices.forEach((choice) => choice.addEventListener('change', updateSelection));
+  printButton.addEventListener('click', () => {
+    if (choices.some((choice) => choice.checked)) window.print();
+  });
+  updateSelection();
+})();
+</script>
 
 <?php
 renderAdminShellClose();
