@@ -324,7 +324,7 @@ if ($view === 'ongoing') {
             throw new RuntimeException('Unable to prepare the recent outputs query: ' . $conn->error);
         }
         $publicationHubUrl = SITE_URL . 'pages/shared/publications.php?status=published';
-        $copyrightHubUrl = SITE_URL . 'pages/shared/copyrights.php?status=registered';
+        $copyrightHubUrl = SITE_URL . 'pages/shared/copyrights.php?status=registered&module_page=research_outputs';
         $stmt->bind_param('ss', $publicationHubUrl, $copyrightHubUrl);
         if (!$stmt->execute()) {
             $error = $stmt->error;
@@ -532,7 +532,7 @@ $tabs = [
       <div class="panel-head"><div><h2 id="outputs-quick-links-heading">Output registers</h2><p>Open the publication and intellectual-property hubs to review full records.</p></div></div>
       <div class="io-quick-links">
         <?php if ($canViewPublications): ?><a class="io-link" href="<?= implementationOutputsEscape(SITE_URL . 'pages/shared/publications.php?status=published&module_page=research_outputs') ?>">Open publications hub</a><?php else: ?><span class="io-link disabled" aria-disabled="true">Publications hub unavailable to this account</span><?php endif; ?>
-        <?php if ($canViewCopyrights): ?><a class="io-link" href="<?= implementationOutputsEscape(SITE_URL . 'pages/shared/copyrights.php?status=registered&module_page=copyrights') ?>">Open copyrights hub</a><?php else: ?><span class="io-link disabled" aria-disabled="true">Copyrights hub unavailable to this account</span><?php endif; ?>
+        <?php if ($canViewCopyrights): ?><a class="io-link" href="<?= implementationOutputsEscape(SITE_URL . 'pages/shared/copyrights.php?status=registered&module_page=research_outputs') ?>">Open copyrights hub</a><?php else: ?><span class="io-link disabled" aria-disabled="true">Copyrights hub unavailable to this account</span><?php endif; ?>
       </div>
       <?php if (!$publicationsAvailable || !$copyrightsAvailable): ?>
         <div class="empty-state"><div class="empty-mark" aria-hidden="true">i</div><div><h3>Some output records are unavailable</h3><p><?= !$publicationsAvailable ? 'The publications table is missing. ' : '' ?><?= !$copyrightsAvailable ? 'The copyright registry is missing.' : '' ?></p></div></div>

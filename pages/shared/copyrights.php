@@ -46,6 +46,9 @@ if ($tableCheck instanceof mysqli_result) {
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
+$returnToResearchOutputs = in_array($role, ['admin', 'research_staff'], true)
+    && (string) ($_GET['module_page'] ?? '') === 'research_outputs';
+$researchOutputsUrl = SITE_URL . 'pages/shared/implementation-outputs.php?view=outputs&module_page=research_outputs';
 $staffCopyrightManagePages = [
     'copyrights' => $role === 'research_staff' && hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'copyrights'),
     'patents_utility_models' => $role === 'research_staff' && hasModulePermission($userId, 'intellectual_property_utilization', 'manage', 'patents_utility_models'),
@@ -99,6 +102,7 @@ if ($role === 'research_staff') {
     $hasCopyrightAccess = hasModulePermission($userId, 'intellectual_property_utilization', 'view', 'copyrights');
     if ($ipScope !== '') {
         $staffPageKey = $ipScope;
+        // output_type exists only on copyright_applications, so this joined-query filter is unambiguous.
         $staffScopeSql = ' AND output_type IN (' . implode(',', array_map(static fn(string $type): string => "'{$type}'", $scopeOutputTypes)) . ')';
     } elseif ($outputType !== '') {
         $staffPageKey = 'copyrights';
@@ -232,9 +236,9 @@ if ($copyrightsAvailable) {
     }
     $sql .= $staffScopeSql;
     if ($view === 'records') {
-        $sql .= " AND status = 'registered'";
+        $sql .= " AND c.status = 'registered'";
     } elseif ($view === 'monitoring') {
-        $sql .= " AND status IN ('pending', 'under_review')";
+        $sql .= " AND c.status IN ('pending', 'under_review')";
     }
     if ($query !== '') {
         $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
@@ -445,7 +449,9 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
   pointer-events: none;
 }
 .copyright-hub .module-intro > div,
-.copyright-hub .module-intro > .hub-button { position: relative; z-index: 1; }
+.copyright-hub .module-intro > .hub-button,
+.copyright-hub .module-intro > .copyright-header-actions { position: relative; z-index: 1; }
+.copyright-hub .copyright-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .copyright-hub .module-kicker {
   margin-bottom: 8px;
   color: var(--copyright-accent-hover);
@@ -691,7 +697,8 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
 @media (max-width: 640px) {
   .copyright-hub .module-intro { display: block; padding: 23px 20px; }
   .copyright-hub .module-intro::after { right: 10px; bottom: -30px; font-size: 130px; }
-  .copyright-hub .module-intro .hub-button { width: 100%; margin-top: 17px; }
+  .copyright-hub .copyright-header-actions { margin-top: 17px; }
+  .copyright-hub .copyright-header-actions .hub-button { width: 100%; }
   .copyright-hub .stat-grid,
   .copyright-hub .stat-grid.stat-grid-four,
   .copyright-hub .filter-form,
@@ -713,7 +720,7 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
 </style>
 
 <div class="module-hub copyright-hub role-<?= copyrightsEscape($role) ?>">
-  <header class="module-intro"><div><p class="module-kicker"><?= copyrightsEscape($pageConfig['kicker']) ?></p><h1><?= copyrightsEscape($pageConfig['title']) ?></h1><p><?= copyrightsEscape($pageConfig['description']) ?></p></div><?php if ($role !== 'research_staff' || $canReview): ?><a class="hub-button" href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-form.php' . ($ipScope !== '' ? '?ip_scope=' . rawurlencode($ipScope) : '')) ?>">+ Apply</a><?php endif; ?></header>
+  <header class="module-intro"><div><p class="module-kicker"><?= copyrightsEscape($pageConfig['kicker']) ?></p><h1><?= copyrightsEscape($pageConfig['title']) ?></h1><p><?= copyrightsEscape($pageConfig['description']) ?></p></div><div class="copyright-header-actions"><?php if ($returnToResearchOutputs): ?><a class="hub-button secondary" href="<?= copyrightsEscape($researchOutputsUrl) ?>">Back to research outputs</a><?php endif; ?><?php if ($role !== 'research_staff' || $canReview): ?><a class="hub-button" href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-form.php' . ($ipScope !== '' ? '?ip_scope=' . rawurlencode($ipScope) : '')) ?>">+ Apply</a><?php endif; ?></div></header>
   <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= copyrightsEscape($flash['message'] ?? '') ?></div><?php endif; ?>
   <?php if ($pageConfig['stats_mode'] === 'rows'): ?>
     <section class="hub-panel" aria-labelledby="intellectual-outputs-heading"><div class="panel-head"><div><h2 id="intellectual-outputs-heading">Intellectual outputs</h2><p>Application counts by output type<?= $ownScope ? ' in your portfolio' : '' ?>.</p></div></div><div class="intellectual-output-list"><?php foreach ($pageConfig['stats'] as $row): ?><div class="intellectual-output-row"><span><?= copyrightsEscape($row['label']) ?></span><strong><?= (int) $row['value'] ?></strong></div><?php endforeach; ?></div></section>
@@ -734,7 +741,7 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
   <?php endif; ?>
 
   <section class="hub-panel" aria-labelledby="copyright-directory-heading"><div class="panel-head"><div><h2 id="copyright-directory-heading"><?= copyrightsEscape($pageConfig['directory_title']) ?></h2><p><?= count($applications) ?> <?= count($applications) === 1 ? 'record' : 'records' ?> in view</p></div></div>
-    <form class="filter-form" method="get" action="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyrights.php') ?>"><?php if ($ipScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= copyrightsEscape($ipScope) ?>"><?php endif; ?><div class="field"><label for="copyright-q">Title, applicant, or reference no.</label><input id="copyright-q" name="q" type="search" maxlength="150" value="<?= copyrightsEscape($query) ?>" placeholder="Search applications"></div><div class="field"><label for="copyright-status">Status</label><select id="copyright-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php if ($ipScope === '' || $staffPageKey === 'copyrights'): ?><div class="field"><label for="copyright-type">Output type</label><select id="copyright-type" name="output_type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $outputType === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= copyrightsEscape($role === 'research_staff' ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($staffPageKey) : SITE_URL . 'pages/shared/copyrights.php') ?>">Clear</a><?php endif; ?></div></form>
+    <form class="filter-form" method="get" action="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyrights.php') ?>"><?php if ($ipScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= copyrightsEscape($ipScope) ?>"><?php endif; ?><?php if ($returnToResearchOutputs): ?><input type="hidden" name="module_page" value="research_outputs"><?php endif; ?><div class="field"><label for="copyright-q">Title, applicant, or reference no.</label><input id="copyright-q" name="q" type="search" maxlength="150" value="<?= copyrightsEscape($query) ?>" placeholder="Search applications"></div><div class="field"><label for="copyright-status">Status</label><select id="copyright-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php if ($ipScope === '' || $staffPageKey === 'copyrights'): ?><div class="field"><label for="copyright-type">Output type</label><select id="copyright-type" name="output_type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $outputType === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= copyrightsEscape($returnToResearchOutputs ? $researchOutputsUrl : ($role === 'research_staff' ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($staffPageKey) : SITE_URL . 'pages/shared/copyrights.php')) ?>">Clear</a><?php endif; ?></div></form>
     <?php if (!$copyrightsAvailable || !$applications): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#169;</div><h2><?= $copyrightsAvailable ? 'No applications found' : 'Copyrights are unavailable' ?></h2><p><?= $copyrightsAvailable ? ($ownScope ? 'No applications match your current search and filters.' : 'Adjust the search or filters to see more copyright records.') : 'Apply database migration 012 to enable this module.' ?></p></div>
     <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><?php if ($showReferenceColumn): ?><th>Reference no.</th><?php endif; ?><th>Output title</th><th>Applicant</th><th>Category</th><th>Output type</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach ($applications as $application): $badge = copyrightsStatusBadge((string) $application['status']); $detailUrl = SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $application['copyright_id']; $canEdit = $role === 'admin' || ($ownScope && (int) $application['applicant_id'] === $userId && $application['status'] === 'pending') || ($role === 'research_staff' && $staffCanManageCopyrightType((string) $application['output_type'])); ?><tr><?php if ($showReferenceColumn): ?><td class="ref"><?= copyrightsEscape($application['copyright_ref_no'] ?: '—') ?></td><?php endif; ?><td class="title-cell"><a href="<?= copyrightsEscape($detailUrl) ?>"><?= copyrightsEscape($application['output_title']) ?></a></td><td><?= copyrightsEscape($application['applicant_name'] ?: '—') ?></td><td><?= copyrightsEscape(ucfirst((string) $application['applicant_category'])) ?></td><td><?= copyrightsEscape($typeOptions[$application['output_type']] ?? ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?></td><td><span class="badge tone-<?= copyrightsEscape($badge['tone']) ?>"><?= copyrightsEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= copyrightsEscape($detailUrl) ?>">View</a><?php if ($canEdit): ?><a class="row-link" href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-form.php?id=' . (int) $application['copyright_id']) ?>">Edit</a><?php endif; ?></div></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
   </section>
