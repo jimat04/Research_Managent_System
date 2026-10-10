@@ -1,8 +1,8 @@
 # RMS Progress Audit Report
 
 **Audit Date:** September 6, 2026
-**Last updated:** October 10, 2026 (source-aligned status note)
-**System version:** v2 — EARIST Cavite Research Monitoring System (pivot from workflow RMS, September 25, 2026)
+**Last updated:** October 10, 2026
+**System version:** v3 — Unified researcher workflow (adviser-approved title + chapter process, October 10, 2026)
 **Auditor:** Claude (E2E walkthrough pass on live DB)
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
@@ -91,6 +91,23 @@ New module structure (6 commits, each E2E-tested before merge):
 | f2ab103 | Dashboards: 7-indicator monitoring overview (staff/admin, shared implementation), personal summaries (faculty/student), pure-CSS activity chart, quick actions |
 
 Role model unchanged (student / faculty / research\_staff / admin): faculty and students submit publications and copyright applications and view activities; staff and admin manage all modules. Repository (research-archive) integrated into navigation.
+
+## 0.3 v3 — Adviser-Approved Research Submission Workflow (2026-10-10)
+
+Per professor direction, the generic research-manual workflow was replaced by a two-stage adviser-approved process, unified for Students and Faculty:
+
+Stage 1 - Research Title: draft (editable) -> submit for review (backend-locked, version snapshot) -> Admin or permission-granted staff approves (status `title_approved`, unlocks chapters) or returns with required comments -> researcher revises and resubmits (new version, history preserved).
+
+Stage 2 - Chapters: available only after title approval; chapter N requires chapter N-1 approved (`FOR UPDATE` gate); same draft/submit/lock/version/return/resubmit model per chapter.
+
+Implementation (commits a33d0ba, b2882e6):
+- `includes/research-workflow.php`: shared workflow engine (version snapshots, review decisions, permission checks reusing the existing module-permission system: `research_review` vs `research_approval` grants, admin implicit)
+- `research_submission_versions` + `research_author_snapshots` tables (migrations 017/018 via the new migration runner `scripts/migrate.php` + tracking table, migration 016)
+- `pages/shared/research-submission-review.php`: unified admin/staff review queue (titles + chapters, approve/return with comments, permission-gated buttons AND server checks)
+- Researcher pages (`submit-research`, `edit-research`, `submit-chapter`, `my-research`) widened to student+faculty with role-aware shells
+- Upload security: uploads htaccess deny + authorized download handler only (direct file URLs 403)
+- Playwright suite (`tests/e2e-browser/`): 11 PASS / 0 FAIL / 2 NOT TESTED with database-state assertions; report at `test-results/e2e-browser-test-report.md`
+- Faculty sidebar My Research group
 
 ### 0.3 Current v2 source snapshot (October 10, 2026)
 
