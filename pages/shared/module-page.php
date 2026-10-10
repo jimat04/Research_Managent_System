@@ -18,11 +18,6 @@ $modules = [
     'calendar.php' => ['Calendar', 'student', 'calendar-days', 'Keep track of research deadlines and scheduled activities.'],
     'profile.php' => ['Profile', null, 'circle-user-round', 'View and update your account information.'],
     'settings.php' => ['Settings', 'student', 'settings', 'Manage your account and notification preferences.'],
-    'faculty-submissions.php' => ['Submissions', 'faculty', 'inbox', 'Browse research projects assigned to your faculty account.'],
-    'faculty-review.php' => ['Review Queue', 'faculty', 'search-check', 'Review chapters and provide feedback to student researchers.'],
-    'faculty-review-detail.php' => ['Review Research', 'faculty', 'clipboard-check', 'Inspect a research submission and record review feedback.'],
-    'faculty-students.php' => ['My Students', 'faculty', 'graduation-cap', 'Monitor the students and projects assigned to you.'],
-    'faculty-reports.php' => ['Reports', 'faculty', 'chart-column', 'View review activity and research progress reports.'],
     'contact-messages.php' => ['Contact Messages', ['admin', 'research_staff'], 'mail', 'Manage public contact form submissions and inquiries.'],
     'admin-users.php' => ['User Management', 'admin', 'users', 'Manage student, faculty, and administrator accounts.'],
     'admin-research.php' => ['Research Management', 'admin', 'folder-kanban', 'Manage all research records and their workflow status.'],
@@ -73,12 +68,8 @@ $navigationByRole = [
         ]
     ],
     'faculty' => [
-        'Advising' => [
+        'Overview' => [
             ['faculty-dashboard.php', 'Dashboard', 'layout-dashboard'],
-            ['faculty-submissions.php', 'Submissions', 'inbox'],
-            ['faculty-review.php', 'Review Queue', 'search-check'],
-            ['faculty-students.php', 'My Students', 'graduation-cap'],
-            ['faculty-reports.php', 'Reports', 'chart-column']
         ],
         'Communication' => [
             ['messages.php', 'Messages', 'messages-square'],

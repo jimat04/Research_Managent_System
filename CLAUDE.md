@@ -165,7 +165,7 @@ APP_DEBUG                             — Enable PHP error display
 | Pattern | Example | Purpose |
 |---|---|---|
 | `{role}-dashboard.php` | `student-dashboard.php` | Role entry page |
-| `{role}-{feature}.php` | `faculty-review.php` | Role-specific feature |
+| `{role}-{feature}.php` | `faculty-dashboard.php` | Role-specific feature |
 | `admin-{feature}.php` | `admin-users.php` | Admin-only pages |
 | `module-page.php?key=xxx` | `?key=my-research.php` | Reusable shared modules |
 | `includes/{name}.php` | `includes/auth.php` | Core backend logic |

@@ -88,7 +88,7 @@ This file documents all agents defined in `.github/agents/` for the **Research M
 
 **Pages scope:**
 - Student: `my-research.php`, `submit-research.php`, `my-documents.php`, `progress-tracking.php`, `messages.php`, `notifications.php`, `profile.php`, `settings.php`, `calendar.php`
-- Faculty: `faculty-review.php`, `faculty-review-detail.php`, `faculty-submissions.php`, `faculty-students.php`, `faculty-reports.php`, `faculty-defense-schedule.php`
+- Faculty: `faculty-dashboard.php`; shared title and chapter workflow lives under `pages/researcher/`.
 - Admin: `admin-users.php`, `admin-research.php`, `admin-archive.php`, `admin-reports.php`, `admin-logs.php`, `admin-backup.php`, `admin-settings.php`
 
 **Deliverables per page:** Full PHP file, SQL ALTER/INSERT, sidebar snippet for other dashboards, 5-step smoke-test checklist.

@@ -127,26 +127,6 @@ function rms_handle_module_action($page_key, $user) {
         }
     }
 
-    if ($page_key === 'faculty-review-detail.php' && $user['role'] === 'faculty') {
-        $project_id = (int) ($_POST['project_id'] ?? 0);
-        $status = $_POST['status'] ?? '';
-        $allowed_statuses = ['proposal', 'in_progress', 'for_defense', 'completed', 'archived'];
-        if (rms_project_access($project_id, $user) && in_array($status, $allowed_statuses, true)) {
-            $statement = $conn->prepare('UPDATE research_projects SET status = ? WHERE project_id = ?');
-            $statement->bind_param('si', $status, $project_id);
-            $statement->execute();
-            $comment = trim($_POST['comment'] ?? '');
-            $chapter_id = (int) ($_POST['chapter_id'] ?? 0);
-            if ($comment !== '' && $chapter_id > 0) {
-                $comment_statement = $conn->prepare('INSERT INTO comments (chapter_id, faculty_id, comment) VALUES (?, ?, ?)');
-                $comment_statement->bind_param('iis', $chapter_id, $user_id, $comment);
-                $comment_statement->execute();
-            }
-            logActivity('Updated research review', 'review');
-            $_SESSION['module_success'] = 'Review update saved.';
-        }
-    }
-
     header('Location: ' . $_SERVER['REQUEST_URI']);
     exit;
 }
@@ -324,48 +304,6 @@ function rms_render_module($page_key, $user, $module) {
 
     if ($page_key === 'profile.php') {
         echo '<div class="card" style="max-width:700px"><div class="card-header"><div class="card-title">Account Profile</div></div><div class="card-body"><form method="post">' . csrfField() . '<label>First name<br><input class="form-control" name="first_name" value="' . rms_escape($user['first_name']) . '" required></label><br><label>Last name<br><input class="form-control" name="last_name" value="' . rms_escape($user['last_name']) . '" required></label><br><label>Email<br><input class="form-control" value="' . rms_escape($user['email']) . '" disabled></label><br><label>Contact<br><input class="form-control" name="contact" value="' . rms_escape($user['contact'] ?? '') . '"></label><br><button class="btn btn-primary">Save Profile</button></form></div></div>'; return;
-    }
-
-    if ($page_key === 'faculty-submissions.php' || $page_key === 'faculty-review.php' || $page_key === 'faculty-students.php') {
-        if ($page_key === 'faculty-students.php') {
-            $stmt = $conn->prepare('SELECT DISTINCT u.first_name, u.last_name, u.email, u.program FROM users u JOIN research_projects rp ON rp.created_by = u.user_id JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? ORDER BY u.last_name');
-            $stmt->bind_param('i', $user_id);
-            $stmt->execute();
-            $rows = rms_rows($stmt->get_result());
-            $formatted = array_map(function ($row) { return [rms_escape($row['first_name'] . ' ' . $row['last_name']), rms_escape($row['email']), rms_escape($row['program'] ?? 'Not specified')]; }, $rows);
-            echo '<div class="card"><div class="card-header"><div class="card-title">My Students</div></div>'; rms_table(['Student', 'Email', 'Program'], $formatted, 'No students are assigned yet.'); echo '</div>'; return;
-        }
-        $stmt = $conn->prepare('SELECT rp.project_id, rp.title, rp.status, u.first_name, u.last_name, rp.created_at FROM research_projects rp JOIN users u ON u.user_id = rp.created_by JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? ORDER BY rp.created_at DESC');
-        $stmt->bind_param('i', $user_id);
-        $stmt->execute();
-        $rows = rms_rows($stmt->get_result());
-        $formatted = array_map(function ($row) { return [rms_escape($row['title']), rms_escape($row['first_name'] . ' ' . $row['last_name']), rms_escape(rms_status($row['status'])), date('M d, Y', strtotime($row['created_at'])), '<a class="btn btn-primary btn-sm" href="faculty-review-detail.php?id=' . (int) $row['project_id'] . '">Review</a>']; }, $rows);
-        echo '<div class="card"><div class="card-header"><div class="card-title">' . rms_escape($module[0]) . '</div></div>'; rms_table(['Research', 'Student', 'Status', 'Date', 'Action'], $formatted, 'No assigned submissions found.'); echo '</div>'; return;
-    }
-
-    if ($page_key === 'faculty-review-detail.php') {
-        $project_id = (int) ($_GET['id'] ?? 0);
-        if (!rms_project_access($project_id, $user)) { echo '<div class="card"><h2>Research not found</h2><p>This project is not assigned to you.</p></div>'; return; }
-        $project_stmt = $conn->prepare('SELECT rp.*, u.first_name, u.last_name FROM research_projects rp JOIN users u ON u.user_id = rp.created_by WHERE rp.project_id = ?');
-        $project_stmt->bind_param('i', $project_id);
-        $project_stmt->execute();
-        $project = $project_stmt->get_result()->fetch_assoc();
-        $chapters_stmt = $conn->prepare('SELECT chapter_id, chapter_number, chapter_title, status FROM chapters WHERE project_id = ? ORDER BY chapter_number');
-        $chapters_stmt->bind_param('i', $project_id);
-        $chapters_stmt->execute();
-        $chapters = rms_rows($chapters_stmt->get_result());
-        echo '<div class="card"><div class="card-header"><div class="card-title">Review: ' . rms_escape($project['title']) . '</div></div><div class="card-body"><p><strong>Student:</strong> ' . rms_escape($project['first_name'] . ' ' . $project['last_name']) . '</p><p>' . nl2br(rms_escape($project['abstract'] ?? 'No abstract provided.')) . '</p><form method="post">' . csrfField() . '<input type="hidden" name="project_id" value="' . $project_id . '"><label>Project status<br><select class="form-control" name="status">';
-        foreach (['proposal', 'in_progress', 'for_defense', 'completed', 'archived'] as $status) echo '<option value="' . $status . '"' . ($project['status'] === $status ? ' selected' : '') . '>' . rms_escape(rms_status($status)) . '</option>';
-        echo '</select></label><br><label>Chapter for comment<br><select class="form-control" name="chapter_id"><option value="0">General project update</option>'; foreach ($chapters as $chapter) echo '<option value="' . (int) $chapter['chapter_id'] . '">Chapter ' . (int) $chapter['chapter_number'] . ' - ' . rms_escape($chapter['chapter_title']) . '</option>'; echo '</select></label><br><label>Feedback<br><textarea class="form-control" name="comment" rows="5"></textarea></label><br><button class="btn btn-primary">Save Review</button></form></div></div>'; return;
-    }
-
-    if ($page_key === 'faculty-reports.php') {
-        $stmt = $conn->prepare('SELECT rp.status, COUNT(*) AS total FROM research_projects rp JOIN project_advisers pa ON pa.project_id = rp.project_id WHERE pa.adviser_id = ? GROUP BY rp.status ORDER BY rp.status');
-        $stmt->bind_param('i', $user_id);
-        $stmt->execute();
-        $rows = rms_rows($stmt->get_result());
-        $formatted = array_map(function ($row) { return [rms_escape(rms_status($row['status'])), (int) $row['total']]; }, $rows);
-        echo '<div class="card"><div class="card-header"><div class="card-title">Assigned Research Report</div></div>'; rms_table(['Status', 'Projects'], $formatted, 'No assigned projects found.'); echo '</div>'; return;
     }
 
     if ($page_key === 'research-archive.php') {

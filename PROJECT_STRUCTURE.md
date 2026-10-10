@@ -35,13 +35,8 @@ rms/
 │   │   ├── my-documents.php             [My documents]
 │   │   └── progress-tracking.php        [Track research progress]
 │   │
-│   ├── 📁 faculty/                      [Faculty Role - 6 files]
-│   │   ├── faculty-dashboard.php        [Faculty dashboard]
-│   │   ├── faculty-submissions.php      [View submissions]
-│   │   ├── faculty-review.php           [Review queue]
-│   │   ├── faculty-review-detail.php    [Detailed review]
-│   │   ├── faculty-students.php         [My students]
-│   │   └── faculty-reports.php          [Faculty reports]
+│   ├── 📁 faculty/                      [Faculty Role]
+│   │   └── faculty-dashboard.php        [Faculty dashboard]
 │   │
 │   ├── 📁 admin/                        [Admin Role - 7 files]
 │   │   ├── admin-dashboard.php          [Admin dashboard]
@@ -210,8 +205,8 @@ http://localhost/rms/pages/researcher/submit-research.php
 **Faculty Pages:**
 ```
 http://localhost/rms/pages/faculty/faculty-dashboard.php
-http://localhost/rms/pages/faculty/faculty-review.php
-http://localhost/rms/pages/faculty/faculty-students.php
+http://localhost/rms/pages/researcher/my-research.php
+http://localhost/rms/pages/researcher/submit-chapter.php
 ```
 
 **Admin Pages:**

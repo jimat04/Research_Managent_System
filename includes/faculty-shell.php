@@ -19,7 +19,7 @@
  * any directory — /pages/faculty/, /pages/shared/, etc. — without 404s.
  *
  * @param array  $user          Current user row from getCurrentUser()
- * @param string $current_page  Current page slug (e.g. 'faculty-dashboard', 'faculty-review', 'messages.php')
+ * @param string $current_page  Current page slug (e.g. 'faculty-dashboard', 'my-research', 'messages.php')
  * @param string $page_title    Title shown in the topbar <h1>
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */

@@ -142,7 +142,7 @@ $is_project_student = in_array($role, ['student', 'faculty'], true)
 $chapter_sequence_title_approved = in_array((string) ($project['status'] ?? ''), ['title_approved', 'approved', 'ongoing'], true);
 $back_links = [
     'student' => ['pages/researcher/my-research.php', 'Back to My Research'],
-    'faculty' => ['pages/faculty/faculty-submissions.php', 'Back to My Submissions'],
+    'faculty' => ['pages/researcher/my-research.php', 'Back to My Research'],
     'research_staff' => ['pages/staff/staff-submissions.php', 'Back to Submissions'],
     'admin' => ['pages/admin/admin-research.php', 'Back to Research Management'],
 ];
@@ -439,7 +439,7 @@ if ($role === 'admin') {
 } elseif ($role === 'research_staff') {
     renderStaffShell($user, 'staff-submissions.php', $detail_title, $detail_subtitle);
 } elseif ($role === 'faculty') {
-    renderFacultyShell($user, 'faculty-submissions.php', $detail_title, $detail_subtitle);
+    renderFacultyShell($user, 'my-research', $detail_title, $detail_subtitle);
 } else {
     renderStudentShell($user, 'my-research.php', $detail_title, $detail_subtitle);
 }

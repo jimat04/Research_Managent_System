@@ -91,8 +91,8 @@ rms/
   pages/                           Authenticated pages, organized by role
     student/                       student-dashboard, my-research, submit-research,
                                    submit-chapter, my-documents, progress-tracking
-    faculty/                       faculty-dashboard, faculty-submissions, faculty-review,
-                                   faculty-review-detail, faculty-students, faculty-reports
+    faculty/                       faculty-dashboard
+    researcher/                    Shared Student/Faculty title and chapter workflow
     admin/                         admin-dashboard, admin-users, admin-research,
                                    admin-archive, admin-reports, admin-logs, admin-backup
     staff/                         staff-dashboard, contact-messages

@@ -379,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                             $notification_title,
                             $review_message,
                             'info',
-                            'pages/faculty/faculty-review-detail.php?id=' . (int) $project_id
+                            SITE_URL . 'pages/shared/research-detail.php?id=' . (int) $project_id
                         );
                     }
                     $adviser_notify_stmt->close();
@@ -400,7 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                             $notification_title,
                             $review_message,
                             'info',
-                            'pages/staff/staff-submissions.php'
+                            SITE_URL . 'pages/shared/research-submission-review.php'
                         );
                     }
                     $staff_notify_stmt->close();

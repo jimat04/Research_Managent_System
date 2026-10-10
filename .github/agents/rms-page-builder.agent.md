@@ -48,7 +48,7 @@ Every new page MUST reuse the existing layout so it looks native:
 `pages/my-research.php`, `pages/submit-research.php`, `pages/my-documents.php`, `pages/progress-tracking.php`, `pages/messages.php`, `pages/notifications.php`, `pages/profile.php`, `pages/settings.php`, `pages/calendar.php`.
 
 ### Faculty
-`pages/faculty-review.php`, `pages/faculty-review-detail.php`, `pages/faculty-submissions.php`, `pages/faculty-students.php`, `pages/faculty-reports.php`, `pages/faculty-defense-schedule.php`.
+`pages/faculty-dashboard.php`. Shared Student/Faculty title and chapter workflow lives under `pages/researcher/`.
 
 ### Admin
 `pages/admin-users.php`, `pages/admin-research.php`, `pages/admin-archive.php`, `pages/admin-reports.php`, `pages/admin-logs.php`, `pages/admin-backup.php`, `pages/admin-settings.php`.

@@ -306,8 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                         $reviewer_id,
                                         'New ' . $level_label . ' review assignment',
                                         'You have been assigned to review "' . $short . '" for the ' . $committee_name . '.',
-                                        'info',
-                                        SITE_URL . 'pages/faculty/faculty-my-reviews.php'
+                                        'info'
                                     );
                                     logActivity(
                                         'Assigned reviewer ' . $rev_name . ' to ' . $level_label . ' review of project #' . $project_id . ' ("' . $title . '")',
@@ -373,8 +372,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                             $removed_reviewer_id,
                                             'Review assignment removed',
                                             'You are no longer assigned as ' . $removed_review_level . ' reviewer for "' . $title . '".',
-                                            'info',
-                                            SITE_URL . 'pages/faculty/faculty-my-reviews.php'
+                                            'info'
                                         );
                                     }
                                 }

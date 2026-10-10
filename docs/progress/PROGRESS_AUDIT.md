@@ -32,7 +32,7 @@ This estimate referred to the v1 research-workflow scope and the historical E2E 
 
 **Status Breakdown:**
 - ✅ **Fully built:** 33 role pages
-- 🟡 **Thin / partial:** a handful of dashboards (e.g. `pages/faculty/faculty-my-reviews.php` at 114 lines)
+- 🟡 **Thin / partial:** a handful of dashboards and shared modules.
 - **Stubs:** 0 (former shared stubs are now real pages: `calendar.php` 320 lines, `settings.php` 208 lines, `research-archive.php` 217 lines, `view-research.php` 348 lines; measured with `wc -l`)
 - 🔴 **Genuine feature gaps:**
   - Email verification (migration 003): columns intentionally unapplied - no code reads them; feature unbuilt by design.
@@ -160,16 +160,9 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 
 | Page | Lines | Status | Evidence |
 |---|---|---|---|
-| `faculty-dashboard.php` | 614 | ✅ Built | Adviser KPIs. |
-| `faculty-submissions.php` | 648 | ✅ Built | Submission queue. |
-| `faculty-review.php` | 827 | ✅ Built | Chapter review queue. |
-| `faculty-review-detail.php` | 271 | ✅ Built | Single chapter review screen. |
-| `faculty-score-review.php` | 195 | 🟡 Thin | OVPREIS Form No. 3 scoring sheet; ~200 lines but functional. |
-| `faculty-students.php` | 732 | ✅ Built | My advisees. |
-| `faculty-reports.php` | 1145 | ✅ Built | Review analytics. |
-| `faculty-my-reviews.php` | 114 | 🟡 Thin | Small page — content rendered but light. |
+| `faculty-dashboard.php` | 614 | ✅ Built | Faculty dashboard and advising overview. |
 
-**Summary:** 6/8 full, 2/8 thin. No stubs.
+Faculty title/chapter submission is shared with Students under `pages/researcher/`; review decisions are handled by the authorized Admin/Staff queue.
 
 ### 1.4 Student portal (`pages/student/`)
 
@@ -242,10 +235,10 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 | # | Manual step | Status | Implementing page(s) | Notes |
 |---|---|---|---|---|
 | 1 | Proposal Submission | ✅ | `pages/researcher/submit-research.php`, `pages/researcher/edit-research.php` | Co-researcher team picker included. |
-| 2 | CREC Evaluation | ✅ | `pages/staff/staff-crec.php`, `pages/faculty/faculty-review.php` | Moves status through `under_crec_review`. |
+| 2 | CREC Evaluation | ✅ | `pages/staff/staff-crec.php` | Legacy committee workflow retained only as historical context. |
 | 3 | **ORS Consolidation** | 🔴 | — | No code path, no UI. Gap. |
-| 4 | EREC Research Forum | ✅ | `pages/faculty/faculty-review.php`, `pages/faculty/faculty-score-review.php` | OVPREIS Form No. 3 scoring + forum. |
-| 5 | Approval / Revision / Disapproval | ✅ | `pages/faculty/faculty-review-detail.php` (revision request) | Statuses `for_revision`, `revision_required`, `approved`. |
+| 4 | EREC Research Forum | ✅ | Legacy committee workflow | Historical manual stage; current v3 workflow uses authorized title/chapter review. |
+| 5 | Approval / Revision / Disapproval | ✅ | `pages/shared/research-submission-review.php` | Current review decisions and required revision comments. |
 | 6 | **President Approval** | 🟡 | Folded into the admin final-approval gate in `pages/admin/admin-research.php` (writes `approved_by` / `approved_at`) | Manual says "President" but UI records the acting admin as the approver. No separate President role. |
 | 7 | MOU and NDA | ✅ | `pages/student/submit-milestone.php` (upload), `pages/staff/staff-milestones.php` (verify) | `research_documents` rows with `document_type='mou'/'nda'`. |
 | 8 | Research Implementation | ✅ | `pages/admin/admin-research.php` (status → `in_progress`), `pages/student/progress-tracking.php` | Gate moves approved → ongoing. |
@@ -257,7 +250,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 
 ### 3.1 Five-chapter structure
 - `pages/researcher/submit-chapter.php` enforces chapters 1–5 and a chapter picker (commit `e82c18c` fixed the invalid-chapter dead-end).
-- `pages/faculty/faculty-review-detail.php` reviews per chapter.
+- Authorized reviewers use the shared title/chapter review queue for chapter decisions.
 
 ### 3.2 Required documents
 - Proposal, Chapters 1–5: ✅ via `pages/student/{submit-research,submit-chapter}.php`.
@@ -287,8 +280,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 
 ### 🟢 P2 — nice-to-have
 10. The "President Approval" step is logged as an admin action. If a President role is ever required, add a `president` role to `users.role` enum and split the gate in `pages/admin/admin-research.php`.
-11. `pages/faculty/faculty-my-reviews.php` is thin (114 lines). Either merge it into `pages/faculty/faculty-review.php` or add a status filter / search.
-12. `pages/faculty/faculty-score-review.php` is also light (195 lines) — could be expanded to surface score history.
+11. Faculty no longer performs title/chapter approval; the unified workflow is shared under `pages/researcher/` and reviewed through the authorized queue.
 
 ---
 

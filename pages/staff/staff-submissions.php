@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                             'New adviser assignment',
                                             'You have been assigned as adviser for "' . $short . '".',
                                             'info',
-                                            SITE_URL . 'pages/faculty/faculty-submissions.php'
+                                            SITE_URL . 'pages/shared/research-detail.php?id=' . (int) $project_id
                                         );
                                         createNotification(
                                             $student_id,
@@ -295,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     'Adviser assignment removed',
                                     'You are no longer assigned as adviser for "' . $short . '".',
                                     'warning',
-                                    SITE_URL . 'pages/faculty/faculty-submissions.php'
+                                    SITE_URL . 'pages/shared/research-detail.php?id=' . (int) $project_id
                                 );
 
                                 $student_recipients = [];
