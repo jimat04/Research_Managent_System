@@ -1042,8 +1042,6 @@ renderAdminShell(
           <select name="office" class="form-control">
             <option value="">Select office</option>
             <option value="Office of Research Services">Office of Research Services (ORS)</option>
-            <option value="CREC Office">CREC Office</option>
-            <option value="EREC Office">EREC Office</option>
             <option value="Graduate School Office">Graduate School Office</option>
           </select>
         </div>
@@ -1164,8 +1162,6 @@ renderAdminShell(
           <select name="office" id="editOffice" class="form-control">
             <option value="">Select office</option>
             <option value="Office of Research Services">Office of Research Services (ORS)</option>
-            <option value="CREC Office">CREC Office</option>
-            <option value="EREC Office">EREC Office</option>
             <option value="Graduate School Office">Graduate School Office</option>
           </select>
         </div>
