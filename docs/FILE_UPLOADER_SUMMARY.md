@@ -46,9 +46,9 @@
 - ✅ HTTP status codes (200/400/403/405)
 
 ### 5. **Current student integrations**
-- `pages/student/submit-research.php` — proposal upload during submission
-- `pages/student/edit-research.php` — optional replacement proposal upload
-- `pages/student/submit-chapter.php` — optional chapter document upload
+- `pages/researcher/submit-research.php` — proposal upload during submission
+- `pages/researcher/edit-research.php` — optional replacement proposal upload
+- `pages/researcher/submit-chapter.php` — optional chapter document upload
 - These use the page's normal form POST handling; the AJAX progress UI is not active in these flows.
 
 ### 6. **Testing Documentation** (`docs/FILE_UPLOADER_TESTING.md`)

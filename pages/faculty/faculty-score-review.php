@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     "$level review completed",
                     "A $level reviewer finished evaluating \"$title\".",
                     'info',
-                    'pages/student/my-research.php'
+                    'pages/researcher/my-research.php'
                 );
             }
             if ($send_completion_notification) {

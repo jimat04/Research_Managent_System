@@ -19,7 +19,7 @@ Premium file uploader component for RMS matching the purple/lavender design lang
 ## 7-Step Smoke Test
 
 ### 1. **Idle State**
-- Open `http://localhost/rms/pages/student/submit-research.php`
+- Open `http://localhost/rms/pages/researcher/submit-research.php`
 - Log in using a local student account (see the root README for optional demo-account details).
 - Scroll to "Proposal Document" section
 - **Expected:** Soft lavender dropzone (#F8F4FF), dashed purple border (#D4C4F0), cloud icon 📁, "Click to browse or drag files here" prompt

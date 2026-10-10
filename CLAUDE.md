@@ -36,7 +36,7 @@ http://localhost/rms/
 | Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
 | Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
 
-Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
+Staff demo accounts are limited to Staff 1 (EREC Office) and Staff 2 (CREC Office).
 
 **Troubleshooting:** Blank page → MySQL not running or wrong `DB_*` in `.env`. Upload fails → `uploads/` subdirs need write permission for web server.
 
@@ -49,7 +49,8 @@ Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate
 ```
 public/          ← Entry point for all HTTP requests (homepage, login, about, error pages)
 pages/           ← Authenticated pages, organized by role
-  student/       Student research submission and tracking
+  researcher/    Shared Student/Faculty research titles and chapter workflow
+  student/       Student-specific research tracking and document tools
   faculty/       Faculty review and student management
   admin/         System administration
   staff/         Research office staff

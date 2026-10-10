@@ -91,6 +91,11 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
         'Overview' => [
             [SITE_URL . 'pages/student/student-dashboard.php', 'Dashboard', '📊', true, 0],
         ],
+        'My Research' => [
+            [SITE_URL . 'pages/researcher/my-research.php',     'My Research',           '📁', true, 0],
+            [SITE_URL . 'pages/researcher/submit-research.php', 'Submit Research Title', '📝', true, 0],
+            [SITE_URL . 'pages/researcher/submit-chapter.php',  'Submit a Chapter',      '📄', true, 0],
+        ],
         'Research Modules' => [
             [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
             [SITE_URL . 'pages/shared/publications.php',     'Publications',        '&#128214;', true, 0],
@@ -120,7 +125,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
 
     // Absolute asset/logout URLs (SITE_URL has a trailing slash).
     $url_style   = SITE_URL . 'css/style.css';
-    $url_shell   = SITE_URL . 'css/student-shell.css';
+    $url_shell   = SITE_URL . 'css/student-shell.css?v=' . filemtime(__DIR__ . '/../css/student-shell.css');
     $url_logout  = SITE_URL . 'public/logout.php';
     ?>
 <!DOCTYPE html>

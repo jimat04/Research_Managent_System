@@ -113,9 +113,9 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
             [SITE_URL . 'pages/faculty/faculty-dashboard.php', 'Dashboard', '📊', true, 0],
         ],
         'My Research' => [
-            [SITE_URL . 'pages/student/my-research.php',     'My Research',     '📁', true, 0],
-            [SITE_URL . 'pages/student/submit-research.php', 'Submit Research', '📝', true, 0],
-            [SITE_URL . 'pages/student/submit-chapter.php',  'Submit Chapter',  '📄', true, 0],
+            [SITE_URL . 'pages/researcher/my-research.php',     'My Research',           '📁', true, 0],
+            [SITE_URL . 'pages/researcher/submit-research.php', 'Submit Research Title', '📝', true, 0],
+            [SITE_URL . 'pages/researcher/submit-chapter.php',  'Submit a Chapter',      '📄', true, 0],
         ],
         'Research Modules' => [
             [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
@@ -148,7 +148,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
 
     // Absolute asset/logout URLs (SITE_URL has a trailing slash).
     $url_style   = SITE_URL . 'css/style.css';
-    $url_shell   = SITE_URL . 'css/faculty-shell.css';
+    $url_shell   = SITE_URL . 'css/faculty-shell.css?v=' . filemtime(__DIR__ . '/../css/faculty-shell.css');
     $url_logout  = SITE_URL . 'public/logout.php';
     $page_class  = 'faculty-page--' . preg_replace('/[^a-z0-9-]+/', '-', strtolower(pathinfo($current_basename, PATHINFO_FILENAME)));
     ?>

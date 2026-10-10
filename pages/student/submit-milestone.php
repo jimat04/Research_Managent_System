@@ -901,7 +901,7 @@ renderStudentShell($user, 'submit-milestone', $page_title, $page_subtitle);
     <div class="ico">📭</div>
     <h3>No research projects yet</h3>
     <p>You need a research project before you can submit milestone documents. Submit your research proposal first.</p>
-    <a class="msub-btn msub-btn-primary" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">+ Submit Your Research</a>
+    <a class="msub-btn msub-btn-primary" href="<?php echo SITE_URL; ?>pages/researcher/submit-research.php">+ Submit Your Research</a>
   </div>
 <?php else: ?>
 

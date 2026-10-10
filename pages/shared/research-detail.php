@@ -141,7 +141,7 @@ $is_project_student = in_array($role, ['student', 'faculty'], true)
     );
 $chapter_sequence_title_approved = in_array((string) ($project['status'] ?? ''), ['title_approved', 'approved', 'ongoing'], true);
 $back_links = [
-    'student' => ['pages/student/my-research.php', 'Back to My Research'],
+    'student' => ['pages/researcher/my-research.php', 'Back to My Research'],
     'faculty' => ['pages/faculty/faculty-submissions.php', 'Back to My Submissions'],
     'research_staff' => ['pages/staff/staff-submissions.php', 'Back to Submissions'],
     'admin' => ['pages/admin/admin-research.php', 'Back to Research Management'],
@@ -552,7 +552,7 @@ if ($role === 'admin') {
               </div>
               <?php if ($is_project_student && $chapter_sequence_title_approved): ?>
                 <div style="display: flex; justify-content: center; gap: 8px;">
-                  <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
+                  <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=1" class="btn btn-sm btn-primary">Upload Chapter 1</a>
                 </div>
               <?php elseif ($is_project_student): ?>
                 <div style="color: var(--text-light); text-align:center;padding-bottom:16px;">Chapter 1 becomes available after the research title is approved.</div>
@@ -587,15 +587,15 @@ if ($role === 'admin') {
                     <?php if ($is_project_student): ?>
                       <div>
                         <?php if (!isset($chapters[$i]) && $chapter_sequence_available): ?>
-                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
+                          <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Start Chapter</a>
                         <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'draft' && $chapter_sequence_available): ?>
-                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
+                          <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">Edit Draft</a>
                         <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'revision_required' && $chapter_sequence_available): ?>
-                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
+                          <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">Edit Revision</a>
                         <?php elseif (isset($chapters[$i]) && in_array($chapters[$i]['status'], ['submitted', 'under_review'], true)): ?>
-                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
+                          <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-secondary">View Submission</a>
                         <?php elseif (isset($chapters[$i]) && $chapters[$i]['status'] === 'approved'): ?>
-                          <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
+                          <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo $project_id; ?>&chapter=<?php echo $i; ?>" class="btn btn-sm btn-accent">View Approved</a>
                         <?php else: ?>
                           <span style="color:var(--text-light);font-size:12px">Locked until the previous stage is approved</span>
                         <?php endif; ?>

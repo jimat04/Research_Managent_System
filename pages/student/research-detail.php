@@ -432,7 +432,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
   <div class="alert alert-error">❌ <?php echo rd_escape($flash_error); ?></div>
 <?php endif; ?>
 
-<a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="back-link">← Back to My Research</a>
+<a href="<?php echo SITE_URL; ?>pages/researcher/my-research.php" class="back-link">← Back to My Research</a>
 
 <?php if (!$project): ?>
   <div class="card">
@@ -459,14 +459,14 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
       <span class="badge badge-<?php echo $status_class; ?>" style="font-size: 13px; padding: 8px 16px;"><?php echo rd_escape($status_text); ?></span>
     </div>
     <div class="actions">
-      <a href="<?php echo SITE_URL; ?>pages/student/my-research.php" class="btn btn-secondary">← Back to List</a>
+      <a href="<?php echo SITE_URL; ?>pages/researcher/my-research.php" class="btn btn-secondary">← Back to List</a>
       <?php if ($is_editable): ?>
-        <a href="<?php echo SITE_URL; ?>pages/student/edit-research.php?id=<?php echo (int) $project['project_id']; ?>" class="btn btn-primary">✏️ Edit Project</a>
+        <a href="<?php echo SITE_URL; ?>pages/researcher/edit-research.php?id=<?php echo (int) $project['project_id']; ?>" class="btn btn-primary">✏️ Edit Project</a>
       <?php else: ?>
         <button class="btn btn-primary" disabled title="Editing is disabled once the project is submitted for review.">✏️ Edit Project</button>
       <?php endif; ?>
       <?php if ($status_key === 'approved' || $status_key === 'ongoing'): ?>
-        <a href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>" class="btn btn-secondary">📄 Submit Chapter</a>
+        <a href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>" class="btn btn-secondary">📄 Submit Chapter</a>
       <?php endif; ?>
     </div>
   </div>

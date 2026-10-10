@@ -446,7 +446,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     'Proposal endorsed to EREC',
                                     'Your proposal "' . $short . '" has been endorsed by CREC (avg score ' . number_format($avg, 1) . '/' . $form3_max_score . ') and forwarded to the EARIST Research Evaluation Committee (EREC).',
                                     'success',
-                                    SITE_URL . 'pages/student/my-research.php'
+                                    SITE_URL . 'pages/researcher/my-research.php'
                                 );
                                 // Notify all admins
                                 $admin_stmt = $conn->prepare("SELECT user_id FROM users WHERE role = 'admin' AND status = 'active'");
@@ -650,7 +650,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 'CREC returned proposal for revision',
                                 'Your proposal "' . $short . '" was returned by CREC for revision. Reason: ' . $reason,
                                 'warning',
-                                SITE_URL . 'pages/student/my-research.php'
+                                SITE_URL . 'pages/researcher/my-research.php'
                             );
                             logActivity(
                                 'CREC returned project #' . $project_id . ' ("' . $title . '") for revision: ' . $reason,
@@ -685,7 +685,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 'Proposal rejected by CREC',
                                 'Your proposal "' . $short . '" was rejected by CREC. Reason: ' . $reason,
                                 'error',
-                                SITE_URL . 'pages/student/my-research.php'
+                                SITE_URL . 'pages/researcher/my-research.php'
                             );
                             logActivity(
                                 'CREC rejected project #' . $project_id . ' ("' . $title . '"): ' . $reason,

@@ -24,11 +24,14 @@ rms/
 │
 ├── 📁 pages/                            [Authenticated Internal Pages]
 │   │
-│   ├── 📁 student/                      [Student Role - 6 files]
+│   ├── 📁 researcher/                   [Shared Student/Faculty Research Workflow]
+│   │   ├── my-research.php              [View research projects]
+│   │   ├── submit-research.php          [Draft and submit research titles]
+│   │   ├── edit-research.php            [Edit drafts and returned titles]
+│   │   └── submit-chapter.php           [Draft and submit chapters]
+│   │
+│   ├── 📁 student/                      [Student Role]
 │   │   ├── student-dashboard.php        [Student dashboard]
-│   │   ├── my-research.php              [View my research projects]
-│   │   ├── submit-research.php          [Submit new research]
-│   │   ├── submit-chapter.php           [Submit chapter]
 │   │   ├── my-documents.php             [My documents]
 │   │   └── progress-tracking.php        [Track research progress]
 │   │
@@ -200,8 +203,8 @@ http://localhost/rms/public/features.php → Features page
 **Student Pages:**
 ```
 http://localhost/rms/pages/student/student-dashboard.php
-http://localhost/rms/pages/student/my-research.php
-http://localhost/rms/pages/student/submit-research.php
+http://localhost/rms/pages/researcher/my-research.php
+http://localhost/rms/pages/researcher/submit-research.php
 ```
 
 **Faculty Pages:**

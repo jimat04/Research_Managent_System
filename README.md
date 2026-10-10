@@ -74,7 +74,7 @@ A PHP and MySQL research management system for students, faculty advisers, resea
 | Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
 | Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
 
-Staff demo accounts are per-office per the manual: ORS, CREC, EREC, and Graduate School.
+Staff demo accounts are limited to Staff 1 (EREC Office) and Staff 2 (CREC Office).
 
 ## Project Structure
 

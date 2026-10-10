@@ -192,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                             'Adviser assigned',
                                             $adviser_name . ' has been assigned as adviser for "' . $short . '".',
                                             'info',
-                                            SITE_URL . 'pages/student/my-research.php'
+                                            SITE_URL . 'pages/researcher/my-research.php'
                                         );
                                         logActivity(
                                             'Assigned faculty #' . $adviser_id . ' (' . $adviser_name . ') as adviser for project #' . $project_id . ' ("' . $title . '")',
@@ -357,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             'Proposal forwarded to CREC',
                             'Your proposal "' . $short . '" has been forwarded to the College Research Evaluation Committee (CREC) for review.',
                             'info',
-                            SITE_URL . 'pages/student/my-research.php'
+                            SITE_URL . 'pages/researcher/my-research.php'
                         );
                         logActivity(
                             'Forwarded submission #' . $project_id . ' ("' . $title . '") to CREC',
@@ -391,7 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 'Proposal returned for revision',
                                 'Your proposal "' . $short . '" was returned for revision. Reason: ' . $reason,
                                 'warning',
-                                SITE_URL . 'pages/student/my-research.php'
+                                SITE_URL . 'pages/researcher/my-research.php'
                             );
                             logActivity(
                                 'Returned submission #' . $project_id . ' ("' . $title . '") for revision: ' . $reason,

@@ -623,7 +623,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
     <div class="ico">📭</div>
     <h3>No research projects yet</h3>
     <p>Submit your first research proposal to start tracking your progress through CREC, EREC, and final review.</p>
-    <a class="ptrack-btn ptrack-btn-primary" href="<?php echo SITE_URL; ?>pages/student/submit-research.php">+ Submit Your First Research</a>
+    <a class="ptrack-btn ptrack-btn-primary" href="<?php echo SITE_URL; ?>pages/researcher/submit-research.php">+ Submit Your First Research</a>
   </div>
 
 <?php else: ?>
@@ -779,7 +779,7 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
               <?php endif; ?>
             </div>
             <?php if (in_array((string) $project['status'], ['approved','ongoing'], true)): ?>
-              <a class="ptrack-link" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">Submit / view →</a>
+              <a class="ptrack-link" href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">Submit / view →</a>
             <?php else: ?>
               <a class="ptrack-link" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $project['project_id']; ?>">View →</a>
             <?php endif; ?>
@@ -922,9 +922,9 @@ renderStudentShell($user, 'progress-tracking', $page_title, $page_subtitle);
         <a class="ptrack-btn ptrack-btn-primary" href="<?php echo SITE_URL; ?>pages/student/research-detail.php?id=<?php echo (int) $project['project_id']; ?>">📄 View Project</a>
         <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/student/submit-milestone.php?project_id=<?php echo (int) $project['project_id']; ?>">📑 Submit Milestone Documents</a>
         <?php if (in_array((string) $project['status'], ['approved','ongoing'], true)): ?>
-          <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/student/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">📘 Submit a Chapter</a>
+          <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/researcher/submit-chapter.php?project_id=<?php echo (int) $project['project_id']; ?>">📘 Submit a Chapter</a>
         <?php endif; ?>
-        <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/student/my-research.php">← Back to My Research</a>
+        <a class="ptrack-btn ptrack-btn-secondary" href="<?php echo SITE_URL; ?>pages/researcher/my-research.php">← Back to My Research</a>
       </div>
     </div>
 

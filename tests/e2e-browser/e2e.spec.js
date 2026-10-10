@@ -746,7 +746,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
   test.skip('legacy CREC, EREC, and milestone lifecycle is outside the title/chapter workflow', async ({ page }) => {
     test.setTimeout(180_000);
     await login(page, workflowStudentEmail, testPassword, 'student');
-    await page.goto('pages/student/submit-research.php');
+    await page.goto('pages/researcher/submit-research.php');
     await page.locator('input[name="title"]').fill(workflowProjectTitle);
     await page.locator('select[name="category_id"]').selectOption({ index: 1 });
     await page.locator('select[name="ay_id"]').selectOption({ index: 1 });
@@ -860,7 +860,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
   test('title drafts remain editable, submitted versions lock, and title approval unlocks Chapter 1', async ({ page }) => {
     test.setTimeout(120_000);
     await login(page, workflowStudentEmail, testPassword, 'student');
-    await page.goto('pages/student/submit-research.php');
+    await page.goto('pages/researcher/submit-research.php');
     await page.locator('input[name="title"]').fill(workflowTitleStageTitle);
     await page.locator('select[name="category_id"]').selectOption({ index: 1 });
     await page.locator('select[name="ay_id"]').selectOption({ index: 1 });
@@ -875,11 +875,11 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(Number(state.title_versions)).toBe(0);
     workflowProjectId = Number(state.project_id);
 
-    await page.goto(`pages/student/edit-research.php?id=${workflowProjectId}`);
+    await page.goto(`pages/researcher/edit-research.php?id=${workflowProjectId}`);
     await page.locator('textarea[name="abstract"]').fill('Edited while still a draft; this change is allowed.');
     await page.getByRole('button', { name: /save changes/i }).click();
     await expect(page.locator('body')).toContainText(/updated successfully|changes saved/i);
-    await page.goto(`pages/student/edit-research.php?id=${workflowProjectId}`);
+    await page.goto(`pages/researcher/edit-research.php?id=${workflowProjectId}`);
     const csrfToken = await page.locator('input[name="csrf_token"]').first().inputValue();
     const categoryId = await page.locator('select[name="category_id"]').inputValue();
     const academicYearId = await page.locator('select[name="ay_id"]').inputValue();
@@ -903,7 +903,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     });
     expect(replacementResponse.status()).toBe(400);
     expect((await replacementResponse.json()).error).toMatch(/attachments are locked/i);
-    const deletionResponse = await page.request.post(`${baseUrl}pages/student/edit-research.php?id=${workflowProjectId}`, {
+    const deletionResponse = await page.request.post(`${baseUrl}pages/researcher/edit-research.php?id=${workflowProjectId}`, {
       form: {
         csrf_token: csrfToken,
         action: 'remove_attachment',
@@ -913,7 +913,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(deletionResponse.status()).toBe(200);
     expect(Number(loadSubmissionState(workflowTitleStageTitle).title_uploads)).toBe(1);
 
-    await page.request.post(`${baseUrl}pages/student/edit-research.php?id=${workflowProjectId}`, {
+    await page.request.post(`${baseUrl}pages/researcher/edit-research.php?id=${workflowProjectId}`, {
       form: {
         csrf_token: csrfToken,
         action: 'save',
@@ -929,11 +929,11 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(Number(state.title_versions)).toBe(1);
     expect(state.title).toBe(workflowTitleStageTitle);
 
-    await page.goto(`pages/student/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
     await expect(page.locator('body')).toContainText(/this chapter is locked/i);
     expect(Number(loadSubmissionState(workflowTitleStageTitle).chapter_count)).toBe(0);
     const blockedChapterCsrf = await page.locator('input[name="csrf_token"]').first().inputValue();
-    await page.request.post(`${baseUrl}pages/student/submit-chapter.php`, {
+    await page.request.post(`${baseUrl}pages/researcher/submit-chapter.php`, {
       form: {
         csrf_token: blockedChapterCsrf,
         project_id: String(workflowProjectId),
@@ -959,7 +959,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(state.status).toBe('title_approved');
     expect(state.latest_title_version_status).toBe('approved');
     await login(page, workflowStudentEmail, testPassword, 'student');
-    await page.goto(`pages/student/submit-chapter.php?project_id=${workflowProjectId}`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${workflowProjectId}`);
     await expect(page.locator('body')).toContainText(/choose a chapter/i);
     await page.locator('a.picker-item').filter({ hasText: /chapter 1:/i }).click();
     await page.locator('textarea[name="background"]').fill('Draft Chapter 1 background content for workflow verification.');
@@ -968,7 +968,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(chapterState.status).toBe('draft');
     expect(Number(chapterState.versions)).toBe(0);
 
-    await page.goto(`pages/student/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
     await page.locator('textarea[name="background"]').fill('Submitted Chapter 1 content, version one.');
     const chapterCsrf = await page.locator('input[name="csrf_token"]').first().inputValue();
     await page.getByRole('button', { name: /^submit for review$/i }).click();
@@ -976,7 +976,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(chapterState.status).toBe('submitted');
     expect(Number(chapterState.versions)).toBe(1);
     expect(chapterState.latest_version_status).toBe('submitted');
-    await page.request.post(`${baseUrl}pages/student/submit-chapter.php`, {
+    await page.request.post(`${baseUrl}pages/researcher/submit-chapter.php`, {
       form: {
         csrf_token: chapterCsrf,
         project_id: String(workflowProjectId),
@@ -1001,7 +1001,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(chapterState.latest_comments).toContain('clarify the research context');
 
     await login(page, workflowStudentEmail, testPassword, 'student');
-    await page.goto(`pages/student/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${workflowProjectId}&chapter=1`);
     await page.locator('textarea[name="background"]').fill('Revised Chapter 1 content addressing the review comments.');
     await page.getByRole('button', { name: /resubmit for review/i }).click();
     chapterState = loadChapterSubmissionState(workflowProjectId, 1);
@@ -1020,13 +1020,13 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(Number(chapterState.reviews)).toBe(2);
 
     await login(page, workflowStudentEmail, testPassword, 'student');
-    await page.goto(`pages/student/submit-chapter.php?project_id=${workflowProjectId}`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${workflowProjectId}`);
     await expect(page.locator('a.picker-item').filter({ hasText: /chapter 2:/i })).toBeVisible();
     await expectNoServerErrors(page);
 
     await login(page, workflowFacultyEmails[0], testPassword, 'faculty');
     const facultyTitle = `${workflowTitleStageTitle} Faculty`;
-    await page.goto('pages/student/submit-research.php');
+    await page.goto('pages/researcher/submit-research.php');
     await page.locator('input[name="title"]').fill(facultyTitle);
     await page.locator('select[name="category_id"]').selectOption({ index: 1 });
     await page.locator('select[name="ay_id"]').selectOption({ index: 1 });
@@ -1047,7 +1047,7 @@ test.describe.serial('RMS connected business workflows and persistence', () => {
     expect(loadSubmissionState(facultyTitle).status).toBe('title_approved');
 
     await login(page, workflowFacultyEmails[0], testPassword, 'faculty');
-    await page.goto(`pages/student/submit-chapter.php?project_id=${facultyProjectId}`);
+    await page.goto(`pages/researcher/submit-chapter.php?project_id=${facultyProjectId}`);
     await expect(page.locator('body')).toContainText(/choose a chapter/i);
     await page.locator('a.picker-item').filter({ hasText: /chapter 1:/i }).click();
     await page.locator('textarea[name="background"]').fill('Faculty Chapter 1 submission through the shared chapter workflow.');

@@ -655,7 +655,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
         <div class="mydoc-hero-value"><?php echo count($projects); ?></div>
         <div class="mydoc-hero-label">Research projects</div>
       </div>
-      <a class="mydoc-hero-action" href="<?php echo mydoc_se(SITE_URL . 'pages/student/submit-research.php'); ?>">Submit new research <span aria-hidden="true">&rarr;</span></a>
+      <a class="mydoc-hero-action" href="<?php echo mydoc_se(SITE_URL . 'pages/researcher/submit-research.php'); ?>">Submit new research <span aria-hidden="true">&rarr;</span></a>
     </div>
   </section>
 
@@ -673,7 +673,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
         Files you upload with your research proposal and chapter submissions will appear here.
         Start by submitting your first research project.
       </div>
-      <a class="btn btn-primary" href="<?php echo mydoc_se(SITE_URL . 'pages/student/submit-research.php'); ?>">
+      <a class="btn btn-primary" href="<?php echo mydoc_se(SITE_URL . 'pages/researcher/submit-research.php'); ?>">
         ＋ Submit your first research
       </a>
     </div>

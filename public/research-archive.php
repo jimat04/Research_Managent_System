@@ -397,7 +397,7 @@ $is_logged_in = isLoggedIn();
                 <p>Browse completed and published research from EARIST students and faculty.</p>
                 <div class="hero-actions">
                     <?php if ($is_logged_in): ?>
-                        <a href="pages/student/submit-research.php" class="btn btn-primary btn-lg">+ Submit Research</a>
+                        <a href="<?php echo archive_escape(SITE_URL . 'pages/researcher/submit-research.php'); ?>" class="btn btn-primary btn-lg">+ Submit Research</a>
                     <?php else: ?>
                         <a href="login.php" class="btn btn-primary btn-lg">Login to submit your research</a>
                     <?php endif; ?>

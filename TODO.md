@@ -48,7 +48,7 @@ Completed against the EARIST Research Manual 2015 + the late-2026 feature push:
 - [x] **Milestone submission UI (student)** — `pages/student/submit-milestone.php` handles MOU / NDA / Midway Progress / Terminal uploads with re-upload after `rejected`.
 - [x] **Milestone verification queue (staff)** — `pages/staff/staff-milestones.php` provides approve / reject / waive for both `research_documents` and `research_reports`, with notifications back to the student.
 - [x] **Defense scheduling with notifications** — `pages/staff/staff-defense.php` schedules proposal / pre-oral / final defenses; notifies project owner, all `project_members`, and all `project_advisers`.
-- [x] **Co-researcher team management on submit and edit** — `pages/student/submit-research.php` and `pages/student/edit-research.php` add/remove team members (cap 5), insert `project_members` rows, and notify invitees.
+- [x] **Co-researcher team management on submit and edit** — `pages/researcher/submit-research.php` and `pages/researcher/edit-research.php` add/remove team members (cap 5), insert `project_members` rows, and notify invitees.
 - [x] **Admin final approval gate** — `pages/admin/admin-research.php` writes `approved_by` / `approved_at` and moves approved projects to `in_progress` (commit `9a8c395`).
 - [x] **Publication, colloquium, and archive tracking on admin archive page** — `pages/admin/admin-archive.php` reads/writes `research_publication_tracking.colloquium_status`, `colloquium_date`, `journal_status`, `journal_reference`, `archive_status` (commit `1129b47`).
 - [x] **Chapter picker fix in `submit-chapter.php`** — replaces the previous invalid-chapter dead-end with a populated chapter select (commit `e82c18c`).
@@ -57,7 +57,7 @@ Completed against the EARIST Research Manual 2015 + the late-2026 feature push:
 
 - [ ] **ORS Consolidation stage (Manual step 3)** — no status, no page, no UI. See `docs/progress/PROGRESS_AUDIT.md` § 4 priority 1.
 - [ ] **Final Bound Report upload slot (Manual step 11)** — `pages/staff/staff-milestones.php` already lists the document type, but `pages/student/submit-milestone.php` has no upload card for it.
-- [ ] **`pages/student/submit-research.php` admin notification** — co-researchers are notified, admin is not.
+- [ ] **`pages/researcher/submit-research.php` admin notification** — co-researchers are notified, admin is not.
 - [ ] **Replace the four 1-line shared stubs** — `pages/shared/{calendar,research-archive,settings,view-research}.php` are `require __DIR__ . '/module-page.php';` with no real content.
 
 ## Notes — follow-ups (not regressions)

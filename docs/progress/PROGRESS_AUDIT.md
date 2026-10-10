@@ -241,7 +241,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 
 | # | Manual step | Status | Implementing page(s) | Notes |
 |---|---|---|---|---|
-| 1 | Proposal Submission | ✅ | `pages/student/submit-research.php`, `pages/student/edit-research.php` | Co-researcher team picker included. |
+| 1 | Proposal Submission | ✅ | `pages/researcher/submit-research.php`, `pages/researcher/edit-research.php` | Co-researcher team picker included. |
 | 2 | CREC Evaluation | ✅ | `pages/staff/staff-crec.php`, `pages/faculty/faculty-review.php` | Moves status through `under_crec_review`. |
 | 3 | **ORS Consolidation** | 🔴 | — | No code path, no UI. Gap. |
 | 4 | EREC Research Forum | ✅ | `pages/faculty/faculty-review.php`, `pages/faculty/faculty-score-review.php` | OVPREIS Form No. 3 scoring + forum. |
@@ -256,7 +256,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 | 13 | Archive & Publication Tracking | ✅ | `pages/admin/admin-archive.php` (publication_status, journal_reference, archive_status) | Single-page controller for archive lifecycle. |
 
 ### 3.1 Five-chapter structure
-- `pages/student/submit-chapter.php` enforces chapters 1–5 and a chapter picker (commit `e82c18c` fixed the invalid-chapter dead-end).
+- `pages/researcher/submit-chapter.php` enforces chapters 1–5 and a chapter picker (commit `e82c18c` fixed the invalid-chapter dead-end).
 - `pages/faculty/faculty-review-detail.php` reviews per chapter.
 
 ### 3.2 Required documents
@@ -273,7 +273,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 ### 🔴 P0 — recorded before the v2 pivot; not the current product backlog
 1. **ORS Consolidation stage (Manual step 3).** No table, no UI, no status transition. Add an ORS review state (`under_ors_consolidation`) with a staff-side queue page (mirror `pages/staff/staff-crec.php`).
 2. **Final Bound Report upload slot (Manual step 11).** `pages/staff/staff-milestones.php:73` already lists `final_bound_report` as a document type, but `pages/student/submit-milestone.php` only renders the MOU/NDA/Midway/Terminal cards. Add a "Final Bound Report" card using the same flow.
-3. **Admin notification on new submission** — `pages/student/submit-research.php` notifies co-researchers but not admins. One `createNotification(...)` call inside the existing transaction. (This is also the last unchecked `TODO.md` item from the original list.)
+3. **Admin notification on new submission** — `pages/researcher/submit-research.php` notifies co-researchers but not admins. One `createNotification(...)` call inside the existing transaction. (This is also the last unchecked `TODO.md` item from the original list.)
 
 ### 🟡 P1 — shared-page work recorded before those pages were implemented
 4. `pages/shared/calendar.php` — render the actual schedule from `defense_schedule` + `research_projects.created_by` (the query already exists in `includes/module-pages.php:283-291` for the student calendar).
