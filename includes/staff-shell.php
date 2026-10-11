@@ -228,7 +228,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
     // Absolute asset/logout URLs (SITE_URL has a trailing slash).
     $url_style   = SITE_URL . 'css/style.css';
-    $url_shell   = SITE_URL . 'css/staff-shell.css';
+    $url_shell   = SITE_URL . 'css/staff-shell.css?v=' . filemtime(__DIR__ . '/../css/staff-shell.css');
     $url_logout  = SITE_URL . 'public/logout.php';
     ?>
 <!DOCTYPE html>
@@ -242,26 +242,54 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 </head>
 <body>
 <div class="staff-dashboard">
+  <button type="button" class="staff-sidebar-scrim" aria-label="Close staff navigation" tabindex="-1"></button>
   <!-- SIDEBAR -->
-  <aside class="staff-sidebar">
+  <aside class="staff-sidebar" id="staff-sidebar" aria-label="Research staff navigation">
     <div class="staff-sidebar-header">
       <a href="<?php echo SITE_URL; ?>pages/staff/staff-dashboard.php" class="staff-sidebar-logo" aria-label="RMS Home">
         <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
       </a>
       <div class="staff-sidebar-brand-text">
-        <div class="staff-sidebar-brand">Research Management</div>
-        <small class="staff-sidebar-role">Staff</small>
+        <div class="staff-sidebar-brand">EARIST Cavite</div>
+        <small class="staff-sidebar-role">Research Management System</small>
       </div>
     </div>
 
-    <nav class="staff-sidebar-nav">
+    <nav class="staff-sidebar-nav" aria-label="Primary">
       <?php foreach ($nav as $group => $items): ?>
-        <div class="staff-nav-group-title"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></div>
-        <?php foreach ($items as $item): ?>
+        <?php if ($group === 'Overview'): ?>
+          <?php foreach ($items as $item): ?>
+            <?php [$href, $label, $icon, $exists] = $item; $active = $exists && $is_active($href); ?>
+            <a class="staff-nav-item staff-nav-dashboard<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
+              <span class="staff-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
+              <span class="staff-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
+            </a>
+          <?php endforeach; ?>
+          <?php continue; ?>
+        <?php endif; ?>
+        <?php
+          $groupId = 'staff-nav-group-' . substr(sha1($group), 0, 8);
+          $groupActive = false;
+          foreach ($items as $candidateItem) {
+              if ($is_active($candidateItem[0])) {
+                  $groupActive = true;
+                  break;
+              }
+          }
+          $groupIcon = $items[0][2] ?? '📁';
+        ?>
+        <details class="staff-nav-group"<?php echo $groupActive ? ' open' : ''; ?>>
+          <summary class="staff-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>">
+            <span class="staff-nav-icon" aria-hidden="true"><?php echo $groupIcon; ?></span>
+            <span class="staff-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="staff-nav-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="staff-nav-subitems" id="<?php echo $groupId; ?>">
+            <?php foreach ($items as $item): ?>
           <?php
             [$href, $label, $icon, $exists, $badge_count] = $item;
             $active   = $exists ? $is_active($href) : false;
-            $classes  = 'staff-nav-item' . ($active ? ' active' : '');
+            $classes  = 'staff-nav-item staff-nav-subitem' . ($active ? ' active' : '');
             $attrs    = $active ? ' aria-current="page"' : '';
             if (!$exists) {
                 $attrs .= ' data-todo="build"';
@@ -275,14 +303,18 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
               <span class="staff-nav-badge"><?php echo $badge_count; ?></span>
             <?php endif; ?>
           </a>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+          </div>
+        </details>
       <?php endforeach; ?>
 
-      <div class="staff-nav-group-title">Session</div>
-      <a class="staff-nav-item staff-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
-        <span class="staff-nav-icon" aria-hidden="true">🚪</span>
-        <span class="staff-nav-label">Logout</span>
-      </a>
+      <div class="staff-nav-session">
+        <div class="staff-nav-group-title">Session</div>
+        <a class="staff-nav-item staff-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
+          <span class="staff-nav-icon" aria-hidden="true">🚪</span>
+          <span class="staff-nav-label">Logout</span>
+        </a>
+      </div>
     </nav>
 
     <div class="staff-sidebar-footer">
@@ -300,7 +332,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   <main class="staff-main">
     <header class="staff-topbar">
       <div class="staff-topbar-left">
-        <button type="button" class="staff-mobile-menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
+        <button type="button" class="staff-mobile-menu-btn" aria-label="Open staff navigation" aria-controls="staff-sidebar" aria-expanded="false">☰</button>
         <h1 class="staff-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
         <?php if ($page_subtitle_safe !== ''): ?>
           <p class="staff-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
@@ -334,12 +366,25 @@ function renderStaffShellClose() {
 <script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
+  const shell = document.querySelector('.staff-dashboard');
   const button = document.querySelector('.staff-mobile-menu-btn');
   const sidebar = document.querySelector('.staff-sidebar');
+  const scrim = document.querySelector('.staff-sidebar-scrim');
   if (!button || !sidebar) return;
-  const closeMenu = () => { sidebar.classList.remove('is-open'); button.setAttribute('aria-expanded', 'false'); };
-  button.addEventListener('click', (event) => { event.stopPropagation(); const open = sidebar.classList.toggle('is-open'); button.setAttribute('aria-expanded', String(open)); });
-  document.addEventListener('click', (event) => { if (sidebar.classList.contains('is-open') && !sidebar.contains(event.target) && !button.contains(event.target)) closeMenu(); });
+  const closeMenu = () => {
+    sidebar.classList.remove('is-open');
+    if (shell) shell.classList.remove('drawer-open');
+    button.setAttribute('aria-expanded', 'false');
+  };
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = !sidebar.classList.contains('is-open');
+    sidebar.classList.toggle('is-open', open);
+    if (shell) shell.classList.toggle('drawer-open', open);
+    button.setAttribute('aria-expanded', String(open));
+  });
+  if (scrim) scrim.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
   window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
 })();
 </script>

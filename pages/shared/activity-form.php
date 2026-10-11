@@ -72,7 +72,7 @@ if ($participantCheck instanceof mysqli_result) {
 }
 
 $typeOptions = $role === 'admin'
-    ? ['seminar' => 'Seminar', 'training' => 'Training', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum']
+    ? ['seminar' => 'Seminar', 'training' => 'Training', 'workshop' => 'Workshop']
     : [];
 if ($role !== 'admin') {
     foreach (['seminars' => ['seminar', 'Seminar'], 'trainings' => ['training', 'Training'], 'workshops' => ['workshop', 'Workshop']] as $pageKey => [$typeKey, $typeLabel]) {
@@ -182,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $values['activity_type'] = $lockedActivityType;
     }
 
-    if (!preg_match('/^(seminar|training|presentation|workshop|forum)$/D', $values['activity_type'])) {
+    if (!preg_match('/^(seminar|training|workshop)$/D', $values['activity_type'])) {
         $errors[] = 'Choose a valid activity type.';
     }
     if (!$canManageActivity((string) $values['activity_type'], $capacityPage)) {
@@ -329,9 +329,7 @@ $shell = $role === 'admin' ? 'admin' : 'staff';
 $activityTypeLabels = [
     'seminar' => 'Seminar',
     'training' => 'Training',
-    'presentation' => 'Presentation',
     'workshop' => 'Workshop',
-    'forum' => 'Forum',
 ];
 $selectedActivityLabel = $activityTypeLabels[$values['activity_type']] ?? 'Activity';
 $pageTitle = ($isEdit ? 'Edit ' : 'Add ') . $selectedActivityLabel;

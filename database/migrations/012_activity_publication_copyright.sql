@@ -1,7 +1,7 @@
 -- Migration 012: Research activities, publications, and copyright management
 --
 -- Module structure:
---   * research_activities stores seminars, presentations, workshops, and forums.
+--   * research_activities stores seminars, trainings, and workshops.
 --   * activity_participants records named or system-user participants per activity.
 --   * publications tracks faculty and student publication outputs and files.
 --   * copyright_applications tracks copyrightable outputs through registration.
@@ -11,7 +11,7 @@
 
 CREATE TABLE IF NOT EXISTS `research_activities` (
   `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
-  `activity_type` enum('seminar','presentation','workshop','forum') NOT NULL,
+  `activity_type` enum('seminar','training','workshop') NOT NULL,
   `title` varchar(255) NOT NULL,
   `activity_date` date NOT NULL,
   `activity_time` time DEFAULT NULL,

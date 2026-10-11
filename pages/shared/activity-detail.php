@@ -275,7 +275,7 @@ elseif ($shell === 'staff') renderStaffShell($user, 'activities.php', $pageTitle
 elseif ($shell === 'faculty') renderFacultyShell($user, 'activities.php', $pageTitle, 'Research activity details');
 else renderStudentShell($user, 'activities.php', $pageTitle, 'Research activity details');
 
-$typeLabels = ['seminar' => 'Seminar', 'training' => 'Training', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
+$typeLabels = ['seminar' => 'Seminar', 'training' => 'Training', 'workshop' => 'Workshop'];
 $statusBadge = activityDetailStatusBadge((string) ($activity['status'] ?? ''));
 ?>
 

@@ -590,7 +590,7 @@ CREATE TABLE `research_submission_version_uploads` (
 
 CREATE TABLE IF NOT EXISTS `research_activities` (
   `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
-  `activity_type` enum('seminar','training','presentation','workshop','forum') NOT NULL,
+  `activity_type` enum('seminar','training','workshop') NOT NULL,
   `title` varchar(255) NOT NULL,
   `activity_date` date NOT NULL,
   `activity_time` time DEFAULT NULL,

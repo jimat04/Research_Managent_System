@@ -106,9 +106,7 @@ foreach (array_keys($researchers) as $key) $researchers[$key] = (int) ($research
 $stats = [
     'seminars' => 0,
     'trainings' => 0,
-    'presentations' => 0,
     'workshops' => 0,
-    'forums' => 0,
     'capacity_upcoming' => 0,
     'capacity_total' => 0,
     'journal_publications' => 0,
@@ -134,19 +132,15 @@ $stats = [
 if ($tables['activities']) {
     $seminarType = 'seminar';
     $trainingType = 'training';
-    $presentationType = 'presentation';
     $workshopType = 'workshop';
-    $forumType = 'forum';
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS presentations, COALESCE(SUM(activity_type = ?), 0) AS workshops, COALESCE(SUM(activity_type = ?), 0) AS forums, COALESCE(SUM(activity_type = 'seminar' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_workshops FROM research_activities");
-    $stmt->bind_param('sssss', $seminarType, $trainingType, $presentationType, $workshopType, $forumType);
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS workshops, COALESCE(SUM(activity_type = 'seminar' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_workshops FROM research_activities");
+    $stmt->bind_param('sss', $seminarType, $trainingType, $workshopType);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
     $stmt->close();
     $stats['seminars'] = (int) ($row['seminars'] ?? 0);
     $stats['trainings'] = (int) ($row['trainings'] ?? 0);
-    $stats['presentations'] = (int) ($row['presentations'] ?? 0);
     $stats['workshops'] = (int) ($row['workshops'] ?? 0);
-    $stats['forums'] = (int) ($row['forums'] ?? 0);
     $stats['capacity_total'] = $stats['seminars'] + $stats['trainings'] + $stats['workshops'];
     $stats['upcoming_seminars'] = (int) ($row['upcoming_seminars'] ?? 0);
     $stats['upcoming_trainings'] = (int) ($row['upcoming_trainings'] ?? 0);
@@ -233,10 +227,10 @@ for ($chartIndex = 0; $chartIndex < 12; $chartIndex++) {
 }
 $chartData = [];
 foreach ($chartMonthKeys as $monthKey) {
-    $chartData[$monthKey] = ['seminars' => 0, 'presentations' => 0, 'publications' => 0, 'copyrights' => 0];
+    $chartData[$monthKey] = ['seminars' => 0, 'workshops' => 0, 'publications' => 0, 'copyrights' => 0];
 }
 if ($tables['activities']) {
-    $stmt = $conn->prepare("SELECT DATE_FORMAT(activity_date, '%Y-%m') AS month_key, SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'presentation' AND status <> 'cancelled') AS presentations FROM research_activities WHERE activity_date >= ? AND activity_date < ? GROUP BY DATE_FORMAT(activity_date, '%Y-%m')");
+    $stmt = $conn->prepare("SELECT DATE_FORMAT(activity_date, '%Y-%m') AS month_key, SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'workshop' AND status <> 'cancelled') AS workshops FROM research_activities WHERE activity_date >= ? AND activity_date < ? GROUP BY DATE_FORMAT(activity_date, '%Y-%m')");
     $stmt->bind_param('ss', $chartStartDate, $chartNextMonthDate);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -244,7 +238,7 @@ if ($tables['activities']) {
         $monthKey = (string) ($row['month_key'] ?? '');
         if (isset($chartData[$monthKey])) {
             $chartData[$monthKey]['seminars'] = (int) ($row['seminars'] ?? 0);
-            $chartData[$monthKey]['presentations'] = (int) ($row['presentations'] ?? 0);
+            $chartData[$monthKey]['workshops'] = (int) ($row['workshops'] ?? 0);
         }
     }
     $stmt->close();
@@ -277,7 +271,7 @@ if ($tables['copyrights']) {
 }
 $chartMaxValue = 0;
 foreach ($chartData as $entry) {
-    $chartMaxValue = max($chartMaxValue, max($entry['seminars'], $entry['presentations'], $entry['publications'], $entry['copyrights']));
+    $chartMaxValue = max($chartMaxValue, max($entry['seminars'], $entry['workshops'], $entry['publications'], $entry['copyrights']));
 }
 $chartMaxValue = max(1, $chartMaxValue);
 $chartMonthLabels = [];
@@ -477,6 +471,228 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 </style>
 
 <style>
+  .module-hub:not(.admin-monitoring-dashboard) .dashboard-chart-panel,
+  .module-hub:not(.admin-monitoring-dashboard) .dashboard-recent-panel {
+    min-width: 0;
+    padding: 22px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .dashboard-grid:not(.dashboard-grid-secondary) {
+    grid-template-columns: minmax(0, 1.1fr) minmax(520px, 0.9fr);
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .dashboard-grid-secondary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .quick-actions {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+    gap: 12px;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .quick-actions .action-link {
+    min-width: 0;
+    min-height: 72px;
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .chart-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .chart-header-row h2,
+  .module-hub:not(.admin-monitoring-dashboard) .panel-head h2 {
+    margin: 0;
+    color: #172033;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .panel-link {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+    text-align: right;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .chart-legend {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px 16px;
+    margin: 8px 0 12px;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .chart-legend-item {
+    display: inline-flex;
+    width: auto;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .chart-legend-swatch {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 2px;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .month-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 540 / 160;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .dashboard-recent-panel .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th,
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td {
+    padding: 10px 4px;
+    border-bottom: 1px solid #edf1f7;
+    color: #334155;
+    font-size: 11px;
+    line-height: 1.4;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th {
+    color: #64748b;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(1),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(1) { width: 18%; }
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(2),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(2) { width: 25%; }
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(3),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(3) { width: 25%; }
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(4),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(4) { width: 14%; }
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(5),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(5) { width: 18%; }
+  .module-hub:not(.admin-monitoring-dashboard) .event-table th:nth-child(6),
+  .module-hub:not(.admin-monitoring-dashboard) .event-table td:nth-child(6) { display: none; }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-name {
+    color: #172033;
+    font-weight: 650;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-name:hover {
+    color: #0d9488;
+    text-decoration: underline;
+  }
+
+  .module-hub:not(.admin-monitoring-dashboard) .event-table .badge {
+    max-width: 100%;
+    white-space: normal;
+    font-size: 10px;
+  }
+
+  @media (max-width: 768px) {
+    .module-hub:not(.admin-monitoring-dashboard) .event-table,
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody {
+      display: block;
+      width: 100%;
+    }
+
+    .module-hub:not(.admin-monitoring-dashboard) .event-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+    }
+
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid #edf1f7;
+    }
+
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td {
+      display: block;
+      width: auto !important;
+      padding: 2px 0 !important;
+      border: 0;
+    }
+
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td::before {
+      display: block;
+      margin-bottom: 2px;
+      color: #64748b;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(1)::before { content: 'Date'; }
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(2)::before { content: 'Activity'; }
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(3)::before { content: 'Researcher'; }
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(4)::before { content: 'Category'; }
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(5)::before { content: 'Status'; }
+    .module-hub:not(.admin-monitoring-dashboard) .event-table tbody td:nth-child(5) { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 1400px) {
+    .module-hub:not(.admin-monitoring-dashboard) .dashboard-grid:not(.dashboard-grid-secondary) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   .admin-body .admin-dashboard .admin-page-content .module-hub {
     max-width: 100%;
     margin: 0;
@@ -823,7 +1039,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
   <style>
     .module-summary-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
       gap: 12px;
       margin: 0 0 18px;
     }
@@ -884,11 +1100,11 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       border-top: 1px solid #edf0f4;
     }
     .module-summary-links a {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       min-width: 0;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      gap: 4px 8px;
       padding: 7px 9px;
       border-radius: 8px;
       color: #334155;
@@ -907,14 +1123,15 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     }
     .module-summary-links a span:first-child {
       min-width: 0;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
     .module-summary-links a span:last-child {
-      flex: 0 0 auto;
+      min-width: 0;
       color: #64748b;
       font-size: 10px;
       font-weight: 500;
       text-align: right;
+      overflow-wrap: anywhere;
     }
     .module-pill {
       display: inline-flex;
@@ -932,6 +1149,15 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     .module-implementation .module-pill { background: rgba(13, 148, 136, 0.08); color: #0d9488; }
     .module-publication .module-pill { background: rgba(16, 185, 129, 0.08); color: #0f766e; }
     .module-ip .module-pill { background: rgba(245, 124, 0, 0.08); color: #b45309; }
+    .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid > .module-summary-card:nth-child(-n + 3) {
+      grid-column: span 2;
+    }
+    .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid > .module-summary-card:nth-child(n + 4) {
+      grid-column: span 3;
+    }
     .admin-monitoring-dashboard > .module-summary-grid {
       grid-column: 1 / -1;
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -952,6 +1178,15 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     }
     @media (max-width: 1180px) {
       .module-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid > .module-summary-card:nth-child(-n + 4) {
+        grid-column: span 1;
+      }
+      .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid > .module-summary-card:nth-child(5) {
+        grid-column: 1 / -1;
+      }
     }
     @media (max-width: 900px) {
       .admin-monitoring-dashboard > .module-summary-grid {
@@ -967,6 +1202,12 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     }
     @media (max-width: 640px) {
       .module-summary-grid { grid-template-columns: 1fr; }
+      .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid {
+        grid-template-columns: 1fr;
+      }
+      .module-hub:not(.admin-monitoring-dashboard) > .module-summary-grid > .module-summary-card:nth-child(n) {
+        grid-column: 1 / -1;
+      }
       .admin-monitoring-dashboard > .module-summary-grid > .module-summary-card:nth-child(n) {
         grid-column: 1 / -1;
       }
@@ -1058,7 +1299,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       </div>
       <div class="chart-legend" aria-label="Chart legend">
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#4F8DF7"></span>Seminars</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#7C4DFF"></span>Presentations</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#7C4DFF"></span>Workshops</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#19B98A"></span>Publications</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#F5AB18"></span>Copyright Applications</span>
       </div>
@@ -1075,13 +1316,13 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         $barWidth = min(8, max(4, $groupWidth / 7));
         $series = [
             'seminars' => ['color' => '#4F8DF7', 'values' => []],
-            'presentations' => ['color' => '#7C4DFF', 'values' => []],
+            'workshops' => ['color' => '#7C4DFF', 'values' => []],
             'publications' => ['color' => '#19B98A', 'values' => []],
             'copyrights' => ['color' => '#F5AB18', 'values' => []],
         ];
         foreach ($chartMonthLabels as $label) {
             $series['seminars']['values'][] = 0;
-            $series['presentations']['values'][] = 0;
+            $series['workshops']['values'][] = 0;
             $series['publications']['values'][] = 0;
             $series['copyrights']['values'][] = 0;
         }
@@ -1089,7 +1330,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
             $monthIndex = array_search($monthKey, $chartMonthKeys, true);
             if ($monthIndex === false) continue;
             $series['seminars']['values'][$monthIndex] = (int) $monthEntry['seminars'];
-            $series['presentations']['values'][$monthIndex] = (int) $monthEntry['presentations'];
+            $series['workshops']['values'][$monthIndex] = (int) $monthEntry['workshops'];
             $series['publications']['values'][$monthIndex] = (int) $monthEntry['publications'];
             $series['copyrights']['values'][$monthIndex] = (int) $monthEntry['copyrights'];
         }

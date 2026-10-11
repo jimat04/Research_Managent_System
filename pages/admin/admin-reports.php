@@ -101,12 +101,12 @@ foreach (['research_activities', 'activity_participants', 'publications', 'copyr
     $tableCheck->close();
 }
 
-$activityReport = ['seminars' => 0, 'presentations' => 0, 'workshops' => 0, 'scheduled' => 0, 'completed' => 0, 'participants' => 0, 'attended' => 0];
+$activityReport = ['seminars' => 0, 'workshops' => 0, 'scheduled' => 0, 'completed' => 0, 'participants' => 0, 'attended' => 0];
 if ($moduleTables['research_activities']) {
-    $activityStmt = $conn->prepare("SELECT SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'presentation' AND status <> 'cancelled') AS presentations, SUM(activity_type IN ('workshop', 'forum') AND status <> 'cancelled') AS workshops, SUM(status = 'scheduled') AS scheduled, SUM(status = 'completed') AS completed FROM research_activities");
+    $activityStmt = $conn->prepare("SELECT SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'workshop' AND status <> 'cancelled') AS workshops, SUM(status = 'scheduled') AS scheduled, SUM(status = 'completed') AS completed FROM research_activities");
     $activityStmt->execute();
     $activityRow = $activityStmt->get_result()->fetch_assoc() ?: [];
-    foreach (['seminars', 'presentations', 'workshops', 'scheduled', 'completed'] as $key) {
+    foreach (['seminars', 'workshops', 'scheduled', 'completed'] as $key) {
         $activityReport[$key] = (int) ($activityRow[$key] ?? 0);
     }
     $activityStmt->close();
@@ -346,12 +346,11 @@ renderAdminShell(
     <div class="module-report-grid">
       <article class="module-report-card report-page" data-report-page="capacity" data-report-title="Capacity Building">
         <h2 class="report-page-heading">Capacity Building</h2>
-        <header><h3>Research activities</h3><p>Seminar, presentation, and participation totals recorded in the activity module.</p></header>
+        <header><h3>Research activities</h3><p>Seminar and workshop totals recorded in the activity module.</p></header>
         <?php if ($moduleTables['research_activities']): ?>
           <div class="module-report-list">
             <div class="module-report-row"><span>Seminars</span><strong><?= $activityReport['seminars'] ?></strong></div>
-            <div class="module-report-row"><span>Presentations</span><strong><?= $activityReport['presentations'] ?></strong></div>
-            <div class="module-report-row"><span>Workshops and forums</span><strong><?= $activityReport['workshops'] ?></strong></div>
+            <div class="module-report-row"><span>Workshops</span><strong><?= $activityReport['workshops'] ?></strong></div>
             <div class="module-report-row"><span>Scheduled / completed</span><strong><?= $activityReport['scheduled'] ?> / <?= $activityReport['completed'] ?></strong></div>
             <div class="module-report-row"><span>Recorded attendance</span><strong><?= $activityReport['attended'] ?> / <?= $activityReport['participants'] ?></strong></div>
           </div>

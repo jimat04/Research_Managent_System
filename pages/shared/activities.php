@@ -177,12 +177,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $flash = $_SESSION['activities_flash'] ?? null;
 unset($_SESSION['activities_flash']);
 
-$typeOptions = ['seminar' => 'Seminar', 'training' => 'Training', 'presentation' => 'Presentation', 'workshop' => 'Workshop', 'forum' => 'Forum'];
+$typeOptions = ['seminar' => 'Seminar', 'training' => 'Training', 'workshop' => 'Workshop'];
 $statusOptions = ['scheduled' => 'Scheduled', 'completed' => 'Completed', 'cancelled' => 'Cancelled'];
 $query = trim((string) ($_GET['q'] ?? ''));
 $query = strlen($query) > 150 ? substr($query, 0, 150) : $query;
 $typeInput = trim((string) ($_GET['type'] ?? ''));
-$type = preg_match('/^(seminar|training|presentation|workshop|forum)$/D', $typeInput) ? $typeInput : '';
+$type = preg_match('/^(seminar|training|workshop)$/D', $typeInput) ? $typeInput : '';
 if ($role === 'research_staff' && isset($typeOptions[$type])) {
     $typeOptions = [$type => $typeOptions[$type]];
 }
@@ -209,16 +209,12 @@ if ($type !== '') {
 $typeLabels = [
     'seminar' => 'Seminars',
     'training' => 'Trainings',
-    'presentation' => 'Presentations',
     'workshop' => 'Workshops',
-    'forum' => 'Forums',
 ];
 $typeSingularLabels = [
     'seminar' => 'Seminar',
     'training' => 'Training',
-    'presentation' => 'Presentation',
     'workshop' => 'Workshop',
-    'forum' => 'Forum',
 ];
 $createActivityLabel = $view !== 'overview' && isset($typeSingularLabels[$view])
     ? '+ Add ' . $typeSingularLabels[$view]
@@ -229,7 +225,7 @@ $attendanceSummary = [];
 $activities = [];
 if ($activitiesAvailable) {
     if ($view === 'overview') {
-        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar' THEN 1 END) AS seminar, COUNT(CASE WHEN activity_type = 'training' THEN 1 END) AS training, COUNT(CASE WHEN activity_type = 'presentation' THEN 1 END) AS presentation, COUNT(CASE WHEN activity_type = 'workshop' THEN 1 END) AS workshop, COUNT(CASE WHEN activity_type = 'forum' THEN 1 END) AS forum FROM research_activities");
+        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar' THEN 1 END) AS seminar, COUNT(CASE WHEN activity_type = 'training' THEN 1 END) AS training, COUNT(CASE WHEN activity_type = 'workshop' THEN 1 END) AS workshop FROM research_activities");
         $row = activitiesRun($stmt)->fetch_assoc() ?: [];
         foreach ($typeLabels as $activityType => $label) {
             $stats[$activityType] = (int) ($row[$activityType] ?? 0);
@@ -320,7 +316,7 @@ $viewConfig = [
     'overview' => [
         'title' => 'Research Activities',
         'kicker' => 'Research engagement',
-        'subtitle' => 'Institutional seminars, trainings, presentations, workshops, and forums',
+        'subtitle' => 'Institutional seminars, trainings, and workshops',
         'description' => 'Review scheduled and completed research events, their organizers, and participation records.',
         'stats' => array_merge(
             array_map(static function (string $activityType, string $label) use ($stats): array {
