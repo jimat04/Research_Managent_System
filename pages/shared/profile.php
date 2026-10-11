@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---------------------------------------------------------------
-// Flash messages (mirrors rms_message() in module-pages.php).
+// Flash messages.
 // ---------------------------------------------------------------
 function profile_flash($type) {
     $key = 'module_' . $type;
@@ -241,7 +241,7 @@ function profile_flash($type) {
 }
 
 // ---------------------------------------------------------------
-// Role-aware shell selection — mirrors module-page.php.
+// Role-aware shell selection.
 // ---------------------------------------------------------------
 $page_title    = 'My Profile';
 $page_subtitle = 'View and update your account information.';

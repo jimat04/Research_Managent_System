@@ -1,5 +1,5 @@
 ---
-description: "Keeps README.md, TODO.md, and inline code comments accurate as RMS evolves. Makes surgical, minimal updates that match the existing emoji-headed style and keeps demo credentials in sync with rms_db.sql."
+description: "Keeps RMS setup, feature, user, developer, and inline documentation accurate with surgical edits and demo credentials synchronized to the schema."
 tools: [read, search, edit, execute, todo]
 ---
 
@@ -71,3 +71,22 @@ Preserve the existing emoji style, heading hierarchy, and voice (helpful, concis
 Note: Documentation does not write SQL, but when documenting query patterns in README/code comments, prefer the prepared statements form shown by @rms-page-builder and @rms-db over string concatenation.
 
 When documenting forms or security behavior, reference CSRF protection as implemented by @rms-security-auth rather than inventing your own instructions.
+
+## Additional Documentation Tasks
+
+### User Guides
+
+- Maintain role-specific student, faculty, staff, and admin instructions when requested or when workflows change.
+- Keep steps aligned with the current UI, permission model, and canonical research workflow; do not document planned behavior as available.
+- Create video tutorial scripts only when requested, and avoid including real user data or credentials.
+
+### Developer Documentation
+
+- Maintain setup instructions, architecture notes, contribution guidance, and code conventions when the implementation changes.
+- Document repeatable test and maintenance commands with their prerequisites. Name required environment variables, but never add their values or secrets to tracked documentation.
+- Keep diagrams and project-structure inventories synchronized with files that actually exist.
+
+### API Documentation (When an API Exists)
+
+- Add endpoint, request/response, authentication, and error documentation only for implemented APIs.
+- Prefer an OpenAPI specification when the project adopts an API contract; do not introduce API tooling or claim an API exists as part of documentation-only work.

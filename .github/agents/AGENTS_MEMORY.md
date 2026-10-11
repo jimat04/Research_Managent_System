@@ -54,13 +54,15 @@ This file documents all agents defined in `.github/agents/` for the **Research M
 
 ## 3. `rms-doc.agent.md` — RMS Documentation Agent
 
-**Description:** Keeps `README.md`, `TODO.md`, and inline code comments accurate as RMS evolves. Makes surgical, minimal updates matching the existing emoji-headed style and keeps demo credentials in sync with `rms_db.sql`.
+**Description:** Keeps RMS setup, feature, user, developer, and inline documentation accurate with surgical edits and demo credentials synchronized to the schema.
 
 **Tools:** read, search, edit, execute, todo
 
 **Files owned:**
 - `README.md` (emoji-headed sections)
 - `TODO.md` (## grouped headers, `- [ ]` / `- [x]` items)
+- Role-specific user guides and developer setup, architecture, contribution, and code-convention docs
+- API endpoint documentation only when an API is implemented
 - Inline code comments in `includes/*.php` and page-level PHP files
 - (Future) `CHANGELOG.md`
 
@@ -70,6 +72,7 @@ This file documents all agents defined in `.github/agents/` for the **Research M
 - PHPDoc blocks above every new helper function
 - 3–5 line block comment at top of every new page file
 - Keep demo credentials in sync with `rms_db.sql` seed
+- Document test/maintenance prerequisites and variable names without recording secret values
 
 ---
 
@@ -142,16 +145,45 @@ This file documents all agents defined in `.github/agents/` for the **Research M
 
 ---
 
+## 7. `rms-testing.agent.md` — RMS Testing Agent
+
+**Description:** Owns automated browser, integration, security, and unit-test work for RMS; distinguish configured suites from proposed coverage.
+
+**Current test capability:** `tests/e2e-browser/` contains a Playwright suite run with `npm test` from that directory (or `npm --prefix tests/e2e-browser test` from the repository root). It requires the local app/database and credentials supplied through `RMS_E2E_*` environment variables. The PHP project does not currently have a configured PHPUnit suite or CI test workflow.
+
+**Responsibilities:** Add focused tests, use isolated/disposable data, preserve secrets outside tracked files, and report exactly which suites ran and what remained unverified.
+
+---
+
+## 8. `rms-performance.agent.md` — RMS Performance Agent
+
+**Description:** Measures and improves PHP, MySQL, and browser performance with reproducible evidence and narrowly scoped changes.
+
+**Responsibilities:** Establish before/after baselines, inspect query plans, identify unbounded/repeated work, coordinate indexes with `rms-db`, and avoid speculative caching, arbitrary targets, or production load testing.
+
+---
+
+## 9. `rms-backup.agent.md` — RMS Backup and Recovery Agent
+
+**Description:** Plans and verifies secure RMS database and upload backups, retention, and recovery procedures.
+
+**Responsibilities:** Keep secrets out of source and logs, protect ignored backup artifacts, require explicit authorization for destructive production operations, and distinguish a successful dump from a restore that has actually been rehearsed.
+
+---
+
 ## Agent Cross-References
 
 | Agent | Interacts With |
 |-------|---------------|
 | `rms-db` | `rms-page-builder` (query patterns), `rms-security-auth` (CSRF upstream) |
 | `rms-debug` | `rms-security-auth` (security bugs escalated there) |
-| `rms-doc` | `rms-page-builder` (page docs), `rms-security-auth` (CSRF docs), `rms-db` (query patterns) |
+| `rms-doc` | `rms-page-builder` (page docs), `rms-security-auth` (CSRF docs), `rms-db` (query patterns), `rms-testing` (test instructions) |
 | `rms-page-builder` | `rms-db` (schema), `rms-ui` (new CSS classes), `rms-security-auth` (CSRF tokens) |
 | `rms-security-auth` | All agents (security concerns escalated to it) |
 | `rms-ui` | `rms-page-builder` (component requests), `rms-security-auth` (form token styling) |
+| `rms-testing` | `rms-page-builder` (workflow tests), `rms-db` (isolated test data), `rms-security-auth` (security coverage) |
+| `rms-performance` | `rms-db` (query plans/indexes), `rms-page-builder` (page behavior), `rms-testing` (regression checks) |
+| `rms-backup` | `rms-db` (schema/data consistency), `rms-debug` (recovery diagnosis) |
 
 ---
 

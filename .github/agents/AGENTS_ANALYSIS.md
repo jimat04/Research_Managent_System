@@ -1,27 +1,29 @@
 # RMS Agents Analysis & Recommendations
 
 **Original analysis:** August 28, 2026
-**Inventory updated:** October 10, 2026
+**Inventory updated:** October 11, 2026
 **Location:** `.github/agents/`
-**Current RMS Agents:** 7 specialized agents
+**Current RMS Agents:** 9 specialized agents
 
 ---
 
 ## 📊 Current Agent Overview
 
-The current RMS inventory contains seven specialized Copilot agents:
+The current RMS inventory contains nine specialized Copilot agents:
 
 | Agent | Purpose |
 |-------|---------|
 | `rms-db` | MySQL schema, migrations, seed data, and prepared-statement queries |
 | `rms-debug` | XAMPP troubleshooting and runtime issue diagnosis |
 | `rms-doc` | README, TODO, and inline documentation maintenance |
+| `rms-backup` | Secure database/upload backups and tested recovery procedures |
+| `rms-performance` | Evidence-based PHP, MySQL, and browser performance work |
 | `rms-page-builder` | Role-specific procedural PHP pages |
 | `rms-security-auth` | RMS authentication, authorization, and security work |
-| `rms-testing` | PHPUnit, integration, security tests, fixtures, and coverage |
+| `rms-testing` | Browser E2E and future unit, integration, and security tests |
 | `rms-ui` | RMS styling, components, responsiveness, and accessibility |
 
-Agent instructions are in `.github/agents/`; the project-specific summary and cross-references are in `AGENTS_MEMORY.md`.
+Agent instructions are in `.github/agents/`; the project-specific summary and cross-references are in `.github/agents/AGENTS_MEMORY.md`.
 
 ## Local Claude Skills
 
@@ -39,10 +41,10 @@ Read a matching skill's `SKILL.md` before applying its guidance. `AGENTS_MEMORY.
 
 The recommendations below originated in the August 28 analysis. The inventory has since changed; in particular, a testing agent now exists. Treat proposed agents and work as a backlog, not as a description of the current inventory.
 
-### 1. **Testing/QA Agent Added**
-`rms-testing.agent.md` now exists and owns automated-test authoring and execution. The repository's project guidance still reports no automated test/build/lint system configured, so the agent's presence does not imply that test infrastructure is already in place.
+### 1. **Testing/QA Agent and Browser Suite Added**
+`rms-testing.agent.md` and `tests/e2e-browser/` now exist. The 13-test Playwright suite passed locally on October 10, 2026; it requires the local app/database and `RMS_E2E_*` credentials supplied through the environment. There is still no configured PHPUnit suite, general PHP build/lint command, or CI test workflow.
 
-**Follow-up:** Confirm test dependencies, test suites, and repeatable commands before treating automated testing as an operational capability.
+**Follow-up:** Broaden automated coverage beyond browser E2E and add a repeatable CI or local quality gate when the project is ready; do not describe that broader infrastructure as already configured.
 
 ### 2. **Missing Agent: Deployment**
 **Problem:** No deployment automation  
@@ -58,21 +60,13 @@ The recommendations below originated in the August 28 analysis. The inventory ha
 - Health checks
 ```
 
-### 3. **Missing Agent: Performance**
-**Problem:** No dedicated performance monitoring/optimization  
-**Impact:** Performance issues not proactively addressed
+### 3. **Performance Agent Added**
+`rms-performance.agent.md` now owns evidence-based performance investigation. This adds agent guidance, not an always-on monitoring system or verified performance targets.
 
-**Recommendation:** Create `rms-performance.agent.md`
-```markdown
-# RMS Performance Agent
-- Database query optimization
-- Index recommendations
-- Caching strategies
-- Asset optimization
-- Performance monitoring
-```
+### 4. **Backup and Recovery Agent Added**
+`rms-backup.agent.md` covers secure backup and restore planning. The existing backup script is not production-ready, and the presence of the agent does not mean a restore procedure has been tested.
 
-### 4. **rms-security-auth: Needs Updates**
+### 5. **rms-security-auth: Needs Updates**
 **Current:** 3,460 bytes (smallest agent)  
 **Issue:** Brief compared to importance
 
@@ -83,7 +77,7 @@ The recommendations below originated in the August 28 analysis. The inventory ha
 - Include rate limiting patterns
 - Add security testing procedures
 
-### 5. **No API Agent**
+### 6. **No API Agent**
 **Current:** No API-specific agent  
 **Future Need:** When you build REST API
 
@@ -281,83 +275,11 @@ user_invocable: true
 - Fixtures: `[table]_fixture.php`
 ```
 
-#### 2. Create `rms-performance.agent.md`
-**Purpose:** Monitor and optimize performance
+#### 2. Performance agent (implemented)
+See `rms-performance.agent.md` for the current evidence-based guidance. The original sample above was removed because it proposed speculative Redis use and unvalidated performance targets.
 
-```markdown
----
-name: rms-performance
-description: Optimize database queries, add indexes, implement caching, monitor performance
-tools:
-  - read
-  - search
-  - edit
-  - execute
-  - todo
-user_invocable: true
----
-
-# RMS Performance Agent
-
-## Responsibilities
-- Analyze slow queries with EXPLAIN
-- Recommend and add database indexes
-- Implement query caching
-- Optimize assets (minify CSS/JS)
-- Monitor page load times
-- Implement pagination
-- Add Redis caching where beneficial
-
-## Performance Targets
-- Page load: < 2 seconds
-- Database queries: < 100ms
-- API responses: < 500ms
-- Time to first byte: < 200ms
-
-## Monitoring
-- Track slow query log
-- Monitor MySQL performance schema
-- Check Apache access logs
-- Profile PHP execution time
-```
-
-#### 3. Create `rms-backup.agent.md`
-**Purpose:** Backup and disaster recovery
-
-```markdown
----
-name: rms-backup
-description: Implement automated backups, test recovery procedures, maintain backup schedules
-tools:
-  - read
-  - edit
-  - execute
-  - todo
-user_invocable: true
----
-
-# RMS Backup & Recovery Agent
-
-## Responsibilities
-- Create automated backup scripts
-- Database dumps (mysqldump)
-- File system backups (/uploads)
-- Test restore procedures
-- Manage backup retention
-- Off-site backup sync
-
-## Backup Schedule
-- Database: Daily at 2 AM
-- Files: Daily at 3 AM
-- Full backup: Weekly (Sunday)
-- Retention: 30 days
-
-## Recovery Procedures
-1. Database restore from .sql dump
-2. File restore from tar.gz
-3. Verify data integrity
-4. Test critical functions
-```
+#### 3. Backup agent (implemented)
+See `rms-backup.agent.md` for the current recovery and secret-handling guidance. Schedules and retention periods remain requirements to agree with stakeholders, not defaults to assume.
 
 ---
 
@@ -437,9 +359,9 @@ Issue with...
 
 ### Phase 2: Short-term (2-4 Weeks)
 1. ✅ Create `rms-testing.agent.md` (implemented)
-2. ⏳ Create `rms-performance.agent.md`
-3. ⏳ Create `rms-backup.agent.md`
-4. ⏳ Enhance `rms-doc.agent.md` with more doc types
+2. ✅ Create `rms-performance.agent.md` (implemented)
+3. ✅ Create `rms-backup.agent.md` (implemented)
+4. ✅ Enhance `rms-doc.agent.md` with user and developer documentation responsibilities
 
 ### Phase 3: Medium-term (1-2 Months)
 1. 📋 Create `rms-deploy.agent.md` (when ready for production)
@@ -462,13 +384,13 @@ Issue with...
 - ⚠️ **Debugging:** Good (rms-debug)
 - ⚠️ **Documentation:** Good (rms-doc)
 - ✅ **Testing agent:** Available (rms-testing)
-- ⚠️ **Test infrastructure:** Not configured per project guidance
-- ❌ **Performance:** Missing
-- ❌ **Backup:** Missing
+- ⚠️ **Test infrastructure:** Playwright browser E2E is configured and passed 13 tests locally; PHPUnit and CI are not configured
+- ✅ **Performance agent:** Available; no continuous monitoring or agreed targets are configured
+- ✅ **Backup agent:** Available; restore process still needs a verified rehearsal
 - ❌ **Deployment:** Missing
 
 ### Recommended Priority
-1. 🔴 **Critical:** Automated test infrastructure, Backup
+1. 🔴 **Critical:** Broader automated test coverage and a verified backup/restore procedure
 2. 🟡 **Important:** Performance, Enhanced Security
 3. 🟢 **Nice to Have:** Deployment, API (future)
 
@@ -508,20 +430,19 @@ Review agent effectiveness quarterly:
 ## 🎯 Immediate Action Items
 
 ### This Week:
-1. ✅ Review this analysis
-2. ⏳ Decide which new agents to create first
-3. ⏳ Expand `rms-security-auth.agent.md` with OWASP checklist
-4. ⏳ Update `AGENTS_MEMORY.md` with invocation guide
+1. ✅ Refresh the agent inventory and backlog status
+2. ✅ Add the performance and backup/recovery agents
+3. ✅ Expand `rms-doc.agent.md` and update the agent memory index
 
 ### Next Week:
 1. ✅ Create `rms-testing.agent.md` (implemented)
-2. ⏳ Create `rms-backup.agent.md`
+2. ✅ Create `rms-backup.agent.md` (implemented)
 3. ⏳ Run security audit using enhanced `rms-security-auth`
 
 ### Month 1:
-1. ⏳ Create `rms-performance.agent.md`
-2. ⏳ Implement automated testing
-3. ⏳ Set up automated backups
+1. ✅ Create `rms-performance.agent.md` (implemented)
+2. ⏳ Expand automated testing beyond browser E2E and add CI coverage
+3. ⏳ Implement and rehearse automated backup/restore procedures
 
 ---
 
@@ -537,16 +458,16 @@ Review agent effectiveness quarterly:
 
 ### Gaps:
 ✅ Testing agent exists (`rms-testing.agent.md`)
-⚠️ Automated test infrastructure is not configured per project guidance
-❌ No dedicated performance agent
-❌ No dedicated backup/recovery agent
+⚠️ Playwright E2E is configured and passed locally; PHPUnit and CI coverage are not configured
+✅ Performance agent exists; no continuous monitoring is configured
+✅ Backup/recovery agent exists; restore procedures still need testing
 ⚠️ Review security-agent recommendations against current security requirements
 
 ### Recommendation:
-**Prioritize repeatable test infrastructure and backup/recovery procedures.** Consider dedicated performance or deployment agents when the project needs justify them. Review `rms-security-auth.agent.md` before deciding whether its guidance needs further expansion.
+**Prioritize broader automated coverage and a verified backup/restore procedure.** Consider deployment automation when the project is ready for production, and review `rms-security-auth.agent.md` before deciding whether its guidance needs further expansion.
 
 ---
 
 **Original analysis generated:** August 28, 2026 15:37 (UTC+8)
-**Inventory refreshed:** October 10, 2026
+**Inventory refreshed:** October 11, 2026
 **Next review:** Reconcile the remaining backlog with actual project priorities

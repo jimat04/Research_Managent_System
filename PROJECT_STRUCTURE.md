@@ -1,7 +1,7 @@
 # RMS Project Structure - Updated
 
-**Last Updated:** August 28, 2026 at 16:20 (UTC+8)  
-**Status:** ✅ Fully Organized and Clean
+**Last Updated:** October 11, 2026
+**Status:** Current source map
 
 ---
 
@@ -10,7 +10,7 @@
 ```
 rms/
 │
-├── 📁 public/                           [Public-Facing Pages - 10 files]
+├── 📁 public/                           [Public-Facing Pages - 12 files]
 │   ├── index.php                        [Homepage with statistics]
 │   ├── login.php                        [Authentication page]
 │   ├── logout.php                       [Session termination]
@@ -18,6 +18,8 @@ rms/
 │   ├── contact.php                      [Contact form]
 │   ├── features.php                     [Features showcase]
 │   ├── research-archive.php             [Public research archive]
+│   ├── verify-email.php                 [Email verification]
+│   ├── resend-verification.php          [Resend verification]
 │   ├── 403.php                          [Access Denied error]
 │   ├── 404.php                          [Not Found error]
 │   └── 500.php                          [Server Error page]
@@ -31,28 +33,43 @@ rms/
 │   │   └── submit-chapter.php           [Draft and submit chapters]
 │   │
 │   ├── 📁 student/                      [Student Role]
-│   │   ├── student-dashboard.php        [Student dashboard]
-│   │   ├── my-documents.php             [My documents]
-│   │   └── progress-tracking.php        [Track research progress]
+│   │   ├── student-dashboard.php        [Shared student/faculty dashboard]
+│   │   ├── my-research.php              [Legacy redirect to researcher workflow]
+│   │   ├── submit-research.php          [Legacy redirect to researcher workflow]
+│   │   ├── edit-research.php            [Legacy redirect to researcher workflow]
+│   │   ├── submit-chapter.php           [Legacy redirect to researcher workflow]
+│   │   ├── my-documents.php             [Student documents]
+│   │   ├── research-detail.php          [Student research detail]
+│   │   ├── progress-tracking.php        [Track research progress]
+│   │   └── submit-milestone.php         [Standby]
 │   │
 │   ├── 📁 faculty/                      [Faculty Role]
-│   │   └── faculty-dashboard.php        [Faculty dashboard]
+│   │   └── faculty-dashboard.php        [Delegates to student-dashboard.php]
 │   │
-│   ├── 📁 admin/                        [Admin Role - 7 files]
+│   ├── 📁 admin/                        [Admin Role - 13 files]
 │   │   ├── admin-dashboard.php          [Admin dashboard]
 │   │   ├── admin-users.php              [User management]
 │   │   ├── admin-research.php           [Research management]
+│   │   ├── admin-research-module.php    [Research module launcher map]
+│   │   ├── admin-researchers.php        [Researcher management]
 │   │   ├── admin-archive.php            [Archive management]
 │   │   ├── admin-reports.php            [Reports & analytics]
 │   │   ├── admin-logs.php               [System logs]
-│   │   └── admin-backup.php             [Backup system]
+│   │   ├── admin-backup.php             [Backup system]
+│   │   ├── admin-contact.php            [Contact messages]
+│   │   ├── admin-departments.php        [Department management]
+│   │   ├── admin-programs.php           [Program management]
+│   │   └── admin-settings.php           [System settings]
 │   │
-│   ├── 📁 staff/                        [Research Staff Role - 2 files]
+│   ├── 📁 staff/                        [Research Staff Role - 6 files]
 │   │   ├── staff-dashboard.php          [Staff dashboard]
-│   │   └── contact-messages.php         [Manage contact messages]
+│   │   ├── contact-messages.php         [Manage contact messages]
+│   │   ├── document-verification.php    [Verify research documents]
+│   │   ├── staff-defense.php            [Defense scheduling]
+│   │   ├── staff-revisions.php          [Manage revisions]
+│   │   └── staff-milestones.php         [Standby]
 │   │
-│   └── 📁 shared/                       [Shared Across Roles - 10 files]
-│       ├── module-page.php              [Module wrapper system]
+│   └── 📁 shared/                       [Shared Across Roles - 20 files]
 │       ├── messages.php                 [Internal messaging]
 │       ├── notifications.php            [Notifications]
 │       ├── profile.php                  [User profile]
@@ -61,13 +78,32 @@ rms/
 │       ├── research-archive.php         [Authenticated archive]
 │       ├── research-detail.php          [Research details]
 │       ├── view-research.php            [View research]
-│       └── placeholder-page.php         [Placeholder template]
+│       ├── research-submission-review.php [Typed title/chapter review queue]
+│       ├── implementation-outputs.php   [Computed ongoing/completed/outputs views]
+│       ├── activities.php                [Research activities]
+│       ├── activity-detail.php           [Activity details]
+│       ├── activity-form.php              [Activity form]
+│       ├── publications.php               [Publication records]
+│       ├── publication-detail.php         [Publication details]
+│       ├── publication-form.php           [Publication form]
+│       ├── copyrights.php                 [Intellectual-property records]
+│       ├── copyright-detail.php           [Copyright details]
+│       ├── copyright-form.php             [Copyright form]
+│       └── download-research-document.php [Authorized research downloads]
 │
-├── 📁 includes/                         [Backend PHP Logic - 4 files]
+├── 📁 includes/                         [Backend PHP Logic]
 │   ├── config.php                       [Database & app configuration]
 │   ├── auth.php                         [Authentication & authorization]
-│   ├── module-pages.php                 [Module rendering system]
-│   └── contact-handler.php              [Contact form handler]
+│   ├── research-workflow.php            [Title/chapter workflow helpers]
+│   ├── contact-handler.php              [Contact form handler]
+│   ├── email.php                         [Email wrapper]
+│   ├── file-uploader.php                [Validated upload helper]
+│   ├── logout-transition.php            [Logout transition]
+│   ├── admin-shell.php                  [Admin shell]
+│   ├── staff-shell.php                  [Staff shell]
+│   ├── faculty-shell.php                [Faculty shell]
+│   ├── student-shell.php                [Student shell]
+│   └── .htaccess                        [Protect includes]
 │
 ├── 📁 config/                           [Configuration Files - 2 files]
 │   ├── settings.json                    [Application settings]
@@ -76,9 +112,7 @@ rms/
 ├── 📁 database/                         [Database Files]
 │   ├── 📁 schema/
 │   │   └── rms_db.sql                   [Main database schema]
-│   └── 📁 migrations/
-│       ├── rms_db_migration.sql         [Migration script]
-│       └── add_contact_messages_table.sql
+│   └── 📁 migrations/                   [21 existing migration scripts]
 │
 ├── 📁 docs/                             [Documentation]
 │   ├── 📁 planning/
@@ -87,17 +121,27 @@ rms/
 │   ├── 📁 progress/
 │   │   ├── PROGRESS_AUDIT.md            [Progress tracking]
 │   │   └── SECURITY_HTACCESS_COMPLETE.md [Security completion]
+│   ├── 📁 reference/
+│   │   └── Research-Manual_2015.md      [Source manual]
 │   ├── rms-spec.md                      [RMS specifications]
-│   └── research-manual-2015.md          [Research manual]
+│   └── testing/                          [Test documentation]
 │
-├── 📁 scripts/                          [Utility Scripts - 3 files]
+├── 📁 scripts/                          [Utility Scripts - 6 files]
+│   ├── backup-database.sh               [Database backup]
+│   ├── migrate.php                      [Migration runner]
 │   ├── update-paths.php                 [Path updating utility]
 │   ├── verify-connections.sh            [Connection verification]
-│   └── verify-htaccess.sh               [Security verification]
+│   ├── verify-htaccess.sh               [Security verification]
+│   └── verify-messages-navigation.php   [Navigation verification]
 │
-├── 📁 css/                              [Stylesheets - 4 files]
+├── 📁 css/                              [Stylesheets and tokens - 9 files]
 │   ├── style.css                        [Main stylesheet]
 │   ├── about.css                        [About page styles]
+│   ├── admin-shell.css                  [Admin shell styles]
+│   ├── staff-shell.css                  [Staff shell styles]
+│   ├── faculty-shell.css                [Faculty shell styles]
+│   ├── student-shell.css                [Student shell styles]
+│   ├── file-uploader.css                [Uploader styles]
 │   ├── tokens.css                       [CSS design tokens]
 │   └── tokens.php                       [Dynamic CSS tokens]
 │
@@ -116,6 +160,8 @@ rms/
 │       ├── rms-security-auth.agent.md
 │       ├── rms-ui.agent.md
 │       ├── rms-testing.agent.md
+│       ├── rms-performance.agent.md
+│       ├── rms-backup.agent.md
 │       ├── AGENTS_ANALYSIS.md
 │       └── AGENTS_MEMORY.md
 │
@@ -131,24 +177,16 @@ rms/
 
 ---
 
-## 📊 File Statistics
+## V3 Architecture and Counts
 
-### By Category:
-- **Public Pages:** 10 files
-- **Student Pages:** 6 files
-- **Faculty Pages:** 6 files
-- **Admin Pages:** 7 files
-- **Staff Pages:** 2 files
-- **Shared Pages:** 10 files
-- **Include Files:** 4 files
-- **Configuration:** 2 files
-- **Database Files:** 3 files
-- **Documentation:** 6 files
-- **Scripts:** 3 files
-- **Stylesheets:** 4 files
+- `pages/researcher/` is canonical for `my-research.php`, `submit-research.php`, `edit-research.php`, and `submit-chapter.php`. The matching student workflow URLs are compatibility redirects; student-specific pages remain in `pages/student/`.
+- `pages/faculty/faculty-dashboard.php` delegates to the student dashboard.
+- `rmsPermissionModules()` in `includes/auth.php` defines 5 staff modules × 3 sub-pages; `pages/admin/admin-research-module.php` launches them through `moduleMap`.
+- `pages/shared/research-submission-review.php` is the typed review queue; `implementation-outputs.php` provides computed ongoing, completed, and outputs views.
+- Role shells in active use: admin, staff, faculty, and student, all under `includes/`.
+- Standby files: `pages/staff/staff-milestones.php` and `pages/student/submit-milestone.php`.
 
-**Total PHP Files:** 52 files  
-**Total Project Files:** 70+ files
+Current page counts: public 12, researcher 4, student 9, faculty 1, admin 13, staff 6, shared 20. `includes/` contains 11 PHP files plus `.htaccess`.
 
 ---
 
@@ -291,14 +329,14 @@ http://localhost/rms/pages/shared/profile.php
 ## 📝 File Naming Conventions
 
 ### Pages:
-- **Role prefix:** `student-`, `faculty-`, `admin-`, `staff-`
-- **Dashboard:** `{role}-dashboard.php`
+- **Role dashboard:** `{role}-dashboard.php`
 - **Shared pages:** No prefix (e.g., `messages.php`, `profile.php`)
+- **Research workflow:** Canonical title/chapter pages live in `pages/researcher/`
 
 ### Includes:
 - **Configuration:** `config.php`
 - **Authentication:** `auth.php`
-- **Module system:** `module-pages.php`
+- **Staff permission map:** `rmsPermissionModules()` in `auth.php`; admin launchers use `admin-research-module.php`
 - **Handlers:** `{name}-handler.php`
 
 ### Documentation:

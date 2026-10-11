@@ -24,7 +24,7 @@
 - [ ] Optional: rename project_id → research_id across schema (breaking change — do with page-builder rollout)
 - [ ] Optional: create settings, defense_evaluations, defense_scores tables when features need them
 ## Pages built
-- [x] pages/my-research.php (student research list with CREC/EREC statuses, chapter progress, multi-student via project_members)
+- [x] pages/my-research.php (student research list with legacy committee statuses, chapter progress, multi-student via project_members)
 ## Pages built (continued)
 - [x] pages/submit-research.php (create new research, draft/submit statuses, optional proposal upload)
 - [x] uploads/proposals, chapters, defense, manuscripts directories created
@@ -58,7 +58,6 @@ Completed against the EARIST Research Manual 2015 + the late-2026 feature push:
 - [ ] **ORS Consolidation stage (Manual step 3)** — no status, no page, no UI. See `docs/progress/PROGRESS_AUDIT.md` § 4 priority 1.
 - [ ] **Final Bound Report upload slot (Manual step 11)** — `pages/staff/staff-milestones.php` already lists the document type, but `pages/student/submit-milestone.php` has no upload card for it.
 - [ ] **`pages/researcher/submit-research.php` admin notification** — co-researchers are notified, admin is not.
-- [ ] **Replace the four 1-line shared stubs** — `pages/shared/{calendar,research-archive,settings,view-research}.php` are `require __DIR__ . '/module-page.php';` with no real content.
 
 ## Notes — follow-ups (not regressions)
 

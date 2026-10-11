@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RMS is a PHP/MySQL Research Management System for a college/university — students submit research, faculty advisers review it through CREC/EREC stages, and administrators manage the system.
+RMS is a PHP/MySQL research platform. Students and faculty use one title and chapter workflow, with typed admin/staff review, sequential chapters, computed completion, and research outputs.
 
 **Stack:** PHP 7.4+, MySQL/MariaDB, Apache (XAMPP), Composer (vlucas/phpdotenv)
 
@@ -29,18 +29,17 @@ http://localhost/rms/
 | Role | Email | Password |
 |---|---|---|
 | Admin | admin@rms.edu.ph | Admin@123 |
-| Faculty (reviewer) | msantos@rms.edu.ph | Faculty@123 |
-| Faculty (reviewer) | jreyes@rms.edu.ph | Faculty@123 |
+| Faculty | msantos@rms.edu.ph | Faculty@123 |
+| Faculty | jreyes@rms.edu.ph | Faculty@123 |
 | Student | jdelacruz@rms.edu.ph | Student@123 |
 | Student | areyes@rms.edu.ph | Student@123 |
-| Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
-| Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
+| Research staff (account 1) | staff1@rms.edu.ph | Staff@123 |
+| Research staff (account 2) | staff2@rms.edu.ph | Staff@123 |
 
-Staff demo accounts are limited to Staff 1 (EREC Office) and Staff 2 (CREC Office).
 
 **Troubleshooting:** Blank page → MySQL not running or wrong `DB_*` in `.env`. Upload fails → `uploads/` subdirs need write permission for web server.
 
-**Note:** This project currently has **no automated build, test, or linting system** configured. Development is manual — edit files directly in XAMPP/WAMP and refresh your browser.
+**Browser E2E:** Run `npm test` from `tests/e2e-browser/`. The suite passed 13/13 at commit `b3edc6e`. It requires `RMS_E2E_ADMIN_EMAIL`, `RMS_E2E_ADMIN_PASSWORD`, `RMS_E2E_STAFF_EMAIL`, `RMS_E2E_STAFF_PASSWORD`, and `RMS_E2E_TEST_PASSWORD` in the environment. There is no configured PHPUnit suite, general PHP build/lint command, or CI test workflow.
 
 ## Architecture
 
@@ -49,16 +48,17 @@ Staff demo accounts are limited to Staff 1 (EREC Office) and Staff 2 (CREC Offic
 ```
 public/          ← Entry point for all HTTP requests (homepage, login, about, error pages)
 pages/           ← Authenticated pages, organized by role
-  researcher/    Shared Student/Faculty research titles and chapter workflow
-  student/       Student-specific research tracking and document tools
-  faculty/       Faculty review and student management
+  researcher/    Canonical workflow: my-research, submit-research, edit-research, submit-chapter
+  student/       Student-specific views plus legacy researcher-workflow redirects
+  faculty/       faculty-dashboard.php delegates to the student dashboard
   admin/         System administration
   staff/         Research office staff
-  shared/        Cross-role modules (messages, notifications, profile, calendar)
+  shared/        Typed review, computed outputs, messages, publications, and profile modules
 includes/        Core backend logic
   config.php     Database connection + env var loading
   auth.php       Authentication helpers and security functions
-  module-pages.php Module rendering and action handlers
+  research-workflow.php Title/chapter workflow helpers
+  {admin,staff,faculty,student}-shell.php Active role shells
   contact-handler.php Contact form handler
 database/
   schema/        Main SQL schema (rms_db.sql)
@@ -73,41 +73,47 @@ docs/             Documentation
   planning/       Project planning (PRIORITY_PLAN.md, RECOMMENDATIONS.md)
   progress/       Implementation tracking (PROGRESS_AUDIT.md)
   rms-spec.md     System specifications
-  research-manual-2015.md Reference workflow
-  .github/agents/ AI agent definitions (rms-db, rms-ui, rms-page-builder, etc.)
+  reference/      Research-Manual_2015.md source material
+.github/agents/ AI agent definitions (9 RMS agents)
 ```
 
 ### Key Additional Files
 
 - **`.env.example`** — Environment variable template with all configuration options
-- **`.github/agents/`** — 7 AI agent definitions for database work, UI/UX, security, debugging, documentation, and page building
+- **`.github/agents/`** — 9 AI agent definitions for database work, debugging, documentation, page building, security, testing, UI/UX, performance, and backup/recovery
 - **`scripts/`** — Maintenance utilities: `verify-connections.sh`, `verify-htaccess.sh`, `backup-database.sh`, `update-paths.php`
 - **`docs/planning/PRIORITY_PLAN.md`** — Prioritized feature roadmap
 - **`docs/planning/RECOMMENDATIONS.md`** — Comprehensive improvement recommendations
-- **`docs/research-manual-2015.md`** — EARIST Research Manual 2015 reference
+- **`docs/reference/Research-Manual_2015.md`** — EARIST Research Manual 2015 source
 
 ### Request Flow
 
 1. All requests to `/rms/` redirect to `public/index.php`
 2. Authenticated pages check session via `includes/config.php` (includes `includes/auth.php`)
 3. Role pages use `requireRole('student')` / `requireRole('faculty')` / `requireRole('admin')` for access control
-4. Most secondary pages are rendered via `pages/shared/module-page.php?key=xxx`, which delegates to `includes/module-pages.php`
+4. `pages/researcher/` is canonical for `my-research.php`, `submit-research.php`, `edit-research.php`, and `submit-chapter.php`. Matching student workflow URLs are compatibility redirects; student-only views remain in `pages/student/`.
+5. `pages/faculty/faculty-dashboard.php` delegates to `pages/student/student-dashboard.php`.
 
-### Module System
+### V3 Architecture
 
-`pages/shared/module-page.php` receives a `key` query param (e.g., `?key=my-research.php`). `includes/module-pages.php` contains two functions:
-
-- **`rms_handle_module_action($page_key, $user)`** — processes POST form submissions (create research, send message, mark read, etc.)
-- **`rms_render_module($page_key, $user, $module)`** — outputs HTML for the module
-
-To add a new module: define the route in the page that calls `rms_render_module()`, add handling in both functions in `module-pages.php`, and add the nav link in the appropriate dashboard.
+- `rmsPermissionModules()` in `includes/auth.php` defines five staff modules with three sub-pages each:
+  - `research_capacity_building`: `seminars`, `trainings`, `workshops`
+  - `research_development`: `research_proposals`, `research_review`, `research_approval`
+  - `research_implementation_outputs`: `ongoing_research`, `completed_research`, `research_outputs`
+  - `publication_dissemination`: `journal_publications`, `conference_presentations`, `research_repository`
+  - `intellectual_property_utilization`: `copyrights`, `patents_utility_models`, `innovation_technology_transfer`
+- `pages/admin/admin-research-module.php` launches destinations through `moduleMap` and enforces staff permissions.
+- `pages/shared/research-submission-review.php` is the typed title/chapter review queue.
+- `pages/shared/implementation-outputs.php` computes the `ongoing`, `completed`, and `outputs` views.
+- Shared pages are standalone; the old module-wrapper system has been removed.
+- Active shells are `admin-shell.php`, `staff-shell.php`, `faculty-shell.php`, and `student-shell.php` in `includes/`.
 
 ### Security Model
 
 - Sessions with configurable timeout (`SESSION_TIMEOUT` in `.env`)
 - CSRF tokens on all state-changing forms (`csrfToken()` / `csrfField()` in `auth.php`)
 - Password hashing via `password_hash()` / `password_verify()` (BCRYPT, configurable cost)
-- Output escaping via `rms_escape()` in `module-pages.php`
+- Output escaping with `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')` or the local page helper
 - `.htaccess` files protect `includes/`, `database/`, `config/` from direct HTTP access
 - `uploads/` allows downloads but blocks PHP execution
 
@@ -118,23 +124,13 @@ To add a new module: define the route in the page that calls `rms_render_module(
 - `logActivity($action, $module)` — writes to `activity_log` table
 - `createNotification($user_id, $title, $message, $type, $link)` — creates in-app notifications
 
-### Key Module Helpers (`includes/module-pages.php`)
-
-- `rms_escape($value)` — HTML escape for output
-- `rms_rows($result)` — fetch all rows from mysqli result into array
-- `rms_status($value)` — humanize status strings (e.g., `in_progress` → `In Progress`)
-- `rms_project_access($project_id, $user)` — check if user can view a research project
-- `rms_table($headers, $rows, $empty)` — render a styled HTML table
+Staff access is defined by `rmsPermissionModules()` and checked through `requireModulePermission()` in `includes/auth.php`.
 
 ## Workflow Reference
 
-The system implements the **EARIST Research Manual 2015** workflow:
+The v3 workflow is: draft a title → submit and lock it → admin/staff review → return for revision or approve → submit Chapters 1–5 in sequence → compute completion from chapter progress → track ongoing/completed research and outputs (publications and copyrights).
 
-1. Proposal Submission → 2. CREC Evaluation → 3. EREC Research Forum → 4. Approval/Revision/Disapproval → 5. President Approval → 6. MOU/NDA → 7. Implementation → 8. Midway Progress → 9. Terminal Report → 10. Final Bound Report → 11. Research Colloquium → 12. Archive
-
-Research projects track a **five-chapter structure** (Chapter 1: Problem & Background → Chapter 5: Summary/Conclusions/Recommendations). Faculty review actions move projects through statuses: `proposal`, `in_progress`, `for_defense`, `completed`, `archived`.
-
-See `docs/research-manual-2015.md` for full manual alignment details.
+See `docs/reference/Research-Manual_2015.md` for the source manual; do not replace the live v3 workflow with its legacy stage names.
 
 ## Configuration
 
@@ -154,7 +150,7 @@ APP_DEBUG                             — Enable PHP error display
 ## Important Conventions
 
 - All includes use `__DIR__` for reliable relative paths (never hardcode paths)
-- All user input is escaped before output (`rms_escape()`)
+- All user input is escaped before output with `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')` or a local escaping helper
 - State-changing forms include `<?= csrfField() ?>` and validate with `isCsrfTokenValid()`
 - Role-gating: admins always pass `requireRole()` checks (admins are added automatically to the allowed list)
 - Database queries use prepared statements exclusively
@@ -167,10 +163,10 @@ APP_DEBUG                             — Enable PHP error display
 | `{role}-dashboard.php` | `student-dashboard.php` | Role entry page |
 | `{role}-{feature}.php` | `faculty-dashboard.php` | Role-specific feature |
 | `admin-{feature}.php` | `admin-users.php` | Admin-only pages |
-| `module-page.php?key=xxx` | `?key=my-research.php` | Reusable shared modules |
+| `pages/researcher/{name}.php` | `submit-research.php` | Canonical shared student/faculty workflow |
 | `includes/{name}.php` | `includes/auth.php` | Core backend logic |
-| `database/migrations/*.sql` | `rms_db_migration.sql` | Schema changes |
-| `scripts/{name}.php` | `scripts/backup-database.php` | Maintenance utilities |
+| `database/migrations/*.sql` | `014_add_training_activity_type.sql` | Schema changes |
+| `scripts/{name}.{php,sh}` | `scripts/backup-database.sh` | Maintenance utilities |
 ## AI Design System (Required)
 
 ## AI Design Constitution — EARIST RMS (MANDATORY)
@@ -228,8 +224,8 @@ Every role's shell uses these exact accents. NEVER swap them.
 |---|---|---|
 | Draft / Pending | Slate gray | `#64748B` |
 | Submitted / Under Review | Blue | `#2563EB` |
-| CREC Review | Blue | `#3B82F6` |
-| EREC Review | Violet | `#7C3AED` |
+| Title / Chapter Review | Blue | `#3B82F6` |
+| Returned for Revision | Orange | `#EA580C` |
 | For Revision | Orange | `#EA580C` |
 | Approved / Ongoing | Green | `#16A34A` |
 | Completed | Emerald | `#059669` |
@@ -275,7 +271,7 @@ Each role has a reusable shell in `includes/{role}-shell.php` with matching `css
 
 Shells output: `<!DOCTYPE><head> (with css/style.css + css/{role}-shell.css links) + dark sidebar + topbar + .{role}-page-content`
 Pages call `render{Role}Shell($user, $current_page, $title, $subtitle)` at top and `render{Role}ShellClose()` at bottom.
-Shared pages (messages/notifications/profile/research-archive/calendar) use `pages/shared/module-page.php` which renders the CORRECT role shell based on logged-in user.
+Shared pages include and render the appropriate active role shell directly.
 
 **When building a new page**, do NOT write a new sidebar/topbar from scratch — call the existing shell for that role.
 
@@ -324,13 +320,15 @@ Shared pages (messages/notifications/profile/research-archive/calendar) use `pag
 
 ---
 
-## Workflow (Canonical — EARIST Research Manual 2015)
+## Workflow (v3)
 
-1. Proposal Submission → 2. CREC Evaluation → 3. EREC Research Forum → 4. Approval/Revision/Disapproval → 5. President Approval → 6. MOU/NDA → 7. Implementation → 8. Midway Progress → 9. Terminal Report → 10. Final Bound Report → 11. Research Colloquium → 12. Archive
+Draft title → submit and lock → typed admin/staff review → return for revision or approve → submit Chapters 1–5 in sequence → compute completion → track ongoing/completed research and outputs (publications and copyrights).
 
-Five-chapter structure: Chapter 1 Problem & Background → Chapter 2 Review of Related Literature → Chapter 3 Methodology → Chapter 4 Results & Discussion → Chapter 5 Summary/Conclusions/Recommendations.
+Five chapters are reviewed sequentially. Completion is computed from chapter progress; do not add a manual completion step or reintroduce legacy committee stages.
 
-Project statuses (consistent across all roles): `draft`, `submitted`, `under_review`, `under_crec_review`, `under_erec_review`, `for_revision`, `revision_required`, `approved`, `ongoing`, `completed`, `archived`. NEVER invent new statuses without updating all shells and badges.
+Use the statuses and transitions implemented by the schema and workflow helpers. Do not invent or rename statuses without updating all affected code and badges.
+
+The source manual is `docs/reference/Research-Manual_2015.md`.
 
 ---
 
@@ -343,7 +341,7 @@ My Research, Submit Proposal, Submit Chapter, My Documents, Progress Tracking, M
 Dashboard, My Submissions, Review Chapters, My Students, Reports (adviser focus — review + advisee management)
 
 ### 📋 Research Staff (teal)
-Dashboard, Submissions Inbox, For CREC Review, Revision Returns, Research Archive, Document Verification, Contact Messages (processing + repository focus)
+Dashboard, typed title/chapter review, five-module access map, revision returns, research archive, document verification, contact messages
 
 ### 🔴 Admin (orange)
 Dashboard, User Management, Research Management, Archive Management, Reports & Analytics, System Logs, Backup

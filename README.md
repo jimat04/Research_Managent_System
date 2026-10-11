@@ -1,6 +1,6 @@
 # Research Management System (RMS)
 
-A PHP and MySQL research management system for students, faculty advisers, research staff, and administrators. Built around the **EARIST Research Manual 2015** workflow — from proposal submission, through CREC/EREC evaluation and defense, to archive and publication.
+A PHP and MySQL v3 research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: draft → submit → locked → admin/staff review → return for revision → revise → Chapters 1–5 → computed completion and outputs. Staff access is organized as 5 modules × 3 sub-pages.
 
 **Stack:** PHP 7.4+ · MySQL/MariaDB · Apache (XAMPP/WAMP) · Composer (phpdotenv, PHPMailer)
 
@@ -69,14 +69,12 @@ A PHP and MySQL research management system for students, faculty advisers, resea
 | Role | Email | Password |
 | --- | --- | --- |
 | Admin | admin@rms.edu.ph | Admin@123 |
-| Faculty (reviewer) | msantos@rms.edu.ph | Faculty@123 |
-| Faculty (reviewer) | jreyes@rms.edu.ph | Faculty@123 |
+| Faculty | msantos@rms.edu.ph | Faculty@123 |
+| Faculty | jreyes@rms.edu.ph | Faculty@123 |
 | Student | jdelacruz@rms.edu.ph | Student@123 |
 | Student | areyes@rms.edu.ph | Student@123 |
-| Staff 1 (EREC Office) | staff1@rms.edu.ph | Staff@123 |
-| Staff 2 (CREC Office) | staff2@rms.edu.ph | Staff@123 |
-
-Staff demo accounts are limited to Staff 1 (EREC Office) and Staff 2 (CREC Office).
+| Research staff (account 1) | staff1@rms.edu.ph | Staff@123 |
+| Research staff (account 2) | staff2@rms.edu.ph | Staff@123 |
 
 ## Project Structure
 
@@ -91,36 +89,36 @@ rms/
     verify-email.php / resend-verification.php
     403.php / 404.php / 500.php    Custom error pages
   pages/                           Authenticated pages, organized by role
-    student/                       student-dashboard, my-research, submit-research,
-                                   submit-chapter, my-documents, progress-tracking
-    faculty/                       faculty-dashboard
-    researcher/                    Shared Student/Faculty title and chapter workflow
+      student/                       Dashboard, student-only views, and legacy workflow redirects
+      faculty/                       faculty-dashboard delegates to the student dashboard
+      researcher/                    Canonical workflow: my-research, submit-research,
+                                                    edit-research, submit-chapter
     admin/                         admin-dashboard, admin-users, admin-research,
                                    admin-archive, admin-reports, admin-logs, admin-backup
     staff/                         staff-dashboard, contact-messages
-    shared/                        module-page.php + messages, notifications, profile,
-                                   settings, calendar, research-archive, research-detail, view-research
+      shared/                        messages, notifications, profile, settings, calendar,
+                                                    typed review, implementation outputs, publications
   includes/                        Core backend
     config.php                     Loads .env, database connection
     auth.php                       Auth, roles, CSRF, hashing, logging helpers
-    module-pages.php               Module renderer + form action handlers
+      research-workflow.php          Title/chapter workflow helpers
     email.php                      PHPMailer wrapper (verification, notifications, replies)
     contact-handler.php            Public contact form handler
     admin-shell.php                Shared admin page shell
+      staff-shell.php / faculty-shell.php / student-shell.php
   database/
     schema/rms_db.sql              Main schema + seed data (19 tables)
     migrations/                    Incremental migration scripts
   config/                          settings.json, skills-lock.json (dev tooling)
-  css/                             style.css, about.css, admin-shell.css, tokens.css/.php
+  css/                             style.css, about.css, role-shell styles, file-uploader.css, tokens.css/.php
   scripts/                         Maintenance: backup-database.sh, verify-connections.sh,
-                                   verify-htaccess.sh, update-paths.php
-  docs/                            rms-spec.md, research-manual-2015.md,
-                                   planning/, progress/ reports
+                                   verify-htaccess.sh, update-paths.php, migrate.php
+  docs/                            rms-spec.md, reference/, planning/, progress/ reports
   uploads/                         proposals/ chapters/ manuscripts/ defense/
-  .github/agents/                  AI agent definitions (db, ui, security, testing, docs, page-builder)
+  .github/agents/                  Nine RMS Copilot agent definitions
 ```
 
-Secondary pages (e.g., `messages.php`) delegate to `pages/shared/module-page.php`, which routes rendering and actions through `includes/module-pages.php`.
+Research submission and chapter work is implemented in `pages/researcher/`; the matching student URLs remain thin compatibility redirects. Staff permissions use 5 modules with 3 sub-pages each, defined by `rmsPermissionModules()` in `includes/auth.php`.
 
 ## Main Features
 
@@ -129,18 +127,16 @@ Secondary pages (e.g., `messages.php`) delegate to `pages/shared/module-page.php
 - **Faculty workflow** — submit research titles and chapters, manage research they own or collaborate on, and submit milestone documents for those projects
 - **Admin tools** — analytics dashboard, user management, research oversight, archive, reports, activity logs, and database backups
 - **Research office staff** — staff dashboard, v3 title and chapter review queue, defense scheduling, milestone verification, revision returns, document verification, and contact-message management
-- **Shared modules** — messaging, notifications, profiles, calendar, and cross-role research detail (calendar / settings / view-research / shared `research-archive` are placeholder stubs routed through `pages/shared/module-page.php`)
+- **Shared modules** — messaging, notifications, profiles, calendar, typed research review, computed implementation progress, publications, and intellectual-property records
 - **Email notifications** — registration verification, account approval, and contact-form replies via PHPMailer (SMTP or `mail()`)
 - **Public site** — homepage, about, features, contact form, public research archive, and branded error pages
 - **Premium design language** — role-tinted academic platform with design tokens (`css/tokens.php`), dark sidebar + role accent (Admin orange, Staff teal, Faculty blue, Student purple), emoji icons, 8-point spacing grid, rounded 16–20px cards (see `CLAUDE.md` "AI Design Constitution")
 
-## Research Manual 2015
+## Research Workflow (v3)
 
-The system implements the EARIST Research Manual 2015 workflow:
+Title submission and review → chapter sequencing → computed completion → outputs (publications and copyrights).
 
-Proposal Submission → CREC Evaluation → EREC Research Forum → Approval/Revision → President Approval → MOU/NDA → Implementation → Midway Progress → Terminal Report → Final Bound Report → Research Colloquium → Archive
-
-The working reference lives in `docs/research-manual-2015.md` — keep implementation aligned with it when adding workflow features.
+The EARIST Research Manual 2015 source is in [`docs/reference/Research-Manual_2015.md`](docs/reference/Research-Manual_2015.md); consult it when adding workflow features.
 
 ## Configuration (.env)
 
@@ -173,16 +169,16 @@ For production: set `APP_ENV=production`, disable `APP_DEBUG`, configure real SM
 
 ## Project Status
 
-**Completed:** security hardening (`.htaccess`, `.env` migration, CSRF, soft-delete columns), page restructure into `public/` + role-based `pages/`, the module-page system, full student / faculty / admin / staff page sets (31 of 33 role pages built — see `docs/progress/PROGRESS_AUDIT.md` for the full status), email verification + notification system, contact-message management, custom error pages, the role-tinted design-token UI layer, milestone upload + verification (MOU/NDA, progress + terminal reports), defense scheduling, co-researcher team management on submissions, and the admin final-approval gate that moves approved projects to `in_progress`.
+**Completed:** security hardening (`.htaccess`, `.env` migration, CSRF, soft-delete columns), the unified student/faculty title and chapter workflow, role-based admin/staff modules, email verification + notifications, contact-message management, custom error pages, the role-tinted design-token UI layer, milestone upload + verification, defense scheduling, co-researcher team management, and the admin final-approval gate.
 
-**In progress / known gaps:** four `pages/shared/` stubs (`calendar.php`, `research-archive.php`, `settings.php`, `view-research.php`); the EARIST Research Manual 2015 ORS Consolidation stage and the Final Bound Report upload slot (Manual steps 3 and 11); the admin notification on new submission; and login rate limiting (the prior "done" check did not actually land in the code — see `TODO.md` Notes). Tracked in `TODO.md`.
+**In progress / known gaps:** the EARIST Research Manual 2015 ORS Consolidation stage, the Final Bound Report upload slot, and the admin notification on new research submission. Tracked in `TODO.md`.
 
 See `docs/progress/PROGRESS_AUDIT.md` for the latest audit and `docs/planning/PRIORITY_PLAN.md` for the roadmap.
 
 ## Documentation
 
 - `docs/rms-spec.md` — system specification
-- `docs/research-manual-2015.md` — EARIST workflow reference
+- `docs/reference/Research-Manual_2015.md` — EARIST workflow reference
 - `docs/EMAIL_SYSTEM.md` — email/verification setup guide
 - `PROJECT_STRUCTURE.md` — detailed file map
 - `TODO.md` — current task list

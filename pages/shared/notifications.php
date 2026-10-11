@@ -226,7 +226,7 @@ function notif_flash($type) {
 }
 
 // ---------------------------------------------------------------
-// Role-aware shell selection — mirrors profile.php and module-page.php.
+// Role-aware shell selection — mirrors profile.php.
 // ---------------------------------------------------------------
 $page_title    = 'Notifications';
 $page_subtitle = $unread_count > 0

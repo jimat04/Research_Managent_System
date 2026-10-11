@@ -3,7 +3,7 @@
 - **Date:** 2026-10-10
 - **Target:** `http://localhost/rms/` using the local Apache application and `rms_db`
 - **Browser:** Headless Chromium through Playwright
-- **Result:** **11 PASS, 2 NOT TESTED, 0 FAIL** (Playwright: 11 passed, 2 skipped)
+- **Result:** **13/13 PASS, 0 FAIL** (Playwright: 13 passed, 0 skipped) at commit `b3edc6e`. Required environment variable names: `RMS_E2E_ADMIN_EMAIL`, `RMS_E2E_ADMIN_PASSWORD`, `RMS_E2E_STAFF_EMAIL`, `RMS_E2E_STAFF_PASSWORD`, `RMS_E2E_TEST_PASSWORD`.
 
 ## Adviser-approved title and chapter workflow
 
@@ -34,7 +34,7 @@
 | Journal/conference publications and repository project relationships | PASS |
 | Copyright, patent, utility-model, and innovation records with project/publication relationships | PASS |
 | Staff view/manage permission checks on existing modules | PASS |
-| Configured standalone staff-dashboard account test | NOT TESTED — no dedicated staff credentials supplied |
+| Configured standalone staff-dashboard account test | PASS |
 | Legacy CREC/EREC and milestone lifecycle test | NOT TESTED — outside the requested title/chapter workflow |
 
 ## Not tested
