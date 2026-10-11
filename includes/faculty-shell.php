@@ -61,7 +61,6 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
 
     // Get unread message and notification counts for badges
     $user_id = (int) ($user['user_id'] ?? 0);
-    $pending_reviews = 0;
     $unread_messages = 0;
     $unread_notifications = 0;
 
@@ -82,24 +81,6 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
             $notif_stmt->close();
         }
 
-        // Pending CREC/EREC review assignments (project_reviews, migration 006).
-        $tbl_stmt = $conn->prepare("SHOW TABLES LIKE 'project_reviews'");
-        if ($tbl_stmt) {
-            $tbl_stmt->execute();
-            $tbl_stmt->bind_result($tbl);
-            $has_project_reviews = false;
-            while ($tbl_stmt->fetch()) { $has_project_reviews = ($tbl === 'project_reviews'); }
-            $tbl_stmt->close();
-            if ($has_project_reviews) {
-                $rev_stmt = $conn->prepare("SELECT COUNT(*) AS c FROM project_reviews WHERE reviewer_id = ? AND reviewed_at IS NULL");
-                if ($rev_stmt) {
-                    $rev_stmt->bind_param('i', $user_id);
-                    $rev_stmt->execute();
-                    $pending_reviews = (int) ($rev_stmt->get_result()->fetch_assoc()['c'] ?? 0);
-                    $rev_stmt->close();
-                }
-            }
-        }
     }
 
     // Canonical faculty nav. Each row: [href, label, icon, exists, badge_count].
