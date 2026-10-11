@@ -26,8 +26,8 @@ $status_label_map = [
     'draft'               => ['slate',   'Draft'],
     'submitted'           => ['blue',    'Submitted'],
     'under_review'        => ['blue',    'Under Review'],
-    'under_crec_review'   => ['blue',    'CREC Review'],
-    'under_erec_review'   => ['violet',  'EREC Review'],
+    'under_crec_review'   => ['blue',    'Committee Review (legacy)'],
+    'under_erec_review'   => ['violet',  'Ethics Review (legacy)'],
     'for_revision'        => ['orange',  'For Revision'],
     'revision_required'   => ['orange',  'Revision Required'],
     'approved'            => ['green',   'Approved'],
@@ -122,7 +122,7 @@ if ($project) {
 
 // Feedback is loaded only after the owner/member access query above succeeds.
 $project_feedback = [];
-$committee_reviews = [];
+$submission_reviews = [];
 $comments_have_project_id = false;
 if ($project) {
     $comments_project_column = $conn->query("SHOW COLUMNS FROM comments LIKE 'project_id'");
@@ -147,25 +147,22 @@ if ($project) {
         }
     }
 
-    $reviews_table = $conn->query("SHOW TABLES LIKE 'project_reviews'");
-    $project_reviews_exist = $reviews_table && $reviews_table->num_rows > 0;
-    if ($reviews_table) $reviews_table->close();
-
-    if ($project_reviews_exist) {
-        $review_stmt = $conn->prepare("
-            SELECT pr.review_level, pr.recommendation, pr.comments, pr.reviewed_at,
-                   u.first_name, u.last_name
-              FROM project_reviews pr
-              LEFT JOIN users u ON u.user_id = pr.reviewer_id
-             WHERE pr.project_id = ? AND pr.reviewed_at IS NOT NULL
-             ORDER BY pr.reviewed_at DESC, pr.review_id DESC
-        ");
-        if ($review_stmt) {
-            $review_stmt->bind_param('i', $project_id);
-            $review_stmt->execute();
-            $committee_reviews = $review_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-            $review_stmt->close();
-        }
+    $review_stmt = $conn->prepare("
+      SELECT r.decision, r.comments, r.reviewed_at,
+           v.submission_type, v.version_number, ch.chapter_number,
+           u.first_name, u.last_name, u.role AS reviewer_role
+        FROM research_submission_reviews r
+        JOIN research_submission_versions v ON v.version_id = r.version_id
+        LEFT JOIN chapters ch ON ch.chapter_id = v.chapter_id
+        LEFT JOIN users u ON u.user_id = r.reviewer_id
+       WHERE v.project_id = ?
+       ORDER BY r.reviewed_at DESC, r.review_id DESC
+    ");
+    if ($review_stmt) {
+      $review_stmt->bind_param('i', $project_id);
+      $review_stmt->execute();
+      $submission_reviews = $review_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+      $review_stmt->close();
     }
 }
 
@@ -513,11 +510,11 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
   <!-- FEEDBACK AND REVIEWS -->
   <div class="card">
     <h2 class="card-title">Feedback &amp; Reviews</h2>
-    <p class="card-subtitle">Comments and recommendations shared by faculty and committee reviewers</p>
+    <p class="card-subtitle">Faculty adviser feedback and decisions from administrators and authorized research staff</p>
 
     <?php if (!empty($project_feedback)): ?>
       <section class="feedback-section">
-        <div class="meta-label">Faculty Feedback</div>
+        <div class="meta-label">Faculty Adviser Feedback</div>
         <div class="feedback-list">
           <?php foreach ($project_feedback as $feedback):
             $feedback_type = strtolower((string) ($feedback['type'] ?? 'general'));
@@ -538,26 +535,30 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
       </section>
     <?php endif; ?>
 
-    <?php if (!empty($committee_reviews)): ?>
+    <?php if (!empty($submission_reviews)): ?>
       <section class="feedback-section">
-        <div class="meta-label">Committee Reviews</div>
+        <div class="meta-label">Authorized Review Decisions</div>
         <div class="feedback-list">
-          <?php foreach ($committee_reviews as $review):
-            $recommendation = strtolower((string) ($review['recommendation'] ?? ''));
-            $recommendation_badge = $recommendation === 'approve' ? 'green'
-                : ($recommendation === 'reject' ? 'red' : 'orange');
+          <?php foreach ($submission_reviews as $review):
+            $decision = (string) ($review['decision'] ?? '');
+            $decision_label = $decision === 'approved' ? 'Approved' : 'Returned for revision';
+            $decision_badge = $decision === 'approved' ? 'green' : 'orange';
             $reviewer_name = trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''));
-            $review_level = strtoupper((string) ($review['review_level'] ?? ''));
+            $reviewer_role = (string) ($review['reviewer_role'] ?? '');
+            $reviewer_role_label = $reviewer_role === 'admin' ? 'Administrator'
+                : ($reviewer_role === 'research_staff' ? 'Authorized research staff' : 'Authorized reviewer');
+            $submission_label = $review['submission_type'] === 'title'
+                ? 'Research Title'
+                : 'Chapter ' . (int) $review['chapter_number'];
           ?>
             <article class="feedback-item">
               <div class="feedback-head">
-                <span class="badge badge-violet"><?php echo rd_escape($review_level); ?></span>
-                <span class="feedback-author"><?php echo rd_escape($reviewer_name !== '' ? $reviewer_name : 'Committee Reviewer'); ?></span>
-                <?php if ($recommendation !== ''): ?>
-                  <span class="badge badge-<?php echo rd_escape($recommendation_badge); ?>"><?php echo rd_escape(ucfirst($recommendation)); ?></span>
-                <?php endif; ?>
+                <span class="feedback-author"><?php echo rd_escape($reviewer_name !== '' ? $reviewer_name : 'Authorized reviewer'); ?></span>
+                <span class="badge badge-violet"><?php echo rd_escape($reviewer_role_label); ?></span>
+                <span class="badge badge-<?php echo rd_escape($decision_badge); ?>"><?php echo rd_escape($decision_label); ?></span>
                 <time class="feedback-date"><?php echo !empty($review['reviewed_at']) ? rd_escape(date('M d, Y g:i A', strtotime($review['reviewed_at']))) : ''; ?></time>
               </div>
+              <div class="feedback-text"><?php echo rd_escape($submission_label . ' · Version ' . (int) $review['version_number']); ?></div>
               <?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?>
                 <div class="feedback-text"><?php echo nl2br(rd_escape($review['comments'])); ?></div>
               <?php endif; ?>
@@ -567,7 +568,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
       </section>
     <?php endif; ?>
 
-    <?php if (empty($project_feedback) && empty($committee_reviews)): ?>
+    <?php if (empty($project_feedback) && empty($submission_reviews)): ?>
       <div class="empty">No feedback yet.</div>
     <?php endif; ?>
   </div>
