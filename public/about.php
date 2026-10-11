@@ -75,7 +75,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     <h1 class="about-hero-title">
                         Research Management <span class="highlight" style="background: linear-gradient(135deg, #c4a9ff, var(--secondary-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">System</span>
                     </h1>
-                    <p class="about-hero-desc">A centralized digital platform purpose-built for EARIST — aligned with the 2015 Research Manual, serving students, faculty advisers, research office staff, and the Research Head through the full proposal-to-colloquium workflow.</p>
+                    <p class="about-hero-desc">A centralized EARIST platform where students and faculty share a versioned title and chapter workflow, admin and staff review submissions, and research outputs are tracked through computed completion.</p>
                     <div class="about-hero-actions">
                         <a href="research-archive.php" class="btn btn-primary btn-lg">View Research Archive</a>
                         <a href="contact.php" class="btn btn-secondary btn-lg">Contact Us</a>
@@ -115,7 +115,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     About The Platform
                 </div>
                 <h2 class="section-title" style="font-size: 2.2rem; color: var(--text-dark); margin-bottom: 18px;">What is the <span style="color: var(--primary);">Research Management System</span>?</h2>
-                <p style="font-size: 1.05rem; color: var(--text-light); line-height: 1.8; text-align: justify;">The Research Management System (RMS) is EARIST's institutional research-management system, purpose-built to operationalize the 2015 Research Manual. It connects research agenda management, CREC and EREC committee evaluation with internal and external specialists, MOU and NDA tracking, progress and terminal reports, the research colloquium, archival, research incentives, and publication in the EARIST Research Journal.<br><br>RMS supports the full path from Proposal Submission through CREC Evaluation, ORS Consolidation, EREC Research Forum, Approved/Revision/Disapproved, President Approval, MOU signed, Implementation, Midway Progress Report, Terminal Report review, Final bound report, and Research Colloquium. Individual and collaborative studies can deliver the five-chapter manuscript structure through these stages: Ch.1 Problem, Ch.2 RRL, Ch.3 Methods, Ch.4 Findings and Analysis, and Ch.5 Summary, Conclusions, and Recommendations.</p>
+                <p style="font-size: 1.05rem; color: var(--text-light); line-height: 1.8; text-align: justify;">The Research Management System (RMS) gives students and faculty one workspace to draft and submit research titles. Submissions lock as versioned snapshots for an admin and staff review queue, where each decision approves the work or returns it with comments for revision. Researchers can revise and resubmit through unlimited review cycles, with the full version history preserved.<br><br>After title approval, Chapters 1–5 are submitted sequentially through the same review loop; approval of one chapter unlocks the next. Completion is computed automatically when all chapters are approved. Staff access is organized as five modules with three sub-pages each, while publications, repository records, and copyright/IP registrations track research outputs. The 2015 Research Manual remains a source reference; RMS follows the current v3 workflow.</p>
             </div>
         </section>
 
@@ -125,7 +125,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                 <div class="feature-card" style="flex: 1 1 340px; min-width: 280px; text-align: center; border-radius: 16px; padding: 36px 30px;">
                     <div class="feature-icon" style="margin: 0 auto 16px; font-size: 2.2rem;">🎯</div>
                     <h3 style="font-size: 1.3rem; color: var(--primary-dark); margin-bottom: 12px;">Our Mission</h3>
-                    <p style="color: var(--text-light); line-height: 1.7;">To institutionalize an efficient, transparent, and accountable digital ecosystem for research management at EARIST — supporting students, faculty, and research committees from proposal through publication, in full alignment with the 2015 Research Manual.</p>
+                    <p style="color: var(--text-light); line-height: 1.7;">To provide an efficient, transparent, and accountable research platform where students and faculty share a versioned submission workflow, admin and staff decisions are traceable, chapters progress in sequence, and completion is computed consistently.</p>
                 </div>
                 <div class="feature-card" style="flex: 1 1 340px; min-width: 280px; text-align: center; border-radius: 16px; padding: 36px 30px;">
                     <div class="feature-icon" style="margin: 0 auto 16px; font-size: 2.2rem; background: rgba(15,108,189,0.1);">🌟</div>
@@ -147,13 +147,13 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                 </div>
                 <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
                     <div class="feature-card"><div class="feature-icon">📄</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Proposal Submission</h3><p>Supports Science/Tech and Social/Behavioral proposal templates with required-document tracking.</p></div>
-                    <div class="feature-card"><div class="feature-icon" style="background: rgba(15,108,189,0.1);">🏛️</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">CREC/EREC Review</h3><p>College-level evaluation flows into institutional review with internal and external specialists.</p></div>
+                    <div class="feature-card"><div class="feature-icon" style="background: rgba(15,108,189,0.1);">📋</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Structured Review Queue</h3><p>Admin and staff review locked title and chapter versions, then approve or return them with comments through a traceable revision history.</p></div>
                     <div class="feature-card"><div class="feature-icon">📑</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Chapter Management</h3><p>Manage the five-chapter structure with field-by-field editors and file uploads.</p></div>
-                    <div class="feature-card"><div class="feature-icon" style="background: rgba(34,197,94,0.1);">✅</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Approval &amp; MOU Tracking</h3><p>Track the President approval gate, Memorandum of Research Undertaking, and Non-Disclosure Form.</p></div>
+                    <div class="feature-card"><div class="feature-icon" style="background: rgba(34,197,94,0.1);">✅</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Chapter Sequencing</h3><p>Approved titles unlock Chapter 1; each chapter then unlocks the next only after approval through the same review loop.</p></div>
                     <div class="feature-card"><div class="feature-icon" style="background: rgba(245,124,0,0.1);">📈</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Progress &amp; Terminal Reports</h3><p>Submit midway progress reports and manage draft and final terminal report review.</p></div>
                     <div class="feature-card"><div class="feature-icon">🗂️</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Research Archive &amp; Journal</h3><p>Archive completed studies and track publication incentives aligned with Manual Ch.6–7.</p></div>
                     <div class="feature-card"><div class="feature-icon" style="background: rgba(91,30,188,0.1);">👥</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Collaborative Research</h3><p>Support Project Leaders, Study Leaders, Co-researchers, and Support Staff through project_members.</p></div>
-                    <div class="feature-card"><div class="feature-icon" style="background: rgba(245,158,11,0.1);">🔔</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Notifications &amp; Deadlines</h3><p>Receive timely alerts for revisions, defenses, colloquium schedules, and research deadlines.</p></div>
+                    <div class="feature-card"><div class="feature-icon" style="background: rgba(245,158,11,0.1);">🔔</div><h3 style="color: var(--text-dark); margin-bottom: 8px;">Notifications &amp; Deadlines</h3><p>Receive timely alerts for title and chapter decisions, revision comments, resubmissions, and research deadlines.</p></div>
                 </div>
             </div>
         </section>
@@ -173,20 +173,20 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                         <div class="feature-icon">🎓</div>
                         <h3 style="font-size: 1.15rem; color: var(--primary-dark); margin-bottom: 12px;">Student Researcher</h3>
                         <ul style="color: var(--text-light); font-size: 0.9rem; padding-left: 18px; margin: 0; line-height: 1.7;">
-                            <li>Submit digital research proposals</li>
-                            <li>Upload chapter drafts and final manuscripts</li>
-                            <li>Search approved research in the archive</li>
-                            <li>Register co-researchers for collaborative studies</li>
+                            <li>Draft and submit research titles through the shared workflow</li>
+                            <li>Revise and resubmit returned versions with history preserved</li>
+                            <li>Submit Chapters 1–5 sequentially as each is unlocked</li>
+                            <li>Manage co-researchers and follow research progress</li>
                         </ul>
                     </div>
                     <div class="feature-card">
                         <div class="feature-icon" style="background: rgba(15,108,189,0.1);">👨‍🏫</div>
-                        <h3 style="font-size: 1.15rem; color: var(--secondary); margin-bottom: 12px;">Faculty Adviser</h3>
+                        <h3 style="font-size: 1.15rem; color: var(--secondary); margin-bottom: 12px;">Faculty Researcher</h3>
                         <ul style="color: var(--text-light); font-size: 0.9rem; padding-left: 18px; margin: 0; line-height: 1.7;">
-                            <li>Review assigned advisees' manuscripts</li>
-                            <li>Provide chapter-level comments and feedback</li>
-                            <li>Endorse or request revisions on milestones</li>
-                            <li>Evaluate oral defenses and presentations</li>
+                            <li>Draft and submit titles through the same workflow as students</li>
+                            <li>Revise and resubmit returned versions with comments</li>
+                            <li>Submit chapters sequentially after title approval</li>
+                            <li>Receive review access only when granted by an administrator</li>
                         </ul>
                     </div>
                     <div class="feature-card">
@@ -195,7 +195,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                         <ul style="color: var(--text-light); font-size: 0.9rem; padding-left: 18px; margin: 0; line-height: 1.7;">
                             <li>Handle day-to-day administrative processing</li>
                             <li>Verify submission completeness &amp; documents</li>
-                            <li>Assist the Research Head &amp; committees</li>
+                            <li>Manage pages enabled by admin-granted permissions</li>
                             <li>Maintain the central research repository</li>
                         </ul>
                     </div>
@@ -228,7 +228,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">📋</span> Manual-Compliant Workflows</div>
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">🔐</span> Secure Role-Based Access</div>
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">📊</span> Real-Time Research Analytics</div>
-                    <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">🤝</span> Committee Collaboration</div>
+                    <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">🤝</span> Research Team Collaboration</div>
                     <div class="feature-card" style="padding: 24px; text-align: center; font-weight: 600; color: var(--primary-dark);"><span style="font-size: 1.6rem; display: block; margin-bottom: 8px;">📚</span> Research Archive &amp; Journal</div>
                 </div>
             </div>
@@ -242,13 +242,13 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                         📜 Institutional Standards
                     </div>
                     <h2 class="section-title" style="font-size: 2.2rem; color: var(--text-dark);">Aligned with the <span style="color: var(--primary);">EARIST Research Manual</span></h2>
-                    <p style="font-size: 1.05rem; color: var(--text-light); line-height: 1.7; max-width: 850px; margin: 0 auto 32px; text-align: center;">RMS implements the 2015 Research Manual end-to-end, connecting research agenda planning, committee-based CREC/EREC review, required documents, implementation, reporting, publication, ethics awareness, and colloquium presentation in one institutional process.</p>
+                    <p style="font-size: 1.05rem; color: var(--text-light); line-height: 1.7; max-width: 850px; margin: 0 auto 32px; text-align: center;">The 2015 Research Manual provides institutional source material for research context and outputs. RMS applies its current v3 workflow: unified title submission, typed review, sequential chapter approval, computed completion, publications, and copyright/IP records.</p>
                 </div>
                 <div class="manual-grid">
                     <div class="manual-card"><h3>Ch.1 General Information</h3><p>Establishes the manual's institutional scope and research context.</p></div>
                     <div class="manual-card"><h3>Ch.2 Roadmap for Excellence</h3><p>Guides the direction and quality goals of EARIST research.</p></div>
                     <div class="manual-card"><h3>Ch.3 The Research Agenda</h3><p>Connects projects to priority areas and institutional needs.</p></div>
-                    <div class="manual-card"><h3>Ch.4 Management of Research</h3><p>Defines the committee and administrative workflow RMS supports.</p></div>
+                    <div class="manual-card"><h3>Ch.4 Management of Research</h3><p>Provides source context for institutional research management; RMS workflows follow the current v3 process.</p></div>
                     <div class="manual-card"><h3>Ch.5 Development &amp; Implementation</h3><p>Tracks approved studies from development through implementation.</p></div>
                     <div class="manual-card"><h3>Ch.6 Research Incentive Program</h3><p>Supports tracking of research incentives and publication outputs.</p></div>
                     <div class="manual-card"><h3>Ch.7 Guidelines for Journal Publication</h3><p>Keeps journal-ready research and publication milestones visible.</p></div>
@@ -299,7 +299,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     🚀 Get Started
                 </div>
                 <h2 class="section-title" style="font-size: 2.3rem; color: var(--text-dark); margin-bottom: 16px;">Begin Your Research at <span style="color: var(--primary);">EARIST</span></h2>
-                <p style="font-size: 1.1rem; color: var(--text-light); margin-bottom: 32px; line-height: 1.7;">Move from proposal review to implementation, reporting, and the research colloquium with a workflow built for research excellence.</p>
+                <p style="font-size: 1.1rem; color: var(--text-light); margin-bottom: 32px; line-height: 1.7;">Move from title submission through sequential chapter review to computed completion, publications, and copyright or IP outputs.</p>
                 <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
                     <a href="login.php" class="btn btn-primary btn-lg"><span>🔑</span> Login Now</a>
                     <a href="login.php#register" class="btn btn-secondary btn-lg" style="color: var(--primary); border: 2px solid var(--primary);"><span>✨</span> Register Account</a>

@@ -203,8 +203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $year_level = isset($_POST['year_level']) ? sanitize($_POST['year_level']) : null;
         $specialization = isset($_POST['specialization']) ? sanitize($_POST['specialization']) : null;
         $academic_rank = isset($_POST['academic_rank']) ? sanitize($_POST['academic_rank']) : null;
-        $is_reviewer = isset($_POST['is_reviewer']) ? 1 : 0;
-        $office = isset($_POST['office']) ? sanitize($_POST['office']) : null;
+        $is_reviewer = 0;
+        $office = '';
 
         $allowedRoles = ['student', 'faculty'];
         if (!in_array($role, $allowedRoles, true)) {
@@ -931,10 +931,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
               </select>
             </div>
 
-            <div class="form-check" style="margin-bottom: 16px;">
-              <input type="checkbox" name="is_reviewer" id="isReviewer" value="1">
-              <label for="isReviewer" style="color: #D0D3E8; font-size: 0.85rem;">I'm willing to participate in CREC/EREC reviews</label>
-            </div>
           </div>
 
           <!-- STAFF-SPECIFIC FIELDS -->
@@ -944,8 +940,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
               <select name="office" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
                 <option value="">Select office</option>
                 <option value="Office of Research Services">Office of Research Services (ORS)</option>
-                <option value="CREC Office">CREC Office</option>
-                <option value="EREC Office">EREC Office</option>
                 <option value="Graduate School Office">Graduate School Office</option>
                 <option value="Other">Other</option>
               </select>

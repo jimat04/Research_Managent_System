@@ -221,7 +221,7 @@ if ($stat_rate === 0) $stat_rate = 95;
       </h1>
 
       <p>
-        An all-in-one digital platform unifying Students, Faculty Advisers, Review Committees (CREC/EREC), and Research Administrators from Proposal Submission through the Final Research Colloquium.
+        One research workspace for students and faculty, from a versioned title submission through admin and staff review, sequenced chapters, computed completion, and research outputs.
       </p>
 
       <div class="hero-actions">
@@ -268,7 +268,7 @@ if ($stat_rate === 0) $stat_rate = 95;
             <span style="background: rgba(34,197,94,0.2); color: #86efac; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Active</span>
           </div>
           <div style="font-size: 0.8rem; color: #cbd5e1; margin-bottom: 12px; line-height: 1.5;">
-            5-Chapter Thesis Structure &bull; CREC &amp; EREC Reviews &bull; Defense Scheduling &bull; Archival
+            Title approval &bull; Sequential Chapters 1-5 &bull; Computed completion &bull; Publications &amp; IP
           </div>
           <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
             <div style="width: 78%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary));"></div>
@@ -279,11 +279,11 @@ if ($stat_rate === 0) $stat_rate = 95;
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div style="background: rgba(91,30,188,0.15); border: 1px solid rgba(196,169,255,0.2); border-radius: 10px; padding: 12px;">
             <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">🎓 Student</div>
-            <div style="font-size: 0.72rem; color: #D0D3E8;">Submit chapters, track revisions &amp; defenses</div>
+            <div style="font-size: 0.72rem; color: #D0D3E8;">Submit titles and chapters, track revisions &amp; progress</div>
           </div>
           <div style="background: rgba(15,108,189,0.15); border: 1px solid rgba(147,197,253,0.2); border-radius: 10px; padding: 12px;">
             <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">👨‍🏫 Faculty</div>
-            <div style="font-size: 0.72rem; color: #D0D3E8;">Review advisees &amp; score panel defenses</div>
+            <div style="font-size: 0.72rem; color: #D0D3E8;">Use the shared submission workflow; review when granted access</div>
           </div>
           <div style="background: rgba(13,148,136,0.15); border: 1px solid rgba(94,234,212,0.2); border-radius: 10px; padding: 12px;">
             <div style="font-size: 1.1rem; margin-bottom: 4px;color: #D0D3E8;">📋 Staff</div>
@@ -300,53 +300,53 @@ if ($stat_rate === 0) $stat_rate = 95;
 </section>
 
 <!-- ════════════════════════════════════════════════════════════ -->
-<!-- RESEARCH MANUAL 2015: 5-STAGE WORKFLOW LIFECYCLE -->
+<!-- V3 RESEARCH WORKFLOW -->
 <!-- ════════════════════════════════════════════════════════════ -->
 <section class="section" style="background: #ffffff; padding: 80px 40px;">
   <div class="section-header" style="text-align: center; margin-bottom: 50px;" data-reveal>
     <div class="section-tag">🔄 End-to-End Governance</div>
     <h2 class="section-title">The Official <span style="color: var(--primary);">Research Lifecycle</span></h2>
-    <p class="section-desc">Modeled directly after the EARIST Research Manual (Ch.4–5: Management &amp; Implementation)</p>
+    <p class="section-desc">One review loop from title submission through five sequenced chapters and research outputs.</p>
   </div>
 
   <div class="workflow-grid" style="max-width: 1240px; margin: 0 auto;">
     <div class="workflow-step" data-reveal>
       <div class="step-number">1</div>
-      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Proposal Submission</h3>
+      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Title Submission</h3>
       <p style="font-size: 0.88rem; color: var(--text-light); line-height: 1.6;">
-        Submission of Title, Objectives, Science/Tech or Social/Behavioral Form 1, and Initial Capsule Proposal.
+        Students and faculty draft a research title, then submit it as a locked, versioned record.
       </p>
     </div>
 
     <div class="workflow-step" data-reveal data-reveal-delay="1">
       <div class="step-number" style="background: linear-gradient(135deg, var(--secondary), #0284c7);">2</div>
-      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">CREC / EREC Evaluation</h3>
+      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Review &amp; Approval</h3>
       <p style="font-size: 0.88rem; color: var(--text-light); line-height: 1.6;">
-        College Review Committee (CREC) &amp; Executive Research Ethics Committee (EREC) specialist evaluation.
+        Admin and staff work from a typed review queue to approve a title or return it with comments for revision.
       </p>
     </div>
 
     <div class="workflow-step" data-reveal data-reveal-delay="2">
       <div class="step-number" style="background: linear-gradient(135deg, #0d9488, #059669);">3</div>
-      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Approval &amp; MOU</h3>
+      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Chapters 1-5</h3>
       <p style="font-size: 0.88rem; color: var(--text-light); line-height: 1.6;">
-        Presidential Approval Gate, Non-Disclosure Agreement (NDA), and Memorandum of Research Undertaking.
+        Submit chapters sequentially through the same review and revision loop; each approval unlocks the next chapter.
       </p>
     </div>
 
     <div class="workflow-step" data-reveal data-reveal-delay="3">
       <div class="step-number" style="background: linear-gradient(135deg, var(--accent), #d97706);">4</div>
-      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Implementation &amp; Defense</h3>
+      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Computed Completion</h3>
       <p style="font-size: 0.88rem; color: var(--text-light); line-height: 1.6;">
-        Midway progress tracking, chapter drafts 1-5, oral defense evaluation, and formal revisions.
+        Research is marked complete automatically after all five chapters are approved.
       </p>
     </div>
 
     <div class="workflow-step" data-reveal data-reveal-delay="3">
       <div class="step-number" style="background: linear-gradient(135deg, #10b981, #047857);">5</div>
-      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Colloquium &amp; Journal</h3>
+      <h3 style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 8px;">Research Outputs</h3>
       <p style="font-size: 0.88rem; color: var(--text-light); line-height: 1.6;">
-        Terminal report approval, presentation at the Research Colloquium, and publication in the EARIST Journal.
+        Track journal and conference publications, repository records, and copyright or IP registrations.
       </p>
     </div>
   </div>
@@ -361,7 +361,7 @@ if ($stat_rate === 0) $stat_rate = 95;
       <div class="section-tag">📑 Standardized Structure</div>
       <h2 class="section-title" style="font-size: 2.2rem;">Institutional 5-Chapter <span style="color: var(--primary);">Manuscript Framework</span></h2>
       <p style="color: var(--text-light); line-height: 1.7; margin-bottom: 24px;">
-        To maintain uniform scholarly quality across all colleges, RMS strictly governs and formats submissions into the 5-chapter thesis specification mandated by the EARIST Research Manual.
+        RMS organizes approved research into five chapters. Each chapter follows the same review loop, and the next chapter unlocks only after the previous one is approved.
       </p>
       <a href="features.php" class="btn btn-primary btn-md">
         <span>📖</span> View Complete Guidelines →
@@ -434,9 +434,9 @@ if ($stat_rate === 0) $stat_rate = 95;
 
     <div class="interactive-card" data-reveal data-reveal-delay="1">
       <div class="feature-icon" style="background: rgba(15,108,189,0.1);">✅</div>
-      <h3 style="color: var(--text-dark); margin-bottom: 10px;">Committee Review &amp; Defense Scoring</h3>
+      <h3 style="color: var(--text-dark); margin-bottom: 10px;">Versioned Review Queue</h3>
       <p style="color: var(--text-light); font-size: 0.9rem; line-height: 1.6; margin-bottom: 16px;">
-        Faculty advisers and panel members evaluate submissions, annotate feedback, and record oral defense ratings.
+        Admin and staff review locked title and chapter versions, approving them or returning them with comments for revision.
       </p>
       <a class="card-action" href="features.php#feature-review" style="color: var(--secondary); font-weight: 600; font-size: 0.85rem; margin-top: auto;">Learn more →</a>
     </div>

@@ -1082,7 +1082,7 @@ $links = [
                     <span class="hero-title-gradient">Effortless Research</span>
                 </h1>
                 <p class="hero-desc-main">
-                    Experience an intuitive, all-in-one ecosystem for proposal submissions, multi-tier committee evaluations, document curation, and defense scheduling aligned with EARIST CREC/EREC standards.
+                    Explore one student/faculty research workspace with locked versioned submissions, a typed admin/staff review queue, sequential chapters, computed completion, and research outputs.
                 </p>
                 <div class="hero-actions" style="display: flex; gap: 14px; flex-wrap: wrap;">
                     <a href="<?php echo features_escape($links['login']); ?>" class="btn btn-primary btn-lg" style="box-shadow: 0 10px 24px rgba(91,30,188,0.4);">
@@ -1120,8 +1120,8 @@ $links = [
                 <div class="mockup-item">
                     <div class="mockup-item-icon" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">💬</div>
                     <div class="mockup-item-text">
-                        <h4>CREC Committee Feedback</h4>
-                        <p>3 remarks from Prof. Alvarez</p>
+                        <h4>Review Comments</h4>
+                        <p>Return with comments, revise, and resubmit</p>
                     </div>
                     <span class="mockup-status-pill pill-review">Action Req.</span>
                 </div>
@@ -1129,8 +1129,8 @@ $links = [
                 <div class="mockup-item">
                     <div class="mockup-item-icon" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">🗓️</div>
                     <div class="mockup-item-text">
-                        <h4>Colloquium Scheduled</h4>
-                        <p>Oct 14, 2026 • Audio Visual Hall</p>
+                        <h4>Chapter 2 Unlocked</h4>
+                        <p>Chapter 1 approved • version history saved</p>
                     </div>
                     <span class="mockup-status-pill pill-active">Confirmed</span>
                 </div>
@@ -1152,7 +1152,7 @@ $links = [
                 <div class="stat-bar-icon">🛡️</div>
                 <div class="stat-bar-data">
                     <h3>Role-Secured</h3>
-                    <p>CREC, EREC, Adviser levels</p>
+                    <p>Admin-granted view/manage access</p>
                 </div>
             </div>
             <div class="stat-bar-item">
@@ -1198,11 +1198,11 @@ $links = [
                 <div class="features-grid features-grid--five">
                     <?php
                     $student_features = [
-                        ['icon' => '📄', 'title' => 'Multi-Stage Submission', 'desc' => 'Multi-step draft saving, executive abstracts, team author attribution, and thematic classification tags.', 'points' => ['Auto-save progress', 'Co-author linking', 'Abstract tagging'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
-                        ['icon' => '📝', 'title' => 'Chapter-by-Chapter Editor', 'desc' => 'Write, upload, and revise Ch. 1 to Ch. 5 with granular version history and status indicators.', 'points' => ['Ch 1-5 versioning', 'Field editors', 'Audit trails'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
-                        ['icon' => '📤', 'title' => 'Smart Document Uploads', 'desc' => 'Seamlessly upload PDF, DOC, and DOCX files for proposal reviews, rubrics, and final manuscripts.', 'points' => ['Secure cloud storage', 'File previews', 'Multi-format support'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
-                        ['icon' => '📊', 'title' => 'Interactive Progress Tracker', 'desc' => 'Visualize milestone progress across CREC/EREC stages, approvals, and pending revision items.', 'points' => ['Milestone steppers', 'Approval badge logs', 'Turnaround metrics'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
-                        ['icon' => '🔔', 'title' => 'Action & Defense Alerts', 'desc' => 'Receive immediate notifications for feedback, remarks, defense dates, and compliance deadlines.', 'points' => ['Email & in-app alerts', 'Defense schedules', 'Due date countdowns'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-student', 'role_name' => 'Student']
+                        ['icon' => '📄', 'title' => 'Unified Title Workspace', 'desc' => 'Draft a research title, save changes, and submit it through the same shared workflow used by faculty.', 'points' => ['Draft saving', 'Shared student/faculty flow', 'Team author attribution'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
+                        ['icon' => '🔒', 'title' => 'Locked Versioned Submissions', 'desc' => 'Submission locks the title and saves a version snapshot; revisions create a full history rather than replacing prior work.', 'points' => ['Locked submitted version', 'Version snapshots', 'Full revision history'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
+                        ['icon' => '📝', 'title' => 'Sequential Chapter Submissions', 'desc' => 'Submit Chapters 1-5 in order; the next chapter becomes available after the current one is approved.', 'points' => ['Five chapter stages', 'Approval-gated unlocks', 'Same return-and-revise loop'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
+                        ['icon' => '📊', 'title' => 'Computed Research Progress', 'desc' => 'Follow title approval and chapter progress, with completion calculated automatically after all five approvals.', 'points' => ['Title approval stage', 'Chapter status history', 'Computed completion'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-student', 'role_name' => 'Student'],
+                        ['icon' => '🔔', 'title' => 'Review & Revision Alerts', 'desc' => 'Receive updates when a version is approved or returned with comments, and when action is needed.', 'points' => ['In-app alerts', 'Revision comments', 'Resubmission updates'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-student', 'role_name' => 'Student']
                     ];
                     foreach ($student_features as $feature): ?>
                         <div class="modern-feature-card" style="--card-gradient: var(--feature-student-grad);">
@@ -1225,23 +1225,23 @@ $links = [
                 </div>
             </div>
 
-            <!-- FACULTY & REVIEWERS GROUP -->
+            <!-- FACULTY WORKSPACE GROUP -->
             <div class="features-section-group" id="faculty-suite">
                 <div class="group-header">
                     <div class="group-title-left">
-                        <h3><span>👨‍🏫</span> Faculty & Reviewers</h3>
-                        <p>Streamlined review queues and contextual feedback workflows</p>
+                        <h3><span>👨‍🏫</span> Faculty Workspace</h3>
+                        <p>The same research submission workflow as students, with optional admin-granted review access</p>
                     </div>
                     <span class="group-count-pill">5 Core Tools</span>
                 </div>
                 <div class="features-grid features-grid--five">
                     <?php
                     $review_features = [
-                        ['icon' => '✅', 'title' => 'Consolidated Review Queue', 'desc' => 'Priority inbox sorting submitted manuscripts and revisions awaiting your evaluation.', 'points' => ['Filtered priority queue', 'One-click assessment', 'Batch review actions'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
-                        ['icon' => '💬', 'title' => 'Inline Annotations & Remarks', 'desc' => 'Deliver precise paragraph-level remarks, required edits, and clear approval stipulations.', 'points' => ['Categorized feedback', 'Revision requests', 'Direct feedback logs'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
-                        ['icon' => '🗓️', 'title' => 'Defense & Panel Scheduling', 'desc' => 'Schedule proposal, pre-oral, and final defenses with room, venue, and panel assignments.', 'points' => ['Venue booking', 'Panel member sync', 'Automated invites'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
-                        ['icon' => '👥', 'title' => 'Advisee Mentorship Hub', 'desc' => 'Overview of all assigned thesis groups, active drafts, and individual milestone progress.', 'points' => ['Advisee status board', 'Milestone flags', 'Activity timelines'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
-                        ['icon' => '📈', 'title' => 'Evaluation Performance', 'desc' => 'Track your review turnaround times, approval rates, and committee service metrics.', 'points' => ['Turnaround metrics', 'Historical approvals', 'Service reporting'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty']
+                        ['icon' => '📄', 'title' => 'Shared Research Workspace', 'desc' => 'Draft and submit titles and chapters through the same workflow available to students.', 'points' => ['Title drafts', 'Chapter submissions', 'Project collaboration'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
+                        ['icon' => '🔒', 'title' => 'Locked Version History', 'desc' => 'Submitted work stays locked as a snapshot while later revisions preserve earlier versions.', 'points' => ['Submission locks', 'Version snapshots', 'Unlimited revision cycles'], 'anchor' => 'feature-submission', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
+                        ['icon' => '💬', 'title' => 'Return with Review Comments', 'desc' => 'When an administrator grants review permissions, faculty can review assigned pages and return work with comments.', 'points' => ['Admin-granted access', 'View/manage permission', 'Comments on returned work'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
+                        ['icon' => '👥', 'title' => 'Collaborative Research', 'desc' => 'Manage research teams and follow shared title and chapter progress with co-researchers.', 'points' => ['Co-researcher linking', 'Shared project context', 'Progress visibility'], 'anchor' => 'feature-review', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty'],
+                        ['icon' => '📈', 'title' => 'Computed Progression', 'desc' => 'Track title approval and sequential chapter progress through automatically computed completion.', 'points' => ['Title stage', 'Five chapter stages', 'Ongoing/completed views'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-faculty', 'role_name' => 'Faculty']
                     ];
                     foreach ($review_features as $feature): ?>
                         <div class="modern-feature-card" style="--card-gradient: var(--feature-faculty-grad);">
@@ -1264,22 +1264,23 @@ $links = [
                 </div>
             </div>
 
-            <!-- CREC-EREC & ADMINISTRATION GROUP -->
+            <!-- ADMIN & RESEARCH OFFICE GROUP -->
             <div class="features-section-group" id="admin-suite">
                 <div class="group-header">
                     <div class="group-title-left">
-                        <h3><span>🏛️</span> CREC-EREC & Administration</h3>
-                        <p>Centralized oversight, compliance controls, and institutional analytics</p>
+                        <h3><span>🏛️</span> Admin &amp; Research Office</h3>
+                        <p>Typed review, per-page staff permissions, computed progression, and research outputs</p>
                     </div>
-                    <span class="group-count-pill">4 Core Tools</span>
+                    <span class="group-count-pill">5 Core Tools</span>
                 </div>
                 <div class="features-grid">
                     <?php
                     $admin_features = [
-                        ['icon' => '🧑‍💼', 'title' => 'User & Role Management', 'desc' => 'Provision and oversee student, faculty, and committee credentials with custom permissions.', 'points' => ['Granular role assignments', 'Account status control', 'Department filtering'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
-                        ['icon' => '🗂️', 'title' => 'Public Research Repository', 'desc' => 'Curate defended and approved manuscripts into an indexed, searchable open archive.', 'points' => ['Metadata indexing', 'Abstract search', 'Full-text retrieval'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
-                        ['icon' => '📊', 'title' => 'Institutional Analytics', 'desc' => 'Department-wide submission trends, approval ratios, and thematic research heatmaps.', 'points' => ['Statistical charts', 'Department breakdowns', 'Annual reports export'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
-                        ['icon' => '💾', 'title' => 'Automated Backups', 'desc' => 'One-click disaster recovery backups of project databases, metadata, and files.', 'points' => ['One-click exports', 'File archive bundles', 'High durability'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-admin', 'role_name' => 'Admin']
+                        ['icon' => '🧑‍💼', 'title' => 'Typed Review Queue', 'desc' => 'Review title and chapter submissions, approve them, or return them with comments for revision.', 'points' => ['Separate title/chapter review', 'Approve or return', 'Version history'], 'anchor' => 'feature-review', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
+                        ['icon' => '🔐', 'title' => '5 × 3 Permission Matrix', 'desc' => 'Grant research staff view or manage access per sub-page across five modules.', 'points' => ['Capacity Building', 'Research Development', 'Implementation & Outputs', 'Publication & Dissemination', 'IP & Utilization'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
+                        ['icon' => '📊', 'title' => 'Computed Progression', 'desc' => 'Track ongoing and completed research from approved titles and chapter progress.', 'points' => ['Ongoing view', 'Completed view', 'Completion from chapter approvals'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
+                        ['icon' => '🗂️', 'title' => 'Publications & Repository', 'desc' => 'Track journal and conference publications and curate research repository records.', 'points' => ['Journal publications', 'Conference presentations', 'Repository records'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-admin', 'role_name' => 'Admin'],
+                        ['icon' => '©️', 'title' => 'Copyright & IP Records', 'desc' => 'Register and track copyrights and other intellectual-property outputs tied to research.', 'points' => ['Copyright registrations', 'Research relationships', 'IP utilization'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-admin', 'role_name' => 'Admin']
                     ];
                     foreach ($admin_features as $feature): ?>
                         <div class="modern-feature-card" style="--card-gradient: var(--feature-admin-grad);">
@@ -1315,9 +1316,9 @@ $links = [
                     <?php
                     $shared_features = [
                         ['icon' => '🔐', 'title' => 'Secure Authentication', 'desc' => 'Role-based access control with encrypted sessions for students, faculty, and administrators.', 'points' => ['Encrypted sessions', 'Role-based gates', 'Audit logging'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
-                        ['icon' => '🔔', 'title' => 'Smart Notification Engine', 'desc' => 'Context-aware alerts for submissions, reviews, defense schedules, and system announcements.', 'points' => ['Priority filtering', 'In-app + email', 'Read/unread tracking'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
-                        ['icon' => '💬', 'title' => 'Real-Time Direct Messaging', 'desc' => 'Built-in collaborative messaging between researchers, advisers, and panel heads.', 'points' => ['Threaded conversations', 'Document attachments', 'Unread badges'], 'anchor' => 'feature-review', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
-                        ['icon' => '📅', 'title' => 'Universal Academic Calendar', 'desc' => 'Synchronized deadlines for submissions, CREC/EREC meetings, and defense colloquiums.', 'points' => ['Interactive calendar view', 'Export to iCal', 'Custom deadline filters'], 'anchor' => 'feature-review', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
+                        ['icon' => '🔔', 'title' => 'Smart Notification Engine', 'desc' => 'Context-aware alerts for title and chapter decisions, returned comments, resubmissions, and system updates.', 'points' => ['Priority filtering', 'In-app + email', 'Read/unread tracking'], 'anchor' => 'feature-analytics', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
+                        ['icon' => '💬', 'title' => 'Real-Time Direct Messaging', 'desc' => 'Built-in messaging for researchers and authorized staff working across research records.', 'points' => ['Threaded conversations', 'Document attachments', 'Unread badges'], 'anchor' => 'feature-review', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
+                        ['icon' => '📅', 'title' => 'Universal Academic Calendar', 'desc' => 'Keep submission and review deadlines visible alongside shared academic dates.', 'points' => ['Interactive calendar view', 'Export to iCal', 'Custom deadline filters'], 'anchor' => 'feature-review', 'badge_class' => 'badge-shared', 'role_name' => 'Platform'],
                         ['icon' => '📱', 'title' => 'Adaptive Responsive UI', 'desc' => 'Pixel-perfect experience across desktop monitors, laptops, iPads, and mobile smartphones.', 'points' => ['Touch-friendly UI', 'Fluid viewport scaling', 'Accessible typography'], 'anchor' => 'feature-archive', 'badge_class' => 'badge-shared', 'role_name' => 'Platform']
                     ];
                     foreach ($shared_features as $feature): ?>
@@ -1382,28 +1383,28 @@ $links = [
                     🏛️ Institutional Alignment
                 </span>
                 <h2 style="font-size: 2.3rem; margin-top: 14px; font-weight: 800;">Built Directly for EARIST Research Protocol</h2>
-                <p style="color: #b4b9d6; font-size: 1rem; margin-top: 10px;">Every workflow mirrors the official EARIST Research Manual guidelines, ensuring full compliance from proposal to colloquium.</p>
+                <p style="color: #b4b9d6; font-size: 1rem; margin-top: 10px;">The 2015 Research Manual is an institutional source reference; RMS presents its current v3 submission, review, chapter, and output workflows.</p>
             </div>
             <div class="alignment-grid">
                 <div class="alignment-card">
                     <div class="alignment-icon">👥</div>
-                    <h4>CREC & EREC Pipeline</h4>
-                    <p>Structured two-tier committee review verifying both technical merit and institutional ethics compliance.</p>
+                    <h4>Structured Review Queue</h4>
+                    <p>Admin and staff review locked title and chapter versions, approving work or returning it with comments.</p>
                 </div>
                 <div class="alignment-card">
                     <div class="alignment-icon">📋</div>
-                    <h4>MOU & NDA Repository</h4>
-                    <p>Enforces required documentation including external institutional MOUs, NDAs, and progress verification.</p>
+                    <h4>Chapter Sequencing</h4>
+                    <p>Chapter 1 follows title approval; every next chapter unlocks after approval of the current one.</p>
                 </div>
                 <div class="alignment-card">
                     <div class="alignment-icon">📊</div>
-                    <h4>Terminal & Progress Reports</h4>
-                    <p>Periodic progress tracking ensuring research implementations stay on schedule toward terminal milestones.</p>
+                    <h4>Computed Progression</h4>
+                    <p>Ongoing and completed views reflect title decisions and chapter approvals; completion is computed from all five approvals.</p>
                 </div>
                 <div class="alignment-card">
                     <div class="alignment-icon">🎓</div>
-                    <h4>Colloquium Integration</h4>
-                    <p>Seamless transition from final defense clearance to official college-wide colloquium presentations.</p>
+                    <h4>Publication &amp; IP Outputs</h4>
+                    <p>Track journal and conference publications, repository records, and copyright or IP registrations.</p>
                 </div>
             </div>
         </div>
@@ -1419,7 +1420,7 @@ $links = [
                 </div>
                 <h2 class="section-title" style="font-size: 2.2rem;">How RMS Powers Your Workflow</h2>
                 <p class="section-desc">Take a closer look at the key modules that keep academic teams focused and aligned.</p>
-                <p class="deep-dive-context-note"><span aria-hidden="true">ℹ️</span> Selected module highlights from RMS&rsquo;s complete five-stage research lifecycle.</p>
+                <p class="deep-dive-context-note"><span aria-hidden="true">ℹ️</span> Selected highlights from the unified title, chapter, review, and output workflow.</p>
             </div>
 
             <!-- Spotlight 1: Submission Flow -->
@@ -1427,7 +1428,7 @@ $links = [
                 <div class="deep-dive-info">
                     <span class="deep-dive-pill">Spotlight 01 • Submission</span>
                     <h2>Frictionless Research Submission & Versioning</h2>
-                    <p>Students can formulate proposals across structured forms, save drafts at any moment, bind co-authors, and upload chapters with verified file schemas. Keep every edit organized under clear revision milestones.</p>
+                    <p>Students and faculty share one workspace to draft a title, save changes, and submit it as a locked version snapshot. Revisions can be returned with comments and resubmitted through unlimited cycles, preserving full history.</p>
                     <div class="deep-feature-specs">
                         <div class="spec-item"><i>💾</i> Auto-draft recovery</div>
                         <div class="spec-item"><i>📑</i> PDF/Word compatibility</div>
@@ -1438,7 +1439,7 @@ $links = [
                 <div class="deep-dive-visual">
                     <div class="interactive-preview-box">
                         <div class="preview-box-header">
-                            <span>📄 Proposal Submission Workspace</span>
+                            <span>📄 Shared Research Workspace</span>
                             <span style="color: #4ade80;">● Auto-saved</span>
                         </div>
                         <div class="interactive-mock-item">
@@ -1456,34 +1457,34 @@ $links = [
                 </div>
             </div>
 
-            <!-- Spotlight 2: Committee Reviews -->
+            <!-- Spotlight 2: Typed Review Queue -->
             <div class="deep-dive-card" id="feature-review">
                 <div class="deep-dive-info">
-                    <span class="deep-dive-pill">Spotlight 02 • Committee Review</span>
-                    <h2>Actionable Feedback & Instant Approvals</h2>
-                    <p>Reviewers and CREC panels review manuscripts within a clean reading canvas. Provide targeted revision notes, attach rubric scoring sheets, and approve projects to progress toward defense colloquiums.</p>
+                    <span class="deep-dive-pill">Spotlight 02 • Typed Review Queue</span>
+                    <h2>Comments, Decisions & Version History</h2>
+                    <p>Admin and staff review title and chapter versions in the typed queue. Approve a submission or return it with comments; researchers revise and resubmit while each version remains in the history.</p>
                     <div class="deep-feature-specs">
                         <div class="spec-item"><i>💬</i> Categorized remarks</div>
                         <div class="spec-item"><i>⚡</i> Instant status triggers</div>
-                        <div class="spec-item"><i>📅</i> Defense slot scheduler</div>
-                        <div class="spec-item"><i>🎯</i> CREC/EREC approval signs</div>
+                        <div class="spec-item"><i>🔒</i> Locked submission snapshots</div>
+                        <div class="spec-item"><i>♻️</i> Unlimited revision cycles</div>
                     </div>
                 </div>
                 <div class="deep-dive-visual">
                     <div class="interactive-preview-box">
                         <div class="preview-box-header">
-                            <span>✅ Reviewer Workspace Queue</span>
+                            <span>✅ Admin/Staff Review Queue</span>
                             <span style="color: #fbbf24;">● 2 Pending Reviews</span>
                         </div>
                         <div class="interactive-mock-item">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <strong style="font-size: 0.82rem; color: #f8fafc;">CREC Evaluation Notice</strong>
+                                <strong style="font-size: 0.82rem; color: #f8fafc;">Chapter Review Returned</strong>
                                 <span style="font-size: 0.68rem; background: #374151; padding: 2px 6px; border-radius: 4px;">Dr. Ramos</span>
                             </div>
                             <p style="font-size: 0.75rem; color: #94a3b8; margin: 0;">"Expand literature matrix in Chapter 2 to include recent 2025 IEEE publications."</p>
                         </div>
                         <div class="interactive-mock-item" style="background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); text-align: center;">
-                            <span style="font-size: 0.78rem; font-weight: 700; color: #4ade80;">✓ Move to Pre-Oral Defense</span>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: #4ade80;">✓ Approve to unlock the next chapter</span>
                         </div>
                     </div>
                 </div>
@@ -1537,7 +1538,7 @@ $links = [
                 🚀 Transform Your Research Journey
             </span>
             <h2>Ready to Experience Modern Research Management?</h2>
-            <p>Join hundreds of students, faculty advisers, and research committees utilizing RMS to publish quality academic studies faster.</p>
+            <p>Join students and faculty using one research workflow, with admin and staff decisions, chapter progress, and outputs managed in one place.</p>
             <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
                 <a href="<?php echo features_escape($links['login']); ?>" class="btn btn-primary btn-lg" style="background: #ffffff; color: var(--primary-dark); font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,0.25);">
                     Access RMS Portal →
@@ -1611,7 +1612,7 @@ $links = [
 
     var roleUseCases = {
         Student: 'Available from the student workspace to keep submissions, milestones, and required actions connected to the active research project.',
-        Faculty: 'Supports advisers and reviewers while evaluating assigned research, recording guidance, and monitoring follow-through.',
+        Faculty: 'Uses the same title and chapter submission workflow as students; administrators may additionally grant review permissions.',
         Admin: 'Used by authorized administrators and research offices to maintain governance, visibility, and institutional control.',
         Platform: 'Works across role-based workspaces as a shared service supporting secure, coordinated research activity.'
     };
