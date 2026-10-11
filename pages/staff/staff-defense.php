@@ -292,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $when_label = $dt->format('M d, Y · g:i A');
             $venue_part = $venue !== '' ? " at {$venue}" : '';
             $notif_msg  = 'A ' . sdef_type_label($type) . " for \"{$short_title}\" is scheduled on {$when_label}{$venue_part}.";
-            $link       = SITE_URL . 'pages/student/progress-tracking.php?project_id=' . $project_id;
+            $link       = SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id;
 
             $recipients = sdef_collect_recipients($conn, $project_id);
             foreach ($recipients as $rid) {
@@ -377,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $history_line  = '';
         $new_date_norm = null;
         $venue_part    = !empty($row['venue']) ? ' at ' . (string) $row['venue'] : '';
-        $link          = SITE_URL . 'pages/student/progress-tracking.php?project_id=' . $project_id;
+        $link          = SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id;
 
         if ($action === 'mark_done') {
             $new_status  = 'done';
