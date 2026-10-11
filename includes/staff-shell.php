@@ -60,24 +60,12 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     // Get badge counts for nav items
     global $conn;
     $stat_contact   = 0;
-    $stat_pending   = 0;
-    $stat_crec      = 0;
     $stat_defenses  = 0;
     $stat_revisions = 0;
     if (isset($conn)) {
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
             $stat_contact = (int) ($count_result->fetch_assoc()['count'] ?? 0);
-        }
-        $count_result = $conn->query("SELECT COUNT(*) AS count FROM research_projects WHERE status = 'submitted'");
-        if ($count_result) {
-            $stat_pending = (int) ($count_result->fetch_assoc()['count'] ?? 0);
-        }
-        $committee_count_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('under_crec_review', 'under_erec_review')");
-        if ($committee_count_stmt) {
-            $committee_count_stmt->execute();
-            $stat_crec = (int) ($committee_count_stmt->get_result()->fetch_assoc()['count'] ?? 0);
-            $committee_count_stmt->close();
         }
         // Upcoming defenses (status scheduled/rescheduled with date >= now).
         // defense_schedule is in the main schema, but defend against older
