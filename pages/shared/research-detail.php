@@ -594,7 +594,9 @@ if ($role === 'admin') {
             <div>
               <div class="card-title">Recent Documents</div>
             </div>
-            <a href="#" style="color: var(--primary); text-decoration: none; font-size: 13px;">View All →</a>
+            <?php if ($role === 'student'): ?>
+              <a href="<?php echo SITE_URL; ?>pages/student/my-documents.php?project_id=<?php echo (int) $project_id; ?>" style="color: var(--primary); text-decoration: none; font-size: 13px;">View All →</a>
+            <?php endif; ?>
           </div>
           <div class="card-body">
             <?php if (empty($uploads)): ?>

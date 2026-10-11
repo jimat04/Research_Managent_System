@@ -69,12 +69,13 @@ foreach ($projects as $project) {
 
 $status_display = [
     'draft' => 'Draft', 'submitted' => 'Submitted', 'under_review' => 'Under Review',
-    'under_crec_review' => 'CREC Review', 'under_erec_review' => 'EREC Review',
+    'under_crec_review' => 'Committee Review (legacy)', 'under_erec_review' => 'Ethics Review (legacy)',
     'for_revision' => 'For Revision', 'revision_required' => 'Revision Required',
-    'title_approved' => 'Title Approved', 'approved' => 'Approved', 'ongoing' => 'Ongoing', 'proposal' => 'Proposal',
-    'in_progress' => 'In Progress', 'for_defense' => 'For Defense',
+    'title_approved' => 'Title Approved', 'approved' => 'Approved', 'ongoing' => 'Ongoing', 'proposal' => 'Proposal (legacy)',
+    'in_progress' => 'In Progress (legacy)', 'for_defense' => 'For Defense (legacy)',
     'completed' => 'Completed', 'archived' => 'Archived',
 ];
+$filter_statuses = ['draft', 'submitted', 'for_revision', 'title_approved', 'ongoing', 'completed', 'archived'];
 
 if (($user['role'] ?? '') === 'faculty') {
     renderFacultyShell($user, 'my-research', 'My Research', 'Track your research title and chapter submissions.');
@@ -147,8 +148,8 @@ if (($user['role'] ?? '') === 'faculty') {
         <label for="statusFilter">Project status</label>
         <select class="research-control" id="statusFilter">
           <option value="">All statuses</option>
-          <?php foreach ($status_display as $status_value => $status_label): ?>
-            <option value="<?php echo htmlspecialchars($status_value, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($status_label, ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php foreach ($filter_statuses as $status_value): ?>
+            <option value="<?php echo htmlspecialchars($status_value, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($status_display[$status_value], ENT_QUOTES, 'UTF-8'); ?></option>
           <?php endforeach; ?>
         </select>
       </div>
