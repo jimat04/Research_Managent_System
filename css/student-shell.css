@@ -8,6 +8,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 .student-dashboard {
+  --student-research-hero-background: radial-gradient(circle at 92% 14%, rgba(213, 190, 255, .25), transparent 28%), radial-gradient(circle at 8% 110%, rgba(50, 111, 232, .22), transparent 30%), linear-gradient(135deg, #291050 0%, #4C188F 55%, #6C2CC7 100%);
   display: flex;
   min-height: 100dvh;
   background: #f5f8fc;
@@ -87,10 +88,11 @@
 }
 
 .student-sidebar-brand {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
   color: #1d2c47;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,10 +100,12 @@
 
 .student-sidebar-role {
   display: block;
-  font-size: 10px;
+  font-size: 9px;
   color: #64748b;
-  font-weight: 500;
-  margin-top: 3px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .student-sidebar-nav {
@@ -114,37 +118,58 @@
 
 .student-nav-group-title {
   font-size: 9px;
-  font-weight: 750;
-  letter-spacing: .09em;
+  font-weight: 700;
+  letter-spacing: .08em;
   color: #77869a;
-  margin: 17px 10px 6px;
+  margin: 20px 8px 8px;
   text-transform: uppercase;
 }
 
-.student-nav-group-title:first-child {
-  margin-top: 0;
+.student-nav-dashboard {
+  margin-bottom: 10px;
 }
 
-.student-nav-item {
+.student-nav-group {
+  margin: 4px 0;
+}
+
+.student-nav-item,
+.student-nav-group-summary {
   display: flex;
   min-height: 38px;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
   margin: 2px 0;
-  border-radius: 9px;
-  font-size: 12px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 600;
-  color: #48586d;
+  color: #243247;
   text-decoration: none;
   transition: background-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease;
-  cursor: pointer;
 }
 
-.student-nav-item:hover {
+.student-nav-group-summary {
+  position: relative;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.student-nav-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-nav-item:hover,
+.student-nav-group-summary:hover {
   background: rgba(91, 30, 188, .06);
   color: #172033;
   transform: translateX(2px);
+}
+
+.student-nav-group[open] > .student-nav-group-summary {
+  background: rgba(91, 30, 188, .09);
+  color: #4c19a5;
 }
 
 .student-nav-item:focus-visible,
@@ -155,10 +180,39 @@
 }
 
 .student-nav-item.active {
-  background: linear-gradient(100deg, #5b1ebc 0%, #6540d1 100%);
+  background: var(--student-research-hero-background);
   color: #ffffff;
   font-weight: 700;
   box-shadow: 0 7px 15px rgba(91, 30, 188, .16);
+}
+
+.student-nav-subitems {
+  display: grid;
+  gap: 2px;
+  padding: 3px 0 7px 14px;
+}
+
+.student-nav-subitem {
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.student-nav-chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  transform: rotate(45deg);
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: #4b5e7b;
+  transition: transform .18s ease;
+}
+
+.student-nav-group[open] > .student-nav-group-summary .student-nav-chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+  color: #5b1ebc;
 }
 
 .student-nav-item[data-todo="build"] {
@@ -198,6 +252,7 @@
 }
 
 .student-nav-item.active .student-nav-icon { color: #fff; }
+.student-nav-group[open] > .student-nav-group-summary .student-nav-icon { color: #5b1ebc; }
 
 .student-nav-label {
   flex: 1;
@@ -220,6 +275,14 @@
   flex-shrink: 0;
 }
 
+.student-nav-subitem .student-nav-badge {
+  min-width: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(91, 30, 188, .1);
+  color: #4c19a5;
+}
+
 .student-nav-logout {
   color: #a43e48;
   margin-top: 8px;
@@ -228,6 +291,16 @@
 .student-nav-logout:hover {
   background: #fff0f0;
   color: #8f2633;
+}
+
+.student-nav-session {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, .18);
+}
+
+.student-sidebar-scrim {
+  display: none;
 }
 
 .student-sidebar-footer {
@@ -376,6 +449,56 @@
   flex-shrink: 0;
 }
 
+.student-topbar-notification {
+  position: relative;
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid #e1e7ef;
+  border-radius: 10px;
+  background: #fff;
+  color: #455669;
+  text-decoration: none;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+
+.student-topbar-notification:hover {
+  border-color: rgba(91, 30, 188, .24);
+  background: rgba(91, 30, 188, .04);
+  color: #4c19a5;
+}
+
+.student-topbar-notification:focus-visible {
+  outline: 3px solid rgba(91, 30, 188, .24);
+  outline-offset: 2px;
+}
+
+.student-topbar-notification svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.student-topbar-notification-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #5b1ebc;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .student-topbar-user {
   display: flex;
   align-items: center;
@@ -442,15 +565,30 @@
 }
 
 @media (max-width: 768px) {
-  .student-sidebar {
+  .student-dashboard .student-sidebar {
     width: min(300px, calc(100vw - 48px));
-    transform: translateX(-100%);
+    z-index: 220;
+    transform: translateX(-105%);
     transition: transform .22s ease;
   }
-  .student-sidebar.is-open {
+  .student-dashboard .student-sidebar.is-open {
     transform: translateX(0);
-    z-index: 200;
     box-shadow: 14px 0 42px rgba(15, 29, 43, .2);
+  }
+  .student-sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    display: block;
+    border: 0;
+    background: rgba(18, 30, 42, .42);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .student-dashboard.drawer-open .student-sidebar-scrim {
+    opacity: 1;
+    pointer-events: auto;
   }
   .student-main { margin-left: 0; }
   .student-topbar { padding: 9px 14px; min-height: 64px; }
@@ -483,6 +621,8 @@
   .student-sidebar,
   .student-sidebar-logo,
   .student-nav-item,
+  .student-nav-group-summary,
+  .student-sidebar-scrim,
   .student-topbar-user {
     transition: none;
   }

@@ -454,7 +454,7 @@ if ($shell === 'admin') {
 }
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -756,7 +756,6 @@ body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
 .flash-success { border-color: #bbdfcf; background: #eefaf4; color: #166534; }
 .flash-error { border-color: #fecaca; background: #fff1f2; color: #991b1b; }
 @media (max-width: 1100px) {
-  .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .upcoming-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .upcoming-item + .upcoming-item { border-left: 0; }
   .upcoming-item:nth-child(even) { border-left: 1px solid #edf1f5; }

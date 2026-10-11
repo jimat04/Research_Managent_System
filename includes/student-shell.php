@@ -114,12 +114,12 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
     // Active-state matcher. Matches either the full target (e.g.
     // 'http://localhost/rms/pages/shared/profile.php') or the bare basename,
     // so shared pages highlight correctly when visited.
-    $current_basename = basename(str_replace('\\', '/', (string) $current_page));
+    $current_basename = preg_replace('/\.php$/i', '', basename(str_replace('\\', '/', (string) $current_page)));
     $is_active = function ($href) use ($current_page, $current_basename) {
         if ($href === $current_page) {
             return true;
         }
-        $href_basename = basename(str_replace('\\', '/', (string) $href));
+      $href_basename = preg_replace('/\.php$/i', '', basename(str_replace('\\', '/', (string) $href)));
         return $current_basename !== '' && $current_basename === $href_basename;
     };
 
@@ -139,26 +139,54 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
 </head>
 <body>
 <div class="student-dashboard">
+  <button type="button" class="student-sidebar-scrim" aria-label="Close student navigation" tabindex="-1"></button>
   <!-- SIDEBAR -->
-  <aside class="student-sidebar">
+  <aside class="student-sidebar" id="student-sidebar" aria-label="Student navigation">
     <div class="student-sidebar-header">
       <a href="<?php echo SITE_URL; ?>pages/student/student-dashboard.php" class="student-sidebar-logo" aria-label="RMS Home">
         <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
       </a>
       <div class="student-sidebar-brand-text">
-        <div class="student-sidebar-brand">Research Management</div>
-        <small class="student-sidebar-role">Student</small>
+        <div class="student-sidebar-brand">EARIST Cavite</div>
+        <small class="student-sidebar-role">Research Management System</small>
       </div>
     </div>
 
-    <nav class="student-sidebar-nav">
+    <nav class="student-sidebar-nav" aria-label="Primary">
       <?php foreach ($nav as $group => $items): ?>
-        <div class="student-nav-group-title"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></div>
-        <?php foreach ($items as $item): ?>
+        <?php if ($group === 'Overview'): ?>
+          <?php foreach ($items as $item): ?>
+            <?php [$href, $label, $icon, $exists] = $item; $active = $exists && $is_active($href); ?>
+            <a class="student-nav-item student-nav-dashboard<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
+              <span class="student-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
+              <span class="student-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
+            </a>
+          <?php endforeach; ?>
+          <?php continue; ?>
+        <?php endif; ?>
+        <?php
+          $groupId = 'student-nav-group-' . substr(sha1($group), 0, 8);
+          $groupActive = false;
+          foreach ($items as $candidateItem) {
+              if ($is_active($candidateItem[0])) {
+                  $groupActive = true;
+                  break;
+              }
+          }
+          $groupIcon = $items[0][2] ?? '📁';
+        ?>
+        <details class="student-nav-group"<?php echo $groupActive ? ' open' : ''; ?>>
+          <summary class="student-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>">
+            <span class="student-nav-icon" aria-hidden="true"><?php echo $groupIcon; ?></span>
+            <span class="student-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="student-nav-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="student-nav-subitems" id="<?php echo $groupId; ?>">
+            <?php foreach ($items as $item): ?>
           <?php
             [$href, $label, $icon, $exists, $badge_count] = $item;
             $active   = $exists ? $is_active($href) : false;
-            $classes  = 'student-nav-item' . ($active ? ' active' : '');
+            $classes  = 'student-nav-item student-nav-subitem' . ($active ? ' active' : '');
             $attrs    = $active ? ' aria-current="page"' : '';
             if (!$exists) {
                 $attrs .= ' data-todo="build"';
@@ -172,14 +200,18 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
               <span class="student-nav-badge"><?php echo $badge_count; ?></span>
             <?php endif; ?>
           </a>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+          </div>
+        </details>
       <?php endforeach; ?>
 
-      <div class="student-nav-group-title">Session</div>
-      <a class="student-nav-item student-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
-        <span class="student-nav-icon" aria-hidden="true">🚪</span>
-        <span class="student-nav-label">Logout</span>
-      </a>
+      <div class="student-nav-session">
+        <div class="student-nav-group-title">Session</div>
+        <a class="student-nav-item student-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
+          <span class="student-nav-icon" aria-hidden="true">🚪</span>
+          <span class="student-nav-label">Logout</span>
+        </a>
+      </div>
     </nav>
 
     <div class="student-sidebar-footer">
@@ -197,13 +229,17 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
   <main class="student-main">
     <header class="student-topbar">
       <div class="student-topbar-left">
-        <button type="button" class="student-mobile-menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
+        <button type="button" class="student-mobile-menu-btn" aria-label="Open student navigation" aria-controls="student-sidebar" aria-expanded="false">☰</button>
         <h1 class="student-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
         <?php if ($page_subtitle_safe !== ''): ?>
           <p class="student-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
         <?php endif; ?>
       </div>
       <div class="student-topbar-right">
+        <a class="student-topbar-notification" href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/notifications.php', ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo htmlspecialchars($unread_notifications > 0 ? 'Notifications, ' . $unread_notifications . ' unread' : 'Notifications', ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($unread_notifications > 0 ? $unread_notifications . ' unread notifications' : 'Notifications', ENT_QUOTES, 'UTF-8'); ?>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+          <?php if ($unread_notifications > 0): ?><span class="student-topbar-notification-badge" aria-hidden="true"><?php echo $unread_notifications > 99 ? '99+' : $unread_notifications; ?></span><?php endif; ?>
+        </a>
         <div class="student-topbar-user">
           <div class="student-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="student-topbar-user-text">
@@ -231,12 +267,25 @@ function renderStudentShellClose() {
 <script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
+  const shell = document.querySelector('.student-dashboard');
   const button = document.querySelector('.student-mobile-menu-btn');
   const sidebar = document.querySelector('.student-sidebar');
+  const scrim = document.querySelector('.student-sidebar-scrim');
   if (!button || !sidebar) return;
-  const closeMenu = () => { sidebar.classList.remove('is-open'); button.setAttribute('aria-expanded', 'false'); };
-  button.addEventListener('click', (event) => { event.stopPropagation(); const open = sidebar.classList.toggle('is-open'); button.setAttribute('aria-expanded', String(open)); });
-  document.addEventListener('click', (event) => { if (sidebar.classList.contains('is-open') && !sidebar.contains(event.target) && !button.contains(event.target)) closeMenu(); });
+  const closeMenu = () => {
+    sidebar.classList.remove('is-open');
+    if (shell) shell.classList.remove('drawer-open');
+    button.setAttribute('aria-expanded', 'false');
+  };
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = !sidebar.classList.contains('is-open');
+    sidebar.classList.toggle('is-open', open);
+    if (shell) shell.classList.toggle('drawer-open', open);
+    button.setAttribute('aria-expanded', String(open));
+  });
+  if (scrim) scrim.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
   window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
 })();
 </script>

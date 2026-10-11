@@ -168,10 +168,10 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
   overflow: hidden;
   margin: 0 0 16px;
   padding: clamp(24px, 3vw, 36px);
-  border: 1px solid color-mix(in srgb, var(--accent) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, white);
   border-left: 4px solid var(--accent);
   border-radius: 14px;
-  background: linear-gradient(115deg, var(--accent-soft), #f8faff 76%);
+  background: radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 34%), linear-gradient(115deg, color-mix(in srgb, var(--accent) 14%, white) 0%, #f8faff 76%);
 }
 .module-greeting::after {
   position: absolute;
@@ -179,7 +179,7 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
   bottom: -82px;
   width: 220px;
   height: 220px;
-  border: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
   border-radius: 50%;
   content: "";
   pointer-events: none;
@@ -239,29 +239,21 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
   min-height: 46px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #d6deea;
+  border: 1px solid var(--accent);
   border-radius: 9px;
   padding: 0 14px;
-  background: #fff;
-  color: #344256;
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
   text-decoration: none;
   transition: transform .18s ease, border-color .18s ease, color .18s ease, background .18s ease, box-shadow .18s ease;
-}
-.quick-link.primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
   box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .quick-link:hover {
   transform: translateY(-1px);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.quick-link.primary:hover {
+  border-color: var(--accent-dark);
   background: var(--accent-dark);
   color: #fff;
 }
@@ -325,8 +317,8 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 17px 19px;
+  gap: 12px;
+  padding: 15px 18px;
   border-bottom: 1px solid #e9edf3;
 }
 .panel-head h2 { margin: 0; font-size: 15px; font-weight: 750; letter-spacing: -.015em; }
@@ -358,7 +350,7 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
 .tone-success { background: #e5f5ec; color: #23633d; }
 .tone-danger { background: #fce9e7; color: #8f332e; }
 .tone-neutral { background: #edf1f5; color: #475569; }
-.activity-item, .notification-item { display: grid; gap: 12px; padding: 14px 19px; border-bottom: 1px solid #edf1f5; }
+.activity-item, .notification-item { display: grid; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #edf1f5; }
 .activity-item { grid-template-columns: 50px minmax(0, 1fr); }
 .notification-item { grid-template-columns: 9px minmax(0, 1fr); }
 .activity-date { display: grid; min-height: 50px; align-content: center; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); text-align: center; }
@@ -367,6 +359,13 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
 .activity-title, .notification-title { margin: 0; color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.4; }
 .activity-title a { color: inherit; text-decoration: none; }
 .activity-meta, .notification-message, .notification-date { margin: 4px 0 0; color: var(--copy); font-size: 10px; line-height: 1.5; }
+.notification-meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin-top: 5px; }
+.notification-date { margin: 0; }
+.notification-details { margin-left: auto; font-size: 10px; }
+.notification-details summary { color: var(--accent); cursor: pointer; font-weight: 750; list-style: none; }
+.notification-details summary::-webkit-details-marker { display: none; }
+.notification-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.notification-details[open] { flex-basis: 100%; margin-left: 0; }
 .notification-dot { width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: #94a3b8; }
 .notification-dot.info { background: #2563eb; }
 .notification-dot.success { background: #15803d; }
@@ -409,37 +408,29 @@ else renderStudentShell($user, $currentPage, 'Dashboard', $pageSubtitle);
     <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/researcher/submit-research.php') ?>">Submit Research Title</a>
     <a class="quick-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/researcher/submit-chapter.php') ?>">Submit a Chapter</a>
   </nav>
-  <nav class="module-shortcuts" aria-label="Research module shortcuts">
-    <span class="module-shortcuts-label">Modules</span>
-    <a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">Research Activities</a>
-    <a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Publications</a>
-    <a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Copyrights</a>
-    <a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">Repository</a>
-  </nav>
-
   <div class="dashboard-grid">
-    <section class="hub-panel" aria-labelledby="my-publications-heading"><div class="panel-head"><div><h2 id="my-publications-heading">My Publications</h2><p><?= $publicationTotal ?> <?= $publicationTotal === 1 ? 'record' : 'records' ?> linked to your account.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Open module</a></div>
+    <section class="hub-panel" aria-labelledby="my-publications-heading"><div class="panel-head"><div><h2 id="my-publications-heading">My Publications</h2></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publications.php') ?>">Open module</a></div>
       <div class="count-strip"><?php foreach ($publicationCounts as $status => $count): $badge = personalDashboardStatusBadge($status); ?><div class="count-item"><strong><?= (int) $count ?></strong><span><?= personalDashboardEscape($badge['label']) ?></span></div><?php endforeach; ?></div>
-      <?php if (!$tables['publications'] || !$recentPublications): ?><div class="empty-state"><strong><?= $tables['publications'] ? 'No publications yet' : 'Publications unavailable' ?></strong><p><?= $tables['publications'] ? 'Your five most recent publication submissions will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+      <?php if (!$tables['publications'] || !$recentPublications): ?><div class="empty-state"><strong><?= $tables['publications'] ? 'No publications yet' : 'Publications unavailable' ?></strong><p><?= $tables['publications'] ? 'Recent publication submissions will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
       <?php else: ?><ul class="record-list"><?php foreach ($recentPublications as $publication): $badge = personalDashboardStatusBadge((string) $publication['status']); ?><li class="record-item"><div><a class="record-title" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $publication['publication_id']) ?>"><?= personalDashboardEscape($publication['research_title']) ?></a><span class="record-meta"><?= personalDashboardEscape(ucwords(str_replace('_', ' ', (string) $publication['publication_type']))) ?><?= $publication['publication_date'] ? ' &middot; ' . personalDashboardEscape(date('M j, Y', strtotime((string) $publication['publication_date']))) : '' ?></span></div><span class="badge tone-<?= personalDashboardEscape($badge['tone']) ?>"><?= personalDashboardEscape($badge['label']) ?></span></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
 
-    <section class="hub-panel" aria-labelledby="my-copyrights-heading"><div class="panel-head"><div><h2 id="my-copyrights-heading">My Copyright Applications</h2><p><?= $copyrightTotal ?> <?= $copyrightTotal === 1 ? 'record' : 'records' ?> linked to your account.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Open module</a></div>
+    <section class="hub-panel" aria-labelledby="my-copyrights-heading"><div class="panel-head"><div><h2 id="my-copyrights-heading">My Copyright Applications</h2></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">Open module</a></div>
       <div class="count-strip"><?php foreach ($copyrightCounts as $status => $count): $badge = personalDashboardStatusBadge($status); ?><div class="count-item"><strong><?= (int) $count ?></strong><span><?= personalDashboardEscape($badge['label']) ?></span></div><?php endforeach; ?></div>
-      <?php if (!$tables['copyrights'] || !$recentCopyrights): ?><div class="empty-state"><strong><?= $tables['copyrights'] ? 'No copyright applications yet' : 'Copyrights unavailable' ?></strong><p><?= $tables['copyrights'] ? 'Your five most recent copyright applications will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+      <?php if (!$tables['copyrights'] || !$recentCopyrights): ?><div class="empty-state"><strong><?= $tables['copyrights'] ? 'No copyright applications yet' : 'Copyrights unavailable' ?></strong><p><?= $tables['copyrights'] ? 'Recent copyright applications will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
       <?php else: ?><ul class="record-list"><?php foreach ($recentCopyrights as $application): $badge = personalDashboardStatusBadge((string) $application['status']); ?><li class="record-item"><div><a class="record-title" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $application['copyright_id']) ?>"><?= personalDashboardEscape($application['output_title']) ?></a><span class="record-meta"><?= personalDashboardEscape(ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?><?= $application['copyright_ref_no'] ? ' &middot; ' . personalDashboardEscape($application['copyright_ref_no']) : '' ?></span></div><span class="badge tone-<?= personalDashboardEscape($badge['tone']) ?>"><?= personalDashboardEscape($badge['label']) ?></span></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
   </div>
 
   <div class="dashboard-grid">
-    <section class="hub-panel" aria-labelledby="upcoming-activities-heading"><div class="panel-head"><div><h2 id="upcoming-activities-heading">Upcoming Activities</h2><p>The next five scheduled institution-wide activities.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">View all</a></div>
-      <?php if (!$tables['activities'] || !$upcomingActivities): ?><div class="empty-state"><strong><?= $tables['activities'] ? 'No upcoming activities' : 'Activities unavailable' ?></strong><p><?= $tables['activities'] ? 'Newly scheduled seminars, presentations, workshops, and forums will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
+    <section class="hub-panel" aria-labelledby="upcoming-activities-heading"><div class="panel-head"><div><h2 id="upcoming-activities-heading">Upcoming Activities</h2></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activities.php') ?>">View all</a></div>
+      <?php if (!$tables['activities'] || !$upcomingActivities): ?><div class="empty-state"><strong><?= $tables['activities'] ? 'No upcoming activities' : 'Activities unavailable' ?></strong><p><?= $tables['activities'] ? 'Scheduled seminars and research events will appear here.' : 'Apply migration 012 to enable this module.' ?></p></div>
       <?php else: ?><ul class="activity-list"><?php foreach ($upcomingActivities as $activity): $activityDate = new DateTimeImmutable((string) $activity['activity_date']); ?><li class="activity-item"><div class="activity-date" aria-hidden="true"><strong><?= personalDashboardEscape($activityDate->format('d')) ?></strong><span><?= personalDashboardEscape($activityDate->format('M')) ?></span></div><div><p class="activity-title"><a href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id']) ?>"><?= personalDashboardEscape($activity['title']) ?></a></p><p class="activity-meta"><?= personalDashboardEscape(ucfirst((string) $activity['activity_type'])) ?><?= $activity['activity_time'] ? ' &middot; ' . personalDashboardEscape(date('g:i a', strtotime((string) $activity['activity_time']))) : '' ?><?= $activity['venue'] ? ' &middot; ' . personalDashboardEscape($activity['venue']) : '' ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
 
-    <section class="hub-panel" aria-labelledby="recent-notifications-heading"><div class="panel-head"><div><h2 id="recent-notifications-heading">Recent Notifications</h2><p>Your five latest system updates.</p></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/notifications.php') ?>">View all</a></div>
-      <?php if (!$tables['notifications'] || !$recentNotifications): ?><div class="empty-state"><strong>No notifications yet</strong><p>Submission and processing updates will appear here.</p></div>
-      <?php else: ?><ul class="notification-list"><?php foreach ($recentNotifications as $notification): $notificationType = in_array($notification['type'], ['info', 'success', 'warning', 'error'], true) ? $notification['type'] : 'info'; ?><li class="notification-item"><span class="notification-dot <?= personalDashboardEscape($notificationType) ?>" aria-hidden="true"></span><div><p class="notification-title"><?= personalDashboardEscape($notification['title']) ?></p><p class="notification-message"><?= personalDashboardEscape($notification['message']) ?></p><p class="notification-date"><?= personalDashboardEscape(date('M j, Y g:i a', strtotime((string) $notification['created_at']))) ?><?= (int) $notification['is_read'] === 0 ? ' &middot; Unread' : '' ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
+    <section class="hub-panel" aria-labelledby="recent-notifications-heading"><div class="panel-head"><div><h2 id="recent-notifications-heading">Recent Notifications</h2></div><a class="panel-link" href="<?= personalDashboardEscape(SITE_URL . 'pages/shared/notifications.php') ?>">View all</a></div>
+      <?php if (!$tables['notifications'] || !$recentNotifications): ?><div class="empty-state"><strong>No notifications yet</strong><p>Submission and review updates will appear here.</p></div>
+      <?php else: ?><ul class="notification-list"><?php foreach ($recentNotifications as $notification): $notificationType = in_array($notification['type'], ['info', 'success', 'warning', 'error'], true) ? $notification['type'] : 'info'; ?><li class="notification-item"><span class="notification-dot <?= personalDashboardEscape($notificationType) ?>" aria-hidden="true"></span><div><p class="notification-title"><?= personalDashboardEscape($notification['title']) ?></p><div class="notification-meta"><p class="notification-date"><?= personalDashboardEscape(date('M j, Y g:i a', strtotime((string) $notification['created_at']))) ?><?= (int) $notification['is_read'] === 0 ? ' &middot; Unread' : '' ?></p><details class="notification-details"><summary>Details</summary><p class="notification-message"><?= personalDashboardEscape($notification['message']) ?></p></details></div></div></li><?php endforeach; ?></ul><?php endif; ?>
     </section>
   </div>
 </div>
