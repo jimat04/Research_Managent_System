@@ -424,7 +424,7 @@ if ($role === 'admin') {
     </section>
   <?php endif; ?>
   <?php foreach ($items as $item): ?>
-    <details id="submission-<?php echo (int) $item['version_id']; ?>" class="submission-review-card" data-status="<?php echo htmlspecialchars($item['status'], ENT_QUOTES, 'UTF-8'); ?>">
+    <details id="submission-<?php echo (int) $item['version_id']; ?>" class="submission-review-card" open data-status="<?php echo htmlspecialchars($item['status'], ENT_QUOTES, 'UTF-8'); ?>">
       <summary class="submission-review-summary">
         <span class="submission-review-summary-title" role="heading" aria-level="3"><?php echo htmlspecialchars($item['title'], ENT_QUOTES, 'UTF-8'); ?></span>
         <span class="submission-review-summary-meta">
