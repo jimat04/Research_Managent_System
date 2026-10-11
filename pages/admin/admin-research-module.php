@@ -15,9 +15,9 @@ $moduleMap = [
     'seminars' => ['permission' => 'research_capacity_building', 'target' => SITE_URL . 'pages/shared/activities.php?type=seminar', 'title' => 'Seminars'],
     'trainings' => ['permission' => 'research_capacity_building', 'target' => SITE_URL . 'pages/shared/activities.php?type=training&capacity_page=trainings', 'title' => 'Trainings'],
     'workshops' => ['permission' => 'research_capacity_building', 'target' => SITE_URL . 'pages/shared/activities.php?type=workshop&capacity_page=workshops', 'title' => 'Workshops'],
-    'research_proposals' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php?type=title', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php?type=title', 'title' => 'Research Proposals'],
-    'research_review' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php', 'title' => 'Research Review'],
-    'research_approval' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php', 'title' => 'Research Approval'],
+    'research_proposals' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_proposals', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_proposals', 'title' => 'Research Proposals'],
+    'research_review' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_review', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_review', 'title' => 'Research Review'],
+    'research_approval' => ['permission' => 'research_development', 'target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_approval', 'staff_target' => SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_approval', 'title' => 'Research Approval'],
     'ongoing_research' => ['permission' => 'research_implementation_outputs', 'target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=ongoing', 'staff_target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=ongoing', 'title' => 'Ongoing Research'],
     'completed_research' => ['permission' => 'research_implementation_outputs', 'target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=completed', 'staff_target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=completed', 'title' => 'Completed Research'],
     'research_outputs' => ['permission' => 'research_implementation_outputs', 'target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=outputs', 'staff_target' => SITE_URL . 'pages/shared/implementation-outputs.php?view=outputs', 'title' => 'Research Outputs'],
@@ -41,6 +41,13 @@ if (!hasRole('admin')) {
 $target = !hasRole('admin') && isset($moduleMap[$moduleKey]['staff_target'])
     ? $moduleMap[$moduleKey]['staff_target']
     : $moduleMap[$moduleKey]['target'];
-$target .= (strpos($target, '?') === false ? '?' : '&') . 'module_page=' . rawurlencode($moduleKey);
+$target_query = parse_url($target, PHP_URL_QUERY);
+$target_parameters = [];
+if (is_string($target_query)) {
+    parse_str($target_query, $target_parameters);
+}
+if (!isset($target_parameters['module_page'])) {
+    $target .= ($target_query === null ? '?' : '&') . 'module_page=' . rawurlencode($moduleKey);
+}
 header('Location: ' . $target);
 exit;

@@ -443,7 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                         'New research proposal submitted',
                         $student_name . ' submitted "' . $title . '" for review.',
                         'info',
-                        SITE_URL . 'pages/shared/research-submission-review.php'
+                        SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_proposals'
                     );
                 }
                 $staff_notify_stmt->close();

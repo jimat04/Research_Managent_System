@@ -298,7 +298,7 @@ renderStaffShell(
             <td><span class="status-badge <?php echo srev_escape($badge_class); ?>"><?php echo srev_escape($badge_label); ?></span></td>
             <td><?php echo srev_escape(srev_date($row['updated_at'] ?? null)); ?></td>
             <td>
-              <a class="action-link" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php?type=title">Open submissions</a>
+              <a class="action-link" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php?type=title&amp;module_page=research_proposals">Open submissions</a>
             </td>
           </tr>
         <?php endforeach; ?>

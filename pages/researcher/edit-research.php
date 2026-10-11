@@ -400,7 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                             $notification_title,
                             $review_message,
                             'info',
-                            SITE_URL . 'pages/shared/research-submission-review.php'
+                            SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_review'
                         );
                     }
                     $staff_notify_stmt->close();

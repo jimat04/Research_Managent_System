@@ -146,7 +146,7 @@ $chapter_sequence_title_approved = in_array((string) ($project['status'] ?? ''),
 $back_links = [
     'student' => ['pages/researcher/my-research.php', 'Back to My Research'],
     'faculty' => ['pages/researcher/my-research.php', 'Back to My Research'],
-    'research_staff' => ['pages/shared/research-submission-review.php', 'Back to Review Queue'],
+    'research_staff' => ['pages/shared/research-submission-review.php?module_page=research_review', 'Back to Review Queue'],
     'admin' => ['pages/admin/admin-research.php', 'Back to Research Management'],
 ];
 [$back_path, $back_label] = $back_links[$role] ?? $back_links['student'];

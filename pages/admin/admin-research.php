@@ -441,7 +441,7 @@ renderAdminShell(
             <a class="btn hero-action hero-action-primary" href="#research-directory">View <?php echo strtolower($research_view_title); ?> <span aria-hidden="true">&#8594;</span></a>
             <a class="btn hero-action hero-action-secondary" href="<?php echo SITE_URL; ?>pages/admin/admin-research.php">All research</a>
           <?php else: ?>
-            <a class="btn hero-action hero-action-primary" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php">Open review queue <span aria-hidden="true">&#8594;</span></a>
+            <a class="btn hero-action hero-action-primary" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php?module_page=research_review">Open review queue <span aria-hidden="true">&#8594;</span></a>
             <a class="btn hero-action hero-action-secondary" href="#research-directory">Browse all projects</a>
           <?php endif; ?>
         </div>

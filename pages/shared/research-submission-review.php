@@ -27,9 +27,13 @@ $can_approve = rms_submission_can_review($user_id, 'approved');
 $type_filter = in_array((string) ($_GET['type'] ?? ''), ['title', 'chapter'], true)
     ? (string) $_GET['type']
     : '';
-$module_page = in_array((string) ($_GET['module_page'] ?? ''), ['research_proposals', 'research_review', 'research_approval'], true)
-    ? (string) $_GET['module_page']
-    : '';
+$requested_module_page = (string) ($_GET['module_page'] ?? '');
+$module_page = in_array($requested_module_page, ['research_proposals', 'research_review', 'research_approval'], true)
+  ? $requested_module_page
+  : '';
+if ($module_page === '' && !array_key_exists('type', $_GET)) {
+  $module_page = 'research_review';
+}
 $section_config = [
     'research_proposals' => [
         'title' => 'Research Proposals',
