@@ -274,6 +274,7 @@ renderAdminShell($user, 'admin-earist-annex-d', 'Annex D Preparation', 'Prepare 
       <label class="ed-check"><input type="checkbox" name="answers[scoring_policy_confirmed]" value="1" aria-describedby="ead-policy-help" <?= ($inputs['scoring_policy_confirmed'] ?? false) === true ? 'checked' : '' ?>> I confirm these decimal score bands match the applicable institutional policy.</label>
       <p class="ed-check-help" id="ead-policy-help">Required for verified preparation. Leave unchecked if you cannot confirm the policy.</p>
       <?php foreach ($fieldErrors as $key => $message): if (isset($labels[$key])) continue; ?><p class="ed-field-error"><?= eadEscape($message) ?></p><?php endforeach; ?>
+      <p class="ed-action-guidance" role="status"><?= $answerReady ? 'Review passed. Save reviewed answers is ready to save this version.' : 'Save reviewed answers stays disabled until Review Answers passes.' ?></p>
       <div class="ed-actions"><button name="action" value="review_answers" type="submit">Review Answers</button><button name="action" value="save_answers" type="submit" <?= $answerReady ? '' : 'disabled' ?>>Save reviewed answers</button></div>
       <input type="hidden" name="form_complete" value="annex-d-complete">
     </form>
