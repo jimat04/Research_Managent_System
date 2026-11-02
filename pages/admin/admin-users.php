@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                 if ($check_stmt->get_result()->num_rows > 0) {
                     $error = 'Email already exists.';
                 } else {
-                    $password_hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+                    $password_hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
                     $status = 'active'; // Admin-created accounts are auto-approved
 
                     $insert_stmt = $conn->prepare("INSERT INTO users (role, first_name, last_name, email, password, student_id, contact, department, specialization, academic_rank, designation, office, status, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
@@ -426,7 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                     if ($target_user['role'] === 'admin') {
                         $error = 'Cannot reset administrator passwords from this interface.';
                     } else {
-                        $password_hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
+                        $password_hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
                     $update_stmt = $conn->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
                         $update_stmt->bind_param('si', $password_hash, $user_id);
 

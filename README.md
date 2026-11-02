@@ -2,12 +2,12 @@
 
 A PHP and MySQL research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: submit a title → authorized review → sequential Chapters 1–5 → submit the complete manuscript → authorized final review. A project is complete only after its final manuscript is approved. Staff access is organized as 5 modules × 3 sub-pages.
 
-**Stack:** PHP 7.4+ · MySQL/MariaDB · Apache (XAMPP/WAMP) · Composer (phpdotenv, PHPMailer)
+**Stack:** PHP 8.1+ · MySQL/MariaDB · Apache (XAMPP/WAMP) · Composer (phpdotenv, PHPMailer)
 
 ## Requirements
 
 - XAMPP, WAMP, or another Apache/PHP/MySQL stack
-- PHP 7.4 or newer
+- PHP 8.1 or newer
 - MySQL or MariaDB
 - [Composer](https://getcomposer.org/) (for dependencies)
 - A modern browser
@@ -150,6 +150,7 @@ SESSION_TIMEOUT                         Session lifetime in seconds (default: 18
 MAX_UPLOAD_SIZE                         Max upload size in bytes (default: 10MB)
 ALLOWED_FILE_TYPES                      Comma-separated upload extension whitelist
 BCRYPT_COST                             Password hashing cost (default: 12)
+EARIST_LIVE_GENERATION_ENABLED          First-run default for document generation (default: 0; saved Admin setting takes precedence)
 MAIL_MAILER / MAIL_HOST / MAIL_PORT / MAIL_USERNAME / MAIL_PASSWORD
 MAIL_FROM_ADDRESS / MAIL_FROM_NAME      SMTP or mail() settings for notifications
 APP_ENV / APP_DEBUG                     Development or production mode
@@ -158,7 +159,22 @@ APP_ENV / APP_DEBUG                     Development or production mode
 ## Security Notes
 
 - Database credentials live in `.env` (gitignored), never in code
-- Passwords are hashed and verified with PHP bcrypt helpers (cost 12)
+- Production deployments must use HTTPS. Configure the production Apache virtual host to set `RMS_FORCE_HTTPS=1`; session cookies use `Secure` in production and `HttpOnly; SameSite=Lax` in web environments.
+
+## Official EARIST document templates
+
+The seven approved EARIST DOCX templates are not distributed in this repository. Obtain the exact files and approved SHA-256 values from the institution's authorized template custodian through an approved secure channel. Do not commit or send these institutional files through an unapproved channel.
+
+Place the files in `templates/earist/blank/` using the exact filenames in `config/earist-template-bindings.json`, then run:
+
+```bash
+php scripts/check-earist-templates.php
+```
+
+The setup check reads the manifest and reports each template as verified, missing, or mismatched. It exits nonzero unless every required file matches its approved SHA-256. Do not edit, resave, or substitute a template to make the check pass; request an approved manifest/hash update if an official template changes.
+
+Use **Admin → System Settings → Application settings → EARIST document generation** to enable or disable generation for the current site. The saved database setting takes precedence over `EARIST_LIVE_GENERATION_ENABLED`; the environment variable supplies the initial value when no saved setting exists. It defaults to `0`. Enable generation only for an approved controlled test window, then turn it off afterward. Keep the setting off in production unless separately approved.
+- Passwords are hashed and verified with PHP bcrypt helpers using `BCRYPT_COST` (default 12)
 - Role-gated access through `includes/auth.php` (`requireRole()`, `requireLogin()`)
 - All state-changing forms (including login/register) use session-bound CSRF tokens
 - Database queries use prepared statements; output is escaped (`rms_escape()`)

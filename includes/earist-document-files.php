@@ -8,7 +8,15 @@ require_once __DIR__ . '/earist-docx-xml.php';
 function earistDocumentStorageConfig(): array
 {
     static $config;
-    return $config ??= require __DIR__ . '/../config/earist-document-storage.php';
+    if (is_array($config ?? null)) {
+        return $config;
+    }
+
+    $config = require __DIR__ . '/../config/earist-document-storage.php';
+    if (function_exists('rmsSetting')) {
+        $config['live_generation_enabled'] = rmsSetting('earist_live_generation_enabled') === '1';
+    }
+    return $config;
 }
 
 function earistDocumentPathKey(string $path): string

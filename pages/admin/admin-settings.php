@@ -547,6 +547,16 @@ renderAdminShell(
       </div>
 
       <div class="settings-form-group">
+        <h3>EARIST document generation</h3>
+        <input type="hidden" name="earist_live_generation_enabled" value="0">
+        <label class="settings-checkbox settings-field full" for="earist-live-generation-enabled">
+          <input id="earist-live-generation-enabled" name="earist_live_generation_enabled" type="checkbox" value="1" <?php echo $settings_values['earist_live_generation_enabled'] === '1' ? 'checked' : ''; ?>>
+          Enable EARIST DOCX generation for eligible Faculty and Admin users
+        </label>
+        <small class="settings-field full">This is a system-wide control. Enable it only for an approved controlled test window. Turning it off blocks new generation requests but does not cancel requests already in progress. Approved templates and protected-storage checks remain required.</small>
+      </div>
+
+      <div class="settings-form-group">
         <h3>Upload policy</h3>
         <div class="settings-field">
           <label for="upload-max-size">Maximum file size (bytes)</label>
@@ -581,7 +591,7 @@ renderAdminShell(
       <div class="settings-confirm-content">
         <p class="settings-confirm-kicker">Admin settings</p>
         <h3 id="settings-confirm-title">Save these changes?</h3>
-        <p id="settings-confirm-description">Changes take effect across RMS immediately. If maintenance mode is enabled, non-admin users will receive a maintenance page.</p>
+        <p id="settings-confirm-description">Changes take effect across RMS immediately. If maintenance mode is enabled, non-admin users will receive a maintenance page. If EARIST DOCX generation is enabled, eligible Faculty and Admin users can start generating official documents.</p>
         <div class="settings-confirm-actions">
           <button type="button" id="settings-confirm-cancel">Cancel</button>
           <button type="button" class="settings-confirm-submit" id="settings-confirm-continue">Save settings</button>

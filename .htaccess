@@ -64,11 +64,13 @@ ErrorDocument 403 /rms/public/403.php
 ErrorDocument 404 /rms/public/404.php
 ErrorDocument 500 /rms/public/500.php
 
-# Force HTTPS (uncomment when SSL is enabled)
-# <IfModule mod_rewrite.c>
-#     RewriteCond %{HTTPS} off
-#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-# </IfModule>
+# Production virtual hosts set RMS_FORCE_HTTPS=1 with mod_setenvif.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{ENV:RMS_FORCE_HTTPS} =1
+    RewriteCond %{HTTPS} !=on
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
 
 # PHP Security Settings (if allowed in .htaccess)
 <IfModule mod_php8.c>

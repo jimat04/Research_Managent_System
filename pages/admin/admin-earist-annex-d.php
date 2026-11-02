@@ -159,12 +159,72 @@ if ($recordId) {
 }
 if ($historyPage > 1) $sourcePageQuery['history_page'] = $historyPage;
 
+// The guide reflects completed server-side actions, not which panels are visible.
+$generationComplete = in_array($notice, [
+    'This request was already completed. Its saved version remains in your Annex D history.',
+    'Annex D preparation version saved. Generation does not establish official issuance.',
+], true);
+$answerPostFailed = in_array($action, ['review_answers', 'save_answers'], true) && ($error !== '' || !empty($fieldErrors));
+$generationReviewFailed = $action === 'review_generation' && $error !== '';
+$generationPostFailed = $action === 'generate' && $error !== '';
+$savedAnswersReady = $draft && empty($stale) && empty($fieldErrors) && !$answerPostFailed && !$answerReady;
+$activeStep = 1;
+if ($generationComplete) $activeStep = 5;
+elseif ($generationReady) $activeStep = 5;
+elseif ($answerReady) $activeStep = 3;
+elseif ($answerPostFailed) $activeStep = 2;
+elseif ($generationReviewFailed || $generationPostFailed) $activeStep = 4;
+elseif ($savedAnswersReady) $activeStep = 4;
+elseif ($record) $activeStep = 2;
+$attentionStep = $answerPostFailed ? 2 : ($generationReviewFailed ? 4 : ($generationPostFailed ? 5 : 0));
+$completedSteps = [];
+if ($record || $generationComplete) $completedSteps[] = 1;
+if ($answerReady || $savedAnswersReady || $generationReady || $generationComplete) $completedSteps[] = 2;
+if ($savedAnswersReady || $generationReady || $generationComplete) $completedSteps[] = 3;
+if ($generationReady || $generationComplete) $completedSteps[] = 4;
+if ($generationComplete) $completedSteps[] = 5;
+$guideSteps = [
+    1 => ['title' => 'Select a research record', 'detail' => 'Choose the faculty record for this Annex D preparation.'],
+    2 => ['title' => 'Enter and review answers', 'detail' => 'Complete the details and select Review Answers.'],
+    3 => ['title' => 'Save reviewed answers', 'detail' => 'Save after the answer review passes.'],
+    4 => ['title' => 'Review saved preparation', 'detail' => 'Check the saved values, missing information, warnings, and preparation mode.'],
+    5 => ['title' => 'Generate and download', 'detail' => 'Generate after review, then download from My Annex D History.'],
+];
+
 renderAdminShell($user, 'admin-earist-annex-d', 'Annex D Preparation', 'Prepare certification copies for physical signing and view your saved versions.');
 ?>
-<link rel="stylesheet" href="<?= eadEscape(SITE_URL . 'css/earist-documents.css') ?>">
+<link rel="stylesheet" href="<?= eadEscape(SITE_URL . 'css/earist-documents.css?v=' . filemtime(__DIR__ . '/../../css/earist-documents.css')) ?>">
 <div class="ed-wrap">
   <?php if ($error !== ''): ?><div class="ed-alert ed-error" role="alert"><?= eadEscape($error) ?></div><?php endif; ?>
   <?php if ($notice !== ''): ?><div class="ed-alert" role="status"><?= eadEscape($notice) ?></div><?php endif; ?>
+  <section class="ed-panel ead-guide" aria-labelledby="ead-guide-title">
+    <h2 id="ead-guide-title">Annex D generation steps</h2>
+    <ol class="ead-steps" aria-label="Annex D preparation progress">
+      <?php foreach ($guideSteps as $stepNumber => $step):
+          $isComplete = in_array($stepNumber, $completedSteps, true);
+          $isCurrent = $stepNumber === $activeStep && !$generationComplete;
+          $isUnavailable = $stepNumber === 5 && !$enabled && !$generationComplete;
+          $isAttention = $stepNumber === $attentionStep;
+          $status = $isComplete ? 'Complete' : ($isAttention ? 'Needs attention' : ($isUnavailable ? 'Unavailable' : ($isCurrent ? 'Current step' : 'Upcoming')));
+          $classes = ['ead-step'];
+          if ($isComplete) $classes[] = 'is-complete';
+          if ($isCurrent) $classes[] = 'is-current';
+          if ($isUnavailable) $classes[] = 'is-unavailable';
+          if ($isAttention) $classes[] = 'is-attention';
+      ?>
+        <li class="<?= eadEscape(implode(' ', $classes)) ?>"<?= $isCurrent ? ' aria-current="step"' : '' ?>>
+          <span class="ead-step-number" aria-hidden="true"><?= (int) $stepNumber ?></span>
+          <span class="ead-step-content">
+            <strong class="ead-step-title"><?= eadEscape($step['title']) ?></strong>
+            <span class="ead-step-detail"><?= eadEscape($step['detail']) ?></span>
+            <span class="ead-step-status"><?= eadEscape($status) ?></span>
+          </span>
+        </li>
+      <?php endforeach; ?>
+    </ol>
+    <?php if ($generationComplete): ?><p class="ead-guide-message" role="status">Generation completed. The saved version is listed in My Annex D History below.</p>
+    <?php elseif (!$enabled): ?><p class="ead-guide-message ead-guide-unavailable" role="status">DOCX generation is unavailable while the live generation setting is disabled. You can still select a record, review, and save answers.</p><?php endif; ?>
+  </section>
   <section class="ed-panel">
     <h2>Select Faculty Research Record</h2>
     <form method="get" action="<?= eadEscape(eadUrl()) ?>" class="ed-search"><label>Research title or faculty name<input name="q" maxlength="200" value="<?= eadEscape($search) ?>"></label><button type="submit">Search records</button></form>
@@ -180,17 +240,28 @@ renderAdminShell($user, 'admin-earist-annex-d', 'Annex D Preparation', 'Prepare 
     </nav>
   </section>
   <?php if ($record && $mapping): ?>
-  <section class="ed-panel">
-    <h2><?= eadEscape($record['title']) ?></h2>
+  <section class="ed-panel ed-annex-preparation">
+    <h2 class="ed-record-title"><?= eadEscape($record['title']) ?></h2>
     <p>Source research version <?= (int) $record['version'] ?> · <?= eadEscape(ucfirst($record['status'])) ?></p>
     <p class="ed-revision"><?= $draft ? 'Saved answers · Revision ' . (int) $draft['draft_revision'] : 'No saved answers yet' ?></p>
     <?php if (!empty($stale)): ?><div class="ed-alert">Research information changed. Your answers are preserved. Review the current title and authors before saving again.</div><?php endif; ?>
-    <h3>Ordered authors</h3><ol><?php foreach ($record['authors'] as $author): ?><li><?= eadEscape($author['full_name']) ?></li><?php endforeach; ?></ol>
-    <p>Annex D belongs to your Admin account. The source research record remains owned by its Faculty account. Preparation does not establish official issuance. Physical signature spaces stay blank.</p>
+    <h3 class="ed-subsection-heading">Authors on the document (in order)</h3><ol class="ed-author-list"><?php foreach ($record['authors'] as $author): ?><li><?= eadEscape($author['full_name']) ?></li><?php endforeach; ?></ol>
+    <aside class="ed-important-note" aria-label="Important document information"><strong>Important</strong><p>This is a preparation copy, not proof that the document was signed or officially issued. Leave the physical signature spaces blank. The preparation is saved under your Admin account; the source research record remains owned by its Faculty account.</p></aside>
     <form method="post" action="<?= eadEscape(eadUrl(['id' => $recordId])) ?>">
       <?= csrfField() ?><input type="hidden" name="draft_revision" value="<?= $expectedRevision ?>"><input type="hidden" name="request_token" value="<?= eadEscape($answerToken) ?>"><input type="hidden" name="reviewed_source" value="<?= eadEscape($fingerprint ?? '') ?>">
-      <h3>Evaluation and certification details</h3>
-      <p>Enter the final score as an exact decimal. Bands: 90–100 Highly Recommended; 80 to below 90 Recommended; 70 to below 80 Moderately Recommended; 60 to below 70 Conditionally Recommended; below 60 Not Recommended. Leave unknown values blank.</p>
+      <h3 class="ed-subsection-heading"><?= $answerReady ? 'Step 3: Save reviewed answers' : ($savedAnswersReady ? 'Saved answers: changes are optional' : 'Step 2: Enter and review answers') ?></h3>
+      <p class="ed-form-instructions"><?= $answerReady ? 'Answer review passed. Select Save reviewed answers to save this version.' : ($savedAnswersReady ? 'These answers are already saved. To change them, edit the fields, select Review Answers, and save the reviewed version. To continue with the saved version, review the preparation below.' : 'Enter the details below, then select Review Answers. Correct any messages shown. Save reviewed answers becomes available after the review passes.') ?></p>
+      <div class="ed-score-guide" aria-labelledby="ed-score-guide-title">
+        <p id="ed-score-guide-title"><strong>Classification bands</strong> <span>Confirm that these match the applicable institutional policy.</span></p>
+        <ul>
+          <li><strong>90 to 100:</strong> Highly Recommended</li>
+          <li><strong>80 to below 90:</strong> Recommended</li>
+          <li><strong>70 to below 80:</strong> Moderately Recommended</li>
+          <li><strong>60 to below 70:</strong> Conditionally Recommended</li>
+          <li><strong>Below 60:</strong> Not Recommended</li>
+        </ul>
+      </div>
+      <p class="ed-form-guidance">Use the exact score from the evaluation record; do not round it. If you enter both a score and classification, they must match. Leave unknown values blank.</p>
       <div class="ed-grid">
       <?php foreach ($labels as $key => $label): ?>
         <label><?= eadEscape($label) ?>
@@ -200,23 +271,26 @@ renderAdminShell($user, 'admin-earist-annex-d', 'Annex D Preparation', 'Prepare 
         <?php if (isset($fieldErrors[$key])): ?><span class="ed-field-error"><?= eadEscape($fieldErrors[$key]) ?></span><?php endif; ?></label>
       <?php endforeach; ?>
       </div>
-      <label class="ed-check"><input type="checkbox" name="answers[scoring_policy_confirmed]" value="1" <?= ($inputs['scoring_policy_confirmed'] ?? false) === true ? 'checked' : '' ?>> I confirm these decimal score bands match the applicable institutional policy.</label>
+      <label class="ed-check"><input type="checkbox" name="answers[scoring_policy_confirmed]" value="1" aria-describedby="ead-policy-help" <?= ($inputs['scoring_policy_confirmed'] ?? false) === true ? 'checked' : '' ?>> I confirm these decimal score bands match the applicable institutional policy.</label>
+      <p class="ed-check-help" id="ead-policy-help">Required for verified preparation. Leave unchecked if you cannot confirm the policy.</p>
       <?php foreach ($fieldErrors as $key => $message): if (isset($labels[$key])) continue; ?><p class="ed-field-error"><?= eadEscape($message) ?></p><?php endforeach; ?>
-      <div class="ed-actions"><button name="action" value="review_answers" type="submit">Review Answers</button><button name="action" value="save_answers" type="submit" <?= $answerReady ? '' : 'disabled' ?>>Save Answers</button></div>
+      <div class="ed-actions"><button name="action" value="review_answers" type="submit">Review Answers</button><button name="action" value="save_answers" type="submit" <?= $answerReady ? '' : 'disabled' ?>>Save reviewed answers</button></div>
       <input type="hidden" name="form_complete" value="annex-d-complete">
     </form>
   </section>
-  <section class="ed-panel">
+  <section class="ed-panel ed-generation-panel">
     <h2>Generate Annex D</h2>
     <?php $generationMapping = $generationContext['mapping'] ?? $mapping; ?>
     <?php if ($generationContext): ?>
-      <h3>Exact saved answers for generation ? Revision <?= (int) $draft['draft_revision'] ?></h3>
-      <p>The editable form above can contain unsaved entries. Generation uses the saved values shown here.</p>
-      <dl><?php foreach ($labels as $key => $label): ?><dt><strong><?= eadEscape($label) ?></strong></dt><dd><?= nl2br(eadEscape($generationMapping['inputs'][$key] !== '' ? $generationMapping['inputs'][$key] : 'Blank')) ?></dd><?php endforeach; ?></dl>
-      <p>Saved scoring policy confirmation: <?= $generationMapping['inputs']['scoring_policy_confirmed'] ? 'Confirmed' : 'Not confirmed' ?></p>
+      <h3>Exact saved answers for generation <span class="ed-revision-number">Revision <?= (int) $draft['draft_revision'] ?></span></h3>
+      <p class="ed-generation-note">The editable form above may contain unsaved entries. Generation uses only the saved answers shown here.</p>
+      <dl class="ed-answer-list"><?php foreach ($labels as $key => $label): ?><div class="ed-answer-item"><dt><?= eadEscape($label) ?></dt><dd><?= nl2br(eadEscape($generationMapping['inputs'][$key] !== '' ? $generationMapping['inputs'][$key] : 'Blank')) ?></dd></div><?php endforeach; ?></dl>
+      <p class="ed-policy-confirmation">Saved scoring policy confirmation: <strong><?= $generationMapping['inputs']['scoring_policy_confirmed'] ? 'Confirmed' : 'Not confirmed' ?></strong></p>
     <?php endif; ?>
-    <h3>Missing information</h3><?php if ($generationMapping['missing']): ?><ul><?php foreach ($generationMapping['missing'] as $key => $status): ?><li><?= eadEscape($labels[substr($key, strlen('annex_d.'))] ?? 'Institutional scoring policy confirmation') ?></li><?php endforeach; ?></ul><?php else: ?><p>All required answers are present.</p><?php endif; ?>
-    <h3>Warnings</h3><ul><?php foreach ($generationMapping['warnings'] as $warning): ?><li><?= eadEscape($warning) ?></li><?php endforeach; ?></ul>
+    <div class="ed-generation-checks">
+      <section class="ed-generation-status"><h3>Missing information</h3><?php if ($generationMapping['missing']): ?><ul><?php foreach ($generationMapping['missing'] as $key => $status): ?><li><?= eadEscape($labels[substr($key, strlen('annex_d.'))] ?? 'Institutional scoring policy confirmation') ?></li><?php endforeach; ?></ul><?php else: ?><p>All required answers are present.</p><?php endif; ?></section>
+      <section class="ed-generation-status ed-generation-warnings"><h3>Warnings</h3><?php if ($generationMapping['warnings']): ?><ul><?php foreach ($generationMapping['warnings'] as $warning): ?><li><?= eadEscape($warning) ?></li><?php endforeach; ?></ul><?php else: ?><p>No additional warnings.</p><?php endif; ?></section>
+    </div>
     <?php if (!$enabled): ?><div class="ed-alert">Live DOCX generation is disabled. You can review and save Annex D answers; no document will be generated.</div>
     <?php elseif (!$generationContext): ?><p>Review and save valid current answers before generation.</p>
     <?php else: ?>

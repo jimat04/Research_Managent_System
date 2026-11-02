@@ -130,6 +130,22 @@ if (!defined('RMS_E2E_IDENTITY_ONLY') || RMS_E2E_IDENTITY_ONLY !== true) {
 
 // Start session
 if (!defined('RMS_E2E_IDENTITY_ONLY') || RMS_E2E_IDENTITY_ONLY !== true) {
+    if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.use_only_cookies', '1');
+        $sitePath = parse_url(SITE_URL, PHP_URL_PATH);
+        $sessionCookiePath = is_string($sitePath) && $sitePath !== '' ? $sitePath : '/';
+        $httpsActive = isset($_SERVER['HTTPS'])
+            && $_SERVER['HTTPS'] !== ''
+            && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => $sessionCookiePath,
+            'secure' => APP_ENV === 'production' || $httpsActive,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
     session_start();
 }
 

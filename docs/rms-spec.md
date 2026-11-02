@@ -6,7 +6,7 @@
 
 ## Platform
 
-- PHP 7.4+ with procedural MySQLi, MySQL/MariaDB, and Apache (the documented local setup is XAMPP).
+- PHP 8.1+ with procedural MySQLi, MySQL/MariaDB, and Apache (the documented local setup is XAMPP).
 - Canonical fresh-install schema and seed data: `database/schema/rms_db.sql`.
 - Existing installations may require the applicable numbered scripts in `database/migrations/`; consult the README migration guidance before applying them.
 - Authenticated pages are grouped by role under `pages/`; reusable cross-role features are under `pages/shared/`. Shared role shells are in `includes/`.

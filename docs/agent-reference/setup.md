@@ -6,7 +6,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Apply this reference when the [task ind
 
 RMS is a PHP/MySQL research platform. Students and faculty share a title, sequential chapter, and final-manuscript workflow. A project is complete only after its final manuscript is approved; authorized admin/staff review controls these transitions.
 
-**Stack:** PHP 7.4+, MySQL/MariaDB, Apache (XAMPP), Composer (vlucas/phpdotenv)
+**Stack:** PHP 8.1+, MySQL/MariaDB, Apache (XAMPP), Composer (vlucas/phpdotenv)
 
 ## Setup Commands
 
@@ -45,4 +45,15 @@ ALLOWED_FILE_TYPES                    — Comma-separated list of allowed extens
 APP_ENV                               — 'development' or 'production'
 APP_DEBUG                             — Enable PHP error display
 REQUIRE_EMAIL_VERIFICATION             — Default 1; 0 skips the login email gate only with APP_ENV=development and a localhost/loopback SITE_URL
+EARIST_LIVE_GENERATION_ENABLED          — First-run default (0); a saved Admin System Settings value takes precedence
 ```
+
+## Official EARIST templates
+
+The approved DOCX templates are excluded from Git. Obtain them and their approved SHA-256 manifest from the authorized institutional custodian through an approved secure channel. Copy the files, without resaving or modifying them, to `templates/earist/blank/` with the exact filenames in `config/earist-template-bindings.json`. Run `php scripts/check-earist-templates.php`; setup is incomplete if any file is missing or its hash differs. The checker is read-only and does not generate documents.
+
+Manage live document generation at **Admin → System Settings → Application settings → EARIST document generation**. The saved `application_settings` value takes precedence over the environment fallback; `EARIST_LIVE_GENERATION_ENABLED` defaults to `0` and supplies the initial value when no database setting exists. Enable it only for an approved controlled test window, then turn it off when that window closes.
+
+## Production transport and sessions
+
+Set `SITE_URL` to the HTTPS application URL and configure the production Apache virtual host with `SetEnvIf Host . RMS_FORCE_HTTPS=1`. The root `.htaccess` uses this server-owned flag to redirect HTTP requests; local development is unaffected. If TLS terminates at a trusted reverse proxy, configure Apache to recognize the trusted proxy's HTTPS state before enabling the redirect. Production session cookies are marked `Secure`, `HttpOnly` and `SameSite=Lax`; development cookies omit `Secure` when served over HTTP.

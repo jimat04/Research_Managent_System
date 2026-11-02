@@ -22,6 +22,10 @@ function rmsSystemSettingDefaults(): array
         'contact_address' => '2 Congressional Rd, General Mariano Alvarez, Cavite, Philippines',
         'maintenance_enabled' => '0',
         'maintenance_message' => 'The system is temporarily unavailable for maintenance. Please try again later.',
+        'earist_live_generation_enabled' => filter_var(
+            rms_env('EARIST_LIVE_GENERATION_ENABLED', '0'),
+            FILTER_VALIDATE_BOOLEAN
+        ) ? '1' : '0',
         'upload_max_size' => (string) min((int) MAX_UPLOAD_SIZE, rmsPhpUploadLimit()),
         'upload_allowed_extensions' => implode(',', $defaultExtensions),
         'session_timeout' => (string) SESSION_TIMEOUT,
@@ -181,8 +185,9 @@ function rmsValidateSystemSetting(string $key, $value): string
             return $value;
 
         case 'maintenance_enabled':
+        case 'earist_live_generation_enabled':
             if (!in_array($value, ['0', '1'], true)) {
-                throw new InvalidArgumentException('Choose whether maintenance mode is enabled.');
+                throw new InvalidArgumentException('Choose a valid enabled or disabled setting.');
             }
             return $value;
 

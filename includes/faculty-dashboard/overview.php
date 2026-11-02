@@ -10,7 +10,7 @@
 ?>
 <div class="faculty-dashboard-overview">
 
-    <!-- Hero Section: Stats + Quick Actions -->
+    <!-- Dashboard Header and Stats -->
     <section class="faculty-dashboard-hero" aria-labelledby="dashboard-title">
         <div class="faculty-dashboard-hero-head">
             <div>
@@ -91,32 +91,6 @@
             <?php endif; ?>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="faculty-quick-actions">
-            <a href="<?= htmlspecialchars($urls['addEngagement']) ?>" class="faculty-btn faculty-btn--primary faculty-quick-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Add Engagement</span>
-            </a>
-            <a href="<?= htmlspecialchars($urls['profile'] . '?tab=research') ?>" class="faculty-btn faculty-btn--secondary faculty-quick-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                </svg>
-                <span>Update Profile</span>
-            </a>
-            <a href="<?= htmlspecialchars($urls['advising']) ?>" class="faculty-btn faculty-btn--secondary faculty-quick-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-                <span>View All Advisees</span>
-            </a>
-        </div>
     </section>
 
     <!-- Advisee Progress Matrix -->
