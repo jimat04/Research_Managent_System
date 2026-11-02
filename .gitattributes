@@ -1,0 +1,2 @@
+# Skill snapshot hashes include exact resource bytes; prevent newline conversion.
+/.github/skills/** -text

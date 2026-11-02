@@ -233,11 +233,12 @@ if (isset($conn) && $conn instanceof mysqli) {
                 <h3>Quick Links</h3>
                 <ul>
                     <li><a href="<?php echo SITE_URL; ?>public/login.php">Login to your account</a></li>
-                    <li><a href="<?php echo SITE_URL; ?>about.php">About the Research System</a></li>
-                    <li><a href="<?php echo SITE_URL; ?>contact.php">Contact Support</a></li>
+                    <li><a href="<?php echo SITE_URL; ?>public/about-us.php">About the Research System</a></li>
+                    <li><a href="<?php echo SITE_URL; ?>public/about-us.php#contact-us">Contact Support</a></li>
                 </ul>
             </div>
         </div>
     </div>
+    <script src="<?php echo SITE_URL; ?>js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
 </body>
 </html>

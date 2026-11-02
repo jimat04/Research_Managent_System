@@ -63,9 +63,25 @@ function sendEmail($to, $subject, $body, $toName = '') {
     $mail = new PHPMailer(true);
 
     try {
-        // Server settings — auto-fallback when SMTP creds are missing so
-        // dev/test environments still get emails via PHP's mail() function.
-        if (rms_smtp_is_configured()) {
+        if ((function_exists('rmsE2eModeEnabled') && rmsE2eModeEnabled())
+            || (string) rms_mail_config('RMS_E2E_MODE', '0') === '1') {
+            if (!rms_smtp_is_configured()
+                || !function_exists('rmsE2eLocalHost')
+                || !rmsE2eLocalHost((string) rms_mail_config('MAIL_HOST', ''))
+                || !rmsE2eLocalHost((string) rms_mail_config('RMS_E2E_MAIL_HOST', ''))
+                || (string) rms_mail_config('MAIL_HOST', '') !== (string) rms_mail_config('RMS_E2E_MAIL_HOST', '')
+                || (string) rms_mail_config('MAIL_PORT', '') !== (string) rms_mail_config('RMS_E2E_MAIL_PORT', '')) {
+                error_log('sendEmail: E2E mail delivery refused because the local SMTP sink is not configured.');
+                return false;
+            }
+            $mail->isSMTP();
+            $mail->Host = rms_mail_config('MAIL_HOST');
+            $mail->SMTPAuth = true;
+            $mail->Username = rms_mail_config('MAIL_USERNAME');
+            $mail->Password = rms_mail_config('MAIL_PASSWORD');
+            $mail->SMTPSecure = rms_mail_config('MAIL_ENCRYPTION', PHPMailer::ENCRYPTION_STARTTLS);
+            $mail->Port = (int) rms_mail_config('MAIL_PORT');
+        } elseif (rms_smtp_is_configured()) {
             $mail->isSMTP();
             $mail->Host       = rms_mail_config('MAIL_HOST', 'smtp.gmail.com');
             $mail->SMTPAuth   = true;
@@ -83,7 +99,7 @@ function sendEmail($to, $subject, $body, $toName = '') {
 
         // Recipients
         $fromAddress = rms_mail_config('MAIL_FROM_ADDRESS', 'noreply@rms.edu.ph');
-        $fromName    = rms_mail_config('MAIL_FROM_NAME', 'RMS Research System');
+        $fromName    = rms_mail_config('MAIL_FROM_NAME', 'RMS System');
         $mail->setFrom($fromAddress, $fromName);
         $mail->addAddress($to, $toName);
         $replyTo = rms_mail_config('MAIL_REPLY_TO', $fromAddress);
@@ -99,7 +115,12 @@ function sendEmail($to, $subject, $body, $toName = '') {
         $mail->send();
         return true;
     } catch (Exception $e) {
-        error_log("Email send failed: {$mail->ErrorInfo}");
+        if ((function_exists('rmsE2eModeEnabled') && rmsE2eModeEnabled())
+            || (string) rms_mail_config('RMS_E2E_MODE', '0') === '1') {
+            error_log('Email send failed: the isolated E2E mail sink did not accept the message.');
+        } else {
+            error_log("Email send failed: {$mail->ErrorInfo}");
+        }
         return false;
     }
 }
@@ -121,7 +142,7 @@ function generateVerificationToken() {
  * @param string $firstName User first name
  * @return bool Success status
  */
-function sendVerificationEmail($userId, $email, $firstName) {
+function sendVerificationEmail($userId, $email, $firstName, $preserveArchiveIntent = false) {
     global $conn;
 
     // Generate verification token
@@ -138,6 +159,9 @@ function sendVerificationEmail($userId, $email, $firstName) {
 
     // Build verification link
     $verifyLink = rms_mail_config('SITE_URL', 'http://localhost/rms/') . "public/verify-email.php?token=" . urlencode($token);
+    if ($preserveArchiveIntent === true) {
+        $verifyLink .= '&continue=research-archive';
+    }
 
     // Email template
     $body = getEmailTemplate('verification', [

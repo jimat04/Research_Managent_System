@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-24",
+  "timezone": "Asia/Taipei",
+  "measurement": "UTF-8 bytes, decoded characters, whitespace-delimited words; not token counts",
+  "live_task_usage": "Unavailable: no connected Copilot session telemetry; before/after client runs pending",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 10641,
+      "characters": 10639,
+      "words": 1450,
+      "sha256": "359d535634d9aff04a440cf1bbe6c232a70bf520661b91b5c9903265e4f7d891"
+    },
+    {
+      "path": "CLAUDE.md",
+      "bytes": 22744,
+      "characters": 22555,
+      "words": 2947,
+      "sha256": "a08924c706502eb47bdcfa330c673b576ff55341e7eeb98bfceb7e177e6c093c"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "bytes": 3521,
+      "characters": 3521,
+      "words": 462,
+      "sha256": "7acae79ed03fc7123ab8e5a05a7acd3f24ac93841f446b1df22a175faf253379"
+    },
+    {
+      "path": "docs/COPILOT_WORKFLOW.md",
+      "bytes": 9028,
+      "characters": 9028,
+      "words": 1134,
+      "sha256": "ebf4fe0a0afe7a19e532ff4e1de5e5ef1015a3674b3ba1cbebc5354c909a3ca0"
+    },
+    {
+      "path": "docs/testing/MANUAL_TESTING_GUIDE.md",
+      "bytes": 14864,
+      "characters": 14864,
+      "words": 2137,
+      "sha256": "12fa9717598f4457ff27b0f95038474fd3c3a42bad3758f0679a49c0a9737e33"
+    },
+    {
+      "path": ".github/skills/README.md",
+      "bytes": 4774,
+      "characters": 4774,
+      "words": 475,
+      "sha256": "fef5fe251104962faaf3825f36182813501c76ddb47b75a291a88199f97f997f"
+    },
+    {
+      "path": ".github/agents/rms-backup.agent.md",
+      "bytes": 3151,
+      "characters": 3151,
+      "words": 439,
+      "sha256": "73dfa5a7bf647c5b4cf468a6d670b7f7aed9bf00df133a472525d2e6c5d57cea"
+    },
+    {
+      "path": ".github/agents/rms-db.agent.md",
+      "bytes": 6515,
+      "characters": 6509,
+      "words": 869,
+      "sha256": "ca8ef6eaf2f72a98cf6e05b8516e17f90b6ab97c4448fdd03980ff0e26daca61"
+    },
+    {
+      "path": ".github/agents/rms-debug.agent.md",
+      "bytes": 5101,
+      "characters": 5101,
+      "words": 699,
+      "sha256": "afeedf665522580bb27b5f3800626006c31fa08be6a79a333ea5fc1a06942975"
+    },
+    {
+      "path": ".github/agents/rms-doc.agent.md",
+      "bytes": 3435,
+      "characters": 3435,
+      "words": 453,
+      "sha256": "988c1320482d3878a0cafdda880af5fd02aed2aaa2076f5ee439ca9892f8feef"
+    },
+    {
+      "path": ".github/agents/rms-page-builder.agent.md",
+      "bytes": 3676,
+      "characters": 3674,
+      "words": 492,
+      "sha256": "55843ebd48585fc96558b479539b2d176a0e5186ceca21aee85924dad3b851c1"
+    },
+    {
+      "path": ".github/agents/rms-performance.agent.md",
+      "bytes": 3149,
+      "characters": 3149,
+      "words": 434,
+      "sha256": "f6aee3e359a6fcc17d6c307114198c4778795d86e520750986ed4c6dc29e4ef6"
+    },
+    {
+      "path": ".github/agents/rms-security-auth.agent.md",
+      "bytes": 4111,
+      "characters": 4111,
+      "words": 550,
+      "sha256": "14193b50a31450d16056c334e70fba4e276f8282340e31da3d1e582259240a85"
+    },
+    {
+      "path": ".github/agents/rms-testing.agent.md",
+      "bytes": 4526,
+      "characters": 4526,
+      "words": 611,
+      "sha256": "1b0295798b088983447c136bcbdae9e45ab97114f9c59959d6d6a0137cb0b88d"
+    },
+    {
+      "path": ".github/agents/rms-ui.agent.md",
+      "bytes": 3683,
+      "characters": 3683,
+      "words": 496,
+      "sha256": "0e9e3d835fe4b6c99e3cd4fcb14cd931bb43a60f8d80637ac46dbca4f1bdf654"
+    },
+    {
+      "path": ".github/agents/rms-workflow.agent.md",
+      "bytes": 3495,
+      "characters": 3495,
+      "words": 463,
+      "sha256": "58ee03245a2fff25318685d8d330b34d5a05441a1c3c6119efc34231b73821c4"
+    }
+  ]
+}

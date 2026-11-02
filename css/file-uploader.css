@@ -323,13 +323,6 @@
   }
 }
 
-.rms-uploader-error-icon {
-  font-size: 16px;
-  color: var(--uploader-danger);
-  flex-shrink: 0;
-  user-select: none;
-}
-
 .rms-uploader-error-message {
   flex: 1;
   font-size: 0.85rem;

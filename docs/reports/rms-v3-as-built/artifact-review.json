@@ -1,0 +1,20 @@
+{
+  "kind": "Generated document inspection, not application testing",
+  "source_blocks": 148,
+  "pdf_pages": 33,
+  "docx_xml": "Well-formed XML; report paragraph and heading text present",
+  "figures": 4,
+  "exports": [
+    {
+      "file": "RMS-v3-As-Built-Report.docx",
+      "bytes": 138252,
+      "sha256": "d4404e0f3f99fcc26edab08a121f23ebca87eb1dc38ad4d51f3e006c7aad8673"
+    },
+    {
+      "file": "RMS-v3-As-Built-Report.pdf",
+      "bytes": 53817,
+      "sha256": "08de11687c4dc4e66f6734a566b302a38f66e93ecec896db6831b19e660dd5e5"
+    }
+  ],
+  "limits": "Word visual pagination is not checked through Office automation; PDF is generated statically. No application, browser, tests or database access."
+}

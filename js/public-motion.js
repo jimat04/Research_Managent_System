@@ -4,6 +4,20 @@
   try {
     document.documentElement.classList.add('motion-ready');
 
+    var authTransitionPath = /\/(?:login|logout)\.php$/i;
+    var currentPathUsesDedicatedTransition = authTransitionPath.test(window.location.pathname);
+    var publicPageUsesZoomInOnly = !!document.querySelector('link[href*="public-theme.css"]');
+    var pageLeaving = false;
+
+    if (!currentPathUsesDedicatedTransition) {
+      document.body.classList.add('page-entering');
+      document.body.addEventListener('animationend', function onPageEntry(event) {
+        if (event.target !== document.body || event.animationName !== 'pageZoomArrival') return;
+        document.body.classList.remove('page-entering');
+        document.body.removeEventListener('animationend', onPageEntry);
+      });
+    }
+
     var autoRevealSelectors = [
       '.admin-page-content > *',
       '.faculty-page-content > *',
@@ -137,22 +151,39 @@
       });
     }, { once: true });
 
+    window.addEventListener('pageshow', function () {
+      pageLeaving = false;
+      document.body.classList.remove('page-leaving');
+    });
+
     document.addEventListener('click', function (event) {
       try {
-        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (currentPathUsesDedicatedTransition || pageLeaving || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
         var link = event.target.closest('a[href]');
         if (!link || link.hasAttribute('download') || (link.getAttribute('target') || '').toLowerCase() === '_blank') return;
 
         var url = new URL(link.href, window.location.href);
         if (url.origin !== window.location.origin || !/^https?:$/.test(url.protocol)) return;
+        if (publicPageUsesZoomInOnly) {
+          if (authTransitionPath.test(url.pathname)) {
+            try { window.sessionStorage.setItem('rmsPublicCtaZoom', '1'); } catch (error) { /* Continue navigation if session storage is unavailable. */ }
+          }
+          return;
+        }
+        if (authTransitionPath.test(url.pathname)) return;
         if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
 
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         event.preventDefault();
+        pageLeaving = true;
         document.body.classList.add('page-leaving');
         window.setTimeout(function () {
-          try { window.location.assign(url.href); } catch (error) { document.body.classList.remove('page-leaving'); }
-        }, 150);
+          try { window.location.assign(url.href); } catch (error) {
+            pageLeaving = false;
+            document.body.classList.remove('page-leaving');
+          }
+        }, 220);
       } catch (error) {
         return;
       }

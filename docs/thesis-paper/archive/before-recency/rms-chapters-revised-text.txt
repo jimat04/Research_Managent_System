@@ -1,0 +1,580 @@
+Research Management System
+
+A Thesis Presented to the 
+
+Faculty of Eulogio “Amang” Rodriguez 
+
+Institute of Science and Technology Cavite Campus
+
+In Partial Fulfillment
+
+of the Requirements for the Degree of
+
+Bachelor of Science in Information Technology
+
+
+By:
+
+Bringas, Junly D.
+
+Cupag, Joseph S.
+
+Formaran, John James E.
+
+Paningbatan, Noemi S.
+
+Tolentino, Jimwel A.
+
+Date :
+
+		CERTIFICATION
+
+			This thesis entitled “Research Management System” was prepared and submitted by Junly D. Bringas, Joseph S. Cupag, James John E. Formaran, Noemi S. Paningbatan, Jimwel A. Tolentino in partial fulfillment of the requirements for the degree of Bachelor of Science in Information Technology.
+
+		                              NANCY G. LIWANAG
+
+		                              Thesis Adviser
+
+		APPROVAL SHEET
+
+			Approved by the Panel for Oral Defense on , with a rating of ________. 
+
+                         
+                           Chairman
+
+		           Member              			   Member  
+
+			Accepted in partial fulfilment of the requirements for the Degree of Bachelor of Science in Information Technology.
+
+		                          CATHERINE D. DUMPIT, LPT, MAEd, MIT
+
+                              		Program Chair
+
+		ACKNOWLEDGEMENT
+
+ABSTRACT
+
+Title:		Research Management System     
+
+Researchers:	BRINGAS, JUNLY D.
+
+               CUPAG, JOSEPH S.
+
+			FORMARAN, JOHN JAMES E.
+
+			PANINGBATAN, NOEMI S.
+
+               TOLENTINO, JIMWEL A.
+
+		Degree:        BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY
+
+		School Year:   2027
+
+		Adviser:       NANCY G. LIWANAG
+
+DEDICATION
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________ 
+
+Bringas, Junly D.
+
+Cupag, Joseph S.
+
+Formaran, John James E.
+
+Paningbatan, Noemi S.
+
+Tolentino, Jimwel A.
+
+	Table of Contents
+
+		PAGE
+
+		LIST OF TABLES	xii
+
+			LIST OF FIGURES	xiii
+
+			LIST OF APPENDICES                                       ix            
+
+
+LIST OF TABLES
+
+Table										  PAGE
+
+	1. 
+
+									2. 
+
+									3. 
+
+								4. 
+
+								5. 
+
+LIST OF FIGURES
+
+Figure						                      PAGE
+
+1. 
+
+2. 
+
+3. 
+
+4. 
+
+5. 
+
+LIST OF APPENDICES
+
+Figure						                      PAGE
+
+1. 
+
+2. 
+
+3. 
+
+4. 
+
+5. 
+
+CHAPTER 1
+
+The Problem and Its Background
+
+Introduction
+
+Research management in a higher education institution involves more than storing a final manuscript. Research titles, chapter submissions, decisions, supporting files, activities, publications, and intellectual-property records must remain associated with the appropriate researchers. A centralized information system can organize these records and make their processing visible to authorized users. The practical value of such a system depends on its fit with institutional responsibilities and on evidence obtained during evaluation.
+
+The Eulogio “Amang” Rodriguez Institute of Science and Technology (EARIST) Research Manual (2015) provides an institutional reference for research administration. The repository copy describes research proposals, evaluation, progress and terminal reports, publication, and related institutional responsibilities. It informs the study context, but it does not by itself establish the current procedures used at the Cavite Campus or prove that the implemented software reproduces every institutional form and approval stage.
+
+This study concerns the web-based Research Management System (RMS) for EARIST Cavite Campus. In the current implementation, students and faculty use a shared workflow: create a research-title draft, submit a locked version, receive an authorized review decision, revise and resubmit when returned, and proceed to Chapters 1–5 after title approval. Each later chapter becomes available after the preceding chapter is approved. Formal title and chapter decisions are performed by administrators and research staff who hold the relevant action permission.
+
+The requirements investigation should establish how campus personnel currently submit, review, monitor, and retrieve research records. The following are problem areas to investigate through interviews, observation, and institutional records; their frequency and severity at EARIST Cavite Campus must be established by the study rather than inferred from the software:
+
+Submission and Review Coordination: Researchers and authorized personnel need a clear record of what was submitted, which version is awaiting a decision, and what recommendations must be addressed. Where paper or disconnected files are used, the study should document the actual handoffs and processing times.
+
+Progress Visibility and Accountability: Students, faculty researchers, advisers, and research personnel need access appropriate to their responsibilities. A useful system must distinguish editable drafts from submitted versions, retain decisions and recommendations, and show chapter progress without giving every user review authority.
+
+Record Organization and Retrieval: Research metadata, supporting documents, publications, and intellectual-property records need consistent organization and appropriate access controls. The study should establish existing retrieval practices and measure representative retrieval tasks before claiming an improvement.
+
+RMS addresses these needs through browser-based interfaces, server-side processing, and relational data storage. Its implemented stack uses HTML, CSS, JavaScript, PHP, and MySQLi for database access. The project is developed locally using XAMPP. Centralized records and backend controls support the intended workflow; security, reliability, usability, and efficiency remain matters to evaluate through defined tasks and technical checks.
+
+Accordingly, this study aims to document, develop, and evaluate RMS as a platform for student and faculty research management. Its capabilities span research capacity-building activities, title and chapter development, implementation and output monitoring, publication and dissemination, and intellectual-property and utilization records. Evaluation is planned with administrators, authorized research staff, faculty users, and student researchers using selected ISO/IEC 25010:2011 product-quality characteristics. These chapters present the study rationale and evaluation plan; they do not report completed acceptance testing or measured benefits.
+
+Statement of the Problem
+
+This study addresses the organization of research submission, permission-controlled review, chapter tracking, and related records at EARIST Cavite Campus through a web-based Research Management System.
+
+Specifically, it seeks to answer the following questions:
+
+What challenges and requirements do administrators, research staff, faculty users, and student researchers identify in current research submission, review, progress monitoring, and record retrieval practices?
+
+How should the system organize student and faculty research, sequential title-and-chapter processing, authorized decisions, version history, and associated activity, publication, and intellectual-property records?
+
+How do the selected users assess the developed system using an instrument based on the following selected ISO/IEC 25010:2011 product-quality characteristics, supported by appropriate technical evidence?
+
+Functional Suitability;
+
+Usability;
+
+Performance Efficiency;
+
+Reliability; and
+
+Security?
+
+What differences in submission processing time, visibility of review and chapter status, and research-record retrieval can be observed between documented existing practices and defined tasks using RMS?
+
+Objectives of the Project 
+
+General Objective
+
+To document, develop, and evaluate a web-based Research Management System for EARIST Cavite Campus that centralizes student and faculty research records, supports permission-controlled title and chapter processing, and organizes related research activities and outputs.
+
+Specific Objectives
+
+To achieve the general objective, and in direct correspondence with the statement of the problem, the proponents aim to accomplish the following:
+
+To document current campus research-administration practices and requirements through authorized interviews, observation, and institutional documents, using the EARIST Research Manual as contextual evidence rather than assuming complete equivalence with the software;
+
+To align the architecture, database, user interfaces, role permissions, and title-and-chapter workflow with the documented requirements and current implementation;
+
+To develop and document the following connected capabilities using HTML, CSS, JavaScript, PHP, and a MySQL-compatible relational database accessed through MySQLi:
+
+User management, authentication, and role- and action-based access controls;
+
+Shared student and faculty title submission with editable drafts, locked submitted versions, and retained submission history;
+
+Sequential Chapters 1–5, recommendations, revision and resubmission, and computed chapter-progress indicators;
+
+Administrator and specifically authorized staff review and approval, supported by decision records and in-app notifications;
+
+Research capacity-building activities, implementation and output listings, searchable research archives, publications, and intellectual-property and utilization records; and
+
+Administrative summaries, reporting, and activity logging within the implemented permissions;
+
+To verify representative workflows, persistence, invalid input handling, direct-route authorization, submission locks, and version preservation through focused technical and integration checks, followed by user acceptance testing. Mutating browser tests must use a verified isolated disposable database. Individual test outcomes will be reported only after execution;
+
+To evaluate selected product-quality characteristics—Functional Suitability, Usability, Performance Efficiency, Reliability, and Security—using ISO/IEC 25010:2011 as the stated evaluation basis, combining respondent assessments with relevant technical observations; and
+
+To compare documented baseline and RMS task results for submission processing, status visibility, and record retrieval, reporting the sample, task conditions, measurements, and limitations without inferring time savings from satisfaction ratings alone.
+
+Scope and Delimitation
+
+Scope of the Study
+
+The system scope covers the currently implemented web-based RMS for student and faculty research at EARIST Cavite Campus. It includes research capacity building, research development, implementation and outputs, publication and dissemination, and intellectual-property and utilization records. The primary workflow evaluated is title submission and sequential Chapters 1–5. Supporting modules must be evaluated separately before conclusions are extended to them. The final respondent sample and task coverage will be specified in the methodology.
+
+Users: The platform uses four account roles—administrator, research staff, faculty, and student—with dedicated navigation and access controls. Access depends on the role, assigned action permissions, and the ownership or assignment rules of the relevant record:
+
+Administrator: Manages accounts and permissions, oversees research records, and performs formal title and chapter review or approval. Software access does not establish that every administrator account corresponds to a particular institutional officeholder.
+
+Research Staff: Uses only the modules and actions explicitly granted through the existing permission system. A permission to review and return a submission is distinct from permission to approve it; staff do not receive unrestricted review authority by default.
+
+Faculty: May submit and track their own research through the canonical title-and-chapter workflow. Assigned advisers may view and guide relevant student research where supported. Adviser assignment alone does not authorize formal title or chapter decisions.
+
+Student: Creates and edits eligible research drafts, submits titles and sequential chapters, views decisions and recommendations, and revises returned work. Access to documents and associated records remains subject to the applicable backend rules.
+
+Location / Organization: The intended institutional setting is EARIST Cavite Campus. The EARIST Research Manual (2015) is a contextual reference. Confirmation of present campus procedures and any claimed equivalence with OVPREIS forms requires review by the appropriate institutional personnel.
+
+System Functions: The system incorporates the following functional capabilities:
+
+Registration, authentication, session handling, and backend authorization controls;
+
+Research-title metadata, researcher and project-member information, chapter content, and supporting document records;
+
+Controlled document uploads and downloads. The chapter interface accepts PDF, DOC, and DOCX files subject to its configured validation and limits; other modules may impose different file requirements;
+
+Project identifiers, submission-version numbers, submission timestamps, and retained review history for traceability;
+
+Title and chapter statuses reflecting drafts, submitted work, returned revisions, and approval. Chapter-progress displays derive approved-chapter counts; these displays must be distinguished from stored project status;
+
+Authorized review interfaces that preserve the submitted snapshot, reviewer identity, decision, and recommendations;
+
+Searchable research records and archive views with the filters actually provided by each interface. Publication-repository views and completed-research archives serve related but distinct record sets;
+
+In-app notifications in the inspected title-submission and review paths. PHPMailer is a declared dependency used by separate email features; delivery of an email for every workflow event is outside the verified claim;
+
+Administrative summaries and status or chapter-progress indicators based on the available records and permissions; and
+
+Activity logging and separate submission/review history. Logging coverage must be checked per action before making claims about complete audit coverage or tamper resistance.
+
+Modules Included:
+
+User Management and Authentication: Account access, authenticated sessions, and role- and action-based permissions.
+
+Research Capacity Building and Development: Seminar, training, and workshop records; shared student/faculty title drafts; locked submission versions; and formal review by authorized personnel.
+
+Chapter Tracking, Implementation, and Outputs: Sequential chapter submissions after title approval, recorded recommendations and revisions, computed progress, and ongoing/completed research and output listings.
+
+Publication and Dissemination: Journal publication and conference presentation records and publication-repository views, together with the separate research archive interfaces.
+
+Intellectual Property and Utilization: Internal records for copyrights, patents and utility models, innovation, and technology transfer. These features do not establish electronic filing with an external intellectual-property agency.
+
+Administration and Reporting: Role-specific dashboards, administrative reports, permission management, activity logs, and record oversight.
+
+Technologies Used:
+
+Frontend: HTML, CSS, and JavaScript, with custom role-specific page shells and styling;
+
+Backend: PHP with MySQLi database access and prepared statements in the inspected workflow handlers;
+
+Database: A MySQL-compatible relational schema. The deployed database engine and version should be recorded during evaluation rather than inferred from the XAMPP label;
+
+Declared Composer packages: PHPMailer and phpdotenv. Bootstrap, DataTables, Chart.js, and Dompdf are not part of the verified implementation description; and
+
+Development Environment: XAMPP providing the local Apache/PHP/database environment. Production deployment characteristics are outside this source-based description.
+
+Data Covered: Account and profile records; research-title and chapter data; project membership and adviser links; submission snapshots and attachment references; review decisions and recommendations; research activities; publication records; intellectual-property and utilization records; in-app notifications; and activity logs. Visibility and modification rights depend on the relevant record and permission rules.
+
+Delimitations of the Study
+
+To ensure project feasibility and maintain technical focus, the following boundaries are defined:
+
+Platform Boundary: RMS is accessed through a web browser. The study does not include development of a native Android/iOS application or an offline desktop client. Network availability is required between the browser and application server; public internet access is not inherently required for a local deployment.
+
+Workflow and Administrative Boundary: The implementation supports student and faculty research and internal output records. It does not establish full automation of CREC/EREC routing, all OVPREIS Forms 1–6, research funding, honoraria, budget liquidation, or external patent filing. Institutional form compliance must be assessed using a separate field-and-action mapping.
+
+Functional Exclusions: The study does not claim an integrated plagiarism or grammar-analysis engine, inline document annotation, automatic approval, or guaranteed protection against all security threats. Scientific judgments and external originality checks remain responsibilities of the appropriate personnel.
+
+Integration Boundary: No integration with institutional enrollment, grading, cashiering, journal-publisher, or external intellectual-property filing services is established by this review. Internal publication and IP records must not be described as those external transactions.
+
+Infrastructure and Preservation Boundary: Availability and response time depend on the deployment, browser, network, file sizes, and workload. Repository storage alone does not guarantee permanent preservation, successful restoration, or disaster recovery; these require an established operational process and verification.
+
+Evaluation Boundary: Planned participants are administrators, research staff, faculty users, and students associated with the study setting. Only tasks, modules, user groups, and conditions actually included in the approved evaluation may support the resulting conclusions. Institutional baseline findings, respondent counts, and completed quality ratings are not supplied in these chapters.
+
+Significance of the Project
+
+The system is intended to support the following stakeholders. The benefits described here are expected contributions to be assessed during evaluation rather than measured outcomes already established by the study:
+
+Administrators: Consolidates research records and formal review decisions, supports permission assignment, and provides summaries for institutional oversight.
+
+Research Staff: Provides access to the administrative tasks explicitly assigned to them and organizes relevant submission, review, activity, and output records.
+
+Faculty Researchers and Advisers: Supports faculty-owned research submissions and chapter tracking, while retaining assigned-adviser visibility and guidance where available. Formal approval remains with the authorized administrator or staff account.
+
+Student Researchers: Provides an interface for drafting and submitting research titles and chapters, viewing recommendations, revising returned work, and tracking recorded progress.
+
+EARIST Cavite Campus: Provides a basis for more coordinated research administration and associated activity, publication, and intellectual-property records. Claims of reduced costs, shorter turnaround, or reduced record loss require study evidence.
+
+Future Researchers and Developers: Provides a documented implementation and evaluation basis for studying permission-controlled academic workflows, version preservation, and research-record organization.
+
+Definition of Terms
+
+For the purpose of clarity and consistency, the following technical and operational terms are defined according to their context in this study:
+
+Chapter Submission: A researcher-owned chapter record that can be drafted and, when eligible, submitted as a preserved version for authorized review. Later chapters require approval of the preceding chapter.
+
+Digital Repository / Research Archive: Searchable views of eligible research or publication records and associated metadata. Access and document availability depend on the relevant interface and permission rules; permanent preservation is not implied.
+
+CREC and EREC: Institutional research-evaluation committees described in the EARIST Research Manual. Their existence in institutional policy does not establish a separate committee-account role or fully automated committee sequence in the current software.
+
+EARIST Research Manual (2015): The institutional research-policy reference available in the project repository. Current campus applicability and any form-to-software mapping require institutional confirmation.
+
+Faculty Researcher / Adviser: A faculty account may own research and use the shared submission workflow. Adviser assignment supports guidance and relevant project visibility, and does not itself grant formal title or chapter approval authority.
+
+ISO/IEC 25010:2011: The identified edition used as the proposed basis for five selected product-quality characteristics in this study. It is not a 2017 edition, and its use does not establish certification or completed evaluation.
+
+MySQLi: The PHP database extension used by the inspected application to communicate with its MySQL-compatible relational database, including prepared statements.
+
+Title Submission: A student or faculty researcher submits a title draft as a preserved version for review. Approval of the title is required before chapter submission becomes available.
+
+OVPREIS Forms: Institutional research forms described in the EARIST Research Manual. They provide context for requirements analysis; complete digitization and routing equivalence are not assumed in this study.
+
+PHP (Hypertext Preprocessor): A server-side scripting language used to process business logic, handle file uploads, and interact with the database.
+
+Progress Tracking: Display of recorded chapter statuses and counts or percentages derived from chapter approvals. It is distinguished from stored project status and is not a claim of push-based live updates.
+
+Administrator: An account role with research-management and formal review authority in the application. The title of the corresponding institutional officeholder must be established separately.
+
+Authorized Research Staff: A research-staff account granted the module and action permissions needed for a particular task, including separate permissions for review and approval.
+
+Role-Based Access Control: Restriction of application actions by account role, supplemented in RMS by explicit staff action permissions and relevant ownership or assignment checks.
+
+Student Researcher: A student account that uses RMS to create and submit eligible research work, view recorded decisions, and revise returned submissions.
+
+Submission Version and Lock: A preserved snapshot of submitted title or chapter data and associated attachment references. Submitted work is not editable through the ordinary draft-editing path; a returned submission can be revised and resubmitted as a later version.
+
+CHAPTER 2
+
+Review of Related Literature and Studies
+
+This chapter reviews literature, verified related studies, and documented system capabilities relevant to the updated RMS. It distinguishes external research findings from features observed in the project implementation. It then relates the reviewed material to the study’s acceptance perspective, architectural and access-control basis, product-quality evaluation, and Input–Process–Output framework.
+
+Related Literature 
+
+The review covers information systems in higher education, browser-based application architecture, relational records, repository design, digitalization, access control, and software evaluation. Sources are used for claims they actually support; results from another institution are not treated as evidence of effectiveness at EARIST Cavite Campus.
+
+Information Systems in Higher Education
+
+Information systems connect organizational activities, information, and management decisions. Laudon and Laudon (2020) provide an overview of management information systems and their relationship to organizational performance. For the present study, this perspective supports examining how research records, responsibilities, and decisions fit together, rather than evaluating the application solely as a set of screens.
+
+Brooks and McCormack (2020) distinguish the conversion of information to digital form from changes to operational processes and wider institutional transformation. RMS can be examined as an intervention in research-record processing. Whether it produces broader organizational change must be established through implementation and evaluation evidence, including user practices and institutional support.
+
+Web-Based Application Development
+
+The implemented application can be described using three logical responsibilities: presentation in a browser, application processing on the PHP server, and persistence in a relational database. This is a description of the inspected system, not a claim that the code or deployment enforces three independently deployed tiers. Requests must be validated and authorized where they are processed on the server.
+
+Presentation: HTML, CSS, and JavaScript provide the forms, record views, role navigation, and progress indicators. The current project uses custom styling and role-specific shells. A responsive interface is an implementation goal to verify on representative devices, not evidence that a particular framework is installed.
+
+Application Processing: PHP handles requests, authenticated sessions, permitted actions, validation, and document operations. Canonical title and chapter submission pages are shared by student and faculty researchers. The review helper separates administrator authority from research-staff permissions and records decisions against preserved submission versions.
+
+Data Storage: A MySQL-compatible relational database stores linked account, project, chapter, version, review, activity, publication, and intellectual-property records. Supporting files are associated with database metadata. This separation requires checking both the record and attachment access path when validating authorization.
+
+Database Management Systems
+
+Relational database design organizes related records through keys and constraints. Elmasri and Navathe (2016) cover database modeling, relational design, and implementation concepts. These concepts are relevant to maintaining associations among researchers, projects, chapters, submitted versions, decisions, and outputs without replacing history with a single mutable record.
+
+The inspected RMS uses MySQLi rather than PDO. The PHP Group (n.d.) documents prepared statements in which values are bound separately from the SQL statement. This technique supports safe handling of input values, but does not replace authorization, validation, output escaping, or file-access controls. The thesis therefore treats security as a set of behaviors to verify rather than a property guaranteed by selecting PHP and MySQL.
+
+Document and Records Management
+
+Research records change through drafting, submission, review, and revision. A record-management design must distinguish the version currently being edited from the version already submitted for a decision. In RMS, submission snapshots, attachment links, reviewer decisions, and recommendations provide the implementation basis for tracing these changes. Their persistence and access restrictions require direct verification.
+
+Smith et al. (2003) describe DSpace as an institutional repository for digital research and educational material, including submission workflow, metadata, retrieval, and preservation concerns. This literature supports organized repository services. It does not establish that RMS implements DSpace, Dublin Core compliance, preservation guarantees, or the same submission workflow.
+
+Digital Transformation in Academic Institutions
+
+Brooks and McCormack (2020) emphasize that digital transformation includes coordinated organizational change as well as technology. For RMS, replacing a handoff with an online action still requires clear responsibility, access, user preparation, and an operational environment. The study will examine these conditions rather than equating installation of the application with institution-wide transformation.
+
+Campus-specific claims require campus-specific evidence. The Research Manual supplies institutional context, while interviews, observations, and approved records should establish how the Cavite Campus currently manages research. Published experiences from other settings can inform questions and design choices but cannot establish local processing delays, paper consumption, or record-loss rates.
+
+Software Quality Assurance and ISO/IEC 25010
+
+The proposed evaluation retains five selected characteristics from ISO/IEC 25010:2011: Functional Suitability, Usability, Performance Efficiency, Reliability, and Security (ISO/IEC, 2011). This limited selection focuses the study on the intended tasks; it is not an assessment of the entire model. The 2011 edition has been withdrawn, and a revised product-quality model is available as ISO/IEC 25010:2023 (ISO/IEC, 2023). The final methodology and instrument must use one edition consistently.
+
+Functional Suitability: Check whether representative authorized users can complete the required tasks, including title submission, sequential chapters, review, revision, and record retrieval, and whether results and stored records match the stated requirements.
+
+Performance Efficiency: Measure response or task times under documented hardware, network, workload, and data conditions. User perceptions may supplement these observations but cannot establish throughput or resource-use performance by themselves.
+
+Usability: Observe representative users completing defined tasks and collect structured assessments of clarity, ease of learning, and ease of operation. Identify errors, assistance needed, and confusing states.
+
+Reliability: Exercise representative failed or invalid operations and assess whether records remain consistent and recoverable within the tested conditions. Availability and recovery claims need operational evidence beyond a successful page load.
+
+Security: Check permitted and prohibited actions, record ownership or assignment, direct-route document access, CSRF handling, input validation, and submitted-version locks. Survey responses alone cannot establish security effectiveness.
+
+The chosen characteristics guide the evaluation plan. The existence of source code and test infrastructure does not demonstrate that an acceptance study has been completed, that every characteristic has passed, or that the application has been certified against the standard.
+
+Foreign Studies and Foundational Research
+
+1. Institutional Repository Design (Smith et al., 2003)
+
+Smith et al. (2003) describe the design and early implementation of DSpace at MIT, including management of research material and institutional submission workflows. The work is relevant to the separation of deposit, review, discovery, and preservation responsibilities. For RMS, repository services should be assessed alongside the title-and-chapter workflow; the source does not support describing all repositories as lacking review or submission processing.
+
+2. Role-Based Authorization (Ferraiolo & Kuhn, 1992)
+
+Ferraiolo and Kuhn (1992) present role-based access control as a way to organize permissions around organizational responsibilities. This provides a foundation for distinguishing researcher, administrator, and research-staff actions. In RMS, specific staff permissions and ownership rules supplement the account role. A role-based design still requires tests of prohibited actions and direct access to protected records.
+
+3. Digital Transformation in Higher Education (Brooks & McCormack, 2020)
+
+The EDUCAUSE report by Brooks and McCormack (2020) examines digital transformation in higher education. It distinguishes operational digitalization from wider institutional change. This distinction informs the study boundary: RMS provides research-administration capabilities, while adoption, revised work practices, and institutional outcomes must be investigated. The report is not evidence of a measured reduction in EARIST processing time.
+
+4. Electronic Research Ethics Management (Mkumbwa et al., 2025)
+
+Mkumbwa et al. (2025) interviewed 16 faculty users of an electronic research ethics management system in Tanzania. Participants described convenience and better record management, alongside dependence on ICT resources and limits on reviewer–researcher interaction. These findings inform evaluation of access, infrastructure, and feedback in RMS. Ethical-clearance processing in that setting differs from the title-and-chapter decisions implemented here.
+
+5. Technology Acceptance Research (Venkatesh et al., 2016)
+
+Venkatesh, Thong, and Xu (2016) review UTAUT research and discuss the importance of context in technology acceptance. This is background on acceptance research, not the original TAM study. The present study uses Davis (1989) for perceived usefulness and perceived ease of use, and does not claim to test UTAUT or its complete set of constructs.
+
+Local Studies and Institutional Context
+
+1. University of the East Research Management System (Celis & Lagda, 2025)
+
+Celis and Lagda (2025) describe development and evaluation of the University of the East RMS. The publicly available abstract identifies submission, approval, research-profile, and reporting functions and an evaluation involving 50 respondents. It also reports requests for improved validation and interfaces. This is a relevant Philippine comparator, but its respondent ratings are evidence about that system, not measured results for EARIST RMS. This review uses the abstract; the full article was not available without login.
+
+2. Bulacan State University Research Management Platform (Adriano et al., 2025)
+
+Adriano et al. (2025) describe a Bulacan State University research-management platform using natural-language processing and an analytics dashboard. Their descriptive-developmental study reports consultations, interviews, questionnaire data, and quality assessments. It supports examining research records and user feedback in a Philippine setting. RMS does not thereby acquire the comparator’s natural-language-processing capabilities, and the comparator’s evaluation does not establish EARIST outcomes.
+
+3. Institutional Reference: EARIST Research Manual (2015)
+
+The repository copy of the EARIST Research Manual describes research administration, evaluation committees, standardized forms, and research-related activities and outputs. It is an institutional reference rather than an empirical evaluation of RMS. It should guide requirements discussions without being used to assert that current campus practice is entirely paper-based or that the application automates every prescribed committee action.
+
+4. Implications for the Present Study
+
+The verified local studies demonstrate that Philippine institutions have investigated research-management platforms with different functional boundaries. The present study must describe its own role model, title-and-chapter processing, record safeguards, and supporting modules. Local effectiveness claims require observations and evaluation data from the actual EARIST study participants and deployment.
+
+5. Delimited Research Contribution
+
+The contribution proposed here is an implementation and evaluation of an EARIST-oriented RMS with shared student/faculty submissions, permission-controlled decisions, preserved versions, sequential chapters, and associated research records. It is not a claim that no comparable system exists. Additional local literature may be added only after its bibliographic identity and attributed findings are verified.
+
+Related Systems 
+
+System / source | Documented capabilities | Relevance | Boundary for comparison
+UE Research Management System (Celis & Lagda, 2025) | Submission, approval, research profiles, reporting; user evaluation. | Philippine research-administration comparator. | Abstract-level evidence; its findings do not establish EARIST outcomes.
+DSpace (Smith et al., 2003) | Institutional repository, metadata, retrieval, and submission workflows. | Deposit, review, discovery, and preservation responsibilities. | EARIST-specific sequential chapter rules are not established by this source.
+EPrints (EPrints Services, n.d.) | Open-source repository platform and repository services. | Institutional repository alternative. | Capabilities depend on configuration; assess locally before claiming a feature is absent.
+Google Classroom (Google, n.d.) | Educational coordination, classwork, and feedback. | General classroom-workflow comparator. | Official overview does not establish an EARIST research lifecycle or its permission model.
+EARIST RMS (implementation reviewed, 2026) | Shared title/chapter submissions; versions and locks; administrator/authorized-staff decisions; connected research records. | Institution-specific implementation to evaluate. | Institutional equivalence and performance benefits require separate evidence.
+
+Table 2.1 compares documented capabilities and the boundaries relevant to RMS. Capabilities of other systems are drawn from the cited study abstracts or official product documentation. The comparison does not establish procurement costs, superiority, or institutional compliance without corresponding evidence.
+
+Table 2.1
+Comparison of Related Systems with the Proposed System
+
+The comparison separates research administration, repository services, and general classroom coordination. DSpace includes submission workflows and must not be described as a final-file store with no review capability. EPrints is a repository platform whose local configuration must be considered. Google Classroom supports educational workflows but its official overview does not establish an EARIST-specific title-and-chapter process. RMS is distinguished here by its inspected implementation and intended institutional setting, not by unsupported claims that every alternative lacks the same features.
+
+Synthesis 
+
+The reviewed sources support studying research management as a combination of organizational responsibilities, record processing, repository services, and evaluation. Their findings inform the design and methods, while the current code and schema establish what the implemented RMS presently contains.
+
+First, the information-systems and higher-education literature suggests that coordinated processes and institutional support matter alongside the technical platform. The requirements investigation therefore needs to establish actual campus practices and assign responsibility for submission, review, and record maintenance.
+
+Second, the verified local studies provide comparators for research-management functions and user evaluation. Their different boundaries require the present study to state explicitly which RMS modules and respondent groups it evaluates.
+
+Third, repository design highlights the need to distinguish discoverable metadata, submission workflow, document access, and preservation. RMS research archives and publication-repository views should be described and evaluated according to the records and access rules each provides.
+
+Fourth, role-based access-control research supports separating authority from simple participation in a project. For RMS, faculty researcher or adviser access does not replace administrator/staff decision permissions. Security checks must include attempted actions outside the assigned authority.
+
+Fifth, acceptance and product-quality perspectives address different questions. Perceived usefulness and ease of use can inform user assessments, while technical checks and task measurements support claims about correctness, performance, reliability, and security. Neither type of evidence should be substituted for the other.
+
+The study therefore addresses a specific implementation and evaluation problem: how to support the documented EARIST research requirements with shared submissions, preserved versions, authorized review, sequential chapters, and connected records. The evaluation must establish the extent of the system’s fit and its limitations rather than assuming complete institutional automation.
+
+Theoretical Framework 
+
+The study uses an acceptance perspective and a product-quality model, supported by an architectural description and access-control principles. These serve distinct purposes and are not all presented as competing theories of user behavior.
+
+Figure 2.1. Bases of the Study
+ACCEPTANCE: TAM (Davis, 1989) / Perceived usefulness and perceived ease of use guide planned user assessments. /  / ARCHITECTURE AND AUTHORIZATION / Browser presentation → PHP processing → relational persistence. / Role-based access principles (Ferraiolo & Kuhn, 1992), explicit staff permissions, and record-access rules. /  / PRODUCT QUALITY / Five selected ISO/IEC 25010:2011 characteristics organize planned technical and user evaluation. /  / These bases guide evaluation; they are not completed results.
+
+1. Technology Acceptance Model (Davis, 1989)
+
+Davis (1989) develops measures of perceived usefulness and perceived ease of use relevant to technology acceptance. In this study, these constructs provide a basis for asking whether the system helps users carry out their work and whether its operations are understandable. They must be operationalized in the evaluation instrument before any TAM-based conclusion is reported.
+
+Perceived Usefulness: Planned questions and task observations will address submission visibility, access to recommendations, and organization of research records. They will not assume that time savings or institutional adoption have already occurred.
+
+Perceived Ease of Use: Planned questions and observations will address learning the interface, finding records, understanding permissions, and completing permitted actions. Using a particular frontend library is not treated as evidence that the interface is easy to use.
+
+2. Architectural and Access-Control Basis
+
+The implementation is described through presentation, application processing, and relational persistence. These are logical responsibilities rather than a claim of physically separated deployment tiers:
+
+Presentation: Browser-delivered HTML, CSS, and JavaScript with role-specific navigation, research forms, record views, and status indicators.
+
+Application Processing: PHP handles authorization, validation, uploads/downloads, locked submissions, version capture, and review decisions. Role-based access principles (Ferraiolo & Kuhn, 1992) are applied through administrator authority, explicit staff permissions, and applicable record-access rules.
+
+Persistence: Relational records connect researchers, projects, chapters, preserved versions, decisions, activities, publications, and IP records, with document metadata linked to stored files. Persistence and access behavior must be verified through relevant test cases.
+
+3. Selected ISO/IEC 25010:2011 Product-Quality Characteristics
+
+Functional Suitability, Usability, Performance Efficiency, Reliability, and Security organize the proposed evaluation. The final methodology must justify this selection and the use of the historical 2011 edition, specify the measures, and document actual test and respondent results. The 2023 edition is acknowledged as a revision; terminology and questionnaire items from different editions must not be combined without an explicit mapping.
+
+Conceptual Framework 
+
+The Input–Process–Output model relates documented requirements and institutional context to development, verification, and planned evaluation. The expected output is an implemented RMS accompanied by evidence about the tasks and conditions actually evaluated. The framework does not presume favorable ratings, complete institutional compliance, or measured improvements before data collection.
+
+Figure 2.2. Conceptual Framework (Input–Process–Output Model)
+
+INPUT
+• Institutional documents and validated campus requirements / • Administrator, staff, faculty, and student tasks / • Shared title/chapter workflow and access rules / • Activity, publication, IP, and archive requirements / • HTML, CSS, JavaScript, PHP/MySQLi, relational database, XAMPP / • Selected quality characteristics and baseline tasks
+
+PROCESS
+1. Validate requirements and evaluation scope / 2. Align architecture, records, permissions, and interfaces / 3. Develop connected persistent behavior / 4. Verify workflow, locks, history, invalid requests, and access / 5. Conduct user tasks and collect assessments / 6. Compare baseline observations and report limitations /  / Mutating browser checks require a verified disposable test database.
+
+EXPECTED OUTPUT
+• Implemented RMS and documented module boundaries / • Title/chapter versions, authorized decisions, and revision history / • Computed chapter-progress and connected research records / • Test evidence and user findings for the evaluated scope / • Documented defects and limitations /  / Results are reported after testing and evaluation; no favorable rating is assumed.
+
+Narrative Explanation of the Conceptual Framework:
+
+Input: Institutional documents and validated campus requirements; needs of administrators, research staff, faculty users, and students; the current title-and-chapter workflow and record-access rules; the implemented technology stack; supporting activity, publication, and IP functions; and the selected evaluation characteristics and baseline task definitions.
+
+Process: Validate requirements and the study boundary; align the architecture, data, permissions, and interfaces; develop connected workflows; verify draft editing, locking, sequential chapters, decisions, history, and record persistence; check invalid and unauthorized requests; conduct user acceptance tasks and collect quality assessments; and compare documented baseline and RMS task observations. Report only testing and data collection actually completed.
+
+Output: The implemented RMS with shared student/faculty title and chapter processing, authorized review, revision history, chapter-progress indicators, research activities, publication and IP records, archive views, and administrative functions. Evaluation reports will state the tested scope, observed results, unresolved defects, and limitations. No quality rating, percentage improvement, or deployment success is presumed by this framework.
+
+References 
+
+Adriano, R., Concepcion, A. U., Cruz, M. M. S., & Concepcion, A. T. V. (2025). A segmentation analysis utilizing natural language processing model with interactive data analytics dashboard for research management platform. International Journal of Multidisciplinary: Applied Business and Education Research, 6(2), 892–904. https://doi.org/10.11594/ijmaber.06.02.31
+
+Brooks, D. C., & McCormack, M. (2020). Driving digital transformation in higher education. EDUCAUSE. https://www.educause.edu/ecar/research-publications/driving-digital-transformation-in-higher-education/2020/defining-digital-transformation
+
+Celis, J. R., & Lagda, E. (2025). Development and evaluation of UE – Research Management System [Abstract]. UE Research Journal, 28(2). https://ejournals.ph/article.php?id=34074
+
+Davis, F. D. (1989). Perceived usefulness, perceived ease of use, and user acceptance of information technology. MIS Quarterly, 13(3), 319–340. https://doi.org/10.2307/249008
+
+EARIST. (2015). EARIST research manual [Institutional reference; repository transcription: docs/reference/Research-Manual_2015.md]. Eulogio “Amang” Rodriguez Institute of Science and Technology.
+
+Elmasri, R., & Navathe, S. B. (2016). Fundamentals of database systems (7th ed., global ed.). Pearson. https://www.pearson.com/en-gb/subject-catalog/p/Elmasri-Fundamentals-of-Database-Systems-Global-Edition-7th-Edition/P200000004142
+
+EPrints Services. (n.d.). EPrints. Retrieved October 20, 2026, from https://www.eprints.org/
+
+Ferraiolo, D. F., & Kuhn, D. R. (1992). Role-based access controls. Proceedings of the 15th National Computer Security Conference (pp. 554–563). https://www.nist.gov/publications/role-based-access-controls
+
+Google. (n.d.). About Classroom. Retrieved October 20, 2026, from https://support.google.com/edu/classroom/answer/6020279?hl=en
+
+ISO/IEC. (2011). Systems and software engineering—Systems and software Quality Requirements and Evaluation (SQuaRE)—System and software quality models (ISO/IEC 25010:2011). International Organization for Standardization. https://www.iso.org/standard/35733.html
+
+ISO/IEC. (2023). Systems and software engineering—Systems and software Quality Requirements and Evaluation (SQuaRE)—Product quality model (ISO/IEC 25010:2023). International Organization for Standardization. https://www.iso.org/standard/78176.html
+
+Laudon, K. C., & Laudon, J. P. (2020). Management information systems: Managing the digital firm (16th ed., global ed.). Pearson. https://www.pearson.com/se/Nordics-Higher-Education/subject-catalogue/information-systems/Laudon-management-information-systems-digital-firm-16e.html/1000
+
+Mkumbwa, R. D., Pancras, G., & Sirili, N. S. (2025). Going paperless: The strengths and limitations of electronic research ethics information management system in a health training institution in Tanzania. BMC Health Services Research, 25, Article 12. https://doi.org/10.1186/s12913-024-12151-0
+
+The PHP Group. (n.d.). Prepared statements. PHP manual. Retrieved October 20, 2026, from https://www.php.net/manual/en/mysqli.quickstart.prepared-statements.php
+
+Smith, M., Barton, M., Bass, M., Branschofsky, M., McClellan, G., Stuve, D., Tansley, R., & Walker, J. H. (2003). DSpace: An open source dynamic digital repository. D-Lib Magazine, 9(1). https://doi.org/10.1045/january2003-smith
+
+Venkatesh, V., Thong, J. Y. L., & Xu, X. (2016). Unified theory of acceptance and use of technology: A synthesis and the road ahead. Journal of the Association for Information Systems, 17(5). https://doi.org/10.17705/1jais.00428

@@ -1,6 +1,6 @@
 # Research Management System (RMS)
 
-A PHP and MySQL v3 research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: draft → submit → locked → admin/staff review → return for revision → revise → Chapters 1–5 → computed completion and outputs. Staff access is organized as 5 modules × 3 sub-pages.
+A PHP and MySQL research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: submit a title → authorized review → sequential Chapters 1–5 → submit the complete manuscript → authorized final review. A project is complete only after its final manuscript is approved. Staff access is organized as 5 modules × 3 sub-pages.
 
 **Stack:** PHP 7.4+ · MySQL/MariaDB · Apache (XAMPP/WAMP) · Composer (phpdotenv, PHPMailer)
 
@@ -47,16 +47,17 @@ A PHP and MySQL v3 research management system for students, faculty, research st
    data, and demo accounts. No migrations are needed for a fresh installation.
 
    The numbered scripts in `database/migrations/` are only the upgrade path for
-   pre-September-2026 legacy databases. The unnumbered
+   existing installations. The unnumbered
    `database/migrations/rms_db_migration.sql` script is superseded and retained
    only for legacy history; do not run it after importing the canonical schema.
-   For an existing database, apply the applicable numbered migrations in order.
-   Migration 011 enables archived researcher-author snapshots; migration 013
-   adds and backfills copyright registration dates required by the registry and
-   admin output reports. Migration 014 stores trainings as a distinct research
-   activity type. Migration 020 adds custom labels for publication records
-   whose type is Other. These migrations are not needed after a fresh schema
-   import.
+   For an existing database, inspect its current schema and migration ledger,
+   then apply only the applicable numbered migrations in order using the
+   documented migration runner. The numbered scripts are the upgrade history
+   (currently through migration 066); do not treat the highest number alone as
+   proof that every migration is applicable. Migration 010 remains marked
+   `needs-verifier`: follow [the reconciliation procedure](docs/MIGRATION_003_010_RECONCILIATION.md)
+   before deciding whether it can run. Numbered migrations are not needed after
+   a fresh canonical schema import.
 
 7. Open the app — the root `index.php` redirects to the public entry point:
 
@@ -64,17 +65,11 @@ A PHP and MySQL v3 research management system for students, faculty, research st
    http://localhost/rms/
    ```
 
-## Demo Credentials
+## Local Demo Accounts
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | admin@rms.edu.ph | Admin@123 |
-| Faculty | msantos@rms.edu.ph | Faculty@123 |
-| Faculty | jreyes@rms.edu.ph | Faculty@123 |
-| Student | jdelacruz@rms.edu.ph | Student@123 |
-| Student | areyes@rms.edu.ph | Student@123 |
-| Research staff (account 1) | staff1@rms.edu.ph | Staff@123 |
-| Research staff (account 2) | staff2@rms.edu.ph | Staff@123 |
+The canonical schema includes demo accounts for local development. Their
+passwords are not published here; verify local account credentials before use.
+Disable or rotate demo accounts before deploying an environment.
 
 ## Project Structure
 
@@ -85,56 +80,62 @@ rms/
     index.php                      Homepage with statistics
     login.php                      Login + registration (role tabs, CSRF, rate limiting)
     logout.php                     Session termination
-    about.php / features.php / contact.php / research-archive.php
+    about-us.php (includes contact form) / research-archive.php
     verify-email.php / resend-verification.php
+    research-record.php             Public research record
     403.php / 404.php / 500.php    Custom error pages
   pages/                           Authenticated pages, organized by role
       student/                       Dashboard, student-only views, and legacy workflow redirects
-      faculty/                       faculty-dashboard delegates to the student dashboard
-      researcher/                    Canonical workflow: my-research, submit-research,
-                                                    edit-research, submit-chapter
-    admin/                         admin-dashboard, admin-users, admin-research,
-                                   admin-archive, admin-reports, admin-logs, admin-backup
-    staff/                         staff-dashboard, contact-messages
-      shared/                        messages, notifications, profile, settings, calendar,
-                                                    typed review, implementation outputs, publications
+      faculty/                       Faculty dashboard, advising, records, and document tools
+      researcher/                    Canonical titles, chapters, final manuscripts, adviser requests
+    admin/                         User/research administration, reports, backups, settings,
+                                   publication classification, public releases, EARIST documents
+    staff/                         Dashboard, contact messages, review, defense, revisions
+    faculty/                       Advising, analytics, document mapping/generation, publications,
+                                   engagement, and faculty research records
+    shared/                        Messaging, activities, publications/IP, research review,
+                                   outputs, adviser requests, and protected document delivery
   includes/                        Core backend
     config.php                     Loads .env, database connection
     auth.php                       Auth, roles, CSRF, hashing, logging helpers
-      research-workflow.php          Title/chapter workflow helpers
+    research-workflow.php          Title/chapter/final-manuscript workflow helpers
     email.php                      PHPMailer wrapper (verification, notifications, replies)
     contact-handler.php            Public contact form handler
     admin-shell.php                Shared admin page shell
       staff-shell.php / faculty-shell.php / student-shell.php
   database/
-    schema/rms_db.sql              Main schema + seed data (19 tables)
+    schema/rms_db.sql              Canonical schema + seed data
     migrations/                    Incremental migration scripts
   config/                          settings.json, skills-lock.json (dev tooling)
   css/                             style.css, about.css, role-shell styles, file-uploader.css, tokens.css/.php
   scripts/                         Maintenance: backup-database.sh, verify-connections.sh,
                                    verify-htaccess.sh, update-paths.php, migrate.php
-  docs/                            rms-spec.md, reference/, planning/, progress/ reports
+  docs/                            Specification, setup/agent references, feature guides,
+                                   planning/history, and manual verification reports
   uploads/                         proposals/ chapters/ manuscripts/ defense/
-  .github/agents/                  Nine RMS Copilot agent definitions
+  .github/agents/                  Nine RMS specialists and workflow coordinator
+  .github/skills/                  Shared skills, task index, and snapshot catalog
 ```
 
 Research submission and chapter work is implemented in `pages/researcher/`; the matching student URLs remain thin compatibility redirects. Staff permissions use 5 modules with 3 sub-pages each, defined by `rmsPermissionModules()` in `includes/auth.php`.
 
+For shared Copilot/local agent routing and skills, see [Copilot workflow setup](docs/COPILOT_WORKFLOW.md).
+
 ## Main Features
 
-- **Authentication** — login with role tabs and wrong-role guidance, login rate limiting, public registration, email verification links, and role-based approval (students activate immediately; faculty/staff wait for admin approval)
-- **Student workflow** — create/submit research, upload chapters and proposals, track title and chapter review decisions, submit manual milestones, and view adviser feedback
-- **Faculty workflow** — submit research titles and chapters, manage research they own or collaborate on, and submit milestone documents for those projects
-- **Admin tools** — analytics dashboard, user management, research oversight, archive, reports, activity logs, and database backups
-- **Research office staff** — staff dashboard, v3 title and chapter review queue, defense scheduling, milestone verification, revision returns, document verification, and contact-message management
-- **Shared modules** — messaging, notifications, profiles, calendar, typed research review, computed implementation progress, publications, and intellectual-property records
+- **Authentication** — role-aware login, login rate limiting, public registration, email verification links, and role-based approval (students activate immediately; faculty/staff wait for admin approval)
+- **Student workflow** — submit titles, sequential chapters, and a complete manuscript; track authorized review decisions, adviser requests, and existing project history
+- **Faculty workflow** — use the shared submission workflow, manage advising and research records, and prepare institutional documents through the mapping and generation workspace
+- **Admin tools** — analytics, user/research oversight, reports, activity logs, backups, publication classifications, and public research releases
+- **Research office staff** — staff dashboard, authorized title/chapter/final-manuscript review, defense scheduling, legacy milestone verification, revision returns, document verification, and contact-message management
+- **Shared modules** — messaging, notifications, profiles, calendar, typed research review, computed implementation progress, multi-day research activities with audience and attendance management, activity budgets and participant notices, publications, and intellectual-property records
 - **Email notifications** — registration verification, account approval, and contact-form replies via PHPMailer (SMTP or `mail()`)
-- **Public site** — homepage, about, features, contact form, public research archive, and branded error pages
+- **Public site** — homepage, About Us page with research-feature summary and contact form, public research archive, and branded error pages
 - **Premium design language** — role-tinted academic platform with design tokens (`css/tokens.php`), dark sidebar + role accent (Admin orange, Staff teal, Faculty blue, Student purple), emoji icons, 8-point spacing grid, rounded 16–20px cards (see `CLAUDE.md` "AI Design Constitution")
 
 ## Research Workflow (v3)
 
-Title submission and review → chapter sequencing → computed completion → outputs (publications and copyrights).
+Title submission and review → sequential chapter approval → complete-manuscript submission and review → approved final manuscript → completed research and outputs.
 
 The EARIST Research Manual 2015 source is in [`docs/reference/Research-Manual_2015.md`](docs/reference/Research-Manual_2015.md); consult it when adding workflow features.
 
@@ -161,7 +162,7 @@ APP_ENV / APP_DEBUG                     Development or production mode
 - Role-gated access through `includes/auth.php` (`requireRole()`, `requireLogin()`)
 - All state-changing forms (including login/register) use session-bound CSRF tokens
 - Database queries use prepared statements; output is escaped (`rms_escape()`)
-- `.htaccess` protection: `includes/`, `database/`, `config/` blocked; security headers; `.env` protected; `uploads/` blocks PHP execution
+- `.htaccess` protection: `includes/`, `database/`, and `config/` blocked; `.env` protected; direct HTTP access to `uploads/` denied so files are served only through authenticated application routes
 - Login rate limiting and account activity logging (`activity_log` table)
 - Custom 403/404/500 pages with graceful fallback
 
@@ -169,9 +170,9 @@ For production: set `APP_ENV=production`, disable `APP_DEBUG`, configure real SM
 
 ## Project Status
 
-**Completed:** security hardening (`.htaccess`, `.env` migration, CSRF, soft-delete columns), the unified student/faculty title and chapter workflow, role-based admin/staff modules, email verification + notifications, contact-message management, custom error pages, the role-tinted design-token UI layer, milestone upload + verification, defense scheduling, co-researcher team management, and the admin final-approval gate.
+**Implemented areas:** security hardening (`.htaccess`, `.env` configuration, CSRF, upload soft deletes), the unified student/faculty title, chapter, and final-manuscript workflow, role-based admin/staff modules, email verification and notifications, contact-message management, custom error pages, milestone compatibility routes, defense scheduling, co-researcher team management, and authorized review decisions. See [the system specification](docs/rms-spec.md) for current workflow boundaries.
 
-**In progress / known gaps:** the EARIST Research Manual 2015 ORS Consolidation stage, the Final Bound Report upload slot, and the admin notification on new research submission. Tracked in `TODO.md`.
+**Product scope:** Research Management System features and compatibility workflows are described in [the system specification](docs/rms-spec.md). The ORS Consolidation stage from the 2015 Manual is not part of the current adviser-approved title-and-chapter workflow. Consult the dated [progress audit](docs/progress/PROGRESS_AUDIT.md) and [priority plan](docs/planning/PRIORITY_PLAN.md) as historical context, not as a live task list.
 
 See `docs/progress/PROGRESS_AUDIT.md` for the latest audit and `docs/planning/PRIORITY_PLAN.md` for the roadmap.
 
@@ -180,8 +181,11 @@ See `docs/progress/PROGRESS_AUDIT.md` for the latest audit and `docs/planning/PR
 - `docs/rms-spec.md` — system specification
 - `docs/reference/Research-Manual_2015.md` — EARIST workflow reference
 - `docs/EMAIL_SYSTEM.md` — email/verification setup guide
+- `docs/PUBLICATION_ARCHIVE_IMPLEMENTATION.md` — publication archive rules and current implementation notes
+- `docs/FACULTY_RESEARCH_RECORDS.md` — faculty research record behavior
+- `docs/EARIST_DOCUMENT_MAPPING.md` and `docs/EARIST_DOCUMENT_GENERATION.md` — institutional document workflows
 - `PROJECT_STRUCTURE.md` — detailed file map
-- `TODO.md` — current task list
+- `docs/planning/PRIORITY_PLAN.md` — dated planning snapshot; confirm items against current source before scheduling work
 - `CLAUDE.md` — conventions, architecture, and the AI design system
 
 ## Troubleshooting
@@ -203,6 +207,6 @@ See `docs/progress/PROGRESS_AUDIT.md` for the latest audit and `docs/planning/PR
 - [ ] Visit `http://localhost/rms/`
 - [ ] Log in with each demo role
 - [ ] Test research submission and chapter upload
-- [ ] Test faculty review actions
+- [ ] Test review actions with an administrator or explicitly authorized research staff account
 - [ ] Register a test account and follow the email verification flow
 - [ ] Review `.env` and security settings before production use

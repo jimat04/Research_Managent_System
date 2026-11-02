@@ -4,6 +4,8 @@
 **Scope:** RMS Contact Management System
 
 > Historical test record: this report documents a local run on the date above. It is not evidence of the current database contents or a production-readiness assessment. Revalidate the current handlers and role shells before relying on it.
+>
+> The public contact form has since moved from `public/contact.php` to `public/about-us.php#contact-us`; the historical test results above apply to the earlier route.
 
 ---
 

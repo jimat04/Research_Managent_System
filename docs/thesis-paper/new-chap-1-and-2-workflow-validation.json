@@ -1,0 +1,26 @@
+{
+  "source": "new-chap-1-and-2.docx",
+  "output": "new-chap-1-and-2-workflow-corrected.docx",
+  "source_sha256": "dc69106dcb955a066a63443983a763e3f08fb06a12779da4a2538e0001f678ce",
+  "output_sha256": "68c3bfee3225a2b36837b14f2185fdbdd5abd1a8944c6abb76cc8b221c0121df",
+  "source_unchanged": true,
+  "edited_locations": 21,
+  "body_paragraphs_edited": 16,
+  "table_paragraphs_edited": 5,
+  "all_other_document_xml_unchanged": true,
+  "paragraph_properties_preserved": true,
+  "surrounding_merged_passages_preserved": true,
+  "front_matter_preserved_including_thesis_adviser": true,
+  "bibliography_preserved": true,
+  "reference_count": 12,
+  "publication_year_range": [
+    2019,
+    2025
+  ],
+  "unchanged_other_package_parts": 43,
+  "zip_crc_check": "passed",
+  "xml_parse_check": "passed",
+  "adviser_role_wording_in_chapters": "removed",
+  "application_or_database_changes": "none",
+  "rendered_word_layout": "not verified; no Word automation launched"
+}

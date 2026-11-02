@@ -2,65 +2,31 @@
 /**
  * Admin — System Settings & Status
  *
- * Read-only environment, migration, and storage diagnostics.
+ * Database-backed settings, read-only runtime diagnostics and explicit Admin
+ * private-storage checks. Diagnostic branches never save database settings.
  */
 
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
+require_once __DIR__ . '/../../includes/earist-document-prerequisites.php';
+require_once __DIR__ . '/../../includes/earist-storage-diagnostic.php';
 
 requireRole('admin');
 
 $user = getCurrentUser();
+header('Cache-Control: private, no-store, max-age=0');
+$earist_prerequisites = null;
+$earist_scratch_result = null;
+$earist_scratch_error = '';
+$earist_generated_result = null;
+$earist_generated_error = '';
+if ($user && $user['role'] === 'admin' && $user['status'] === 'active') {
+    $earist_prerequisites = earistDocumentPrerequisites();
+}
 
 function aset_escape($value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
-}
-
-function aset_table_exists(mysqli $conn, string $table): bool {
-    $allowed_tables = [
-        'users',
-        'research_projects',
-        'project_reviews',
-        'comments',
-        'project_advisers_history',
-    ];
-    if (!in_array($table, $allowed_tables, true)) {
-        return false;
-    }
-
-    $escaped_table = $conn->real_escape_string($table);
-    $stmt = $conn->prepare("SHOW TABLES LIKE '$escaped_table'");
-    if (!$stmt || !$stmt->execute()) {
-        if ($stmt) { $stmt->close(); }
-        return false;
-    }
-    $exists = $stmt->get_result()->num_rows > 0;
-    $stmt->close();
-    return $exists;
-}
-
-function aset_column_info(mysqli $conn, string $table, string $column): ?array {
-    $allowed_columns = [
-        'users'            => ['office', 'email_verified'],
-        'research_projects' => ['status'],
-        'project_reviews'   => ['capability_score'],
-        'comments'          => ['project_id'],
-    ];
-    if (!isset($allowed_columns[$table]) || !in_array($column, $allowed_columns[$table], true)) {
-        return null;
-    }
-
-    $escaped_table = str_replace('`', '``', $table);
-    $escaped_column = $conn->real_escape_string($column);
-    $stmt = $conn->prepare("SHOW COLUMNS FROM `$escaped_table` LIKE '$escaped_column'");
-    if (!$stmt || !$stmt->execute()) {
-        if ($stmt) { $stmt->close(); }
-        return null;
-    }
-    $row = $stmt->get_result()->fetch_assoc() ?: null;
-    $stmt->close();
-    return $row;
 }
 
 function aset_format_bytes(int $bytes): string {
@@ -91,59 +57,69 @@ $upload_max_filesize = ini_get('upload_max_filesize');
 $post_max_size = ini_get('post_max_size');
 $file_uploads_enabled = filter_var(ini_get('file_uploads'), FILTER_VALIDATE_BOOLEAN);
 
-// Structural migration probes. Migration 005 does not exist in this project;
-// migration 010 is data-only and is noted separately below.
-$users_office = aset_column_info($conn, 'users', 'office');
-$users_email_verified = aset_column_info($conn, 'users', 'email_verified');
-$project_status = aset_column_info($conn, 'research_projects', 'status');
-$project_reviews_exists = aset_table_exists($conn, 'project_reviews');
-$capability_score = $project_reviews_exists
-    ? aset_column_info($conn, 'project_reviews', 'capability_score')
-    : null;
-$comments_project_id = aset_column_info($conn, 'comments', 'project_id');
-$adviser_history_exists = aset_table_exists($conn, 'project_advisers_history');
+// Report the runner's recorded state instead of inferring migration status from
+// a small set of schema artifacts.
+$migration_directory = __DIR__ . '/../../database/migrations';
+$migration_paths = glob($migration_directory . DIRECTORY_SEPARATOR . '*.sql') ?: [];
+$migration_ledger_available = false;
+$migration_ledger = [];
+$ledger_check = $conn->prepare(
+    "SELECT COUNT(*) FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'schema_migrations'"
+);
+if (!$ledger_check || !$ledger_check->execute()) {
+    if ($ledger_check) { $ledger_check->close(); }
+    throw new RuntimeException('Unable to check the migration ledger.');
+}
+$migration_ledger_available = (int) $ledger_check->get_result()->fetch_row()[0] > 0;
+$ledger_check->close();
 
-$migration_rows = [
-    [
-        'file' => '002_enhance_users_for_registration.sql',
-        'adds' => 'Office and role-specific registration fields on users',
-        'applied' => $users_office !== null,
-    ],
-    [
-        'file' => '003_add_email_verification.sql',
-        'adds' => 'Email verification fields on users',
-        'applied' => $users_email_verified !== null,
-    ],
-    [
-        'file' => '004_extend_status_enums.sql',
-        'adds' => 'Full project lifecycle status values, including under_erec_review',
-        'applied' => $project_status !== null
-            && str_contains((string) ($project_status['Type'] ?? ''), "'under_erec_review'"),
-    ],
-    [
-        'file' => '006_create_project_reviews.sql',
-        'adds' => 'project_reviews table for CREC/EREC assignments and scoring',
-        'applied' => $project_reviews_exists,
-    ],
-    [
-        'file' => '007_form3_full_criteria.sql',
-        'adds' => 'capability_score criterion on project_reviews',
-        'applied' => $capability_score !== null,
-    ],
-    [
-        'file' => '008_comments_project_feedback.sql',
-        'adds' => 'project_id for project-level comments',
-        'applied' => $comments_project_id !== null,
-    ],
-    [
-        'file' => '009_adviser_history.sql',
-        'adds' => 'project_advisers_history table',
-        'applied' => $adviser_history_exists,
-    ],
-];
+if ($migration_ledger_available) {
+    $ledger_result = $conn->query(
+        'SELECT filename, checksum, status, verification_method, applied_at
+         FROM schema_migrations'
+    );
+    if (!$ledger_result) {
+        throw new RuntimeException('Unable to read the migration ledger: ' . $conn->error);
+    }
+    while ($ledger_row = $ledger_result->fetch_assoc()) {
+        $migration_ledger[(string) $ledger_row['filename']] = $ledger_row;
+    }
+    $ledger_result->free();
+}
+
+$migration_rows = [];
+foreach ($migration_paths as $migration_path) {
+    $filename = basename($migration_path);
+    $record = $migration_ledger[$filename] ?? null;
+    $state = 'Not tracked';
+    if ($record) {
+        if ($record['status'] === 'failed') {
+            $state = 'Failed';
+        } else {
+            $current_checksum = hash_file('sha256', $migration_path);
+            if ($current_checksum === false) {
+                throw new RuntimeException('Unable to verify migration checksum for ' . $filename . '.');
+            }
+            if (!hash_equals((string) $record['checksum'], $current_checksum)) {
+                $state = 'Checksum mismatch';
+            } elseif ($record['status'] === 'applied') {
+                $state = 'Applied';
+            } else {
+                $state = 'Unknown';
+            }
+        }
+    }
+    $migration_rows[] = [
+        'file' => $filename,
+        'state' => $state,
+        'method' => (string) ($record['verification_method'] ?? ''),
+        'date' => (string) ($record['applied_at'] ?? ''),
+    ];
+}
 
 // Storage diagnostics. Only configured subfolders that currently exist are shown.
-$upload_root = __DIR__ . '/../../uploads';
+$upload_root = UPLOADS_DIR;
 $upload_folders = ['proposals', 'chapters', 'defense', 'manuscripts', 'milestones', 'other'];
 $storage_rows = [];
 $total_files = 0;
@@ -188,40 +164,110 @@ foreach ($upload_folders as $folder) {
 
 $backup_script_exists = is_file(__DIR__ . '/../../scripts/backup-database.sh');
 $applied_migration_count = count(array_filter($migration_rows, static function (array $migration): bool {
-    return $migration['applied'] === true;
+    return $migration['state'] === 'Applied';
 }));
 $migration_count = count($migration_rows);
 $pending_migrations = array_values(array_filter($migration_rows, static function (array $migration): bool {
-    return $migration['applied'] !== true;
+    return $migration['state'] !== 'Applied';
 }));
 $storage_folder_count = count($storage_rows);
 $diagnostics_checked_at = new DateTimeImmutable();
+
+$settings_error = $_SESSION['admin_settings_error'] ?? '';
+$settings_success = $_SESSION['admin_settings_success'] ?? '';
+unset($_SESSION['admin_settings_error'], $_SESSION['admin_settings_success']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $storageDiagnosticTarget = match ($_POST['action'] ?? '') {
+        'run_earist_scratch_test' => 'scratch',
+        'run_earist_generated_test' => 'generated',
+        default => null,
+    };
+    if ($storageDiagnosticTarget !== null) {
+        $isGeneratedDiagnostic = $storageDiagnosticTarget === 'generated';
+        $diagnosticErrorKey = $isGeneratedDiagnostic ? 'earist_generated_error' : 'earist_scratch_error';
+        $diagnosticResultKey = $isGeneratedDiagnostic ? 'earist_generated_result' : 'earist_scratch_result';
+        if (!$user || $user['role'] !== 'admin' || $user['status'] !== 'active') {
+            http_response_code(403);
+            exit('Admin access required.');
+        }
+        if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+            http_response_code(403);
+            ${$diagnosticErrorKey} = 'Your form expired. Reload this page before running the private-storage test.';
+        } elseif (array_diff(array_keys($_POST), ['action', 'csrf_token'])) {
+            http_response_code(400);
+            ${$diagnosticErrorKey} = 'Unsupported diagnostic fields were rejected. No test ran.';
+        } else {
+            try {
+                ${$diagnosticResultKey} = earistStorageDiagnosticForAdmin($storageDiagnosticTarget);
+            } catch (DomainException $exception) {
+                http_response_code(in_array($exception->getCode(), [400, 403], true) ? $exception->getCode() : 400);
+                ${$diagnosticErrorKey} = $exception->getMessage();
+            } catch (Throwable $exception) {
+                http_response_code(503);
+                ${$diagnosticErrorKey} = 'The private-storage diagnostic is unavailable. No settings or research data were saved.';
+            }
+        }
+    } elseif (($_POST['action'] ?? '') !== 'save_system_settings') {
+        http_response_code(400);
+        exit('Invalid settings request.');
+    } elseif (!isCsrfTokenValid($_POST['csrf_token'] ?? '')) {
+        $settings_error = 'Your session token expired. Reload the page and try again.';
+    } else {
+        try {
+            $setting_values = [];
+            foreach (array_keys(rmsSystemSettingDefaults()) as $setting_key) {
+                if (!array_key_exists($setting_key, $_POST)) {
+                    throw new InvalidArgumentException('Submit every setting before saving.');
+                }
+                $setting_values[$setting_key] = $_POST[$setting_key];
+            }
+            $changed_settings = rmsUpdateSystemSettings($setting_values, (int) $user['user_id']);
+            $_SESSION['admin_settings_success'] = $changed_settings
+                ? 'System settings saved. Updated: ' . implode(', ', $changed_settings) . '.'
+                : 'No settings changed.';
+            header('Location: ' . SITE_URL . 'pages/admin/admin-settings.php');
+            exit();
+        } catch (InvalidArgumentException $exception) {
+            $settings_error = $exception->getMessage();
+        } catch (Throwable $exception) {
+            error_log('System settings save failed: ' . $exception->getMessage());
+            $settings_error = 'Settings could not be saved. Confirm the settings migration and audit log are available, then try again.';
+        }
+    }
+}
+
+$system_settings_available = rmsSystemSettingsAvailable();
+$settings_values = rmsSystemSettings();
 
 renderAdminShell(
     $user,
     'admin-settings',
     'System Settings & Status',
-    'Read-only diagnostics for the RMS environment, database migrations, and uploaded-file storage.'
+    'Manage application policy and review live environment, migration, and upload-storage diagnostics.'
 );
 ?>
 
 <style>
-  html{scroll-behavior:smooth}.settings-workspace{--settings-ink:#192235;--settings-gold:#d2a248;--settings-muted:#687386;--settings-line:#dfe5ed;max-width:1480px;margin:0 auto;color:var(--settings-ink)}
-  .settings-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.18fr) minmax(310px,.82fr);gap:50px;min-height:344px;padding:54px 56px 68px;overflow:hidden;border-radius:24px 24px 8px 8px;background:radial-gradient(circle at 82% 15%,rgba(210,162,72,.21),transparent 29%),linear-gradient(135deg,#172033,#202e46 66%,#29364c);color:#fff;box-shadow:0 24px 58px rgba(24,34,53,.16)}.settings-hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.15;background-image:repeating-linear-gradient(90deg,transparent 0,transparent 67px,rgba(255,255,255,.1) 68px);pointer-events:none}.settings-kicker,.health-code,.metric-index,.card-index,.read-only-badge{font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.15em;text-transform:uppercase}.settings-kicker{margin-bottom:18px;color:#e9bf6e}.settings-hero h2{max-width:780px;margin:0;font-size:clamp(40px,4.6vw,66px);line-height:.98;letter-spacing:-.055em;text-wrap:balance}.settings-hero-copy>p{max-width:640px;margin:24px 0 0;color:#bdc8d8;font-size:15px;line-height:1.75;text-wrap:pretty}.settings-signal{display:inline-flex;align-items:center;gap:9px;margin-top:25px;color:#aeb9ca;font-size:12px}.settings-signal::before{content:'';width:7px;height:7px;border-radius:50%;background:#70bd91;box-shadow:0 0 0 5px rgba(112,189,145,.11)}
-  .health-readout{align-self:end;display:grid;gap:2px}.health-row{display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:12px;padding:16px 18px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06)}.health-row:first-child{border-radius:14px 14px 5px 5px}.health-row:last-child{border-radius:5px 5px 14px 14px}.health-code{color:#e9bf6e}.health-label{color:#d4dce8;font-size:12px}.health-value{color:#fff;font-size:20px;font-weight:720;letter-spacing:-.03em;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .settings-metrics{position:relative;z-index:2;display:grid;grid-template-columns:1.15fr repeat(3,1fr);gap:2px;margin:-24px 22px 0}.settings-metric{position:relative;min-height:136px;padding:23px 24px 20px;overflow:hidden;border:1px solid #e2e7ee;background:#fff}.settings-metric:first-child{border-radius:16px 5px 5px 16px;background:#fcfaf5}.settings-metric:last-child{border-radius:5px 16px 16px 5px}.settings-metric::after{content:'';position:absolute;right:-20px;bottom:-32px;width:76px;height:76px;border:17px solid var(--metric-accent,#64748b);border-radius:50%;opacity:.075}.metric-runtime{--metric-accent:#987027}.metric-database{--metric-accent:#315b8c}.metric-migrations{--metric-accent:#705487}.metric-storage{--metric-accent:#347451}.metric-index{margin-bottom:22px;color:var(--metric-accent)}.metric-value{font-size:29px;font-weight:720;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.metric-label{margin-top:8px;color:var(--settings-muted);font-size:13px;font-weight:620}
-  .settings-grid{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);gap:24px;margin-top:38px;align-items:start}.settings-card,.managed-section{overflow:hidden;border:1px solid var(--settings-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.06)}.migration-card{grid-column:2;grid-row:1 / span 2}.managed-section{grid-column:1/-1}.settings-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:27px 28px 22px;border-bottom:1px solid #edf0f4}.card-index{margin-bottom:9px;color:#987027}.settings-card-header h2,.managed-section h2{margin:0;color:#1c2639;font-size:24px;line-height:1.13;letter-spacing:-.03em}.settings-card-header p,.managed-section>p{max-width:620px;margin:9px 0 0;color:var(--settings-muted);font-size:13px;line-height:1.6}.read-only-badge{padding:6px 8px;border:1px solid #e2d4b8;border-radius:5px;background:#fbf6eb;color:#866224;white-space:nowrap}
+  html{scroll-behavior:smooth}.settings-workspace{--settings-ink:#192235;--settings-orange:#f57c00;--settings-muted:#687386;--settings-line:#dfe5ed;max-width:1480px;margin:0 auto;color:var(--settings-ink)}
+  .settings-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.18fr) minmax(310px,.82fr);gap:50px;min-height:344px;padding:54px 56px 68px;overflow:hidden;border-radius:24px 24px 8px 8px;background:radial-gradient(circle at 82% 15%,rgba(245,124,0,.18),transparent 29%),linear-gradient(135deg,#172033,#202e46 66%,#29364c);color:#fff;box-shadow:0 24px 58px rgba(24,34,53,.16)}.settings-hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.15;background-image:repeating-linear-gradient(90deg,transparent 0,transparent 67px,rgba(255,255,255,.1) 68px);pointer-events:none}.settings-kicker,.health-code,.metric-index,.card-index,.read-only-badge{font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.15em;text-transform:uppercase}.settings-kicker{margin-bottom:18px;color:#ffb45e}.settings-hero h2{max-width:780px;margin:0;font-size:clamp(40px,4.6vw,66px);line-height:.98;letter-spacing:-.055em;text-wrap:balance}.settings-hero-copy>p{max-width:640px;margin:24px 0 0;color:#bdc8d8;font-size:15px;line-height:1.75;text-wrap:pretty}.settings-signal{display:inline-flex;align-items:center;gap:9px;margin-top:25px;color:#aeb9ca;font-size:12px}.settings-signal::before{content:'';width:7px;height:7px;border-radius:50%;background:#70bd91;box-shadow:0 0 0 5px rgba(112,189,145,.11)}
+  .health-readout{align-self:end;display:grid;gap:2px}.health-row{display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:12px;padding:16px 18px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06)}.health-row:first-child{border-radius:14px 14px 5px 5px}.health-row:last-child{border-radius:5px 5px 14px 14px}.health-code{color:#ffb45e}.health-label{color:#d4dce8;font-size:12px}.health-value{color:#fff;font-size:20px;font-weight:720;letter-spacing:-.03em;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .settings-metrics{position:relative;z-index:2;display:grid;grid-template-columns:1.15fr repeat(3,1fr);gap:2px;margin:-24px 22px 0}.settings-metric{position:relative;min-height:136px;padding:23px 24px 20px;overflow:hidden;border:1px solid #e2e7ee;background:#fff}.settings-metric:first-child{border-radius:16px 5px 5px 16px;background:#fffaf5}.settings-metric:last-child{border-radius:5px 16px 16px 5px}.settings-metric::after{content:'';position:absolute;right:-20px;bottom:-32px;width:76px;height:76px;border:17px solid var(--metric-accent,#64748b);border-radius:50%;opacity:.075}.metric-runtime{--metric-accent:#c96a00}.metric-database{--metric-accent:#315b8c}.metric-migrations{--metric-accent:#705487}.metric-storage{--metric-accent:#347451}.metric-index{margin-bottom:22px;color:var(--metric-accent)}.metric-value{font-size:29px;font-weight:720;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.metric-label{margin-top:8px;color:var(--settings-muted);font-size:13px;font-weight:620}
+  .settings-grid{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);gap:24px;margin-top:38px;align-items:start}.settings-card,.managed-section{overflow:hidden;border:1px solid var(--settings-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.06)}.migration-card{grid-column:2;grid-row:1 / span 2}.managed-section{grid-column:1/-1}.settings-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:27px 28px 22px;border-bottom:1px solid #edf0f4}.card-index{margin-bottom:9px;color:#c96a00}.settings-card-header h2,.managed-section h2{margin:0;color:#1c2639;font-size:24px;line-height:1.13;letter-spacing:-.03em}.settings-card-header p,.managed-section>p{max-width:620px;margin:9px 0 0;color:var(--settings-muted);font-size:13px;line-height:1.6}.read-only-badge{padding:6px 8px;border:1px solid #e2d4b8;border-radius:5px;background:#fbf6eb;color:#866224;white-space:nowrap}
   .environment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;padding:1px;background:#edf0f4}.environment-item{min-height:112px;padding:18px 20px;background:#fff}.environment-label{margin-bottom:10px;color:#8a94a3;font:700 9px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em;text-transform:uppercase}.environment-value{color:#263247;font-size:14px;font-weight:650;line-height:1.55;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.status-dot{display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;vertical-align:1px}.status-dot.on{background:#4b9b70;box-shadow:0 0 0 4px rgba(75,155,112,.1)}.status-dot.off{background:#b95b5b;box-shadow:0 0 0 4px rgba(185,91,91,.1)}
-  .table-wrap{overflow-x:auto}.settings-table{width:100%;border-collapse:collapse}.settings-table thead{background:#fafbfc}.settings-table th{padding:12px 17px;color:#7a8494;font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em;text-align:left;text-transform:uppercase;white-space:nowrap}.settings-table th:first-child,.settings-table td:first-child{padding-left:28px}.settings-table th:last-child,.settings-table td:last-child{padding-right:28px}.settings-table td{padding:15px 17px;border-top:1px solid #edf0f4;color:#465368;font-size:12px;line-height:1.5;vertical-align:middle}.settings-table tbody tr{transition:background .2s ease}.settings-table tbody tr:hover{background:#fbfaf7}.file-name{color:#263247;font:650 10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.migration-status{display:inline-flex;padding:5px 8px;border:1px solid;border-radius:5px;font-size:9px;font-weight:750;letter-spacing:.055em;white-space:nowrap;text-transform:uppercase}.migration-status.applied{border-color:#cfe4d7;background:#f0f7f2;color:#2f704d}.migration-status.missing{border-color:#e8caca;background:#fff4f4;color:#9b4141}.table-total td{background:#f7f8fa;color:#202a3d;font-weight:720}.settings-note{margin:0;padding:15px 28px;border-top:1px solid #e9edf2;background:#fbf7ed;color:#795b27;font-size:11px;line-height:1.55}.settings-note strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-  .managed-section{padding:27px 28px 29px}.managed-list{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:22px 0 0;padding:0;list-style:none}.managed-list li{min-height:112px;padding:18px;background:#f5f7fa;color:#556176;font-size:12px;line-height:1.55}.managed-list li:first-child{border-radius:10px 4px 4px 10px}.managed-list li:last-child{border-radius:4px 10px 10px 4px}.managed-list strong{display:block;margin-bottom:6px;color:#263247;font-size:13px}.managed-list a{color:#8a6528;font-weight:720;text-decoration:none}.managed-list a:hover{text-decoration:underline}.managed-list a:focus-visible{outline:3px solid rgba(210,162,72,.25);outline-offset:3px;border-radius:2px}.managed-list code{color:#263247;font-weight:700}
+  .table-wrap{overflow-x:auto}.settings-table{width:100%;border-collapse:collapse}.settings-table thead{background:#fafbfc}.settings-table th{padding:12px 17px;color:#7a8494;font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em;text-align:left;text-transform:uppercase;white-space:nowrap}.settings-table th:first-child,.settings-table td:first-child{padding-left:28px}.settings-table th:last-child,.settings-table td:last-child{padding-right:28px}.settings-table td{padding:15px 17px;border-top:1px solid #edf0f4;color:#465368;font-size:12px;line-height:1.5;vertical-align:middle}.settings-table tbody tr{transition:background .2s ease}.settings-table tbody tr:hover{background:#fbfaf7}.file-name{color:#263247;font:650 10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.migration-status{display:inline-flex;padding:5px 8px;border:1px solid;border-radius:5px;font-size:9px;font-weight:750;letter-spacing:.055em;white-space:nowrap;text-transform:uppercase}.migration-status.applied{border-color:#cfe4d7;background:#f0f7f2;color:#2f704d}.migration-status.missing{border-color:#e8caca;background:#fff4f4;color:#9b4141}.table-total td{background:#f7f8fa;color:#202a3d;font-weight:720}.settings-note{margin:0;padding:15px 28px;border-top:1px solid #e9edf2;background:#fff7ed;color:#80500c;font-size:11px;line-height:1.55}.settings-note strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .managed-section{padding:27px 28px 29px}.managed-list{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:22px 0 0;padding:0;list-style:none}.managed-list li{min-height:112px;padding:18px;background:#f5f7fa;color:#556176;font-size:12px;line-height:1.55}.managed-list li:first-child{border-radius:10px 4px 4px 10px}.managed-list li:last-child{border-radius:4px 10px 10px 4px}.managed-list strong{display:block;margin-bottom:6px;color:#263247;font-size:13px}.managed-list a{color:#c96a00;font-weight:720;text-decoration:none}.managed-list a:hover{text-decoration:underline}.managed-list a:focus-visible{outline:3px solid rgba(245,124,0,.25);outline-offset:3px;border-radius:2px}.managed-list code{color:#263247;font-weight:700}
   @media(max-width:1100px){.settings-hero{grid-template-columns:1fr;gap:30px}.health-readout{grid-template-columns:repeat(3,1fr)}.health-row{grid-template-columns:32px 1fr}.health-value{grid-column:2}.settings-grid{grid-template-columns:1fr}.migration-card,.managed-section{grid-column:auto;grid-row:auto}}
   @media(max-width:760px){.settings-hero{min-height:0;padding:31px 24px 51px;border-radius:18px 18px 7px 7px}.settings-hero h2{font-size:40px}.health-readout{grid-template-columns:1fr}.health-row{grid-template-columns:34px 1fr auto}.health-value{grid-column:auto}.settings-metrics{grid-template-columns:repeat(4,minmax(150px,1fr));margin:-18px 12px 0;overflow-x:auto}.settings-metric{min-width:150px}.settings-grid{margin-top:28px}.settings-card-header,.managed-section{padding:23px 20px 20px}.environment-grid{grid-template-columns:1fr}.managed-list{grid-template-columns:1fr}.managed-list li:first-child,.managed-list li:last-child{border-radius:8px}.table-wrap{overflow:visible}.settings-table thead{display:none}.settings-table tbody{display:grid;gap:12px;padding:16px;background:#f6f8fa}.settings-table tbody tr{display:block;overflow:hidden;border:1px solid #e0e5eb;border-radius:12px;background:#fff}.settings-table tbody td{display:grid;grid-template-columns:94px minmax(0,1fr);width:100%;padding:11px 14px;border-top:1px solid #edf0f4;text-align:left;overflow-wrap:anywhere}.settings-table tbody td:first-child{padding:15px 14px;border-top:0}.settings-table tbody td:last-child{padding:13px 14px}.settings-table tbody td::before{content:attr(data-label);margin:2px 11px 0 0;color:#8a94a3;font:700 9px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase}.settings-table td[colspan]::before{display:none}.settings-note{padding:15px 20px}}
   @media(prefers-reduced-motion:reduce){.settings-table tbody tr{transition:none}}
   .settings-signal{flex-wrap:wrap;row-gap:6px}.settings-signal time{color:#65738b;font-size:11px}
-  .settings-section-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:22px 0 18px;padding:12px 16px;border:1px solid #e2e7ee;border-radius:10px;background:#fff}.settings-section-nav span{margin-right:4px;color:#64748b;font-size:12px;font-weight:650}.settings-section-nav a{padding:7px 10px;border-radius:7px;color:#34445f;font-size:12px;font-weight:650;text-decoration:none}.settings-section-nav a:hover{background:#f2f5fa;color:#1d4ed8}.settings-section-nav a:focus-visible,.migration-alert a:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
-  .migration-alert{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:0 0 24px;padding:17px 20px;border:1px solid #f1d7a8;border-left:4px solid #d97706;border-radius:10px;background:#fff9ed;color:#654b20}.migration-alert strong{display:block;margin-bottom:4px;color:#7c4a03;font-size:14px}.migration-alert p{margin:0;color:#725b36;font-size:12px;line-height:1.6}.migration-alert a{flex:0 0 auto;color:#8b5e13;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+  .settings-section-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:22px 0 18px;padding:12px 16px;border:1px solid #e2e7ee;border-radius:10px;background:#fff}.settings-section-nav span{margin-right:4px;color:#64748b;font-size:12px;font-weight:650}.settings-section-nav a{padding:7px 10px;border-radius:7px;color:#34445f;font-size:12px;font-weight:650;text-decoration:none}.settings-section-nav a:hover{background:#f2f5fa;color:#c96a00}.settings-section-nav a:focus-visible,.migration-alert a:focus-visible{outline:2px solid #c96a00;outline-offset:2px}
+  .settings-confirm-dialog{position:fixed;inset:0;margin:auto;width:min(460px,calc(100% - 40px));padding:0;border:1px solid #e2e7ee;border-top:4px solid #f57c00;border-radius:16px;background:#fff;color:#192235;box-shadow:0 24px 70px rgba(17,24,39,.25)}.settings-confirm-dialog::backdrop{background:rgba(17,24,39,.54);backdrop-filter:blur(2px)}.settings-confirm-content{padding:26px 26px 22px}.settings-confirm-kicker{margin:0 0 8px;color:#a54f00;font:700 10px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.13em;text-transform:uppercase}.settings-confirm-dialog h3{margin:0;color:#192235;font-size:21px;line-height:1.25;letter-spacing:-.025em}.settings-confirm-dialog p:not(.settings-confirm-kicker){margin:11px 0 0;color:#596579;font-size:13px;line-height:1.65}.settings-confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:23px}.settings-confirm-actions button{min-height:40px;padding:9px 15px;border:1px solid #cfd7e2;border-radius:8px;background:#fff;color:#34445f;font:inherit;font-size:13px;font-weight:650;cursor:pointer}.settings-confirm-actions button:hover{background:#f5f7fa}.settings-confirm-actions button:focus-visible{outline:2px solid #f57c00;outline-offset:3px}.settings-confirm-actions .settings-confirm-submit{border-color:#f57c00;background:#f57c00;color:#fff}.settings-confirm-actions .settings-confirm-submit:hover{border-color:#ea580c;background:#ea580c}
+  @media(max-width:480px){.settings-confirm-content{padding:22px 20px 18px}.settings-confirm-actions{flex-direction:column-reverse}.settings-confirm-actions button{width:100%}}
+  .migration-alert{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:0 0 24px;padding:17px 20px;border:1px solid #f5c98f;border-left:4px solid #f57c00;border-radius:10px;background:#fff7ed;color:#75430a}.migration-alert strong{display:block;margin-bottom:4px;color:#8a4700;font-size:14px}.migration-alert p{margin:0;color:#79552e;font-size:12px;line-height:1.6}.migration-alert a{flex:0 0 auto;color:#a54f00;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
   .settings-note p+p{margin-top:8px}
   .settings-section{scroll-margin-top:24px}.storage-card{grid-column:1/-1}
+  .settings-form{display:grid;gap:24px;margin-top:22px}.settings-form-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:18px;border:1px solid #e5e9ef;border-radius:12px;background:#fbfcfe}.settings-form-group h3{grid-column:1/-1;margin:0;color:#1c2639;font-size:16px}.settings-field{display:grid;gap:7px}.settings-field.full{grid-column:1/-1}.settings-field label{color:#34445f;font-size:12px;font-weight:700}.settings-field input,.settings-field textarea{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #cfd7e2;border-radius:8px;background:#fff;color:#192235;font:inherit}.settings-field input:focus-visible,.settings-field textarea:focus-visible{outline:2px solid #f57c00;outline-offset:2px}.settings-field small{color:#687386;font-size:11px;line-height:1.5}.settings-checkbox{display:flex;align-items:center;gap:9px;color:#34445f;font-size:13px;font-weight:650}.settings-checkbox input{width:18px;height:18px;accent-color:#f57c00}.settings-submit{justify-self:start;padding:11px 18px;border:0;border-radius:9px;background:#f57c00;color:#fff;font:inherit;font-size:13px;font-weight:650;line-height:1.2;cursor:pointer}.settings-submit:hover{background:#ea580c}.settings-submit:focus-visible{outline:2px solid #f57c00;outline-offset:3px}.settings-submit:disabled{cursor:not-allowed;opacity:.6}.settings-flash{margin:18px 0 0;padding:12px 15px;border:1px solid;border-radius:9px;font-size:13px;line-height:1.5}.settings-flash.error{border-color:#efbaba;background:#fff4f4;color:#9b3030}.settings-flash.success{border-color:#b8dfc4;background:#f0f8f2;color:#24623b}
   @media(max-width:600px){.migration-alert{align-items:flex-start;flex-direction:column}}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
@@ -229,9 +275,9 @@ renderAdminShell(
 <div class="settings-workspace">
   <section class="settings-hero" aria-labelledby="settings-hero-title">
     <div class="settings-hero-copy">
-      <div class="settings-kicker">System observatory &middot; Read-only diagnostics</div>
-      <h2 id="settings-hero-title">Know the system before it needs attention.</h2>
-      <p>Inspect the RMS runtime, database structure, and uploaded-file footprint from one operational view. Configuration values remain protected and nothing on this page can alter the system.</p>
+      <div class="settings-kicker">System observatory &middot; Admin controls</div>
+      <h2 id="settings-hero-title">System settings &amp; status.</h2>
+      <p>Manage application policy while keeping deployment secrets outside the web interface. Diagnostics reflect the connected runtime, migration ledger, and uploaded-file footprint.</p>
       <div class="settings-signal">
         <span>Live diagnostics connected</span>
         <time datetime="<?php echo aset_escape($diagnostics_checked_at->format(DateTimeInterface::ATOM)); ?>">Last checked <?php echo aset_escape($diagnostics_checked_at->format('M j, Y g:i:s A T')); ?></time>
@@ -254,22 +300,18 @@ renderAdminShell(
   <nav class="settings-section-nav" aria-label="Settings page sections">
     <span>Jump to</span>
     <a href="#environment">Environment</a>
+    <a href="#settings">Application settings</a>
     <a href="#migrations">Database migrations</a>
     <a href="#storage">Storage</a>
-    <a href="#ownership">Settings ownership</a>
   </nav>
 
-  <?php if (!empty($pending_migrations)): ?>
+  <?php if (!$migration_ledger_available || !empty($pending_migrations)): ?>
     <aside class="migration-alert" aria-labelledby="migration-alert-title">
       <div>
-        <strong id="migration-alert-title"><?php echo number_format(count($pending_migrations)); ?> migration check<?php echo count($pending_migrations) === 1 ? '' : 's'; ?> not detected</strong>
-        <p>A missing schema marker is informational; this page does not determine whether an upgrade applies to this installation.
-          <?php if (in_array('003_add_email_verification.sql', array_column($pending_migrations, 'file'), true)): ?>
-            Email-verification migration 003 is intentionally unapplied because that feature is not implemented; no action is needed for current RMS functionality.
-          <?php endif; ?>
-        </p>
+        <strong id="migration-alert-title"><?php if (!$migration_ledger_available): ?>Migration ledger is unavailable<?php else: ?><?php echo number_format(count($pending_migrations)); ?> migration record<?php echo count($pending_migrations) === 1 ? '' : 's'; ?> needs review<?php endif; ?></strong>
+        <p><?php if (!$migration_ledger_available): ?>This database has no <code>schema_migrations</code> table, so applied migration state cannot be reported.<?php else: ?>Rows marked Failed, Checksum mismatch, or Not tracked need review in the migration tool. This page does not run or apply migrations.<?php endif; ?></p>
       </div>
-      <a href="#migrations">Review database upgrade guidance</a>
+      <a href="#migrations">Review migration ledger</a>
     </aside>
   <?php endif; ?>
 
@@ -281,7 +323,7 @@ renderAdminShell(
         <h2>Environment</h2>
         <p>Runtime values reported by PHP and the connected database server.</p>
       </div>
-      <span class="read-only-badge">READ ONLY</span>
+      <span class="read-only-badge">DIAGNOSTICS</span>
     </div>
     <div class="environment-grid">
       <div class="environment-item">
@@ -305,7 +347,66 @@ renderAdminShell(
           <span class="status-dot <?php echo $file_uploads_enabled ? 'on' : 'off'; ?>"></span><?php echo $file_uploads_enabled ? 'Enabled' : 'Disabled'; ?>
         </div>
       </div>
+      <?php if ($earist_prerequisites !== null): ?>
+      <div class="environment-item">
+        <div class="environment-label">EARIST DOCX prerequisites (read only)</div>
+        <div class="environment-value">
+          <strong><?php echo $earist_prerequisites['ready'] ? 'Ready' : 'Unavailable'; ?></strong><br>
+          Runtime: <?php echo aset_escape($earist_prerequisites['sapi']); ?><br>
+          ZipArchive: <?php echo $earist_prerequisites['zip_archive_class'] ? 'Available' : 'Unavailable'; ?>;
+          Libzip: <?php echo aset_escape($earist_prerequisites['libzip_version'] ?? 'Unavailable'); ?><br>
+          <?php echo aset_escape($earist_prerequisites['message']); ?><br>
+          This checks an existing blank template only. No document is generated or saved. PDF export remains disabled.
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
+    <?php if ($earist_prerequisites !== null): ?>
+    <section class="settings-note" id="earist-scratch-diagnostic" aria-labelledby="earist-scratch-title">
+      <h3 id="earist-scratch-title">EARIST private-storage write test</h3>
+      <p>Run one disposable scratch-file check under this Apache PHP runtime. It creates a random file, writes synthetic bytes, reopens and validates them, then deletes only its own file and empty allocation directory. It does not save settings, research data or documents. Live DOCX generation remains disabled.</p>
+      <form method="post" action="<?php echo aset_escape(SITE_URL . 'pages/admin/admin-settings.php#earist-scratch-diagnostic'); ?>">
+        <?php echo csrfField(); ?>
+        <input type="hidden" name="action" value="run_earist_scratch_test">
+        <button class="settings-submit" type="submit">Run EARIST scratch write test</button>
+      </form>
+      <?php if ($earist_scratch_error !== ''): ?>
+        <p role="alert"><strong>Test not run:</strong> <?php echo aset_escape($earist_scratch_error); ?></p>
+      <?php elseif ($earist_scratch_result !== null): ?>
+        <div role="<?php echo $earist_scratch_result['passed'] ? 'status' : 'alert'; ?>">
+          <p><strong><?php echo $earist_scratch_result['passed'] ? 'Scratch write test passed.' : 'Scratch write test did not pass.'; ?></strong> Runtime: <?php echo aset_escape($earist_scratch_result['runtime']); ?></p>
+          <ul><?php foreach ($earist_scratch_result['steps'] as $scratch_step): ?>
+            <li><strong><?php echo aset_escape($scratch_step['label']); ?>: <?php echo aset_escape($scratch_step['status']); ?>.</strong> <?php echo aset_escape($scratch_step['message']); ?></li>
+          <?php endforeach; ?></ul>
+          <?php if (isset($earist_scratch_result['retained_allocation'])): ?>
+            <p>Private allocation retained for operator review: <code>scratch/<?php echo aset_escape($earist_scratch_result['retained_allocation']); ?></code>. No automatic retry cleanup will touch it.</p>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+    <section class="settings-note" id="earist-generated-diagnostic" aria-labelledby="earist-generated-title">
+      <h3 id="earist-generated-title">EARIST generated-storage write test</h3>
+      <p>Run one disposable file check under this Apache PHP runtime. It creates a random private allocation directory and file inside <code>storage/earist/generated</code>, writes synthetic bytes, reopens and validates them, then deletes only its own file and empty allocation directory. It does not create a DOCX, save settings, research data or document history. Live DOCX generation remains disabled.</p>
+      <form method="post" action="<?php echo aset_escape(SITE_URL . 'pages/admin/admin-settings.php#earist-generated-diagnostic'); ?>">
+        <?php echo csrfField(); ?>
+        <input type="hidden" name="action" value="run_earist_generated_test">
+        <button class="settings-submit" type="submit">Run EARIST generated-storage write test</button>
+      </form>
+      <?php if ($earist_generated_error !== ''): ?>
+        <p role="alert"><strong>Test not run:</strong> <?php echo aset_escape($earist_generated_error); ?></p>
+      <?php elseif ($earist_generated_result !== null): ?>
+        <div role="<?php echo $earist_generated_result['passed'] ? 'status' : 'alert'; ?>">
+          <p><strong><?php echo $earist_generated_result['passed'] ? 'Generated-storage write test passed.' : 'Generated-storage write test did not pass.'; ?></strong> Runtime: <?php echo aset_escape($earist_generated_result['runtime']); ?></p>
+          <ul><?php foreach ($earist_generated_result['steps'] as $generated_step): ?>
+            <li><strong><?php echo aset_escape($generated_step['label']); ?>: <?php echo aset_escape($generated_step['status']); ?>.</strong> <?php echo aset_escape($generated_step['message']); ?></li>
+          <?php endforeach; ?></ul>
+          <?php if (isset($earist_generated_result['retained_allocation'])): ?>
+            <p>Private allocation retained for operator review: <code>generated/<?php echo aset_escape($earist_generated_result['retained_allocation']); ?></code>. No automatic retry cleanup will touch it.</p>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+    <?php endif; ?>
   </section>
 
   <section class="settings-card migration-card settings-section" id="migrations">
@@ -313,21 +414,21 @@ renderAdminShell(
       <div>
         <div class="card-index">02 &middot; Schema</div>
         <h2>Database migrations</h2>
-        <p>Structural artifacts detected in the currently connected RMS database.</p>
+        <p>Recorded migration state and current file checksums from the connected RMS database.</p>
       </div>
-      <span class="read-only-badge">LIVE PROBES</span>
+      <span class="read-only-badge">READ ONLY</span>
     </div>
     <div class="table-wrap">
       <table class="settings-table">
-        <thead><tr><th>Migration file</th><th>What it adds</th><th>Status</th></tr></thead>
+        <thead><tr><th>Migration file</th><th>Recorded by</th><th>Status</th></tr></thead>
         <tbody>
         <?php foreach ($migration_rows as $migration): ?>
           <tr>
             <td class="file-name" data-label="Migration"><?php echo aset_escape($migration['file']); ?></td>
-            <td data-label="Artifact"><?php echo aset_escape($migration['adds']); ?></td>
+            <td data-label="Recorded by"><?php echo aset_escape($migration['method'] !== '' ? $migration['method'] : '—'); ?></td>
             <td data-label="Status">
-              <span class="migration-status <?php echo $migration['applied'] ? 'applied' : 'missing'; ?>">
-                <?php echo $migration['applied'] ? 'Applied' : 'NOT APPLIED'; ?>
+              <span class="migration-status <?php echo $migration['state'] === 'Applied' ? 'applied' : 'missing'; ?>">
+                <?php echo aset_escape($migration['state']); ?>
               </span>
             </td>
           </tr>
@@ -336,8 +437,8 @@ renderAdminShell(
       </table>
     </div>
     <div class="settings-note">
-      <p><strong>Upgrade guidance:</strong> Numbered migration scripts are for pre-September-2026 legacy databases. A fresh installation imported from <code>database/schema/rms_db.sql</code> needs no migrations; for a legacy upgrade, apply only applicable numbered scripts in order.</p>
-      <p><strong>010_demo_accounts_resync.sql:</strong> data-only migration; run and verify manually when demo-account synchronization is needed.</p>
+      <p><strong>Read-only:</strong> migration state is loaded from <code>schema_migrations</code> and compared with each current file checksum. This page never applies or synchronizes migrations.</p>
+      <?php if (!$migration_ledger_available): ?><p>Use the documented migration runner to initialize or reconcile this database before interpreting migration state.</p><?php endif; ?>
     </div>
   </section>
 
@@ -383,15 +484,144 @@ renderAdminShell(
     </div>
   </section>
 
-  <section class="managed-section settings-section" id="ownership">
-    <div class="card-index">04 &middot; Ownership</div>
-    <h2>What settings are managed where</h2>
-    <p>This diagnostics page intentionally does not change system configuration.</p>
-    <ul class="managed-list">
-      <li><strong>Users:</strong> manage accounts, roles, and account status in <a href="<?php echo aset_escape(SITE_URL . 'pages/admin/admin-users.php'); ?>">User Management</a>.</li>
-      <li><strong>Archive:</strong> manage publication, colloquium, and archive state in <a href="<?php echo aset_escape(SITE_URL . 'pages/admin/admin-archive.php'); ?>">Archive Management</a>.</li>
-      <li><strong>Site credentials:</strong> managed in <code>.env</code>; credential values are never displayed here.</li>
-    </ul>
+  <section class="managed-section settings-section" id="settings">
+    <div class="card-index">04 &middot; Application policy</div>
+    <h2>Application settings</h2>
+    <p>These database-backed values apply to RMS behavior. Database, email, and other deployment credentials remain in <code>.env</code> and are never shown or edited here.</p>
+
+    <?php if ($settings_error !== ''): ?>
+      <div class="settings-flash error" role="alert"><?php echo aset_escape($settings_error); ?></div>
+    <?php elseif ($settings_success !== ''): ?>
+      <div class="settings-flash success" role="status"><?php echo aset_escape($settings_success); ?></div>
+    <?php endif; ?>
+
+    <?php if (!$system_settings_available): ?>
+      <div class="settings-flash error" role="alert">Application settings storage is not installed. Apply <code>022_application_settings.sql</code> with the migration runner before saving system settings.</div>
+    <?php endif; ?>
+
+    <form class="settings-form" id="settings-form" method="post" action="<?php echo aset_escape(SITE_URL . 'pages/admin/admin-settings.php'); ?>">
+      <?php echo csrfField(); ?>
+      <input type="hidden" name="action" value="save_system_settings">
+
+      <div class="settings-form-group">
+        <h3>Site identity and contact</h3>
+        <div class="settings-field">
+          <label for="site-name">Site name</label>
+          <input id="site-name" name="site_name" value="<?php echo aset_escape($settings_values['site_name']); ?>" maxlength="120" required>
+        </div>
+        <div class="settings-field">
+          <label for="site-title">Browser title</label>
+          <input id="site-title" name="site_title" value="<?php echo aset_escape($settings_values['site_title']); ?>" maxlength="120" required>
+        </div>
+        <div class="settings-field full">
+          <label for="institutional-affiliation">Default institutional affiliation</label>
+          <input id="institutional-affiliation" name="institutional_affiliation" value="<?php echo aset_escape($settings_values['institutional_affiliation']); ?>" maxlength="255" required>
+          <small>Used as the default affiliation for internal EARIST faculty in future research document generation.</small>
+        </div>
+        <div class="settings-field">
+          <label for="contact-email">Public contact email</label>
+          <input id="contact-email" name="contact_email" type="email" value="<?php echo aset_escape($settings_values['contact_email']); ?>" maxlength="254" required>
+        </div>
+        <div class="settings-field">
+          <label for="contact-phone">Public contact phone</label>
+          <input id="contact-phone" name="contact_phone" value="<?php echo aset_escape($settings_values['contact_phone']); ?>" maxlength="40" required>
+        </div>
+        <div class="settings-field full">
+          <label for="contact-address">Public contact address</label>
+          <input id="contact-address" name="contact_address" value="<?php echo aset_escape($settings_values['contact_address']); ?>" maxlength="255" required>
+        </div>
+      </div>
+
+      <div class="settings-form-group">
+        <h3>Maintenance mode</h3>
+        <input type="hidden" name="maintenance_enabled" value="0">
+        <label class="settings-checkbox settings-field full" for="maintenance-enabled">
+          <input id="maintenance-enabled" name="maintenance_enabled" type="checkbox" value="1" <?php echo $settings_values['maintenance_enabled'] === '1' ? 'checked' : ''; ?>>
+          Enable maintenance mode (non-admin requests receive a 503 page; active administrators retain access)
+        </label>
+        <div class="settings-field full">
+          <label for="maintenance-message">Maintenance message</label>
+          <textarea id="maintenance-message" name="maintenance_message" rows="3" maxlength="500" required><?php echo aset_escape($settings_values['maintenance_message']); ?></textarea>
+          <small>Displayed to visitors while maintenance mode is enabled.</small>
+        </div>
+      </div>
+
+      <div class="settings-form-group">
+        <h3>Upload policy</h3>
+        <div class="settings-field">
+          <label for="upload-max-size">Maximum file size (bytes)</label>
+          <input id="upload-max-size" name="upload_max_size" type="number" min="65536" max="<?php echo (int) rmsPhpUploadLimit(); ?>" step="1" value="<?php echo (int) $settings_values['upload_max_size']; ?>" required>
+          <small>Cannot exceed the lower of PHP upload_max_filesize and post_max_size (currently <?php echo aset_escape(aset_format_bytes(rmsPhpUploadLimit())); ?>).</small>
+        </div>
+        <div class="settings-field">
+          <label for="upload-extensions">Allowed file extensions</label>
+          <input id="upload-extensions" name="upload_allowed_extensions" value="<?php echo aset_escape($settings_values['upload_allowed_extensions']); ?>" maxlength="200" required>
+          <small>Comma-separated: pdf, doc, docx, xls, xlsx, ppt, pptx, jpg, jpeg, png, gif. PDF is required by research-document workflows.</small>
+        </div>
+      </div>
+
+      <div class="settings-form-group">
+        <h3>Security policy</h3>
+        <div class="settings-field">
+          <label for="session-timeout">Idle session timeout (seconds)</label>
+          <input id="session-timeout" name="session_timeout" type="number" min="300" max="86400" step="60" value="<?php echo (int) $settings_values['session_timeout']; ?>" required>
+          <small>Allowed range: 300 seconds (5 minutes) to 86,400 seconds (24 hours).</small>
+        </div>
+        <div class="settings-field">
+          <label for="password-min-length">Minimum password length</label>
+          <input id="password-min-length" name="password_min_length" type="number" min="8" max="64" value="<?php echo (int) $settings_values['password_min_length']; ?>" required>
+          <small>Passwords must also contain a letter and a number, and cannot contain spaces.</small>
+        </div>
+      </div>
+
+      <button class="settings-submit" type="submit" <?php echo $system_settings_available ? '' : 'disabled'; ?>>Save application settings</button>
+    </form>
+
+    <dialog class="settings-confirm-dialog" id="settings-save-confirmation" aria-labelledby="settings-confirm-title" aria-describedby="settings-confirm-description">
+      <div class="settings-confirm-content">
+        <p class="settings-confirm-kicker">Admin settings</p>
+        <h3 id="settings-confirm-title">Save these changes?</h3>
+        <p id="settings-confirm-description">Changes take effect across RMS immediately. If maintenance mode is enabled, non-admin users will receive a maintenance page.</p>
+        <div class="settings-confirm-actions">
+          <button type="button" id="settings-confirm-cancel">Cancel</button>
+          <button type="button" class="settings-confirm-submit" id="settings-confirm-continue">Save settings</button>
+        </div>
+      </div>
+    </dialog>
+    <script>
+      (() => {
+        const form = document.getElementById('settings-form');
+        const dialog = document.getElementById('settings-save-confirmation');
+        const cancelButton = document.getElementById('settings-confirm-cancel');
+        const continueButton = document.getElementById('settings-confirm-continue');
+        let allowSubmit = false;
+
+        if (!form || !dialog || !cancelButton || !continueButton || typeof dialog.showModal !== 'function') {
+          return;
+        }
+
+        form.addEventListener('submit', (event) => {
+          if (allowSubmit) {
+            allowSubmit = false;
+            return;
+          }
+
+          event.preventDefault();
+          dialog.showModal();
+        });
+
+        cancelButton.addEventListener('click', () => dialog.close());
+        continueButton.addEventListener('click', () => {
+          if (!form.reportValidity()) {
+            return;
+          }
+
+          dialog.close();
+          allowSubmit = true;
+          form.requestSubmit();
+        });
+      })();
+    </script>
   </section>
 </div>
 </div>

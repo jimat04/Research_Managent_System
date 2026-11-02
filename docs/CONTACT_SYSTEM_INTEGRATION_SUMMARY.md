@@ -3,7 +3,7 @@
 **Original integration date:** August 29, 2026
 **Status:** Historical implementation summary; current navigation and behavior were not re-tested by that report.
 
-**Current source check (October 10, 2026):** Contact submission is handled by `public/contact.php` and `includes/contact-handler.php`. Management pages are `pages/admin/admin-contact.php` and `pages/staff/contact-messages.php`. The admin shell links to Contact Messages; the current staff shell does not link to its contact-message page.
+**Current source check:** Public contact submission is handled by `public/about-us.php` and `includes/contact-handler.php`. The form was merged into the About Us page; the former standalone `public/contact.php` route was removed. Management pages are `pages/admin/admin-contact.php` and `pages/staff/contact-messages.php`. The admin shell links to Contact Messages; the current staff shell does not link to its contact-message page.
 
 ---
 
@@ -84,7 +84,7 @@ Email Reply System
 
 ```
 public/
-  └─ contact.php                    ✅ Public submission form
+  └─ about-us.php                   ✅ Public information and submission form
 
 pages/
   ├─ admin/
@@ -116,7 +116,7 @@ database/
 ### URLs
 
 **Public:**
-- Contact Form: `http://localhost/rms/public/contact.php`
+- Contact Form: `http://localhost/rms/public/about-us.php#contact-us`
 
 **Admin (after login):**
 - Contact Messages: `http://localhost/rms/pages/admin/admin-contact.php`
@@ -215,7 +215,7 @@ CREATE TABLE contact_messages (
 ### Complete Message Lifecycle
 
 1. **Public User Submits:**
-   - Visitor fills form at `public/contact.php`
+   - Visitor fills form at `public/about-us.php#contact-us`
    - Message saved with status `pending`
    - Success confirmation shown
 

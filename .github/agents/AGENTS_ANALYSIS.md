@@ -1,9 +1,13 @@
 # RMS Agents Analysis & Recommendations
 
 **Original analysis:** August 28, 2026
-**Inventory updated:** October 11, 2026
+**Inventory reviewed:** October 13, 2026
 **Location:** `.github/agents/`
 **Current RMS Agents:** 9 specialized agents
+
+## Current Status (2026-10-13)
+
+The nine specialist definitions were reviewed against the current `AGENTS.md`, `CLAUDE.md`, schema, auth helpers, upload helper, and Playwright harness. `AGENTS.md` and each current `.agent.md` definition are authoritative; recommendations and example definitions later in this historical analysis are not active instructions unless revalidated. The configured test suite is Playwright E2E only; PHPUnit, a general PHP lint/build command, and test CI are not configured.
 
 ---
 
@@ -42,7 +46,7 @@ Read a matching skill's `SKILL.md` before applying its guidance. `AGENTS_MEMORY.
 The recommendations below originated in the August 28 analysis. The inventory has since changed; in particular, a testing agent now exists. Treat proposed agents and work as a backlog, not as a description of the current inventory.
 
 ### 1. **Testing/QA Agent and Browser Suite Added**
-`rms-testing.agent.md` and `tests/e2e-browser/` now exist. The 13-test Playwright suite passed locally on October 10, 2026; it requires the local app/database and `RMS_E2E_*` credentials supplied through the environment. There is still no configured PHPUnit suite, general PHP build/lint command, or CI test workflow.
+`rms-testing.agent.md` and `tests/e2e-browser/` now exist. The last recorded run was 13 passing Playwright tests on October 10, 2026; that result is historical, not a claim that the suite was rerun during this review. It requires the local app/database and `RMS_E2E_*` credentials supplied through the environment. PHPUnit, a general PHP build/lint command, and a test CI workflow are not configured.
 
 **Follow-up:** Broaden automated coverage beyond browser E2E and add a repeatable CI or local quality gate when the project is ready; do not describe that broader infrastructure as already configured.
 
@@ -66,16 +70,8 @@ The recommendations below originated in the August 28 analysis. The inventory ha
 ### 4. **Backup and Recovery Agent Added**
 `rms-backup.agent.md` covers secure backup and restore planning. The existing backup script is not production-ready, and the presence of the agent does not mean a restore procedure has been tested.
 
-### 5. **rms-security-auth: Needs Updates**
-**Current:** 3,460 bytes (smallest agent)  
-**Issue:** Brief compared to importance
-
-**Recommendations:**
-- Add more security check patterns
-- Include OWASP Top 10 checklist
-- Add file upload security details
-- Include rate limiting patterns
-- Add security testing procedures
+### 5. **Security Agent: Guidance Refreshed**
+On October 13, 2026, `rms-security-auth.agent.md` was checked against `includes/auth.php` and the shared upload helper. It now directs agents to inspect actual helpers, distinguishes SQL sanitation from HTML escaping, and avoids assuming rate limiting is implemented. The older checklist below is an archived proposal, not a current requirements list.
 
 ### 6. **No API Agent**
 **Current:** No API-specific agent  
@@ -93,7 +89,7 @@ The recommendations below originated in the August 28 analysis. The inventory ha
 
 ---
 
-## 📈 Agent Usage Analysis
+## 📈 Historical Agent Usage Estimates (Not Telemetry)
 
 Based on your project's current state and needs:
 
@@ -113,10 +109,13 @@ Based on your project's current state and needs:
 
 ## 🎯 Recommendations
 
-### Priority 1: Enhance Existing Agents
+### Historical Priority 1: Enhance Existing Agents
 
-#### A. Expand `rms-security-auth.agent.md`
-**Add these sections:**
+The suggestions in this section are archival. Current specialist definitions and `AGENTS.md` take precedence.
+
+#### A. Archived `rms-security-auth.agent.md` Checklist Proposal
+
+The following checklist is retained as historical brainstorming only. Do not copy it into current instructions without validating each control against the application and its deployment.
 
 ```markdown
 ## Security Checklist (OWASP Top 10)

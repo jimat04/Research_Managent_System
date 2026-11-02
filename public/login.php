@@ -1,10 +1,41 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/faculty-ranks.php';
+require_once __DIR__ . '/../includes/logout-transition.php';
+
+if (($_GET['continue'] ?? '') === 'public-record') {
+    rmsSetPublicRecordReturnIntent($_GET['record_type'] ?? null, $_GET['record_id'] ?? null);
+} elseif (isset($_GET['continue'])) {
+    rmsClearPublicRecordReturnIntent();
+    rmsSetResearchArchiveReturnIntent($_GET['continue']);
+}
 
 // If already logged in, redirect straight to their dashboard
 if (isLoggedIn()) {
+    $publicRecordUrl = rmsPublicRecordReturnUrl();
+    if ($publicRecordUrl !== null) {
+        rmsClearPublicRecordReturnIntent();
+        header('Location: ' . $publicRecordUrl);
+        exit();
+    }
     $role = $_SESSION['role'] ?? 'student';
+    if ($role === 'student' && rmsHasResearchArchiveReturnIntent()) {
+        $studentId = (int) ($_SESSION['user_id'] ?? 0);
+        $stateStmt = $conn->prepare("SELECT research_basics_completed FROM users WHERE user_id = ? AND role = 'student' AND deleted_at IS NULL LIMIT 1");
+        if ($stateStmt) {
+            $stateStmt->bind_param('i', $studentId);
+            $stateStmt->execute();
+            $stateRow = $stateStmt->get_result()->fetch_assoc();
+            $stateStmt->close();
+            if ((int) ($stateRow['research_basics_completed'] ?? 0) === 1) {
+                rmsClearResearchArchiveReturnIntent();
+            }
+        }
+    } elseif ($role !== 'student') {
+        rmsClearResearchArchiveReturnIntent();
+    }
+
     $dashboardMap = [
         'student'        => '../pages/student/student-dashboard.php',
         'faculty'        => '../pages/faculty/faculty-dashboard.php',
@@ -17,65 +48,50 @@ if (isLoggedIn()) {
 
 $error = '';
 $success = '';
-$selectedRole = 'student';
-$validLoginRoles = ['student', 'faculty', 'research_staff', 'admin'];
 
-$roleLabels = [
-    'student'        => 'Student',
-    'faculty'        => 'Faculty Adviser',
-    'research_staff' => 'Research Staff',
-    'admin'          => 'Administrator',
+$facultyDepartments = [
+    'INFORMATION TECHNOLOGY',
+    'COMPUTER SCIENCE',
 ];
+$facultyAcademicRanks = array_keys(rmsFacultyAcademicRanks());
 
 if (isset($_GET['timeout'])) {
     $error = 'Your session has expired. Please log in again.';
 }
 
-function loginFailureKey() {
+function loginFailureKey($email) {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-    return md5($ip . '|' . session_id());
+    return hash('sha256', $ip . '|' . strtolower(trim((string) $email)));
 }
 
-function isLoginLocked() {
-    $key = loginFailureKey();
-
-    if (empty($_SESSION['login_locked_until'][$key])) {
-        return false;
-    }
-
-    if ($_SESSION['login_locked_until'][$key] > time()) {
-        return true;
-    }
-
-    unset($_SESSION['login_locked_until'][$key]);
-    unset($_SESSION['login_failures'][$key]);
-
-    return false;
+function getLoginRateLimit($key) {
+    global $conn;
+    $stmt = $conn->prepare('SELECT failures, locked_until FROM login_rate_limits WHERE rate_key = ? LIMIT 1');
+    if (!$stmt) return ['failures' => 0, 'locked_until' => null];
+    $stmt->bind_param('s', $key);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: ['failures' => 0, 'locked_until' => null];
+    $stmt->close();
+    return $row;
 }
 
-function recordFailedLogin() {
-    $key = loginFailureKey();
-
-    if (!isset($_SESSION['login_failures'])) {
-        $_SESSION['login_failures'] = [];
-    }
-
-    if (!isset($_SESSION['login_locked_until'])) {
-        $_SESSION['login_locked_until'] = [];
-    }
-
-    $_SESSION['login_failures'][$key] = ($_SESSION['login_failures'][$key] ?? 0) + 1;
-
-    if ($_SESSION['login_failures'][$key] >= 5) {
-        $_SESSION['login_locked_until'][$key] = time() + (15 * 60);
-        $_SESSION['login_failures'][$key] = 0;
-    }
+function isLoginLocked($email) {
+    $row = getLoginRateLimit(loginFailureKey($email));
+    return !empty($row['locked_until']) && strtotime($row['locked_until']) > time();
 }
 
-function resetFailedLogins() {
-    $key = loginFailureKey();
-    unset($_SESSION['login_failures'][$key]);
-    unset($_SESSION['login_locked_until'][$key]);
+function recordFailedLogin($email) {
+    global $conn;
+    $key = loginFailureKey($email);
+    $stmt = $conn->prepare("INSERT INTO login_rate_limits (rate_key, failures, locked_until, updated_at) VALUES (?, 1, NULL, NOW()) ON DUPLICATE KEY UPDATE failures = IF(updated_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, failures + 1), locked_until = IF(failures >= 5, DATE_ADD(NOW(), INTERVAL 15 MINUTE), NULL), updated_at = NOW()");
+    if ($stmt) { $stmt->bind_param('s', $key); $stmt->execute(); $stmt->close(); }
+}
+
+function resetFailedLogins($email) {
+    global $conn;
+    $key = loginFailureKey($email);
+    $stmt = $conn->prepare('DELETE FROM login_rate_limits WHERE rate_key = ?');
+    if ($stmt) { $stmt->bind_param('s', $key); $stmt->execute(); $stmt->close(); }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -88,24 +104,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $email = isset($_POST['email']) ? trim($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
 
-        // Preserve the user's chosen tab on any error path below, so it
-        // doesn't snap back to Student.
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
-            $postedRole = strtolower((string) ($_POST['role'] ?? ''));
-            if (in_array($postedRole, $validLoginRoles, true)) {
-                $selectedRole = $postedRole;
-            }
-        }
-
         if (empty($email) || empty($password)) {
             $error = 'Email and password are required';
         } elseif (!isValidEmail($email)) {
             $error = 'Invalid email format';
-        } elseif (isLoginLocked()) {
-            $remaining = max(1, ceil(($_SESSION['login_locked_until'][loginFailureKey()] - time()) / 60));
+        } elseif (isLoginLocked($email)) {
+            $locked = getLoginRateLimit(loginFailureKey($email));
+            $remaining = max(1, ceil((strtotime($locked['locked_until']) - time()) / 60));
             $error = "Too many failed attempts. Please try again in {$remaining} minute(s).";
         } else {
-            $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, password, role, status FROM users WHERE email = ? LIMIT 1");
+            $stmt = $conn->prepare("SELECT user_id, first_name, last_name, email, password, role, status, email_verified, research_basics_completed FROM users WHERE email = ? LIMIT 1");
             $stmt->bind_param('s', $email);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -121,39 +129,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                         $validRoles = ['student', 'faculty', 'research_staff', 'admin'];
 
                         if (!in_array($dbRole, $validRoles, true)) {
-                            recordFailedLogin();
+                            recordFailedLogin($email);
                             $error = 'Invalid email, password, or role.';
                         } else {
-                            // Read the role tab the user clicked. Validate strictly
-                            // against the four allowed values; anything else is
-                            // treated as a malformed POST and falls back to the
-                            // default tab.
-                            $postedRole = strtolower((string) ($_POST['role'] ?? ''));
-                            if (!in_array($postedRole, $validLoginRoles, true)) {
-                                $postedRole = 'student';
-                            }
-
-                            // Gate: the tab must match the DB role. If not, show a
-                            // helpful, specific error that names the correct tab.
-                            // This is NOT a failed login attempt — we do not
-                            // increment the lockout counter, log activity, set
-                            // the session, or redirect. The user simply has to
-                            // click the right tab and try again.
-                            if ($postedRole !== $dbRole) {
-                                $label    = $roleLabels[$dbRole] ?? 'a different role';
-                                $tabWord  = $roleLabels[$dbRole] ?? ucfirst($dbRole);
-                                $error    = "This account is registered as {$label}. Please click the {$tabWord} tab and sign in again.";
-                                $selectedRole = $dbRole; // auto-highlight the correct tab
-                                // Password is intentionally NOT re-rendered into
-                                // the form (security: never echo passwords back).
+                            if (REQUIRE_EMAIL_VERIFICATION && $dbRole !== 'admin' && (int) ($user['email_verified'] ?? 0) !== 1) {
+                                $error = 'Please verify your email address before signing in.';
                             } else {
-                                resetFailedLogins();
+                                resetFailedLogins($email);
                                 session_regenerate_id(true);
 
                                 $_SESSION['user_id'] = (int) $user['user_id'];
                                 $_SESSION['email']   = $user['email'];
                                 $_SESSION['name']    = $user['first_name'] . ' ' . $user['last_name'];
                                 $_SESSION['role']    = $dbRole;
+                                $_SESSION['auth_password_hash'] = (string) $user['password'];
                                 $_SESSION['last_activity'] = time();
 
                                 $updateStmt = $conn->prepare('UPDATE users SET last_login = NOW() WHERE user_id = ?');
@@ -170,24 +159,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                                 ];
 
                                 $dashboard = $dashboardMap[$dbRole] ?? '../pages/student/student-dashboard.php';
-                                header('Location: ' . $dashboard);
+                                $publicRecordUrl = rmsPublicRecordReturnUrl();
+                                if ($publicRecordUrl !== null) {
+                                    $dashboard = $publicRecordUrl;
+                                    rmsClearPublicRecordReturnIntent();
+                                    rmsClearResearchArchiveReturnIntent();
+                                } elseif ($dbRole === 'student' && rmsHasResearchArchiveReturnIntent()
+                                    && (int) ($user['research_basics_completed'] ?? 0) === 1) {
+                                    rmsClearResearchArchiveReturnIntent();
+                                } elseif ($dbRole !== 'student') {
+                                    rmsClearResearchArchiveReturnIntent();
+                                }
+                                $loginRedirect = htmlspecialchars($dashboard, ENT_QUOTES, 'UTF-8');
+                                $welcomeName = trim((string) $user['first_name']);
+                                $welcomeMessage = $welcomeName !== ''
+                                    ? 'Welcome back, ' . $welcomeName . '. Preparing your workspace.'
+                                    : 'Welcome back. Preparing your workspace.';
+                                ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="2;url=<?php echo htmlspecialchars($dashboard, ENT_QUOTES, 'UTF-8'); ?>">
+    <title>Login successful | RMS</title>
+</head>
+<body>
+    <?php renderLogoutTransition([
+        'heading' => 'Login successful',
+        'message' => $welcomeMessage,
+        'status' => 'Preparing workspace',
+        'completion_status' => 'Opening your workspace',
+        'caption' => 'Signing in',
+        'aria_label' => 'Login successful',
+        'redirect_url' => $dashboard,
+    ]); ?>
+</body>
+</html>
+                                <?php
                                 exit();
                             }
                         }
                     }
                 } else {
-                    recordFailedLogin();
+                    recordFailedLogin($email);
                     $error = 'Invalid email, password, or role.';
                 }
             } else {
-                recordFailedLogin();
+                recordFailedLogin($email);
                 $error = 'Invalid email, password, or role.';
             }
         }
     }
 
     // REGISTER
-    if ($action === 'register') {
+    if ($action === 'register' && rmsSetting('maintenance_enabled') === '1') {
+        $error = 'New registrations are temporarily unavailable during system maintenance.';
+    } elseif ($action === 'register') {
         $first_name = isset($_POST['first_name']) ? sanitize($_POST['first_name']) : '';
         $last_name = isset($_POST['last_name']) ? sanitize($_POST['last_name']) : '';
         $email = isset($_POST['email']) ? trim($_POST['email']) : '';
@@ -198,11 +226,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $role = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
 
         // Role-specific fields
-        $department = isset($_POST['department']) ? sanitize($_POST['department']) : null;
+        $departmentInput = $_POST['department'] ?? null;
+        $department = is_string($departmentInput) ? sanitize($departmentInput) : null;
         $program = isset($_POST['program']) ? sanitize($_POST['program']) : null;
         $year_level = isset($_POST['year_level']) ? sanitize($_POST['year_level']) : null;
         $specialization = isset($_POST['specialization']) ? sanitize($_POST['specialization']) : null;
-        $academic_rank = isset($_POST['academic_rank']) ? sanitize($_POST['academic_rank']) : null;
+        $academicRankInput = $_POST['academic_rank'] ?? null;
+        $academic_rank = is_string($academicRankInput) ? sanitize($academicRankInput) : null;
         $is_reviewer = 0;
         $office = '';
 
@@ -215,15 +245,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $error = 'All fields are required';
         } elseif (!isValidEmail($email)) {
             $error = 'Invalid email format';
-        } elseif (strlen($password) < 8) {
-            $error = 'Password must be at least 8 characters';
-        } elseif (!preg_match('/[A-Za-z]/', $password) || !preg_match('/[0-9]/', $password)) {
-            $error = 'Password must contain at least one letter and one number';
-        } elseif (preg_match('/\s/', $password)) {
-            $error = 'Password cannot contain spaces';
+        } elseif ($contact !== '' && !preg_match('/^09[0-9]{9}$/D', $contact)) {
+            $error = 'Contact number must contain 11 digits and start with 09.';
+        } elseif (($passwordPolicyError = rmsValidatePasswordPolicy($password)) !== null) {
+            $error = $passwordPolicyError;
         } elseif ($password !== $password_confirm) {
             $error = 'Passwords do not match';
+        } elseif ($role === 'faculty' && (!is_string($departmentInput) || !in_array($departmentInput, $facultyDepartments, true))) {
+            $error = 'Please select a valid faculty department.';
+        } elseif ($role === 'faculty' && (!is_string($academicRankInput) || !in_array($academicRankInput, $facultyAcademicRanks, true))) {
+            $error = 'Please select a valid academic rank.';
         } else {
+            if ($role === 'faculty') {
+                // Store only exact allowlisted values; the prepared insert below
+                // persists these values without escaping or reinterpretation.
+                $department = $departmentInput;
+                $academic_rank = $academicRankInput;
+            }
+
             $checkStmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
             $checkStmt->bind_param('s', $email);
             $checkStmt->execute();
@@ -245,7 +284,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
                     // Send email verification
                     require_once __DIR__ . '/../includes/email.php';
-                    sendVerificationEmail($userId, $email, $first_name);
+                    $preserveArchiveIntent = $role === 'student' && rmsHasResearchArchiveReturnIntent();
+                    sendVerificationEmail($userId, $email, $first_name, $preserveArchiveIntent);
 
                     if ($role === 'student') {
                         $success = 'Registration successful! Please check your email to verify your account. You can now log in.';
@@ -253,6 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                         // Notify admins about pending approval
                         sendPendingApprovalNotification($first_name, $last_name, $email, $role);
                         $success = 'Registration successful! Please check your email to verify your account. An administrator will review and approve your account shortly.';
+                        rmsClearResearchArchiveReturnIntent();
                     }
 
                     $_POST = [];
@@ -263,15 +304,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         }
     }
 }
+
+$publicRecordIntent = rmsPublicRecordReturnIntent();
+$authContinuationQuery = $publicRecordIntent
+    ? '?' . http_build_query([
+        'continue' => 'public-record',
+        'record_type' => $publicRecordIntent['type'],
+        'record_id' => $publicRecordIntent['id'],
+    ])
+    : (rmsHasResearchArchiveReturnIntent()
+        ? '?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE)
+        : '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login — <?php echo SITE_TITLE; ?></title>
+  <title>Login — <?php echo htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8'); ?></title>
   <link rel="stylesheet" href="../css/style.css" />
   <style>
+    html { color-scheme: light; }
     /* ============================================================
        SPLIT-SCREEN LOGIN LAYOUT
        Replaces the old .auth-container / .auth-card centered card.
@@ -376,19 +429,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       max-width: 360px;
       margin: 0 auto;
     }
-    /* Institutional badge under the tagline */
-    .auth-split-badge {
-      display: inline-block;
-      margin-top: 20px;
-      padding: 6px 14px;
-      background: rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.75);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 50px;
-      font-size: 0.78rem;
-      font-weight: 500;
-      letter-spacing: 0.3px;
-    }
 
     /* RIGHT — form panel (soft lavender to harmonize with the dark left) */
     .auth-split-form {
@@ -435,9 +475,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       width: 100%;
       max-width: 100%;
     }
+    @keyframes authCtaZoomIn {
+      from { transform: scale(.985); }
+      to { transform: scale(1); }
+    }
+    .auth-split.cta-zoom-arrival {
+      animation: authCtaZoomIn 1.1s cubic-bezier(.16, 1, .3, 1) both;
+      transform-origin: center center;
+    }
+    @keyframes authFormZoomIn {
+      from { opacity: 0; transform: scale(.985); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .auth-split-form .auth-card.form-entering {
+      animation: authFormZoomIn .5s cubic-bezier(.22, 1, .36, 1) both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .auth-split.cta-zoom-arrival,
+      .auth-split-form .auth-card.form-entering { animation: none; }
+    }
 
     /* Section header inside the form card (replaces the old emoji logo header) */
-    .auth-split-form .auth-header { text-align: left; margin-bottom: 24px; }
+    .auth-split-form .auth-header { text-align: center; margin-bottom: 24px; }
     .auth-split-form .auth-header h1 {
       color: #1e1b3a;
       font-size: 1.4rem;
@@ -462,7 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       border: 1px solid #DDD0F5;
       color: #1e1b3a;
     }
-    .auth-split-form .form-control::placeholder { color: #9b8fc4; }
+    .auth-split-form .form-control::placeholder { color: #6B5CA5; }
     .auth-split-form .form-control:focus {
       border-color: var(--primary);
       background: #ffffff;
@@ -475,34 +534,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     .auth-split-form .form-control option:hover { background: var(--primary); color: #ffffff; }
     .auth-split-form .form-check { color: #4B5563; }
     .auth-split-form .form-check input { accent-color: var(--primary); }
-
-    /* Role tabs — editorial underline style.
-       No filled background; active tab gets a 2px purple underline + glow. */
-    .auth-split-form .role-tab {
-      background: transparent !important;
-      border-radius: 8px;
-      padding: 10px 8px !important;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      font-size: 0.78rem !important;
-      color: #64748b !important;
-      transition: color 180ms ease;
-    }
-    .auth-split-form .role-tab:not(.active):hover {
-      color: #4338ca !important;
-      background: transparent !important;
-    }
-    .auth-split-form .role-tab.active {
-      color: #5B1EBC !important;
-      background: transparent !important;
-      box-shadow: inset 0 -2px 0 0 #5B1EBC, 0 0 8px rgba(91,30,188,0.5);
-    }
-    .auth-split-form .role-tab .role-tab-emoji {
-      font-size: 16px;
-      line-height: 1;
-    }
 
     /* Demo credentials box — soft purple tint to harmonize with the panel */
     .auth-split-form .demo-creds {
@@ -520,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     /* "Create one" / "Sign In" / "or" links — lavender muted + purple CTA */
     .auth-split-form .auth-link-light { color: #6b5ca5 !important; }
     .auth-split-form a[onclick] { color: var(--primary) !important; font-weight: 600; }
-    .auth-split-form .auth-or { color: #9b8fc4 !important; }
+    .auth-split-form .auth-or { color: #6B5CA5 !important; }
 
     /* "Back to homepage" link */
     .auth-split-form .back-home {
@@ -535,7 +566,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
       font-size: 0.85rem;
     }
     .auth-split-form .back-home:hover { background: rgba(91,30,188,0.06) !important; }
-
     /* Password show/hide button — dark glyph on light field */
     .auth-split-form #togglePasswordBtn { color: #6B7280 !important; }
 
@@ -608,12 +638,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         transform: scaleY(0);
         transform-origin: center center;
         animation:
-          rms-divider-draw 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards,
-          rms-divider-pulse 4s ease-in-out 1.25s infinite;
+          rms-divider-draw 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0s forwards,
+          rms-divider-pulse 4s ease-in-out 1.1s infinite;
       }
       /* Energy flow loop, starts after the divider has drawn. */
       .auth-split-divider-line::after {
-        animation: rms-divider-flow 6s ease-in-out 1.25s infinite;
+        animation: rms-divider-flow 6s ease-in-out 1.1s infinite;
       }
     }
 
@@ -650,18 +680,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         transform: translateY(8px);
         animation: rms-content-fade 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
       }
-      .auth-split-brand-inner > .auth-split-logo     { animation-delay: 0.10s; }
-      .auth-split-brand-inner > .auth-split-title    { animation-delay: 0.20s; }
-      .auth-split-brand-inner > .auth-split-subtitle { animation-delay: 0.30s; }
-      .auth-split-brand-inner > .auth-split-divider  { animation-delay: 0.40s; }
-      .auth-split-brand-inner > .auth-split-tagline  { animation-delay: 0.50s; }
-      .auth-split-brand-inner > .auth-split-badge    { animation-delay: 0.60s; }
+      .auth-split-brand-inner > .auth-split-logo     { animation-delay: 0s; }
+      .auth-split-brand-inner > .auth-split-title    { animation-delay: 0.06s; }
+      .auth-split-brand-inner > .auth-split-divider  { animation-delay: 0.12s; }
+      .auth-split-brand-inner > .auth-split-tagline  { animation-delay: 0.18s; }
 
       /* Form card slides in from the right after the brand has settled. */
       .auth-split-form-inner {
         opacity: 0;
         transform: translateX(20px);
-        animation: rms-card-slide 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.30s forwards;
+        animation: rms-card-slide 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0s forwards;
       }
     }
     @keyframes rms-content-fade {
@@ -711,11 +739,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
   <aside class="auth-split-brand" aria-label="Branding">
     <div class="auth-split-brand-inner">
       <img class="auth-split-logo" src="<?php echo htmlspecialchars(SITE_URL, ENT_QUOTES, 'UTF-8'); ?>photos/rms-logo.png" alt="EARIST Research Management System logo">
-      <h1 class="auth-split-title">Research Management System</h1>
-      <p class="auth-split-subtitle">EARIST Cavite Campus</p>
+      <h1 class="auth-split-title"><?php echo htmlspecialchars(rmsSetting('site_name'), ENT_QUOTES, 'UTF-8'); ?></h1>
       <div class="auth-split-divider" aria-hidden="true"></div>
       <p class="auth-split-tagline">Sign in to access your research dashboard.</p>
-      <div class="auth-split-badge">📜 EARIST Research Manual 2015</div>
     </div>
   </aside>
 
@@ -728,7 +754,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     <div class="auth-split-form-inner">
       <div id="loginForm" class="auth-card" style="display: block;">
         <div class="auth-header">
-          <h1>Welcome Back</h1>
+          <h1>Welcome to RMS</h1>
           <p>Sign in to your account</p>
         </div>
 
@@ -750,32 +776,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
           <strong style="color: #bfdbfe;">🔑 Demo Credentials</strong><br>
           Student: jdelacruz@rms.edu.ph / Student@123<br>
           Faculty: msantos@rms.edu.ph / Faculty@123<br>
-          Staff: staff@rms.edu.ph / Staff@123<br>
+          Staff: staff1@rms.edu.ph / Staff@123<br>
           Admin: admin@rms.edu.ph / Admin@123
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; padding: 4px;">
-          <?php
-          $tabs = [
-              'student'        => ['🎓', 'Student'],
-              'faculty'        => ['👨‍🏫', 'Faculty'],
-              'research_staff' => ['📋', 'Staff'],
-              'admin'          => ['⚙️', 'Admin'],
-          ];
-          foreach ($tabs as $tabKey => $tabParts):
-              $isActive = ($selectedRole === $tabKey);
-              $fg       = $isActive ? '#5B1EBC' : '#64748B';
-              $weight   = $isActive ? '600' : '500';
-              $cls      = 'role-tab' . ($isActive ? ' active' : '');
-          ?>
-          <button type="button" class="<?php echo $cls; ?>" data-role="<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>" onclick="switchRole('<?php echo htmlspecialchars($tabKey, ENT_QUOTES, 'UTF-8'); ?>')" style="color: <?php echo $fg; ?>; border: none; cursor: pointer; font-weight: <?php echo $weight; ?>;"><span class="role-tab-emoji" aria-hidden="true"><?php echo $tabParts[0]; ?></span><span><?php echo $tabParts[1]; ?></span></button>
-          <?php endforeach; ?>
-        </div>
-
-        <form method="POST" action="login.php">
+        <form method="POST" action="login.php<?php echo $authContinuationQuery; ?>">
           <input type="hidden" name="action" value="login">
           <?php echo csrfField(); ?>
-          <input type="hidden" name="role" id="role" value="<?php echo htmlspecialchars($selectedRole, ENT_QUOTES, 'UTF-8'); ?>">
 
           <div class="form-group">
             <label class="form-label">Email Address</label>
@@ -796,7 +803,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             <label class="form-check">
               <input type="checkbox"> Remember me
             </label>
-            <a href="#forgot" style="color: var(--primary-light); font-weight: 500;">Forgot Password?</a>
+            <a href="about-us.php?password_help=1#contact-us" style="color: var(--primary-light); font-weight: 500;">Forgot Password?</a>
           </div>
 
           <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
@@ -822,9 +829,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         <div class="auth-header">
           <h1>Create Account</h1>
           <p>Join the Research Management System</p>
+          <?php if (rmsSetting('maintenance_enabled') === '1'): ?>
+            <p role="status">New registrations are temporarily unavailable during system maintenance.</p>
+          <?php endif; ?>
         </div>
 
-        <form method="POST" action="login.php" id="registrationForm">
+        <form method="POST" action="login.php<?php echo $authContinuationQuery; ?>" id="registrationForm">
           <input type="hidden" name="action" value="register">
           <?php echo csrfField(); ?>
 
@@ -849,50 +859,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             <select name="role" id="registerRole" class="form-control" required onchange="updateRegistrationFields()" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
               <option value="" disabled selected style="background: #0F1729; color: #8B8FAD;">Choose a role</option>
               <option value="student" style="background: #1a1a2e; color: #ffffff; padding: 12px;">🎓 Student</option>
-              <option value="faculty" style="background: #1a1a2e; color: #ffffff; padding: 12px;">👨‍🏫 Faculty/Adviser</option>
+              <option value="faculty" style="background: #1a1a2e; color: #ffffff; padding: 12px;">👨‍🏫 Faculty</option>
             </select>
           </div>
 
           <div class="form-group">
             <label class="form-label">Student/Employee ID</label>
-            <input type="text" name="student_id" id="studentEmployeeId" class="form-control" placeholder="e.g. 2024-00001" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id'], ENT_QUOTES, 'UTF-8') : ''; ?>">
+            <input type="text" name="student_id" id="studentEmployeeId" class="form-control" placeholder="e.g. 0316-00000C" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id'], ENT_QUOTES, 'UTF-8') : ''; ?>">
           </div>
 
           <div class="form-group">
             <label class="form-label">Contact Number</label>
-            <input type="tel" name="contact" class="form-control" placeholder="09XX XXX XXXX" value="<?php echo isset($_POST['contact']) ? htmlspecialchars($_POST['contact'], ENT_QUOTES, 'UTF-8') : ''; ?>">
+            <input type="tel" name="contact" class="form-control" placeholder="e.g. 09171234567" inputmode="numeric" pattern="09[0-9]{9}" minlength="11" maxlength="11" title="Enter 11 digits starting with 09." value="<?php echo isset($_POST['contact']) ? htmlspecialchars($_POST['contact'], ENT_QUOTES, 'UTF-8') : ''; ?>">
           </div>
 
           <!-- STUDENT-SPECIFIC FIELDS -->
           <div id="studentFields" style="display: none;">
-            <div class="form-group">
-              <label class="form-label">College/Department</label>
-              <select name="department" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
-                <option value="">Select college</option>
-                <option value="College of Information and Communications Technology">CICT</option>
-                <option value="College of Engineering">College of Engineering</option>
-                <option value="College of Arts and Sciences">College of Arts and Sciences</option>
-                <option value="College of Education">College of Education</option>
-                <option value="Graduate School">Graduate School</option>
-              </select>
-            </div>
-
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
               <div class="form-group">
                 <label class="form-label">Program/Course</label>
-                <input type="text" name="program" class="form-control" placeholder="e.g. BSIT, BSCS">
+                <select name="program" class="form-control">
+                  <option value="">Select program/course</option>
+                  <option value="BSIT">BSIT (BS Information Technology)</option>
+                  <option value="BSCS">BSCS (BS Computer Science)</option>
+                </select>
               </div>
               <div class="form-group">
                 <label class="form-label">Year Level</label>
                 <select name="year_level" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
                   <option value="">Select year</option>
-                  <option value="1st">1st Year</option>
-                  <option value="2nd">2nd Year</option>
                   <option value="3rd">3rd Year</option>
                   <option value="4th">4th Year</option>
-                  <option value="Graduate">Graduate</option>
-                  <option value="Masters">Master's</option>
-                  <option value="Doctorate">Doctorate</option>
                 </select>
               </div>
             </div>
@@ -904,12 +901,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
               <label class="form-label">Department</label>
               <select name="department" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
                 <option value="">Select department</option>
-                <option value="Information Technology">Information Technology</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Education">Education</option>
-                <option value="Arts and Sciences">Arts and Sciences</option>
-                <option value="Other">Other</option>
+                <?php foreach ($facultyDepartments as $facultyDepartment): ?>
+                  <option value="<?php echo htmlspecialchars($facultyDepartment, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($facultyDepartment, ENT_QUOTES, 'UTF-8'); ?></option>
+                <?php endforeach; ?>
               </select>
             </div>
 
@@ -922,12 +916,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
               <label class="form-label">Academic Rank</label>
               <select name="academic_rank" class="form-control" style="background: rgba(255,255,255,0.06); color: white; cursor: pointer; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3e%3cpath fill=%27%23D0D3E8%27 d=%27M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z%27/%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;">
                 <option value="">Select rank</option>
-                <option value="Instructor">Instructor</option>
-                <option value="Assistant Professor">Assistant Professor</option>
-                <option value="Associate Professor">Associate Professor</option>
-                <option value="Professor">Professor</option>
-                <option value="Dean">Dean</option>
-                <option value="Director">Director</option>
+                <?php foreach ($facultyAcademicRanks as $facultyAcademicRank): ?>
+                  <option value="<?php echo htmlspecialchars($facultyAcademicRank, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(rmsFacultyAcademicRankLabel($facultyAcademicRank), ENT_QUOTES, 'UTF-8'); ?></option>
+                <?php endforeach; ?>
               </select>
             </div>
 
@@ -947,14 +938,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
             <div class="form-group">
               <label class="form-label">Department</label>
-              <input type="text" name="department" class="form-control" placeholder="e.g. Research Management">
+              <input type="text" name="staff_department" class="form-control" placeholder="e.g. Research Management">
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">Password</label>
-              <input type="password" name="password" class="form-control" placeholder="Min. 8 characters" required>
+              <input type="password" name="password" class="form-control" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" placeholder="Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters" required>
             </div>
             <div class="form-group">
               <label class="form-label">Confirm Password</label>
@@ -962,7 +953,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-bottom: 16px;">
+          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-bottom: 16px;" <?php echo rmsSetting('maintenance_enabled') === '1' ? 'disabled' : ''; ?>>
             ✨ Create Account
           </button>
         </form>
@@ -977,39 +968,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 </div>
 
 <script>
-function switchRole(role) {
-  const roleInput = document.getElementById('role');
-  const tabs = document.querySelectorAll('.role-tab');
-
-  switch (role) {
-    case 'student':
-    case 'faculty':
-    case 'research_staff':
-    case 'admin':
-      if (roleInput) {
-        roleInput.value = role;
-      }
-      break;
-    default:
-      return;
-  }
-
-  tabs.forEach((btn) => {
-    const isActive = btn.getAttribute('data-role') === role;
-    btn.classList.toggle('active', isActive);
-    btn.style.color = isActive ? '#5B1EBC' : '#64748B';
-    btn.style.fontWeight = isActive ? '600' : '500';
-  });
-}
-
 function switchToRegister() {
-  document.getElementById('loginForm').style.display = 'none';
-  document.getElementById('registerForm').style.display = 'block';
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  if (!loginForm || !registerForm) return;
+
+  loginForm.style.display = 'none';
+  registerForm.style.display = 'block';
+  registerForm.classList.remove('form-entering');
+  void registerForm.offsetWidth;
+  registerForm.classList.add('form-entering');
 }
 
 function switchToLogin() {
-  document.getElementById('registerForm').style.display = 'none';
-  document.getElementById('loginForm').style.display = 'block';
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  if (!loginForm || !registerForm) return;
+
+  registerForm.style.display = 'none';
+  loginForm.style.display = 'block';
+  loginForm.classList.remove('form-entering');
+  void loginForm.offsetWidth;
+  loginForm.classList.add('form-entering');
 }
 
 function togglePassword(inputId, btnId) {
@@ -1042,7 +1022,7 @@ function updateRegistrationFields() {
   // Show relevant fields based on role
   if (role === 'student') {
     studentFields.style.display = 'block';
-    if (idLabel) idLabel.placeholder = 'e.g. 2024-00001 (Student ID)';
+    if (idLabel) idLabel.placeholder = 'e.g. 0316-00000C (Student ID)';
   } else if (role === 'faculty') {
     facultyFields.style.display = 'block';
     if (idLabel) idLabel.placeholder = 'e.g. F-2024-001 (Employee ID)';
@@ -1056,38 +1036,15 @@ if (window.location.hash === '#register') {
   switchToRegister();
 }
 
-// Auto-detect role from email as the user types. Unobtrusive: only switches
-// the active tab, never moves the cursor or steals focus. The substring
-// checks are intentionally simple — exact demo creds are covered, plus
-// any email that contains a role keyword (admin/staff/faculty/student).
-(function () {
-  const emailEl = document.getElementById('loginEmail');
-  if (!emailEl) return;
-
-  // Order matters: more specific patterns (e.g. "msantos") are checked
-  // before generic ones (e.g. "admin"). The first match wins.
-  const patterns = [
-    { role: 'admin',          rx: /admin/i },
-    { role: 'research_staff', rx: /staff/i },
-    { role: 'faculty',        rx: /msantos|jreyes|faculty|adviser/i },
-    { role: 'student',        rx: /jdelacruz|areyes|student/i },
-  ];
-
-  function detect(email) {
-    for (let i = 0; i < patterns.length; i++) {
-      if (patterns[i].rx.test(email)) return patterns[i].role;
-    }
-    return null;
+try {
+  if (window.sessionStorage.getItem('rmsPublicCtaZoom') === '1') {
+    window.sessionStorage.removeItem('rmsPublicCtaZoom');
+    document.querySelector('.auth-split')?.classList.add('cta-zoom-arrival');
   }
+} catch (error) {
+  // The login page remains available if session storage is unavailable.
+}
 
-  emailEl.addEventListener('input', function () {
-    const v = emailEl.value || '';
-    const role = detect(v);
-    if (role) {
-      switchRole(role);
-    }
-  });
-})();
 </script>
 </body>
 </html>

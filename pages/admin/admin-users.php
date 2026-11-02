@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/faculty-ranks.php';
+require_once __DIR__ . '/../../includes/academic-affiliation.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
 
 requireRole('admin');
@@ -8,6 +10,66 @@ requireRole('admin');
 $user = getCurrentUser();
 $success = '';
 $error = '';
+$academic_affiliation_enabled = rmsAcademicAffiliationTablesAvailable($conn);
+$academic_affiliation_catalog = $academic_affiliation_enabled ? rmsAcademicAffiliationCatalog($conn) : [];
+$academic_affiliation_all_groups = $academic_affiliation_enabled ? rmsAcademicAffiliationCatalog($conn, false) : [];
+$academic_affiliation_programs = [];
+$academic_affiliation_mappings = [];
+if ($academic_affiliation_enabled) {
+    $programResult = $conn->query(
+        'SELECT affiliation_program_id, program_id, program_code, program_name, is_specialization, status
+           FROM academic_affiliation_programs ORDER BY program_name'
+    );
+    if ($programResult) {
+        $academic_affiliation_programs = $programResult->fetch_all(MYSQLI_ASSOC);
+    }
+    $mappingResult = $conn->query(
+        'SELECT group_id, affiliation_program_id, status FROM academic_group_programs ORDER BY group_id, affiliation_program_id'
+    );
+    if ($mappingResult) {
+        while ($mapping = $mappingResult->fetch_assoc()) {
+            $academic_affiliation_mappings[(int) $mapping['group_id']][(int) $mapping['affiliation_program_id']] = (int) $mapping['status'];
+        }
+    }
+}
+
+function rms_admin_affiliation_program_ids($postedIds, array $allowedIds): ?array
+{
+    if (!is_array($postedIds)) {
+        return null;
+    }
+    $ids = [];
+    foreach ($postedIds as $rawId) {
+        if (!is_scalar($rawId) || !preg_match('/^[1-9][0-9]*$/D', (string) $rawId)) {
+            return null;
+        }
+        $id = filter_var($rawId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($id === false || !in_array((int) $id, $allowedIds, true)) {
+            return null;
+        }
+        $ids[] = (int) $id;
+    }
+    return array_values(array_unique($ids));
+}
+
+function rms_admin_group_code(mysqli $conn, string $name, int $exceptId = 0): string
+{
+    $base = strtolower(trim(preg_replace('/[^A-Za-z0-9]+/', '-', $name), '-'));
+    $base = $base !== '' ? substr($base, 0, 32) : 'academic-group';
+    $candidate = $base;
+    $suffix = 2;
+    $stmt = $conn->prepare('SELECT group_id FROM academic_affiliation_groups WHERE group_code = ? AND group_id <> ? LIMIT 1');
+    if (!$stmt) return $base;
+    while (true) {
+        $stmt->bind_param('si', $candidate, $exceptId);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows === 0) break;
+        $ending = '-' . $suffix++;
+        $candidate = substr($base, 0, 40 - strlen($ending)) . $ending;
+    }
+    $stmt->close();
+    return $candidate;
+}
 
 // Handle POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
@@ -16,8 +78,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
     } else {
         $action = $_POST['action'];
 
-        // CREATE USER (Faculty/Staff only)
-        if ($action === 'create_user') {
+        if ($action === 'save_academic_group') {
+            $groupId = filter_var($_POST['group_id'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+            $groupName = trim((string) ($_POST['group_name'] ?? ''));
+            $programIds = rms_admin_affiliation_program_ids(
+                $_POST['affiliation_program_ids'] ?? [],
+                array_map(static fn($program) => (int) $program['affiliation_program_id'], $academic_affiliation_programs)
+            );
+            $duplicateGroupName = false;
+            if ($academic_affiliation_enabled && is_int($groupId) && $groupId >= 0 && $groupName !== '') {
+                $duplicateStmt = $conn->prepare('SELECT group_id FROM academic_affiliation_groups WHERE LOWER(group_name) = LOWER(?) AND group_id <> ? LIMIT 1');
+                if ($duplicateStmt) {
+                    $duplicateStmt->bind_param('si', $groupName, $groupId);
+                    $duplicateStmt->execute();
+                    $duplicateGroupName = $duplicateStmt->get_result()->num_rows > 0;
+                    $duplicateStmt->close();
+                }
+            }
+            if (!$academic_affiliation_enabled) {
+                $error = 'The academic affiliation catalog is not available.';
+            } elseif ($groupId === false || mb_strlen($groupName) < 2 || mb_strlen($groupName) > 150) {
+                $error = 'Enter an academic group name between 2 and 150 characters.';
+            } elseif ($duplicateGroupName) {
+                $error = 'An academic group with that name already exists.';
+            } elseif ($programIds === null) {
+                $error = 'Choose valid academic programs for this group.';
+            } else {
+                $conn->begin_transaction();
+                $saved = true;
+                if ((int) $groupId > 0) {
+                    $groupStmt = $conn->prepare('UPDATE academic_affiliation_groups SET group_name = ?, updated_at = NOW() WHERE group_id = ?');
+                    if (!$groupStmt) $saved = false;
+                    else {
+                        $groupStmt->bind_param('si', $groupName, $groupId);
+                        $saved = $groupStmt->execute() && $groupStmt->affected_rows >= 0;
+                        $groupStmt->close();
+                    }
+                    $targetGroupId = (int) $groupId;
+                } else {
+                    $code = rms_admin_group_code($conn, $groupName);
+                    $groupStmt = $conn->prepare('INSERT INTO academic_affiliation_groups (group_code, group_name, status) VALUES (?, ?, 1)');
+                    if (!$groupStmt) $saved = false;
+                    else {
+                        $groupStmt->bind_param('ss', $code, $groupName);
+                        $saved = $groupStmt->execute();
+                        $targetGroupId = (int) $conn->insert_id;
+                        $groupStmt->close();
+                    }
+                }
+                if ($saved) {
+                    $disable = $conn->prepare('UPDATE academic_group_programs SET status = 0, updated_at = NOW() WHERE group_id = ?');
+                    if (!$disable) $saved = false;
+                    else {
+                        $disable->bind_param('i', $targetGroupId);
+                        $saved = $disable->execute();
+                        $disable->close();
+                    }
+                }
+                if ($saved) {
+                    $map = $conn->prepare(
+                        'INSERT INTO academic_group_programs (group_id, affiliation_program_id, status)
+                         VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE status = 1, updated_at = NOW()'
+                    );
+                    if (!$map) $saved = false;
+                    else {
+                        foreach ($programIds as $programId) {
+                            $map->bind_param('ii', $targetGroupId, $programId);
+                            if (!$map->execute()) { $saved = false; break; }
+                        }
+                        $map->close();
+                    }
+                }
+                if ($saved && $conn->commit()) {
+                    logActivity('Updated academic affiliation group and program mappings', 'user_management');
+                    $success = 'Academic group and program mappings saved.';
+                } else {
+                    $conn->rollback();
+                    $error = 'Could not save the academic group and mappings.';
+                }
+            }
+        }
+
+        elseif ($action === 'toggle_academic_group') {
+            $groupId = filter_var($_POST['group_id'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $newStatus = ($_POST['new_status'] ?? '') === '1' ? 1 : 0;
+            if (!$academic_affiliation_enabled || $groupId === false) {
+                $error = 'Choose a valid academic group.';
+            } else {
+                $toggle = $conn->prepare('UPDATE academic_affiliation_groups SET status = ?, updated_at = NOW() WHERE group_id = ?');
+                $toggle->bind_param('ii', $newStatus, $groupId);
+                if ($toggle->execute()) {
+                    logActivity(($newStatus ? 'Activated' : 'Deactivated') . ' academic affiliation group', 'user_management');
+                    $success = 'Academic group status updated.';
+                } else $error = 'Could not update the academic group status.';
+                $toggle->close();
+            }
+        }
+
+        // CREATE USER (Faculty, Research Staff, or Administrator)
+        elseif ($action === 'create_user') {
             $role = $_POST['role'] ?? '';
             $first_name = trim($_POST['first_name'] ?? '');
             $last_name = trim($_POST['last_name'] ?? '');
@@ -27,20 +186,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $contact = trim($_POST['contact'] ?? '');
             $department = trim($_POST['department'] ?? '');
             $specialization = trim($_POST['specialization'] ?? '');
-            $academic_rank = $_POST['academic_rank'] ?? null;
-            $is_reviewer = isset($_POST['is_reviewer']) ? 1 : 0;
+            $academic_rank = $_POST['academic_rank'] ?? '';
+            $designation = trim((string) ($_POST['designation'] ?? ''));
             $office = trim($_POST['office'] ?? '');
+            $affiliations = $_POST['academic_affiliations'] ?? [];
 
-            // Only allow faculty and research_staff creation
-            if (!in_array($role, ['faculty', 'research_staff'], true)) {
-                $error = 'Can only create Faculty or Research Staff accounts.';
+            if (!in_array($role, ['faculty', 'research_staff', 'admin'], true)) {
+                $error = 'Choose Faculty, Research Staff, or Administrator.';
+            } elseif ($academic_rank !== '' && !rmsFacultyAcademicRankIsValid($academic_rank)) {
+                $error = 'Please select a valid academic rank.';
+            } elseif ($academic_affiliation_enabled && (!isset($_POST['academic_affiliations_submitted']) || !is_array($affiliations))) {
+                $error = 'Submit valid academic affiliation selections.';
+            } elseif (mb_strlen($designation) > 150) {
+                $error = 'Designation is too long (max 150 characters).';
             } elseif (empty($first_name) || empty($last_name) || empty($email) || empty($password)) {
                 $error = 'Name, email, and password are required.';
-            } elseif (strlen($password) < 8) {
-                $error = 'Password must be at least 8 characters.';
+            } elseif (strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $error = 'Enter a valid email address.';
+            } elseif (($passwordPolicyError = rmsValidatePasswordPolicy($password)) !== null) {
+                $error = $passwordPolicyError;
             } else {
+                $academic_rank = $academic_rank === '' ? null : $academic_rank;
                 // Check if email exists
-                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL");
                 $check_stmt->bind_param('s', $email);
                 $check_stmt->execute();
                 if ($check_stmt->get_result()->num_rows > 0) {
@@ -49,18 +217,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                     $password_hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
                     $status = 'active'; // Admin-created accounts are auto-approved
 
-                    $insert_stmt = $conn->prepare("INSERT INTO users (role, first_name, last_name, email, password, student_id, contact, department, specialization, academic_rank, is_reviewer, office, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
-                    $insert_stmt->bind_param('sssssssssssss', $role, $first_name, $last_name, $email, $password_hash, $student_id, $contact, $department, $specialization, $academic_rank, $is_reviewer, $office, $status);
-
-                    if ($insert_stmt->execute()) {
-                        $newUserId = (int) $conn->insert_id;
-                        if ($role === 'research_staff') {
-                            seedDefaultStaffPermissions($newUserId, true);
-                        }
-                        logActivity("Created user account: {$first_name} {$last_name} ({$email})", 'user_management');
-                        $success = "User {$first_name} {$last_name} created successfully.";
+                    $insert_stmt = $conn->prepare("INSERT INTO users (role, first_name, last_name, email, password, student_id, contact, department, specialization, academic_rank, designation, office, status, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
+                    if (!$insert_stmt) {
+                        $error = 'Could not prepare the account creation. Please try again.';
                     } else {
-                        $error = 'Failed to create user account.';
+                        $insert_stmt->bind_param('sssssssssssss', $role, $first_name, $last_name, $email, $password_hash, $student_id, $contact, $department, $specialization, $academic_rank, $designation, $office, $status);
+                        $transactionStarted = !$academic_affiliation_enabled || $conn->begin_transaction();
+                        if (!$transactionStarted) {
+                            $error = 'Could not begin the account update. Please try again.';
+                        } elseif ($insert_stmt->execute()) {
+                            $newUserId = (int) $conn->insert_id;
+                            $affiliationsSaved = !$academic_affiliation_enabled || rmsAcademicAffiliationSave($conn, $newUserId, $affiliations, $role === 'faculty');
+                            $committed = $affiliationsSaved && (!$academic_affiliation_enabled || $conn->commit());
+                            if ($committed) {
+                                if ($role === 'research_staff') {
+                                seedDefaultStaffPermissions($newUserId, true);
+                                }
+                                logActivity("Created user account: {$first_name} {$last_name} ({$email})", 'user_management');
+                                $success = "User {$first_name} {$last_name} created successfully.";
+                            } else {
+                                if ($academic_affiliation_enabled) $conn->rollback();
+                                $error = 'Could not save academic affiliation selections.';
+                            }
+                        } else {
+                            if ($academic_affiliation_enabled) $conn->rollback();
+                            $error = 'Failed to create user account.';
+                        }
+                        $insert_stmt->close();
                     }
                 }
             }
@@ -69,7 +252,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
         // EDIT USER
         elseif ($action === 'edit_user') {
             $user_id = (int) ($_POST['user_id'] ?? 0);
-            $role = $_POST['role'] ?? '';
             $first_name = trim($_POST['first_name'] ?? '');
             $last_name = trim($_POST['last_name'] ?? '');
             $email = trim($_POST['email'] ?? '');
@@ -79,28 +261,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $program = trim($_POST['program'] ?? '');
             $year_level = $_POST['year_level'] ?? null;
             $specialization = trim($_POST['specialization'] ?? '');
-            $academic_rank = $_POST['academic_rank'] ?? null;
-            $is_reviewer = isset($_POST['is_reviewer']) ? 1 : 0;
+            $academic_rank = $_POST['academic_rank'] ?? '';
+            $designation = trim((string) ($_POST['designation'] ?? ''));
             $office = trim($_POST['office'] ?? '');
 
-            if (empty($first_name) || empty($last_name) || empty($email)) {
+            $role_stmt = $conn->prepare('SELECT role, academic_rank, designation, program, year_level FROM users WHERE user_id = ? AND deleted_at IS NULL LIMIT 1');
+            $actual_role = '';
+            $role_row = [];
+            if ($role_stmt) {
+                $role_stmt->bind_param('i', $user_id);
+                $role_stmt->execute();
+                $role_row = $role_stmt->get_result()->fetch_assoc();
+                $actual_role = (string) ($role_row['role'] ?? '');
+                $role_stmt->close();
+            }
+            $role = $actual_role;
+            $affiliations = $_POST['academic_affiliations'] ?? [];
+            $isAffiliationRole = in_array($role, ['admin', 'research_staff', 'faculty'], true);
+            if ($role !== 'student') {
+                $program = (string) ($role_row['program'] ?? '');
+                $year_level = $role_row['year_level'] ?? null;
+            }
+            if (!$isAffiliationRole) {
+                $academic_rank = $role_row['academic_rank'] ?? null;
+                $designation = (string) ($role_row['designation'] ?? '');
+            }
+
+            if ($user_id <= 0 || $role === '') {
+                $error = 'User not found.';
+            } elseif ($isAffiliationRole && $academic_rank !== '' && !rmsFacultyAcademicRankIsValid($academic_rank, $role_row['academic_rank'] ?? null)) {
+                $error = 'Please select a valid academic rank.';
+            } elseif ($isAffiliationRole && $academic_affiliation_enabled && (!isset($_POST['academic_affiliations_submitted']) || !is_array($affiliations))) {
+                $error = 'Submit valid academic affiliation selections.';
+            } elseif ($isAffiliationRole && mb_strlen($designation) > 150) {
+                $error = 'Designation is too long (max 150 characters).';
+            } elseif (empty($first_name) || empty($last_name) || empty($email)) {
                 $error = 'Name and email are required.';
             } else {
+                $academic_rank = $academic_rank === '' ? null : $academic_rank;
                 // Check if email exists for another user
-                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id != ?");
+                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id != ? AND deleted_at IS NULL");
                 $check_stmt->bind_param('si', $email, $user_id);
                 $check_stmt->execute();
                 if ($check_stmt->get_result()->num_rows > 0) {
                     $error = 'Email already used by another user.';
                 } else {
-                    $update_stmt = $conn->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ?, student_id = ?, contact = ?, department = ?, program = ?, year_level = ?, specialization = ?, academic_rank = ?, is_reviewer = ?, office = ?, updated_at = NOW() WHERE user_id = ?");
-                    $update_stmt->bind_param('ssssssssssssi', $first_name, $last_name, $email, $student_id, $contact, $department, $program, $year_level, $specialization, $academic_rank, $is_reviewer, $office, $user_id);
-
-                    if ($update_stmt->execute()) {
-                        logActivity("Updated user account: {$first_name} {$last_name} (ID: {$user_id})", 'user_management');
-                        $success = "User {$first_name} {$last_name} updated successfully.";
+                    $update_stmt = $conn->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ?, student_id = ?, contact = ?, department = ?, program = ?, year_level = ?, specialization = ?, academic_rank = ?, designation = ?, office = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
+                    if (!$update_stmt) {
+                        $error = 'Could not prepare the account update. Please try again.';
+                    } elseif (!$conn->begin_transaction()) {
+                        $update_stmt->close();
+                        $error = 'Could not begin the account update. Please try again.';
                     } else {
-                        $error = 'Failed to update user account.';
+                        $update_stmt->bind_param('ssssssssssssi', $first_name, $last_name, $email, $student_id, $contact, $department, $program, $year_level, $specialization, $academic_rank, $designation, $office, $user_id);
+                        $updated = $update_stmt->execute();
+                        $update_stmt->close();
+                        $affiliationsSaved = $updated && (!$isAffiliationRole || !$academic_affiliation_enabled
+                            || rmsAcademicAffiliationSave($conn, $user_id, $affiliations, $role === 'faculty'));
+                        if ($affiliationsSaved && $conn->commit()) {
+                            logActivity("Updated user account: {$first_name} {$last_name} (ID: {$user_id})", 'user_management');
+                            $success = "User {$first_name} {$last_name} updated successfully.";
+                        } else {
+                            $conn->rollback();
+                            $error = $updated ? 'Could not save academic affiliation selections.' : 'Failed to update user account.';
+                        }
                     }
                 }
             }
@@ -112,7 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $current_status = $_POST['current_status'] ?? '';
 
             // Prevent suspending admin accounts
-            $check_stmt = $conn->prepare("SELECT role, first_name, last_name, email, CONCAT(first_name, ' ', last_name) AS name FROM users WHERE user_id = ?");
+            $check_stmt = $conn->prepare("SELECT role, first_name, last_name, email, CONCAT(first_name, ' ', last_name) AS name FROM users WHERE user_id = ? AND deleted_at IS NULL");
             $check_stmt->bind_param('i', $user_id);
             $check_stmt->execute();
             $result = $check_stmt->get_result();
@@ -125,7 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                     $error = 'Cannot modify administrator accounts.';
                 } else {
                     $new_status = ($current_status === 'active') ? 'suspended' : 'active';
-                    $update_stmt = $conn->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE user_id = ?");
+                    $update_stmt = $conn->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
                     $update_stmt->bind_param('si', $new_status, $user_id);
 
                     if ($update_stmt->execute()) {
@@ -149,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
         // SAVE STAFF PERMISSIONS
         elseif ($action === 'save_staff_permissions') {
             $user_id = (int) ($_POST['user_id'] ?? 0);
-            $target_stmt = $conn->prepare('SELECT user_id, role, CONCAT(first_name, " ", last_name) AS name FROM users WHERE user_id = ? LIMIT 1');
+            $target_stmt = $conn->prepare('SELECT user_id, role, CONCAT(first_name, " ", last_name) AS name FROM users WHERE user_id = ? AND deleted_at IS NULL LIMIT 1');
             if (!$target_stmt) {
                 $error = 'Unable to load staff account.';
             } else {
@@ -167,7 +391,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                     if (!is_array($moduleAccess)) {
                         $moduleAccess = [];
                     }
-                    $saved = saveStaffPermissionCollection($user_id, $moduleAccess);
+                    $downloadAccess = $_POST['download_access'] ?? [];
+                    if (!is_array($downloadAccess)) {
+                        $downloadAccess = [];
+                    }
+                    $saved = saveStaffPermissionCollection($user_id, $moduleAccess, $downloadAccess);
                     if ($saved) {
                         logActivity("Updated staff permissions for {$target_user['name']} (ID: {$user_id})", 'user_management');
                         $success = "Permissions updated for {$target_user['name']}.";
@@ -183,10 +411,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $user_id = (int) ($_POST['user_id'] ?? 0);
             $new_password = $_POST['new_password'] ?? '';
 
-            if (strlen($new_password) < 8) {
-                $error = 'Password must be at least 8 characters.';
+            if (($passwordPolicyError = rmsValidatePasswordPolicy((string) $new_password)) !== null) {
+                $error = $passwordPolicyError;
             } else {
-                $check_stmt = $conn->prepare("SELECT role, CONCAT(first_name, ' ', last_name) AS name FROM users WHERE user_id = ?");
+                $check_stmt = $conn->prepare("SELECT role, CONCAT(first_name, ' ', last_name) AS name FROM users WHERE user_id = ? AND deleted_at IS NULL");
                 $check_stmt->bind_param('i', $user_id);
                 $check_stmt->execute();
                 $result = $check_stmt->get_result();
@@ -199,7 +427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                         $error = 'Cannot reset administrator passwords from this interface.';
                     } else {
                         $password_hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
-                        $update_stmt = $conn->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE user_id = ?");
+                    $update_stmt = $conn->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
                         $update_stmt->bind_param('si', $password_hash, $user_id);
 
                         if ($update_stmt->execute()) {
@@ -219,8 +447,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $role_filter = isset($_GET['role']) ? $_GET['role'] : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
+$academic_group_filter = filter_var($_GET['academic_group'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: 0;
+$academic_program_filter = filter_var($_GET['academic_program'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: 0;
 
-$where_clauses = [];
+$where_clauses = ['deleted_at IS NULL'];
 $params = [];
 $types = '';
 
@@ -246,9 +476,29 @@ if (!empty($status_filter)) {
     $types .= 's';
 }
 
+if ($academic_affiliation_enabled && $academic_group_filter > 0) {
+    $where_clauses[] = "role IN ('admin','research_staff','faculty') AND EXISTS (SELECT 1 FROM user_academic_affiliations filter_affiliation WHERE filter_affiliation.user_id = users.user_id AND filter_affiliation.group_id = ? )";
+    $params[] = $academic_group_filter;
+    $types .= 'i';
+}
+if ($academic_affiliation_enabled && $academic_program_filter > 0) {
+    $where_clauses[] = "role IN ('admin','research_staff','faculty') AND EXISTS (SELECT 1 FROM user_academic_affiliations filter_affiliation JOIN user_academic_program_assignments filter_program ON filter_program.affiliation_id = filter_affiliation.affiliation_id WHERE filter_affiliation.user_id = users.user_id AND filter_program.affiliation_program_id = ? )";
+    $params[] = $academic_program_filter;
+    $types .= 'i';
+}
+
 $where_sql = !empty($where_clauses) ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
 
-$query = "SELECT user_id, role, first_name, last_name, email, student_id, contact, department, program, year_level, specialization, academic_rank, is_reviewer, office, status, last_login, created_at FROM users {$where_sql} ORDER BY created_at DESC";
+$affiliationSummarySelect = $academic_affiliation_enabled
+    ? "(SELECT GROUP_CONCAT(DISTINCT CONCAT(g.group_name, ': ', COALESCE(p.program_name, 'Not Applicable')) ORDER BY g.group_name, p.program_name SEPARATOR '; ') FROM user_academic_affiliations a JOIN academic_affiliation_groups g ON g.group_id = a.group_id LEFT JOIN user_academic_program_assignments pa ON pa.affiliation_id = a.affiliation_id LEFT JOIN academic_affiliation_programs p ON p.affiliation_program_id = pa.affiliation_program_id WHERE a.user_id = users.user_id) AS academic_affiliation_summary,"
+    : 'NULL AS academic_affiliation_summary,';
+$query = "SELECT user_id, role, first_name, last_name, email, student_id, contact, department, program, year_level, specialization, academic_rank, designation, office, status, last_login, created_at,
+                 {$affiliationSummarySelect}
+                 (SELECT GROUP_CONCAT(p.program_code ORDER BY p.program_code SEPARATOR ', ')
+                    FROM faculty_program_assignments fpa
+                    JOIN programs p ON p.program_id = fpa.program_id
+                   WHERE fpa.faculty_id = users.user_id) AS faculty_program_codes
+            FROM users {$where_sql} ORDER BY created_at DESC";
 
 $stmt = $conn->prepare($query);
 if (!empty($params)) {
@@ -256,14 +506,35 @@ if (!empty($params)) {
 }
 $stmt->execute();
 $users = $stmt->get_result();
+$academic_affiliations_by_user = [];
+if ($academic_affiliation_enabled) {
+    $assigned = $conn->query(
+        "SELECT a.user_id, a.group_id, a.is_primary, GROUP_CONCAT(pa.affiliation_program_id ORDER BY p.program_name SEPARATOR ',') AS program_ids
+           FROM user_academic_affiliations a
+           JOIN users u ON u.user_id = a.user_id AND u.role IN ('admin','research_staff','faculty') AND u.deleted_at IS NULL
+           LEFT JOIN user_academic_program_assignments pa ON pa.affiliation_id = a.affiliation_id
+           LEFT JOIN academic_affiliation_programs p ON p.affiliation_program_id = pa.affiliation_program_id
+          GROUP BY a.user_id, a.group_id, a.is_primary
+          ORDER BY a.is_primary DESC, a.group_id"
+    );
+    if ($assigned) {
+        while ($assignment = $assigned->fetch_assoc()) {
+            $academic_affiliations_by_user[(int) $assignment['user_id']][] = [
+                'group_id' => (int) $assignment['group_id'],
+                'is_primary' => (int) $assignment['is_primary'],
+                'program_ids' => array_values(array_filter(array_map('intval', explode(',', (string) ($assignment['program_ids'] ?? ''))))),
+            ];
+        }
+    }
+}
 
 // Get counts for statistics
-$total_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users")->fetch_assoc()['count'] ?? 0);
-$total_students = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'student'")->fetch_assoc()['count'] ?? 0);
-$total_faculty = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'faculty'")->fetch_assoc()['count'] ?? 0);
-$total_staff = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'research_staff'")->fetch_assoc()['count'] ?? 0);
-$pending_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE status = 'pending'")->fetch_assoc()['count'] ?? 0);
-$active_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE status = 'active'")->fetch_assoc()['count'] ?? 0);
+$total_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$total_students = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'student' AND deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$total_faculty = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'faculty' AND deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$total_staff = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'research_staff' AND deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$pending_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE status = 'pending' AND deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
+$active_users = (int) ($conn->query("SELECT COUNT(*) as count FROM users WHERE status = 'active' AND deleted_at IS NULL")->fetch_assoc()['count'] ?? 0);
 $visible_users = $users->num_rows;
 
 // Page-specific styles only — sidebar/topbar styles live in css/admin-shell.css.
@@ -490,9 +761,6 @@ $visible_users = $users->num_rows;
   .permission-grid {
     display: grid;
     gap: 16px;
-    max-height: 60vh;
-    overflow: auto;
-    padding-right: 6px;
   }
   .permission-block {
     border: 1px solid #e5e7eb;
@@ -512,19 +780,21 @@ $visible_users = $users->num_rows;
     gap: 10px;
   }
   .permission-subpage {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 138px;
     align-items: center;
     gap: 12px;
     padding-top: 10px;
     border-top: 1px solid #edf2f7;
   }
+  .permission-subpage > span { min-width: 0; }
   .permission-levels {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
     justify-content: flex-end;
   }
+  .permission-levels.compact { flex-wrap: nowrap; gap: 12px; justify-content: flex-start; white-space: nowrap; }
   .permission-option {
     display: inline-flex;
     align-items: center;
@@ -533,6 +803,7 @@ $visible_users = $users->num_rows;
     color: #475467;
   }
   .permission-option.compact { font-size: 11px; }
+  .permission-subpage > .permission-option { white-space: nowrap; }
   .permission-option input { accent-color: #5b1ebc; }
   .modal-large { max-width: 980px; width: min(90vw, 980px); }
 
@@ -558,7 +829,6 @@ $visible_users = $users->num_rows;
   .identity-avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border-radius: 10px; background: #e9edf3; color: #344054; font-size: 12px; font-weight: 750; letter-spacing: .03em; }
   .identity-name { color: #20293b; font-weight: 680; line-height: 1.3; }
   .identity-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: #8a94a3; font-size: 11px; }
-  .reviewer-mark { display: inline-flex; align-items: center; gap: 4px; color: #86611c; }
   .user-table th:nth-child(2),
   .user-table td:nth-child(2) { width: 250px; }
   .email-cell { min-width: 230px; line-height: 1.5; white-space: nowrap; }
@@ -587,18 +857,20 @@ $visible_users = $users->num_rows;
 
   .modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; padding: 24px; background: rgba(12,18,29,.68); backdrop-filter: blur(7px); }
   .modal-overlay.active { display: flex; animation: modal-fade .18s ease both; }
-  .modal { width: min(100%, 640px); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 0; border: 1px solid rgba(255,255,255,.6); border-radius: 18px; background: #fff; box-shadow: 0 30px 80px rgba(9,15,27,.3); animation: modal-rise .25s cubic-bezier(.2,.8,.2,1) both; }
-  .modal-header { position: relative; margin: 0; padding: 28px 32px 24px; overflow: hidden; background: #182033; color: #fff; }
+  .modal { display: flex; flex-direction: column; width: min(100%, 640px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow: hidden; padding: 0; border: 1px solid rgba(255,255,255,.6); border-radius: 18px; background: #fff; box-shadow: 0 30px 80px rgba(9,15,27,.3); animation: modal-rise .25s cubic-bezier(.2,.8,.2,1) both; }
+  .modal-header { position: relative; flex: 0 0 auto; margin: 0; padding: 28px 32px 24px; overflow: hidden; background: #182033; color: #fff; }
   .modal-header::after { content: ''; position: absolute; right: -42px; top: -72px; width: 170px; height: 170px; border: 30px solid rgba(211,163,72,.17); border-radius: 50%; }
   .modal-title { position: relative; z-index: 1; margin: 0 0 6px; font-size: 25px; font-weight: 720; letter-spacing: -.03em; }
   .modal-subtitle { position: relative; z-index: 1; color: #aeb9ca; font-size: 13px; }
-  .modal form { padding: 28px 32px 32px; }
+  .modal form { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 28px 32px 32px; }
   .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px; padding-top: 22px; border-top: 1px solid #e8ecf1; }
   .form-group { margin-bottom: 18px; }
   .form-label { display: block; margin-bottom: 7px; color: #000; font-size: 12px; font-weight: 700; }
   .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .form-check { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 10px 12px; border: 1px solid #e0e5eb; border-radius: 9px; background: #f8f9fb; color: #000; font-size: 13px; font-weight: 600; }
   .form-check input { accent-color: #b7862f; }
+  .faculty-program-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+  .faculty-program-group legend { padding: 0; }
   .form-hint { display: block; margin-top: 6px; color: #000; font-size: 11px; font-weight: 600; }
   .modal .form-control,
   .modal .form-control option { color: #000 !important; -webkit-text-fill-color: #000 !important; }
@@ -647,9 +919,20 @@ $visible_users = $users->num_rows;
     .empty-state::before { display: none; }
     .form-grid-2 { grid-template-columns: 1fr; gap: 0; }
     .modal-overlay { padding: 12px; }
-    .modal { max-height: calc(100dvh - 24px); }
+    .modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
     .modal-header { padding: 24px 22px 21px; }
     .modal form { padding: 24px 22px; }
+    .permission-subpage { grid-template-columns: minmax(0, 1fr) 138px; column-gap: 12px; row-gap: 8px; }
+    .permission-subpage > span { grid-column: 1 / -1; }
+    .permission-levels.compact { grid-column: 1; }
+    .permission-subpage > .permission-option { grid-column: 2; }
+  }
+
+  @media (max-width: 480px) {
+    .permission-subpage { grid-template-columns: minmax(0, 1fr); }
+    .permission-levels.compact { grid-column: 1; display: grid; grid-template-columns: repeat(3, max-content); gap: 8px; }
+    .permission-subpage > .permission-option { grid-column: 1; }
+    .permission-option.compact { gap: 4px; font-size: 10px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -747,9 +1030,16 @@ renderAdminShell(
         <div>
           <div class="directory-eyebrow">Institutional directory</div>
           <h3 class="directory-title" id="directory-title">User accounts</h3>
-          <p class="directory-meta"><?php echo $visible_users; ?> record<?php echo $visible_users === 1 ? '' : 's'; ?> shown<?php echo (!empty($search) || !empty($role_filter) || !empty($status_filter)) ? ' for the current filters' : ''; ?>.</p>
+          <p class="directory-meta"><?php echo $visible_users; ?> record<?php echo $visible_users === 1 ? '' : 's'; ?> shown<?php echo (!empty($search) || !empty($role_filter) || !empty($status_filter) || $academic_group_filter || $academic_program_filter) ? ' for the current filters' : ''; ?>.</p>
         </div>
-        <button type="button" class="btn btn-primary" onclick="openCreateModal()">Add faculty or staff</button>
+        <div class="directory-actions">
+          <?php if ($academic_affiliation_enabled): ?>
+            <button type="button" class="btn btn-secondary" onclick="showModal('academicAffiliationManager')">Manage academic groups</button>
+          <?php else: ?>
+            <span class="form-hint">Academic affiliation catalog is awaiting its database migration.</span>
+          <?php endif; ?>
+          <button type="button" class="btn btn-primary" onclick="openCreateModal()">Add faculty or staff</button>
+        </div>
       </div>
 
       <!-- FILTERS -->
@@ -773,8 +1063,24 @@ renderAdminShell(
           <option value="pending" <?php echo $status_filter === 'pending' ? 'selected' : ''; ?>>Pending</option>
           <option value="suspended" <?php echo $status_filter === 'suspended' ? 'selected' : ''; ?>>Suspended</option>
         </select>
+        <?php if ($academic_affiliation_enabled): ?>
+        <label class="sr-only" for="academicGroupFilter">Filter by academic group</label>
+        <select id="academicGroupFilter" name="academic_group" class="filter-select">
+          <option value="0">All academic groups</option>
+          <?php foreach ($academic_affiliation_catalog as $group): ?>
+            <option value="<?php echo (int) $group['group_id']; ?>" <?php echo $academic_group_filter === (int) $group['group_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($group['group_name'], ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php endforeach; ?>
+        </select>
+        <label class="sr-only" for="academicProgramFilter">Filter by academic program</label>
+        <select id="academicProgramFilter" name="academic_program" class="filter-select">
+          <option value="0">All academic programs</option>
+          <?php foreach ($academic_affiliation_catalog as $group): foreach ($group['programs'] as $program): ?>
+            <option value="<?php echo (int) $program['affiliation_program_id']; ?>" <?php echo $academic_program_filter === (int) $program['affiliation_program_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($group['group_name'] . ' · ' . $program['program_name'], ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php endforeach; endforeach; ?>
+        </select>
+        <?php endif; ?>
         <button type="submit" class="btn btn-secondary">Apply filters</button>
-        <?php if (!empty($search) || !empty($role_filter) || !empty($status_filter)): ?>
+        <?php if (!empty($search) || !empty($role_filter) || !empty($status_filter) || $academic_group_filter || $academic_program_filter): ?>
           <a href="admin-users.php" class="btn btn-secondary clear-filter">Clear filters</a>
         <?php endif; ?>
       </form>
@@ -787,6 +1093,8 @@ renderAdminShell(
               <th>Name</th>
               <th>Email</th>
               <th>ID</th>
+              <th>Course</th>
+              <th>Academic affiliation</th>
               <th>Role</th>
               <th>Status</th>
               <th>Joined</th>
@@ -808,15 +1116,30 @@ renderAdminShell(
                         <div class="identity-name"><?php echo htmlspecialchars($person_name, ENT_QUOTES, 'UTF-8'); ?></div>
                         <div class="identity-meta">
                           Account #<?php echo (int) $u['user_id']; ?>
-                          <?php if ($u['is_reviewer'] == 1): ?>
-                            <span class="reviewer-mark" title="Legacy reviewer flag">&bull; Legacy reviewer flag</span>
-                          <?php endif; ?>
                         </div>
                       </div>
                     </div>
                   </td>
                   <td data-label="Email" class="email-cell"><?php echo htmlspecialchars($u['email'], ENT_QUOTES, 'UTF-8'); ?></td>
                   <td data-label="ID" class="id-cell"><?php echo htmlspecialchars($u['student_id'] ?: '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td data-label="Course" class="course-cell">
+                    <?php if ($u['role'] === 'student' && trim((string) $u['program']) !== ''): ?>
+                      <?php echo htmlspecialchars($u['program'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php elseif ($u['role'] === 'faculty' && trim((string) ($u['faculty_program_codes'] ?? '')) !== ''): ?>
+                      <?php echo htmlspecialchars($u['faculty_program_codes'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php else: ?>
+                      &mdash;
+                    <?php endif; ?>
+                  </td>
+                  <td data-label="Academic affiliation" class="affiliation-cell">
+                    <?php if (in_array($u['role'], ['admin', 'research_staff', 'faculty'], true) && trim((string) ($u['academic_affiliation_summary'] ?? '')) !== ''): ?>
+                      <?php echo htmlspecialchars($u['academic_affiliation_summary'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php elseif (in_array($u['role'], ['admin', 'research_staff', 'faculty'], true)): ?>
+                      <span class="muted">Not recorded</span>
+                    <?php else: ?>
+                      <span class="muted">—</span>
+                    <?php endif; ?>
+                  </td>
                   <td data-label="Role">
                     <?php
                     $role_badges = [
@@ -851,7 +1174,8 @@ renderAdminShell(
                   <td data-label="Actions">
                     <?php if ($u['role'] !== 'admin'): ?>
                       <div class="actions">
-                      <button type="button" class="btn btn-secondary btn-sm" onclick='openEditModal(<?php echo json_encode($u, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Edit</button>
+                      <?php $editPayload = $u; $editPayload['academic_affiliations'] = $academic_affiliations_by_user[(int) $u['user_id']] ?? []; ?>
+                      <button type="button" class="btn btn-secondary btn-sm" onclick='openEditModal(<?php echo json_encode($editPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>)'>Edit</button>
 
                       <?php if ($u['status'] === 'active'): ?>
                         <button type="button" class="btn btn-sm btn-danger" onclick='confirmToggleStatus(<?php echo (int) $u['user_id']; ?>, "active", <?php echo json_encode($person_name, JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>Suspend</button>
@@ -873,7 +1197,7 @@ renderAdminShell(
               <?php endwhile; ?>
             <?php else: ?>
               <tr>
-                <td colspan="7" class="empty-state">
+                <td colspan="9" class="empty-state">
                   <strong>No matching accounts</strong>
                   <span>Adjust the search or clear the active filters.</span>
                 </td>
@@ -901,7 +1225,7 @@ renderAdminShell(
       <?php echo csrfField(); ?>
 
       <div class="permission-grid">
-        <p class="permission-guidance">Research staff receive view-only access by default. To grant control, choose Manage only for the specific subpage this staff member should operate.</p>
+        <p class="permission-guidance">Existing default module access is view-only. Download grants are separate and remain disabled unless explicitly granted for a subpage.</p>
         <?php foreach (rmsPermissionModules() as $module_key => $module_data): ?>
           <section class="permission-block">
             <div class="permission-header">
@@ -938,6 +1262,10 @@ renderAdminShell(
                       <span>Manage</span>
                     </label>
                   </div>
+                  <label class="permission-option compact">
+                    <input type="checkbox" name="download_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="1">
+                    <span>Allow downloads</span>
+                  </label>
                 </div>
               <?php endforeach; ?>
             </div>
@@ -953,12 +1281,87 @@ renderAdminShell(
   </div>
 </div>
 
+<?php if ($academic_affiliation_enabled): ?>
+<div class="modal-overlay" id="academicAffiliationManager" aria-hidden="true">
+  <div class="modal modal-large affiliation-manager" role="dialog" aria-modal="true" aria-labelledby="academicAffiliationTitle" tabindex="-1">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="academicAffiliationTitle">Academic affiliation catalog</div>
+        <div class="modal-subtitle">Manage internal RMS groups and their program mappings. Existing assignments are retained when a group or mapping is deactivated.</div>
+      </div>
+    </div>
+    <div class="affiliation-manager-body">
+      <form method="POST" action="admin-users.php" class="affiliation-manager-card" data-affiliation-save-form data-affiliation-create-form data-save-label="Add group">
+        <input type="hidden" name="action" value="save_academic_group">
+        <input type="hidden" name="group_id" value="0">
+        <?php echo csrfField(); ?>
+        <h3>Add academic group</h3>
+        <label>Group name<input type="text" name="group_name" maxlength="150" required></label>
+        <fieldset>
+          <legend>Mapped programs and specializations</legend>
+          <div class="affiliation-admin-options">
+            <?php foreach ($academic_affiliation_programs as $program): ?>
+              <label><input type="checkbox" name="affiliation_program_ids[]" value="<?php echo (int) $program['affiliation_program_id']; ?>"><span><?php echo htmlspecialchars(($program['program_code'] ? $program['program_code'] . ' — ' : '') . $program['program_name'] . ((int) $program['is_specialization'] ? ' · Specialization' : ''), ENT_QUOTES, 'UTF-8'); ?></span></label>
+            <?php endforeach; ?>
+          </div>
+        </fieldset>
+        <button type="submit" class="btn btn-primary">Add group</button>
+      </form>
+
+      <h3 class="affiliation-existing-heading">Existing groups</h3>
+      <?php foreach ($academic_affiliation_all_groups as $group): ?>
+        <article class="affiliation-manager-card <?php echo $group['status'] ? '' : 'is-inactive'; ?>">
+          <div class="affiliation-manager-card-heading">
+            <strong><?php echo htmlspecialchars($group['group_name'], ENT_QUOTES, 'UTF-8'); ?></strong>
+            <span><?php echo $group['status'] ? 'Active' : 'Inactive'; ?></span>
+          </div>
+          <form method="POST" action="admin-users.php" data-affiliation-save-form data-affiliation-existing-form data-save-label="Save group and mappings">
+            <input type="hidden" name="action" value="save_academic_group">
+            <input type="hidden" name="group_id" value="<?php echo (int) $group['group_id']; ?>">
+            <?php echo csrfField(); ?>
+            <label>Group name<input type="text" name="group_name" maxlength="150" required value="<?php echo htmlspecialchars($group['group_name'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+            <fieldset>
+              <legend>Mapped programs and specializations</legend>
+              <div class="affiliation-admin-options">
+                <?php foreach ($academic_affiliation_programs as $program): $programId = (int) $program['affiliation_program_id']; ?>
+                  <label><input type="checkbox" name="affiliation_program_ids[]" value="<?php echo $programId; ?>" <?php echo (($academic_affiliation_mappings[(int) $group['group_id']][$programId] ?? 0) === 1) ? 'checked' : ''; ?>><span><?php echo htmlspecialchars(($program['program_code'] ? $program['program_code'] . ' — ' : '') . $program['program_name'] . ((int) $program['is_specialization'] ? ' · Specialization' : ''), ENT_QUOTES, 'UTF-8'); ?></span></label>
+                <?php endforeach; ?>
+              </div>
+            </fieldset>
+            <div class="affiliation-manager-actions">
+              <button type="submit" class="btn btn-secondary">Save group and mappings</button>
+          </form>
+              <form method="POST" action="admin-users.php">
+                <input type="hidden" name="action" value="toggle_academic_group">
+                <input type="hidden" name="group_id" value="<?php echo (int) $group['group_id']; ?>">
+                <input type="hidden" name="new_status" value="<?php echo $group['status'] ? '0' : '1'; ?>">
+                <?php echo csrfField(); ?>
+                <button type="submit" class="btn btn-secondary"><?php echo $group['status'] ? 'Deactivate' : 'Activate'; ?></button>
+              </form>
+            </div>
+        </article>
+      <?php endforeach; ?>
+    </div>
+    <div class="modal-footer affiliation-manager-footer">
+      <button type="button" class="btn btn-primary" id="saveAcademicAffiliationButton" onclick="saveAcademicAffiliationForm()">Save group and mappings</button>
+      <button type="button" class="btn btn-secondary" onclick="hideModal('academicAffiliationManager')">Close</button>
+    </div>
+  </div>
+</div>
+<style>
+.directory-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.affiliation-cell{min-width:180px;max-width:280px;line-height:1.45}.muted{color:#94a3b8}
+.affiliation-manager{height:92vh;height:92dvh;max-height:92vh;max-height:92dvh;overflow:hidden}.affiliation-manager-body{display:grid;grid-auto-rows:max-content;align-content:start;gap:16px;min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;padding:4px 24px 20px}.affiliation-manager .affiliation-manager-card{flex:0 0 auto;min-height:max-content;overflow:visible;padding:16px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.affiliation-manager-card.is-inactive{background:#f8fafc;opacity:.88}.affiliation-manager-card h3,.affiliation-existing-heading{margin:0 0 12px;color:#172033;font-size:15px}.affiliation-manager-card label{display:grid;gap:6px;color:#475569;font-size:12px;font-weight:650}.affiliation-manager-card>label input{min-height:40px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}.affiliation-manager-card fieldset{margin:14px 0;padding:0;border:0}.affiliation-manager-card legend{margin-bottom:8px;color:#475569;font-size:12px;font-weight:700}.affiliation-admin-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:220px;overflow:auto}.affiliation-admin-options label{display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid #e2e8f0;border-radius:7px;font-weight:500}.affiliation-admin-options input{margin-top:2px;accent-color:#f57c00}.affiliation-manager-card-heading,.affiliation-manager-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.affiliation-manager-card-heading{margin-bottom:12px}.affiliation-manager-card-heading span{color:#64748b;font-size:11px}.affiliation-manager-actions{justify-content:flex-start;margin-top:12px}.affiliation-manager-actions>form{margin:0}.affiliation-manager-footer{flex:0 0 auto;margin:0;padding:14px 24px;border-top:1px solid #e8ecf1;background:#fff}
+.academic-affiliation-editor{margin:16px 0;padding:16px;border:1px solid #dbe3ec;border-radius:12px;background:#fbfcfe}.academic-affiliation-editor h4{margin:0;color:#172033;font-size:14px}.academic-affiliation-editor p{margin:5px 0 0;color:#64748b;font-size:12px;line-height:1.5}.affiliation-editor-heading,.affiliation-row-controls{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.affiliation-editor-rows{display:grid;gap:10px;margin-top:14px}.affiliation-row{padding:13px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}.affiliation-group-field{display:grid;gap:6px;flex:1;max-width:520px}.affiliation-field-label{color:#475569;font-size:12px;font-weight:700}.affiliation-group-field select,.affiliation-program-select{width:100%;min-height:40px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#172033;font:inherit;font-size:12px}.affiliation-program-field{margin:12px 0 0;padding:0;border:0}.affiliation-program-field legend{margin-bottom:7px}.affiliation-remove{padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#475569;font:inherit;font-size:12px;cursor:pointer}.affiliation-empty{color:#64748b;font-size:12px}
+@media(max-width:640px){.affiliation-manager-body{padding:4px 14px 16px}.affiliation-admin-options{grid-template-columns:1fr}.directory-actions{align-items:stretch;flex-direction:column}}
+</style>
+<?php endif; ?>
+
 <!-- CREATE USER MODAL -->
 <div class="modal-overlay" id="createModal" aria-hidden="true">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="createModalTitle" tabindex="-1">
     <div class="modal-header">
       <div class="modal-title" id="createModalTitle">Create an account</div>
-      <div class="modal-subtitle">Faculty or Research Staff only</div>
+        <div class="modal-subtitle">Create a separate RMS account with the selected role.</div>
     </div>
 
     <form method="POST" action="admin-users.php" id="createForm">
@@ -971,7 +1374,9 @@ renderAdminShell(
           <option value="">Select role</option>
           <option value="faculty">Faculty/Adviser</option>
           <option value="research_staff">Research Staff</option>
+          <option value="admin">Administrator (full system access)</option>
         </select>
+        <small class="form-hint" id="createAdminWarning" hidden>Administrators can manage users, system settings, and all research records. The new administrator should change their password after signing in.</small>
       </div>
 
       <div class="form-grid-2">
@@ -1003,8 +1408,8 @@ renderAdminShell(
 
       <div class="form-group">
         <label class="form-label">Password *</label>
-        <input type="password" name="password" class="form-control" minlength="8" required>
-        <small class="form-hint">Minimum 8 characters</small>
+        <input type="password" name="password" class="form-control" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" required>
+        <small class="form-hint">Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters; include a letter and number.</small>
       </div>
 
       <!-- FACULTY FIELDS -->
@@ -1016,22 +1421,6 @@ renderAdminShell(
         <div class="form-group">
           <label class="form-label">Specialization</label>
           <input type="text" name="specialization" class="form-control">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Academic Rank</label>
-          <select name="academic_rank" class="form-control">
-            <option value="">Select rank</option>
-            <option value="Instructor">Instructor</option>
-            <option value="Assistant Professor">Assistant Professor</option>
-            <option value="Associate Professor">Associate Professor</option>
-            <option value="Professor">Professor</option>
-            <option value="Dean">Dean</option>
-            <option value="Director">Director</option>
-          </select>
-        </div>
-        <div class="form-check">
-          <input type="checkbox" name="is_reviewer" id="createReviewer" value="1">
-          <label for="createReviewer">Legacy reviewer flag</label>
         </div>
       </div>
 
@@ -1050,6 +1439,34 @@ renderAdminShell(
           <input type="text" name="department" class="form-control">
         </div>
       </div>
+
+      <?php if ($academic_affiliation_enabled): ?>
+      <div id="createAcademicAffiliationFields" style="display:none;">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="createAcademicRank">Academic Rank (optional)</label>
+            <select name="academic_rank" id="createAcademicRank" class="form-control">
+              <option value="">Not applicable / not recorded</option>
+              <?php foreach (rmsFacultyAcademicRanks() as $rank => $salary_grade): ?>
+                <option value="<?php echo htmlspecialchars($rank, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(rmsFacultyAcademicRankLabel($rank), ENT_QUOTES, 'UTF-8'); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="createDesignation">Designation</label>
+            <input type="text" name="designation" id="createDesignation" class="form-control" maxlength="150" placeholder="Optional designation">
+          </div>
+        </div>
+        <section class="academic-affiliation-editor" id="createAcademicAffiliationEditor" data-academic-affiliation-editor>
+          <input type="hidden" name="academic_affiliations_submitted" value="1">
+          <div class="affiliation-editor-heading">
+            <div><h4>Academic Affiliation</h4><p>Institute: <strong>EARIST</strong>. Program assignments are optional where they do not apply.</p></div>
+            <button class="btn btn-secondary btn-sm" type="button" data-add-affiliation>Add academic unit</button>
+          </div>
+          <div class="affiliation-editor-rows" data-affiliation-rows></div>
+        </section>
+      </div>
+      <?php endif; ?>
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancel</button>
@@ -1108,8 +1525,9 @@ renderAdminShell(
         </div>
         <div class="form-grid-2">
           <div class="form-group">
-            <label class="form-label">Program</label>
-            <input type="text" name="program" id="editProgram" class="form-control">
+            <label class="form-label" for="editProgram">Course</label>
+            <input type="text" name="program" id="editProgram" class="form-control" maxlength="120" placeholder="e.g., BSIT or BSCS" aria-describedby="editProgramHint">
+            <small class="form-hint" id="editProgramHint">Enter the student's course code, such as BSIT or BSCS.</small>
           </div>
           <div class="form-group">
             <label class="form-label">Year Level</label>
@@ -1137,22 +1555,6 @@ renderAdminShell(
           <label class="form-label">Specialization</label>
           <input type="text" name="specialization" id="editSpecialization" class="form-control">
         </div>
-        <div class="form-group">
-          <label class="form-label">Academic Rank</label>
-          <select name="academic_rank" id="editAcademicRank" class="form-control">
-            <option value="">Select rank</option>
-            <option value="Instructor">Instructor</option>
-            <option value="Assistant Professor">Assistant Professor</option>
-            <option value="Associate Professor">Associate Professor</option>
-            <option value="Professor">Professor</option>
-            <option value="Dean">Dean</option>
-            <option value="Director">Director</option>
-          </select>
-        </div>
-        <div class="form-check">
-          <input type="checkbox" name="is_reviewer" id="editReviewer" value="1">
-          <label for="editReviewer">Legacy reviewer flag</label>
-        </div>
       </div>
 
       <!-- STAFF FIELDS -->
@@ -1170,6 +1572,34 @@ renderAdminShell(
           <input type="text" name="department" id="editDepartmentStaff" class="form-control">
         </div>
       </div>
+
+      <?php if ($academic_affiliation_enabled): ?>
+      <div id="editAcademicAffiliationFields" style="display:none;">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="editAcademicRank">Academic Rank (optional)</label>
+            <select name="academic_rank" id="editAcademicRank" class="form-control">
+              <option value="">Not applicable / not recorded</option>
+              <?php foreach (rmsFacultyAcademicRanks() as $rank => $salary_grade): ?>
+                <option value="<?php echo htmlspecialchars($rank, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(rmsFacultyAcademicRankLabel($rank), ENT_QUOTES, 'UTF-8'); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editDesignation">Designation</label>
+            <input type="text" name="designation" id="editDesignation" class="form-control" maxlength="150" placeholder="Optional designation">
+          </div>
+        </div>
+        <section class="academic-affiliation-editor" id="editAcademicAffiliationEditor" data-academic-affiliation-editor>
+          <input type="hidden" name="academic_affiliations_submitted" value="1">
+          <div class="affiliation-editor-heading">
+            <div><h4>Academic Affiliation</h4><p>Institute: <strong>EARIST</strong>. Program assignments are optional where they do not apply.</p></div>
+            <button class="btn btn-secondary btn-sm" type="button" data-add-affiliation>Add academic unit</button>
+          </div>
+          <div class="affiliation-editor-rows" data-affiliation-rows></div>
+        </section>
+      </div>
+      <?php endif; ?>
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
@@ -1194,8 +1624,8 @@ renderAdminShell(
 
       <div class="form-group">
         <label class="form-label">New Password *</label>
-        <input type="password" name="new_password" class="form-control" minlength="8" required>
-        <small class="form-hint">Minimum 8 characters</small>
+        <input type="password" name="new_password" class="form-control" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" required>
+        <small class="form-hint">Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters; include a letter and number.</small>
       </div>
 
       <div class="modal-footer">
@@ -1216,16 +1646,39 @@ renderAdminShell(
 
 <script>
 let lastFocusedElement = null;
+let activeAcademicAffiliationForm = null;
+
+// Keep fixed dialogs outside the animated content wrapper so they use the viewport as their containing block.
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  document.body.appendChild(overlay);
+});
 
 function showModal(modalId) {
   const overlay = document.getElementById(modalId);
   if (!overlay) return;
+  if (modalId === 'academicAffiliationManager') {
+    const defaultSaveForm = overlay.querySelector('[data-affiliation-existing-form]') || overlay.querySelector('[data-affiliation-save-form]');
+    setActiveAcademicAffiliationForm(defaultSaveForm);
+  }
   lastFocusedElement = document.activeElement;
   overlay.classList.add('active');
   overlay.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   const dialog = overlay.querySelector('.modal');
   if (dialog) window.setTimeout(() => dialog.focus(), 0);
+}
+
+function setActiveAcademicAffiliationForm(form) {
+  if (!form || !form.matches('[data-affiliation-save-form]')) return;
+  activeAcademicAffiliationForm = form;
+  const saveButton = document.getElementById('saveAcademicAffiliationButton');
+  if (saveButton) saveButton.textContent = form.dataset.saveLabel || 'Save changes';
+}
+
+function saveAcademicAffiliationForm() {
+  if (activeAcademicAffiliationForm && activeAcademicAffiliationForm.isConnected) {
+    activeAcademicAffiliationForm.requestSubmit();
+  }
 }
 
 function hideModal(modalId) {
@@ -1242,6 +1695,10 @@ function openCreateModal() {
   showModal('createModal');
   document.getElementById('createForm').reset();
   updateCreateFields();
+  const affiliationEditor = document.getElementById('createAcademicAffiliationEditor');
+  if (affiliationEditor && window.initRmsAcademicAffiliationEditor) {
+    window.initRmsAcademicAffiliationEditor(affiliationEditor, []);
+  }
 }
 
 function closeCreateModal() {
@@ -1252,9 +1709,16 @@ function updateCreateFields() {
   const role = document.getElementById('createRole').value;
   const facultyFields = document.getElementById('createFacultyFields');
   const staffFields = document.getElementById('createStaffFields');
+  const affiliationFields = document.getElementById('createAcademicAffiliationFields');
+  const adminWarning = document.getElementById('createAdminWarning');
 
   facultyFields.style.display = 'none';
   staffFields.style.display = 'none';
+  adminWarning.hidden = role !== 'admin';
+  if (affiliationFields) {
+    affiliationFields.style.display = ['admin', 'research_staff', 'faculty'].includes(role) ? 'block' : 'none';
+    affiliationFields.querySelectorAll('input,select,button').forEach((control) => { control.disabled = !['admin', 'research_staff', 'faculty'].includes(role); });
+  }
 
   if (role === 'faculty') {
     facultyFields.style.display = 'block';
@@ -1279,6 +1743,16 @@ function openEditModal(userData) {
   document.getElementById('editStudentFields').style.display = 'none';
   document.getElementById('editFacultyFields').style.display = 'none';
   document.getElementById('editStaffFields').style.display = 'none';
+  const affiliationFields = document.getElementById('editAcademicAffiliationFields');
+  if (affiliationFields) {
+    affiliationFields.style.display = 'none';
+    affiliationFields.querySelectorAll('input,select,button').forEach((control) => { control.disabled = true; });
+  }
+  const rankSelect = document.getElementById('editAcademicRank');
+  if (rankSelect) {
+    rankSelect.querySelectorAll('option[data-legacy-rank]').forEach((option) => option.remove());
+    rankSelect.value = '';
+  }
 
   // Show relevant fields
   if (userData.role === 'student') {
@@ -1290,12 +1764,34 @@ function openEditModal(userData) {
     document.getElementById('editFacultyFields').style.display = 'block';
     document.getElementById('editDepartmentFaculty').value = userData.department || '';
     document.getElementById('editSpecialization').value = userData.specialization || '';
-    document.getElementById('editAcademicRank').value = userData.academic_rank || '';
-    document.getElementById('editReviewer').checked = userData.is_reviewer == 1;
+    const currentRank = userData.academic_rank || '';
+    if (rankSelect && currentRank && !Array.from(rankSelect.options).some((option) => option.value === currentRank)) {
+      const legacyOption = new Option(currentRank + ' (previous rank; select a level)', currentRank);
+      legacyOption.dataset.legacyRank = 'true';
+      rankSelect.add(legacyOption);
+    }
+    if (rankSelect) rankSelect.value = currentRank;
   } else if (userData.role === 'research_staff') {
     document.getElementById('editStaffFields').style.display = 'block';
     document.getElementById('editOffice').value = userData.office || '';
     document.getElementById('editDepartmentStaff').value = userData.department || '';
+  }
+  if (['admin', 'research_staff', 'faculty'].includes(userData.role) && affiliationFields) {
+    affiliationFields.style.display = 'block';
+    affiliationFields.querySelectorAll('input,select,button').forEach((control) => { control.disabled = false; });
+    const currentAcademicRank = userData.academic_rank || '';
+    if (rankSelect && currentAcademicRank && !Array.from(rankSelect.options).some((option) => option.value === currentAcademicRank)) {
+      const legacyOption = new Option(currentAcademicRank + ' (previous rank)', currentAcademicRank);
+      legacyOption.dataset.legacyRank = 'true';
+      rankSelect.add(legacyOption);
+    }
+    if (rankSelect) rankSelect.value = currentAcademicRank;
+    const designation = document.getElementById('editDesignation');
+    if (designation) designation.value = userData.designation || '';
+    const affiliationEditor = document.getElementById('editAcademicAffiliationEditor');
+    if (affiliationEditor && window.initRmsAcademicAffiliationEditor) {
+      window.initRmsAcademicAffiliationEditor(affiliationEditor, userData.academic_affiliations || []);
+    }
   }
 }
 
@@ -1318,6 +1814,9 @@ function openStaffPermissionsModal(userId, userName, permissionsJson) {
   document.querySelectorAll('#staffPermissionsForm input[type="radio"]').forEach((input) => {
     input.checked = false;
   });
+  document.querySelectorAll('#staffPermissionsForm input[type="checkbox"]').forEach((input) => {
+    input.checked = false;
+  });
 
   document.querySelectorAll('#staffPermissionsForm input[name$="[access]"]').forEach((input) => {
     input.checked = (input.value === 'none');
@@ -1336,6 +1835,14 @@ function openStaffPermissionsModal(userId, userName, permissionsJson) {
         const pageSelector = '#staffPermissionsForm input[name="module_access[' + moduleKey + '][pages][' + subpageKey + ']"]';
         document.querySelectorAll(pageSelector).forEach((radio) => {
           radio.checked = (radio.value === (subpageLevel || 'none'));
+        });
+      });
+    }
+    if (moduleData.downloads && typeof moduleData.downloads === 'object') {
+      Object.entries(moduleData.downloads).forEach(([subpageKey, isAllowed]) => {
+        const downloadSelector = '#staffPermissionsForm input[name="download_access[' + moduleKey + '][pages][' + subpageKey + ']"]';
+        document.querySelectorAll(downloadSelector).forEach((checkbox) => {
+          checkbox.checked = isAllowed === true;
         });
       });
     }
@@ -1371,6 +1878,11 @@ function confirmToggleStatus(userId, currentStatus, userName) {
 
 // Close modals on overlay click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  if (overlay.id === 'academicAffiliationManager') {
+    overlay.addEventListener('focusin', event => {
+      setActiveAcademicAffiliationForm(event.target.closest('[data-affiliation-save-form]'));
+    });
+  }
   overlay.addEventListener('click', function(e) {
     if (e.target === this) {
       hideModal(this.id);
@@ -1385,5 +1897,11 @@ document.addEventListener('keydown', event => {
 });
 </script>
 
+<?php
+if ($academic_affiliation_enabled):
+?>
+<script>window.RmsAcademicAffiliationCatalog = <?php echo json_encode($academic_affiliation_catalog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;</script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/academic-affiliation.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<?php endif; ?>
 <?php
 renderAdminShellClose();

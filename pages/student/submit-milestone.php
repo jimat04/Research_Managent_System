@@ -235,7 +235,7 @@ $slots = [
         'report_type'      => 'terminal',
         'visible_statuses' => ['ongoing', 'progress_report', 'terminal_review'],
         'visibility_error' => 'The Terminal Report can only be submitted while the project is ongoing or in progress-report or terminal-review status.',
-        'description'      => 'Final written report covering all five chapters, conclusions, and recommendations, submitted before the defense.',
+        'description'      => 'Final written report covering all five chapters, conclusions, and suggestions, submitted before the defense.',
         'doc_row'          => null,
         'report_row'       => null,
         'upload_row'       => null,
@@ -432,12 +432,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conn->begin_transaction();
                 try {
                     // 1) Move the file into uploads/milestones/.
-                    $milestones_dir = __DIR__ . '/../../uploads/milestones';
+                    $milestones_dir = rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'milestones';
                     if (!is_dir($milestones_dir) && !@mkdir($milestones_dir, 0755, true)) {
                         throw new Exception('Unable to create the milestone upload directory.');
                     }
+                    $upload_root = realpath(UPLOADS_DIR);
+                    $real_milestones_dir = realpath($milestones_dir);
+                    if (!$upload_root || !$real_milestones_dir
+                        || strpos(
+                            $real_milestones_dir,
+                            rtrim($upload_root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
+                        ) !== 0) {
+                        throw new Exception('Invalid milestone upload destination.');
+                    }
                     $safe_name = uniqid('ms_', true) . '.' . $ext;
-                    $full_path = $milestones_dir . '/' . $safe_name;
+                    $full_path = $real_milestones_dir . DIRECTORY_SEPARATOR . $safe_name;
                     if (!move_uploaded_file($tmp_path, $full_path)) {
                         throw new Exception('Unable to save the uploaded file.');
                     }
@@ -998,7 +1007,7 @@ if (($user['role'] ?? '') === 'faculty') {
           <?php if ($upl): ?>
             <div class="msub-slot-row">
               <span class="label-text">📄 File:</span>
-              <a class="msub-link" href="<?php echo msub_se($upl['file_path']); ?>" target="_blank" rel="noopener">
+              <a class="msub-link" href="<?php echo msub_se(SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . (int) $upl['upload_id'] . '&mode=viewer'); ?>" target="_blank" rel="noopener">
                 <?php echo msub_se($upl['original_name']); ?>
               </a>
               <span class="label-text">·</span>

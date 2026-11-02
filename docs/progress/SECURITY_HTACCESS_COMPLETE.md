@@ -74,7 +74,7 @@ http://localhost/rms/uploads/
 ```
 http://localhost/rms/index.php
 http://localhost/rms/public/login.php
-http://localhost/rms/public/about.php
+http://localhost/rms/public/about-us.php
 ```
 
 ---

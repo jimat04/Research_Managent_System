@@ -1,27 +1,17 @@
-# Secure uploads directory
-# Allow only specific file types to be downloaded
-# Deny direct access to PHP files (prevents uploaded malicious scripts from running)
-
-# Allow document downloads
-<FilesMatch "\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$">
+# All uploaded files must be served through authenticated application routes.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
     Order allow,deny
-    Allow from all
-</FilesMatch>
-
-# Block all other files (especially .php, .exe, .sh)
-<FilesMatch ".*">
-    Order deny,allow
     Deny from all
-</FilesMatch>
+</IfModule>
 
-# Prevent PHP execution in uploads directory
-php_flag engine off
-
-# Prevent directory listing
 Options -Indexes
 
-# Additional security headers
+# Uploaded scripts must never execute.
+php_flag engine off
+
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
-    Header set X-Frame-Options "SAMEORIGIN"
 </IfModule>

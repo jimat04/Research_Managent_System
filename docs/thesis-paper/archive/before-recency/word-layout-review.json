@@ -1,0 +1,16 @@
+{
+  "status": "incomplete",
+  "pdf_produced": false,
+  "attempts": [
+    {
+      "result": "Word automation did not return a pagination/export result; attempt stopped.",
+      "cleanup": "Stopped only task-created Word process 9052 after matching name and creation timestamp. Pre-existing process 3984 was not stopped."
+    },
+    {
+      "result": "Bounded retry failed before document opening: automation object returned no window handle (null IntPtr conversion).",
+      "cleanup": "Worker finally block requested Word Quit."
+    }
+  ],
+  "visual_page_review": "not completed",
+  "limitations": "Final pagination, table wrapping and rendered appearance remain unverified."
+}

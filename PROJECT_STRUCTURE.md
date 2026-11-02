@@ -1,192 +1,46 @@
 # RMS Project Structure - Updated
 
-**Last Updated:** October 11, 2026
-**Status:** Current source map
+**Last Updated:** November 2, 2026
+**Status:** Maintained high-level source map; verify volatile counts and paths against the repository
 
 ---
 
 ## 📂 Directory Structure
 
-```
+```text
 rms/
-│
-├── 📁 public/                           [Public-Facing Pages - 12 files]
-│   ├── index.php                        [Homepage with statistics]
-│   ├── login.php                        [Authentication page]
-│   ├── logout.php                       [Session termination]
-│   ├── about.php                        [About EARIST RMS]
-│   ├── contact.php                      [Contact form]
-│   ├── features.php                     [Features showcase]
-│   ├── research-archive.php             [Public research archive]
-│   ├── verify-email.php                 [Email verification]
-│   ├── resend-verification.php          [Resend verification]
-│   ├── 403.php                          [Access Denied error]
-│   ├── 404.php                          [Not Found error]
-│   └── 500.php                          [Server Error page]
-│
-├── 📁 pages/                            [Authenticated Internal Pages]
-│   │
-│   ├── 📁 researcher/                   [Shared Student/Faculty Research Workflow]
-│   │   ├── my-research.php              [View research projects]
-│   │   ├── submit-research.php          [Draft and submit research titles]
-│   │   ├── edit-research.php            [Edit drafts and returned titles]
-│   │   └── submit-chapter.php           [Draft and submit chapters]
-│   │
-│   ├── 📁 student/                      [Student Role]
-│   │   ├── student-dashboard.php        [Shared student/faculty dashboard]
-│   │   ├── my-research.php              [Legacy redirect to researcher workflow]
-│   │   ├── submit-research.php          [Legacy redirect to researcher workflow]
-│   │   ├── edit-research.php            [Legacy redirect to researcher workflow]
-│   │   ├── submit-chapter.php           [Legacy redirect to researcher workflow]
-│   │   ├── my-documents.php             [Student documents]
-│   │   ├── research-detail.php          [Student research detail]
-│   │   ├── progress-tracking.php        [Track research progress]
-│   │   └── submit-milestone.php         [Standby]
-│   │
-│   ├── 📁 faculty/                      [Faculty Role]
-│   │   └── faculty-dashboard.php        [Delegates to student-dashboard.php]
-│   │
-│   ├── 📁 admin/                        [Admin Role - 13 files]
-│   │   ├── admin-dashboard.php          [Admin dashboard]
-│   │   ├── admin-users.php              [User management]
-│   │   ├── admin-research.php           [Research management]
-│   │   ├── admin-research-module.php    [Research module launcher map]
-│   │   ├── admin-researchers.php        [Researcher management]
-│   │   ├── admin-archive.php            [Archive management]
-│   │   ├── admin-reports.php            [Reports & analytics]
-│   │   ├── admin-logs.php               [System logs]
-│   │   ├── admin-backup.php             [Backup system]
-│   │   ├── admin-contact.php            [Contact messages]
-│   │   ├── admin-departments.php        [Department management]
-│   │   ├── admin-programs.php           [Program management]
-│   │   └── admin-settings.php           [System settings]
-│   │
-│   ├── 📁 staff/                        [Research Staff Role - 6 files]
-│   │   ├── staff-dashboard.php          [Staff dashboard]
-│   │   ├── contact-messages.php         [Manage contact messages]
-│   │   ├── document-verification.php    [Verify research documents]
-│   │   ├── staff-defense.php            [Defense scheduling]
-│   │   ├── staff-revisions.php          [Manage revisions]
-│   │   └── staff-milestones.php         [Standby]
-│   │
-│   └── 📁 shared/                       [Shared Across Roles - 20 files]
-│       ├── messages.php                 [Internal messaging]
-│       ├── notifications.php            [Notifications]
-│       ├── profile.php                  [User profile]
-│       ├── settings.php                 [Account settings]
-│       ├── calendar.php                 [Calendar view]
-│       ├── research-archive.php         [Authenticated archive]
-│       ├── research-detail.php          [Research details]
-│       ├── view-research.php            [View research]
-│       ├── research-submission-review.php [Typed title/chapter review queue]
-│       ├── implementation-outputs.php   [Computed ongoing/completed/outputs views]
-│       ├── activities.php                [Research activities]
-│       ├── activity-detail.php           [Activity details]
-│       ├── activity-form.php              [Activity form]
-│       ├── publications.php               [Publication records]
-│       ├── publication-detail.php         [Publication details]
-│       ├── publication-form.php           [Publication form]
-│       ├── copyrights.php                 [Intellectual-property records]
-│       ├── copyright-detail.php           [Copyright details]
-│       ├── copyright-form.php             [Copyright form]
-│       └── download-research-document.php [Authorized research downloads]
-│
-├── 📁 includes/                         [Backend PHP Logic]
-│   ├── config.php                       [Database & app configuration]
-│   ├── auth.php                         [Authentication & authorization]
-│   ├── research-workflow.php            [Title/chapter workflow helpers]
-│   ├── contact-handler.php              [Contact form handler]
-│   ├── email.php                         [Email wrapper]
-│   ├── file-uploader.php                [Validated upload helper]
-│   ├── logout-transition.php            [Logout transition]
-│   ├── admin-shell.php                  [Admin shell]
-│   ├── staff-shell.php                  [Staff shell]
-│   ├── faculty-shell.php                [Faculty shell]
-│   ├── student-shell.php                [Student shell]
-│   └── .htaccess                        [Protect includes]
-│
-├── 📁 config/                           [Configuration Files - 2 files]
-│   ├── settings.json                    [Application settings]
-│   └── skills-lock.json                 [Skills configuration]
-│
-├── 📁 database/                         [Database Files]
-│   ├── 📁 schema/
-│   │   └── rms_db.sql                   [Main database schema]
-│   └── 📁 migrations/                   [21 existing migration scripts]
-│
-├── 📁 docs/                             [Documentation]
-│   ├── 📁 planning/
-│   │   ├── PRIORITY_PLAN.md             [Development roadmap]
-│   │   └── RECOMMENDATIONS.md           [Improvement recommendations]
-│   ├── 📁 progress/
-│   │   ├── PROGRESS_AUDIT.md            [Progress tracking]
-│   │   └── SECURITY_HTACCESS_COMPLETE.md [Security completion]
-│   ├── 📁 reference/
-│   │   └── Research-Manual_2015.md      [Source manual]
-│   ├── rms-spec.md                      [RMS specifications]
-│   └── testing/                          [Test documentation]
-│
-├── 📁 scripts/                          [Utility Scripts - 6 files]
-│   ├── backup-database.sh               [Database backup]
-│   ├── migrate.php                      [Migration runner]
-│   ├── update-paths.php                 [Path updating utility]
-│   ├── verify-connections.sh            [Connection verification]
-│   ├── verify-htaccess.sh               [Security verification]
-│   └── verify-messages-navigation.php   [Navigation verification]
-│
-├── 📁 css/                              [Stylesheets and tokens - 9 files]
-│   ├── style.css                        [Main stylesheet]
-│   ├── about.css                        [About page styles]
-│   ├── admin-shell.css                  [Admin shell styles]
-│   ├── staff-shell.css                  [Staff shell styles]
-│   ├── faculty-shell.css                [Faculty shell styles]
-│   ├── student-shell.css                [Student shell styles]
-│   ├── file-uploader.css                [Uploader styles]
-│   ├── tokens.css                       [CSS design tokens]
-│   └── tokens.php                       [Dynamic CSS tokens]
-│
-├── 📁 uploads/                          [File Storage]
-│   ├── proposals/                       [Research proposals]
-│   ├── chapters/                        [Chapter submissions]
-│   ├── manuscripts/                     [Manuscript files]
-│   └── defense/                         [Defense materials]
-│
-├── 📁 .github/                          [GitHub Configuration]
-│   └── agents/                          [AI Agent definitions]
-│       ├── rms-db.agent.md
-│       ├── rms-debug.agent.md
-│       ├── rms-doc.agent.md
-│       ├── rms-page-builder.agent.md
-│       ├── rms-security-auth.agent.md
-│       ├── rms-ui.agent.md
-│       ├── rms-testing.agent.md
-│       ├── rms-performance.agent.md
-│       ├── rms-backup.agent.md
-│       ├── AGENTS_ANALYSIS.md
-│       └── AGENTS_MEMORY.md
-│
-├── 📄 index.php                         [Root redirector to public/]
-├── 📄 README.md                         [Project overview]
-├── 📄 TODO.md                           [Task tracking]
-├── 📄 PROJECT_STRUCTURE.md              [This file]
-├── 📄 .gitignore                        [Git ignore rules]
-├── 📄 .env.example                      [Environment template]
-├── 📄 package.json                      [Node.js configuration]
-└── 📄 composer.json                     [PHP dependencies]
+  public/                  Public pages, login, email verification, archive, released records
+  pages/
+    researcher/            Canonical title, chapter, final manuscript, and adviser request flows
+    student/               Student dashboard, documents, and compatibility routes
+    faculty/               Advising, analytics, document tools, engagement, publications, research records
+    admin/                 Users, research, reports, backups, publications, public releases, EARIST administration
+    staff/                 Staff dashboard, contact, document verification, defense, revisions, milestones
+    shared/                Messages, activities, typed reviews, outputs, publications/IP, protected downloads
+  includes/                Authentication, workflow, archives, activities, documents, shells, shared helpers
+  database/
+    schema/rms_db.sql      Canonical fresh-install schema and seed data
+    migrations/            Numbered upgrade history (currently through 066) and legacy scripts
+  scripts/                 Migration, backup, verification, document, and archive utilities
+  docs/                    Specification, task references, feature guides, dated verification reports
+  css/, js/, uploads/      Application styles, scripts, and protected file storage
+  .github/                 Agent and skill guidance
+  index.php                Root redirector to public/
+  README.md                Setup and product overview
+  PROJECT_STRUCTURE.md     This source map
 ```
-
 ---
 
-## V3 Architecture and Counts
+## Current Architecture
 
-- `pages/researcher/` is canonical for `my-research.php`, `submit-research.php`, `edit-research.php`, and `submit-chapter.php`. The matching student workflow URLs are compatibility redirects; student-specific pages remain in `pages/student/`.
-- `pages/faculty/faculty-dashboard.php` delegates to the student dashboard.
+- `pages/researcher/` is canonical for title, chapter, final-manuscript, and adviser-request submissions. The matching student workflow URLs are compatibility redirects; student-specific pages remain in `pages/student/`.
+- `pages/faculty/faculty-dashboard.php` routes faculty to `faculty-analytics.php`; both roles use the shared researcher workflow.
 - `rmsPermissionModules()` in `includes/auth.php` defines 5 staff modules × 3 sub-pages; `pages/admin/admin-research-module.php` launches them through `moduleMap`.
-- `pages/shared/research-submission-review.php` is the typed review queue; `implementation-outputs.php` provides computed ongoing, completed, and outputs views.
+- `pages/shared/research-submission-review.php` is the typed title/chapter/final-manuscript review queue; `implementation-outputs.php` requires an approved final manuscript for completed research.
 - Role shells in active use: admin, staff, faculty, and student, all under `includes/`.
 - Standby files: `pages/staff/staff-milestones.php` and `pages/student/submit-milestone.php`.
 
-Current page counts: public 12, researcher 4, student 9, faculty 1, admin 13, staff 6, shared 20. `includes/` contains 11 PHP files plus `.htaccess`.
+Page counts change as features are added; use the directory contents as the current inventory. Researcher submissions are canonical under `pages/researcher/`, while role-specific and shared pages remain in their corresponding directories.
 
 ---
 
@@ -226,9 +80,8 @@ Each user role has its own directory, making it easy to:
 http://localhost/rms/                    → Redirects to public/index.php
 http://localhost/rms/public/index.php    → Homepage
 http://localhost/rms/public/login.php    → Login page
-http://localhost/rms/public/about.php    → About page
-http://localhost/rms/public/contact.php  → Contact form
-http://localhost/rms/public/features.php → Features page
+http://localhost/rms/public/about-us.php → About Us page and contact form
+http://localhost/rms/public/about-us.php#research-features → About Us feature summary
 ```
 
 ### Internal URLs (Login Required):
@@ -342,7 +195,7 @@ http://localhost/rms/pages/shared/profile.php
 ### Documentation:
 - **Planning docs:** `docs/planning/`
 - **Progress docs:** `docs/progress/`
-- **Uppercase:** `README.md`, `TODO.md`, `PROJECT_STRUCTURE.md`
+- **Uppercase:** `README.md`, `PROJECT_STRUCTURE.md`
 
 ---
 
@@ -360,7 +213,7 @@ http://localhost/rms/pages/shared/profile.php
 
 ## 🔄 Recent Changes
 
-**August 28, 2026:**
+**August 28, 2026 (historical):**
 - ✅ Reorganized into public/ and pages/ structure
 - ✅ Created role-based subdirectories (student, faculty, admin, staff, shared)
 - ✅ Updated all file paths to use `__DIR__`
@@ -401,12 +254,11 @@ http://localhost/rms/pages/shared/profile.php
 
 1. **Start with:** `README.md` - Project overview
 2. **Understand structure:** This file (`PROJECT_STRUCTURE.md`)
-3. **Check tasks:** `TODO.md` - What needs to be done
+3. **Check planning:** `docs/planning/PRIORITY_PLAN.md` - historical priorities; confirm current status in source
 4. **Review documentation:** `docs/` folder
 5. **Test locally:** Access via `http://localhost/rms/`
 
 ---
 
-**Generated:** August 28, 2026 at 16:20 (UTC+8)  
-**Status:** ✅ Complete, Clean, and Organized  
-**Next Review:** As needed for new features
+**Last reviewed:** November 2, 2026 (Asia/Taipei)
+**Status:** Maintained source map; historical change notes are retained below

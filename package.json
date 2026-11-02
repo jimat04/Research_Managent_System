@@ -7,6 +7,9 @@
     "dev": "echo 'No build process configured yet'",
     "build": "echo 'No build process configured yet'"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "docx-preview": "0.4.1",
+    "jszip": "3.10.2",
+    "pdfjs-dist": "6.4.299"
+  }
 }

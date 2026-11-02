@@ -1,0 +1,55 @@
+# Verification: faculty document mapping wizard
+
+- Date/time: 2026-11-02, Asia/Taipei
+- Assistant: Codex
+- Target and expected behavior: Faculty can navigate document mapping stages, retain answers while moving between stages, review the mapped values, and reach the existing review/save controls.
+- Environment URL: Not confirmed; use the current integrated RMS application.
+- Roles and disposable records/files: Faculty role; no record changes made by Codex.
+- Session state: In progress
+
+## Graphify and source context
+- Question and selected graph vocabulary: Why the Annex A “Review and Generate DOCX” action is absent on `faculty-document-mapping.php?id=2&document=annex_a#document-answers`; selected tokens `faculty_document_mapping`, `earist_document_storage`, `live_generation_enabled`.
+- Query/lookup and result: Existing Graphify queries for the mapping/storage vocabulary returned unrelated or truncated neighborhoods; `earistMappingTemplateInfo` had no matching node. No useful graph relationship was established for this behavior.
+- Relevant source locations and verified relationships: `pages/faculty/faculty-document-mapping.php:164-168` renders the action only when a current saved draft exists, is not stale, has no mapping errors, the inspected template matches, and live generation is enabled. `config/earist-document-storage.php:8` currently enables it. `includes/earist-document-mapping.php:391-398` checks that the Annex A template file exists and matches its configured SHA-256. The action is inside wizard panel 4 at `pages/faculty/faculty-document-mapping.php:307-320`; the URL's `#document-answers` points to panel 2 (`:231`), and `js/faculty-document-mapping.js:24-28` hides all panels except the active one. Saving answers is a separate required step and does not itself generate a DOCX.
+- Missing, inferred, stale, or truncated context: Graphify coverage for this exact behavior is missing/irrelevant; direct source was used. Source proves the panel/condition rules, but cannot establish which record-specific condition is false for record 2 without observing the rendered page or its non-sensitive status text. No graph rebuild or write was performed.
+
+## Checks
+| ID | Method / role / page | Action | Expected | Observed / evidence source | Status |
+|---|---|---|---|---|---|
+| S1 | Assistant static check | Run `php -l` on the four changed faculty PHP pages | No PHP syntax errors | All four reported no syntax errors | Passed |
+| S2 | Assistant static check | Run `node --check js/faculty-document-mapping.js` | No JavaScript syntax errors | Command exited successfully without output | Passed |
+| S3 | Assistant static check | Compare CSS opening and closing brace counts | Counts match | 68 opening and 68 closing braces | Passed |
+| B1 | User-operated browser / faculty / Document Center | Open DOCX Generator | Research record list and Step 1 guidance appear | Awaiting user observation | Pending |
+| B2 | User-operated browser / faculty / document mapping | Continue through the selected document’s wizard and navigate back and forward | Active step and entered values are retained | Depends on B1 and a faculty-selected record; not started | Pending |
+| B3 | User-operated browser / faculty / document mapping | After successful review, inspect the final actions | Save Answers appears; Review all answers is hidden | User screenshot showed both actions at once | Failed |
+| B5 | User-operated browser / faculty / document mapping | Repeat Review all answers after the UI fix | Review all answers hides and Save Answers remains visible; changing an answer restores Review and hides Save | Awaiting user retest | Pending |
+| B4 | User-operated browser / faculty / generation and history | Follow the links through generation review and document history | Labels and return links match the workflow; normal safeguards remain active | Depends on existing generation prerequisites; not started | Pending |
+| B6 | Assistant source trace / faculty / Annex A mapping URL | Explain why the generation action is not visible at the supplied fragment | Identify the wizard panel placement and the independent eligibility gates | The fragment targets Step 2 (`document-answers`); generation action is only in Step 4. Eligibility also requires a saved non-stale draft, no mapping errors, matching template hash, and enabled generation. The config currently enables generation. | Passed |
+| B7 | User screenshot + assistant static check / faculty / Annex A Step 4 | Determine why generation action remains absent after Save Answers | All generation eligibility gates pass and the action appears | Screenshot shows the generic save/current-research hint. Static check confirms Annex A template hash mismatch and a change to protected `word/footer1.xml`; therefore `$template['matches']` is false and the source suppresses the action. Historical baseline records the approved hash as `4c0e2062c7ff1879f5e769be3111661a7e1ab64539fceda1b9b63ac12013633e`. | Failed |
+| S8 | Assistant read-only template inspection | Establish whether the current Annex A template still satisfies structural bindings and protected-region checks | Approved hash, footer, package structure, and all bindings match | `python -X utf8 scripts/inspect-earist-templates.py`: all 24 Annex A bindings and structure checks pass, but its package hash and protected footer check fail. The same run found hash/footer failures for the Annex C Liwanag variant; total 4 failures across 8 packages, 70 bindings checked. | Failed |
+| S9 | Assistant read-only asset search | Find a retained pristine Annex A DOCX for safe restoration | A local DOCX matches the recorded approved hash | Scanned 113 DOCX files under `templates/earist/blank` and `backups`; none matches the approved Annex A SHA-256. Retained samples are generated outputs, not pristine source templates. | Blocked |
+| S10 | Assistant static check after user identified the intended template | Confirm Annex A package pin, protected footer, and field bindings agree | Annex A passes the inspector | Updated only the Annex A DOCX and footer hashes to match the file at the path supplied by the user. Inspector reports all 24 Annex A bindings passing with no Annex A failures. Two pre-existing hash/footer failures remain for the separate Annex C Liwanag variant. | Passed (Annex A) |
+
+## Failures, decisions, fixes, and retests
+- User screenshot showed Review all answers and Save Answers visible together after a successful review. User requested the review action hide once Save Answers is available; implementation now also invalidates the review if an answer changes. Retest is pending.
+- No application records were changed by Codex.
+- The supplied fragment targets Step 2 while the generation action is in Step 4, so it is expected to be absent at that position. If it remains absent in Step 4, inspect the page's “Save valid answers…” or “DOCX generation is not enabled yet” hint to distinguish draft/template/data eligibility from the feature switch; the current source config has the switch enabled. Record-specific data state was not inspected.
+- User screenshot now confirms the action is still absent on Step 4 after Save Answers. The Annex A file's current SHA-256 does not equal the expected value in `config/earist-template-bindings.json`; the config is untracked in Git, so repository history does not establish whether the mismatch is an intentional template update or stale manifest metadata. No hash or template content was changed.
+- User then supplied the current Annex A template path after authorizing the fix; treated that as confirmation to pin this file as the intended Annex A template. Updated only its package SHA-256 and `word/footer1.xml` SHA-256 in `config/earist-template-bindings.json`. The DOCX itself was not modified. Since the existing saved draft carries the previous template hash, it will now be marked stale; the faculty must review and save that draft again before generation becomes available.
+- Historical check `docs/testing/manual-reports/2026-10-30-earist-mapping-01.md` and `backups/earist-stage4b-baseline-2026-10-30.json` record the approved Annex A package hash as `4c0e...633e` and report all eight source templates unchanged at that time. The current Annex A file timestamp is 2026-10-31 03:14:32. `.gitignore` excludes `*.docx`, so Git cannot identify the edit or recover the original. Current body table/checkbox/binding checks pass, but the footer is explicitly protected and now differs. Updating the expected hash alone would silently approve a changed official form. The Annex C Liwanag variant has the same class of hash plus protected-footer failure, suggesting more than one supplied DOCX may have been edited; provenance remains unknown.
+
+## Assistant-run checks
+- Final stylesheet brace count: 68 opening and 68 closing braces.
+- Read-only source inspection and Graphify queries only; no request was made to the running app and no database or record was changed.
+- `rtk proxy certutil -hashfile "templates/earist/blank/ANNEX A - Pre-Submission Clearance - Blank Template.docx" SHA256` — actual file hash differs from the configured Annex A hash. `rtk proxy git -c safe.directory=C:/xampp/htdocs/rms status --short -- config/earist-template-bindings.json ...` reports the manifest as untracked; no tracked diff established the intended value.
+- `rtk proxy python -X utf8 scripts/inspect-earist-templates.py` — read-only structural inspection: 8 packages, 70 bindings, 4 failures. Annex A: package hash and protected footer mismatch; 24 Annex A bindings and package shape checks pass. Annex C Liwanag: package hash and protected footer mismatch. No files written.
+- `rtk proxy python -c ...` — hashed 113 DOCX candidates in `templates/earist/blank` and `backups`; none matches the protected Annex A baseline hash.
+- After the user identified the current Annex A path as the intended template, `rtk proxy python -X utf8 scripts/inspect-earist-templates.py` — Annex A passes all package/hash/footer/binding checks; only Annex C Liwanag's package/footer mismatch remains (2 failures total).
+- `rtk proxy powershell.exe -NoProfile -Command "php -l ...; node --check ..."` — all four PHP pages passed syntax checks; JavaScript check exited successfully.
+- CSS braces matched: 68 opening and 68 closing braces.
+
+## Resume / handoff
+- Last user-confirmed state: User screenshot showed the mapping page at Step 4 with both review and save actions visible.
+- Next pending action: Faculty refreshes the Annex A mapping page for record 2 and confirms the stale-template banner. Then review current answers and save the new revision through the page; confirm that “Review and Generate DOCX” appears. Do not generate a document until the user confirms the action is visible and intended.
+- Blocked/skipped checks and remaining verification gaps: Browser checks await faculty-operated application interaction; no database or record mutations were performed by Codex.
+- User-performed data changes and cleanup status: None reported.

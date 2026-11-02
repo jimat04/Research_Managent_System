@@ -24,6 +24,7 @@
  * @param string $page_subtitle Subtitle shown under the title (pass '' for none)
  */
 require_once __DIR__ . '/logout-transition.php';
+require_once __DIR__ . '/notification-popover.php';
 
 function renderStaffShell($user, $current_page, $page_title, $page_subtitle = '') {
     // Normalise the user object
@@ -62,7 +63,20 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $stat_contact   = 0;
     $stat_defenses  = 0;
     $stat_revisions = 0;
+    $unread_notifications = 0;
     if (isset($conn)) {
+        $user_id = (int) ($user['user_id'] ?? 0);
+        if ($user_id > 0) {
+            $notification_stmt = $conn->prepare('SELECT COUNT(*) AS unread_count FROM notifications WHERE user_id = ? AND is_read = 0');
+            if (!$notification_stmt) {
+                throw new RuntimeException('Unable to load unread notifications: ' . $conn->error);
+            }
+            $notification_stmt->bind_param('i', $user_id);
+            $notification_stmt->execute();
+            $unread_notifications = (int) ($notification_stmt->get_result()->fetch_assoc()['unread_count'] ?? 0);
+            $notification_stmt->close();
+        }
+
         $count_result = $conn->query("SELECT COUNT(*) AS count FROM contact_messages WHERE status = 'pending'");
         if ($count_result) {
             $stat_contact = (int) ($count_result->fetch_assoc()['count'] ?? 0);
@@ -131,9 +145,6 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     foreach (rmsPermissionModules() as $moduleKey => $module) {
         $moduleItems = [];
         foreach ($module['pages'] as $pageKey => $label) {
-            if ($pageKey === 'ongoing_research') {
-                continue;
-            }
             $level = ($shell_user['role'] ?? '') === 'admin'
                 ? 'manage'
                 : ($permissionMatrix[$moduleKey]['pages'][$pageKey] ?? 'none');
@@ -152,22 +163,25 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             $nav[$module['label']] = $moduleItems;
         }
     }
-    $nav['Research Lifecycle'] = [
-        [SITE_URL . 'pages/staff/staff-defense.php', 'Defense Schedule', '🗓️', true, $stat_defenses],
-        [SITE_URL . 'pages/staff/staff-revisions.php', 'Revision Returns', '↩️', true, $stat_revisions],
-    ];
-    $nav['Research Services'] = [
-        [SITE_URL . 'pages/staff/document-verification.php', 'Document Verification', '📄', true, 0],
-        [SITE_URL . 'pages/staff/contact-messages.php', 'Contact Messages', '✉️', true, $stat_contact],
-    ];
+    // Keep staff's legacy tools beside the corresponding admin research areas.
+    // Routes retain their existing role and permission checks; this only
+    // changes where they appear in the navigation.
+    $nav['Research Development'] ??= [];
+    $nav['Research Development'][] = [SITE_URL . 'pages/staff/document-verification.php', 'Document Verification', '📄', true, 0];
+    $nav['Research Development'][] = [SITE_URL . 'pages/staff/staff-revisions.php', 'Revision Returns', '↩️', true, $stat_revisions];
+
+    $nav['Research Implementation & Outputs'] ??= [];
+    $nav['Research Implementation & Outputs'][] = [SITE_URL . 'pages/staff/staff-defense.php', 'Defense Schedule', '🗓️', true, $stat_defenses];
+
     $nav['Communication'] = [
         [SITE_URL . 'pages/shared/messages.php', 'Messages', '💬', true, 0],
         [SITE_URL . 'pages/shared/notifications.php', 'Notifications', '🔔', true, 0],
-    ];
-    $nav['Account'] = [
+        [SITE_URL . 'pages/staff/contact-messages.php', 'Contact messages', '✉️', true, $stat_contact],
         [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
     ];
-
+    $nav['Account'] = [
+        [SITE_URL . 'pages/shared/settings.php', 'Account settings', '⚙️', true, 0],
+    ];
     // Active-state matcher. Matches either the full target (e.g.
     // 'http://localhost/rms/pages/shared/profile.php') or the bare basename,
     // so shared pages highlight correctly when visited.
@@ -215,7 +229,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     };
 
     // Absolute asset/logout URLs (SITE_URL has a trailing slash).
-    $url_style   = SITE_URL . 'css/style.css';
+    $url_style   = SITE_URL . 'css/style.css?v=' . filemtime(__DIR__ . '/../css/style.css');
     $url_shell   = SITE_URL . 'css/staff-shell.css?v=' . filemtime(__DIR__ . '/../css/staff-shell.css');
     $url_logout  = SITE_URL . 'public/logout.php';
     ?>
@@ -229,10 +243,10 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body>
-<div class="staff-dashboard">
+<div class="staff-dashboard" data-role-shell="staff">
   <button type="button" class="staff-sidebar-scrim" aria-label="Close staff navigation" tabindex="-1"></button>
   <!-- SIDEBAR -->
-  <aside class="staff-sidebar" id="staff-sidebar" aria-label="Research staff navigation">
+  <aside class="staff-sidebar" id="staff-sidebar" aria-label="Research staff navigation" data-role-shell-sidebar>
     <div class="staff-sidebar-header">
       <a href="<?php echo SITE_URL; ?>pages/staff/staff-dashboard.php" class="staff-sidebar-logo" aria-label="RMS Home">
         <img src="<?php echo SITE_URL; ?>photos/rms-logo.png" alt="RMS Logo">
@@ -243,7 +257,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
       </div>
     </div>
 
-    <nav class="staff-sidebar-nav" aria-label="Primary">
+    <nav class="staff-sidebar-nav" aria-label="Primary" data-role-shell-nav>
       <?php foreach ($nav as $group => $items): ?>
         <?php if ($group === 'Overview'): ?>
           <?php foreach ($items as $item): ?>
@@ -298,10 +312,13 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
       <div class="staff-nav-session">
         <div class="staff-nav-group-title">Session</div>
-        <a class="staff-nav-item staff-nav-logout" href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>">
+        <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="staff-nav-logout-form" data-logout-confirm>
+          <?php echo csrfField(); ?>
+          <button type="submit" class="staff-nav-item staff-nav-logout">
           <span class="staff-nav-icon" aria-hidden="true">🚪</span>
           <span class="staff-nav-label">Logout</span>
-        </a>
+          </button>
+        </form>
       </div>
     </nav>
 
@@ -318,15 +335,24 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
   <!-- MAIN CONTENT -->
   <main class="staff-main">
-    <header class="staff-topbar">
+    <header class="staff-topbar" data-role-shell-topbar>
       <div class="staff-topbar-left">
         <button type="button" class="staff-mobile-menu-btn" aria-label="Open staff navigation" aria-controls="staff-sidebar" aria-expanded="false">☰</button>
-        <h1 class="staff-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
-        <?php if ($page_subtitle_safe !== ''): ?>
+        <button type="button" class="staff-collapse-btn" aria-label="Collapse sidebar" aria-controls="staff-sidebar" title="Collapse sidebar" data-role-shell-collapse><span aria-hidden="true">‹</span></button>
+        <div class="staff-topbar-heading">
+          <h1 class="staff-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
+          <?php if ($page_subtitle_safe !== ''): ?>
           <p class="staff-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
-        <?php endif; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+      <div class="staff-topbar-search">
+        <span class="staff-topbar-search-icon" aria-hidden="true">⌕</span>
+        <input type="search" id="staff-page-search" aria-label="Search pages in RMS" placeholder="Search pages..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="staff-search-suggestions" aria-expanded="false" data-role-shell-search>
+        <div class="staff-search-suggestions" id="staff-search-suggestions" role="listbox" aria-label="Matching RMS pages" hidden data-role-shell-suggestions></div>
       </div>
       <div class="staff-topbar-right">
+        <?php renderNotificationPopover($user_id, $unread_notifications, 'staff'); ?>
         <div class="staff-topbar-user">
           <div class="staff-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
           <div class="staff-topbar-user-text">
@@ -351,7 +377,9 @@ function renderStaffShellClose() {
   </main>
 </div><!-- /.staff-dashboard -->
 <?php renderLogoutTransition(); ?>
-<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/notification-popover.js?v=' . filemtime(__DIR__ . '/../js/notification-popover.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js?v=' . filemtime(__DIR__ . '/../js/public-motion.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/role-shell-controls.js?v=' . filemtime(__DIR__ . '/../js/role-shell-controls.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
   const shell = document.querySelector('.staff-dashboard');

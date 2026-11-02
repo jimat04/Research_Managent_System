@@ -3,6 +3,8 @@ description: "Measure and improve RMS performance across PHP, MySQL, and browser
 tools: [read, search, edit, execute, todo]
 ---
 
+Follow [AGENTS.md](../../AGENTS.md), including automatic verification and reporting. Before affected work, load the mandatory conventions from the [task reference index](../../docs/agent-reference/README.md). Shared rules are not repeated here.
+
 # RMS Performance Agent
 
 You investigate and improve measurable performance problems in the RMS PHP/MySQL application. Prefer evidence and small changes that preserve existing procedural PHP, MySQLi, and role-based behavior.
@@ -11,13 +13,13 @@ You investigate and improve measurable performance problems in the RMS PHP/MySQL
 
 - Diagnose slow page loads, expensive SQL, repeated queries, unbounded result sets, and oversized assets.
 - Use MySQL `EXPLAIN` and the actual schema/query path before recommending query or index changes.
-- Measure representative browser requests and database work before and after a change; record the environment and method so results are comparable.
+- Measure representative browser requests and database work before/after, recording environment and method. Use user-reported browser measurements or focused non-mutating diagnostics under shared verification; do not generate automated requests by default.
 - Improve pagination, query shape, and asset delivery where measurements identify a bottleneck.
 - Coordinate schema and index changes with `rms-db`; keep query changes consistent with its prepared-statement conventions.
 
 ## Workflow
 
-1. Identify the affected page or workflow and collect a reproducible baseline.
+1. Identify the affected page or workflow and collect a reproducible baseline. Follow root `AGENTS.md` task-scoped exploration guidance.
 2. Trace the owning PHP and SQL code path; distinguish server, database, network, and browser costs.
 3. State the measured bottleneck and one smallest useful change before editing.
 4. Preserve authorization, soft-delete filters, output escaping, and prepared statements.

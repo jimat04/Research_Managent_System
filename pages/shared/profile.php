@@ -17,6 +17,8 @@
 
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/faculty-ranks.php';
+require_once __DIR__ . '/../../includes/academic-affiliation.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
@@ -31,6 +33,18 @@ if (!$user) {
 }
 $user_id = (int) $user['user_id'];
 $role    = (string) ($user['role'] ?? 'student');
+$academic_affiliation_roles = ['admin', 'research_staff', 'faculty'];
+$academic_affiliation_enabled = in_array($role, $academic_affiliation_roles, true)
+    && rmsAcademicAffiliationTablesAvailable($conn);
+$academic_affiliation_catalog = $academic_affiliation_enabled
+    ? rmsAcademicAffiliationCatalog($conn)
+    : [];
+$academic_affiliations = $academic_affiliation_enabled
+    ? rmsAcademicAffiliationLoad($conn, $user_id)
+    : [];
+$academic_affiliation_summary = $academic_affiliation_enabled
+    ? rmsAcademicAffiliationDisplay($conn, $user_id)
+    : [];
 
 // ---------------------------------------------------------------
 // Defensive column detection — migration 002 added year_level,
@@ -43,7 +57,7 @@ $role    = (string) ($user['role'] ?? 'student');
 // rather than SHOW COLUMNS — MariaDB/MySQL do not support `?`
 // placeholders in SHOW statements.
 // ---------------------------------------------------------------
-$migration_columns = ['year_level', 'specialization', 'academic_rank', 'office', 'is_reviewer'];
+$migration_columns = ['year_level', 'specialization', 'academic_rank', 'office', 'is_reviewer', 'middle_name', 'designation', 'appointment_status'];
 $has_column = array_fill_keys($migration_columns, false);
 $col_check = $conn->prepare(
     "SELECT COLUMN_NAME AS c
@@ -71,6 +85,9 @@ if ($has_column['year_level'])     $user_columns .= ', year_level';
 if ($has_column['specialization']) $user_columns .= ', specialization';
 if ($has_column['academic_rank'])  $user_columns .= ', academic_rank';
 if ($has_column['office'])         $user_columns .= ', office';
+if ($has_column['middle_name'])       $user_columns .= ', middle_name';
+if ($has_column['designation'])       $user_columns .= ', designation';
+if ($has_column['appointment_status']) $user_columns .= ', appointment_status';
 
 $user_stmt = $conn->prepare("SELECT $user_columns FROM users WHERE user_id = ? LIMIT 1");
 $user_stmt->bind_param('i', $user_id);
@@ -104,8 +121,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Role-specific optional fields.
         $year_level    = $has_column['year_level']     ? trim((string) ($_POST['year_level']    ?? '')) : null;
         $specialization = $has_column['specialization'] ? trim((string) ($_POST['specialization'] ?? '')) : null;
-        $academic_rank = $has_column['academic_rank']  ? trim((string) ($_POST['academic_rank'] ?? '')) : null;
+        $academic_rank = $has_column['academic_rank'] ? ($_POST['academic_rank'] ?? '') : null;
         $office        = $has_column['office']         ? trim((string) ($_POST['office']        ?? '')) : null;
+        $middle_name = $role === 'faculty' && $has_column['middle_name'] ? trim((string) ($_POST['middle_name'] ?? '')) : null;
+        $designation = in_array($role, $academic_affiliation_roles, true) && $has_column['designation'] ? trim((string) ($_POST['designation'] ?? '')) : null;
+        $appointment_status = $role === 'faculty' && $has_column['appointment_status'] ? trim((string) ($_POST['appointment_status'] ?? '')) : null;
 
         if ($first_name === '') $profile_errors[] = 'First name is required.';
         if ($last_name  === '') $profile_errors[] = 'Last name is required.';
@@ -118,9 +138,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($has_column['year_level'] && $year_level !== '' && !in_array($year_level, $allowed_year_levels, true)) {
             $profile_errors[] = 'Invalid year level.';
         }
-        $allowed_ranks = ['Instructor', 'Assistant Professor', 'Associate Professor', 'Professor', 'Dean', 'Director'];
-        if ($has_column['academic_rank'] && $academic_rank !== '' && !in_array($academic_rank, $allowed_ranks, true)) {
+        if ($has_column['academic_rank'] && !rmsFacultyAcademicRankIsValid($academic_rank, $user_row['academic_rank'] ?? null)) {
             $profile_errors[] = 'Invalid academic rank.';
+        }
+        if ($role === 'faculty' && $has_column['middle_name'] && mb_strlen($middle_name) > 80) {
+            $profile_errors[] = 'Middle name or initial is too long (max 80 characters).';
+        }
+        if (in_array($role, $academic_affiliation_roles, true) && $has_column['designation'] && mb_strlen($designation) > 150) {
+            $profile_errors[] = 'Designation is too long (max 150 characters).';
+        }
+        if ($academic_affiliation_enabled && (!isset($_POST['academic_affiliations_submitted'])
+            || !is_array($_POST['academic_affiliations'] ?? []))) {
+            $profile_errors[] = 'Submit valid academic affiliation selections.';
+        }
+        if ($role === 'faculty' && $has_column['appointment_status'] && mb_strlen($appointment_status) > 80) {
+            $profile_errors[] = 'Appointment status is too long (max 80 characters).';
         }
 
         if (!$profile_errors) {
@@ -149,20 +181,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $types   .= 's';
                 $values[] = $office !== '' ? $office : null;
             }
+            if ($role === 'faculty' && $has_column['middle_name']) {
+                $sets[] = 'middle_name = ?';
+                $types .= 's';
+                $values[] = $middle_name !== '' ? $middle_name : null;
+            }
+            if (in_array($role, $academic_affiliation_roles, true) && $has_column['designation']) {
+                $sets[] = 'designation = ?';
+                $types .= 's';
+                $values[] = $designation !== '' ? $designation : null;
+            }
+            if ($role === 'faculty' && $has_column['appointment_status']) {
+                $sets[] = 'appointment_status = ?';
+                $types .= 's';
+                $values[] = $appointment_status !== '' ? $appointment_status : null;
+            }
 
             $types .= 'i';
             $values[] = $user_id;
 
             $sql = 'UPDATE users SET ' . implode(', ', $sets) . ' WHERE user_id = ?';
-            $upd = $conn->prepare($sql);
-            if (!$upd) {
+            $transactionStarted = !$academic_affiliation_enabled || $conn->begin_transaction();
+            $upd = $transactionStarted ? $conn->prepare($sql) : false;
+            if (!$transactionStarted) {
+                $profile_errors[] = 'Could not begin the profile update. Please try again.';
+            } elseif (!$upd) {
                 $profile_errors[] = 'Could not save your changes. Please try again.';
             } else {
                 $upd->bind_param($types, ...$values);
-                if ($upd->execute() && $upd->affected_rows >= 0) {
+                $updated = $upd->execute() && $upd->affected_rows >= 0;
+                $affiliationsSaved = !$academic_affiliation_enabled || ($updated && rmsAcademicAffiliationSave(
+                    $conn,
+                    $user_id,
+                    $_POST['academic_affiliations'] ?? [],
+                    $role === 'faculty'
+                ));
+                $committed = $updated && $affiliationsSaved
+                    && (!$academic_affiliation_enabled || $conn->commit());
+                if ($committed) {
                     logActivity('Updated profile information', 'profile');
                     $_SESSION['module_success'] = 'Profile updated successfully.';
                 } else {
+                    if ($academic_affiliation_enabled) {
+                        $conn->rollback();
+                    }
                     $profile_errors[] = 'Could not save your changes. Please try again.';
                 }
                 $upd->close();
@@ -184,8 +246,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($current_password === '' || $new_password === '' || $confirm_password === '') {
             $password_errors[] = 'All password fields are required.';
-        } elseif (strlen($new_password) < 8) {
-            $password_errors[] = 'New password must be at least 8 characters.';
+        } elseif (($passwordPolicyError = rmsValidatePasswordPolicy($new_password)) !== null) {
+            $password_errors[] = $passwordPolicyError;
         } elseif ($new_password !== $confirm_password) {
             $password_errors[] = 'New password and confirmation do not match.';
         } else {
@@ -267,7 +329,11 @@ $role_label = $role_labels[$role] ?? ucwords(str_replace('_', ' ', $role));
 
 // Year-level options (matches the ENUM in migration 002).
 $year_level_options = ['', '1st', '2nd', '3rd', '4th', 'Graduate', 'Masters', 'Doctorate'];
-$rank_options = ['', 'Instructor', 'Assistant Professor', 'Associate Professor', 'Professor', 'Dean', 'Director'];
+$rank_options = array_merge([''], array_keys(rmsFacultyAcademicRanks()));
+$current_rank = (string) ($user_row['academic_rank'] ?? '');
+if ($current_rank !== '' && !in_array($current_rank, $rank_options, true)) {
+    $rank_options[] = $current_rank;
+}
 
 // Pre-fill values for the form (sticky on validation failure).
 $form_first_name    = $user_row['first_name']    ?? '';
@@ -278,7 +344,10 @@ $form_year_level    = $user_row['year_level']    ?? '';
 $form_specialization = $user_row['specialization'] ?? '';
 $form_academic_rank = $user_row['academic_rank'] ?? '';
 $form_office        = $user_row['office']        ?? '';
-$profile_name = trim((string) $form_first_name . ' ' . (string) $form_last_name);
+$form_middle_name = $user_row['middle_name'] ?? '';
+$form_designation = $user_row['designation'] ?? '';
+$form_appointment_status = $user_row['appointment_status'] ?? '';
+$profile_name = trim((string) $form_first_name . ' ' . ($role === 'faculty' ? (string) $form_middle_name . ' ' : '') . (string) $form_last_name);
 $profile_name = $profile_name !== '' ? $profile_name : 'RMS User';
 $profile_initials = mb_strtoupper(mb_substr((string) $form_first_name, 0, 1) . mb_substr((string) $form_last_name, 0, 1));
 $profile_initials = $profile_initials !== '' ? $profile_initials : 'RU';
@@ -350,7 +419,7 @@ $profileTheme = match ($role) {
       <div class="profile-info-row">
         <div class="profile-info-label">Full name</div>
         <div class="profile-info-value">
-          <?php echo htmlspecialchars(trim(($user_row['first_name'] ?? '') . ' ' . ($user_row['last_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>
+          <?php echo htmlspecialchars(trim(($user_row['first_name'] ?? '') . ' ' . ($role === 'faculty' ? (string) ($user_row['middle_name'] ?? '') . ' ' : '') . ($user_row['last_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>
         </div>
       </div>
       <div class="profile-info-row">
@@ -361,6 +430,12 @@ $profileTheme = match ($role) {
         <div class="profile-info-label">Role</div>
         <div class="profile-info-value"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
       </div>
+      <?php if (in_array($role, $academic_affiliation_roles, true)): ?>
+      <div class="profile-info-row">
+        <div class="profile-info-label">Institute</div>
+        <div class="profile-info-value">EARIST</div>
+      </div>
+      <?php endif; ?>
       <div class="profile-info-row">
         <div class="profile-info-label">Status</div>
         <div class="profile-info-value"><?php echo htmlspecialchars(ucfirst((string) ($user_row['status'] ?? 'active')), ENT_QUOTES, 'UTF-8'); ?></div>
@@ -394,7 +469,19 @@ $profileTheme = match ($role) {
         <?php if ($has_column['academic_rank']): ?>
         <div class="profile-info-row">
           <div class="profile-info-label">Academic rank</div>
-          <div class="profile-info-value"><?php echo htmlspecialchars((string) ($user_row['academic_rank'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="profile-info-value"><?php echo htmlspecialchars(rmsFacultyAcademicRankLabel($user_row['academic_rank'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($has_column['designation'] && !empty($user_row['designation'])): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Designation</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars((string) $user_row['designation'], ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($has_column['appointment_status'] && !empty($user_row['appointment_status'])): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Appointment status</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars((string) $user_row['appointment_status'], ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
         <?php endif; ?>
       <?php else: /* research_staff or admin */ ?>
@@ -408,6 +495,35 @@ $profileTheme = match ($role) {
           <div class="profile-info-value"><?php echo htmlspecialchars((string) ($user_row['office'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
         <?php endif; ?>
+        <?php if ($has_column['academic_rank'] && !empty($user_row['academic_rank'])): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Academic rank</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars(rmsFacultyAcademicRankLabel($user_row['academic_rank']), ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($has_column['designation'] && !empty($user_row['designation'])): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Designation</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars((string) $user_row['designation'], ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <?php endif; ?>
+      <?php endif; ?>
+      <?php if ($academic_affiliation_enabled): ?>
+        <?php foreach ($academic_affiliation_summary as $groupName => $programNames): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Academic Unit / Program Group</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars($groupName, ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Academic Program</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars($programNames, ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+        <?php endforeach; ?>
+      <?php elseif (in_array($role, $academic_affiliation_roles, true)): ?>
+        <div class="profile-info-row">
+          <div class="profile-info-label">Academic affiliation</div>
+          <div class="profile-info-value">The affiliation catalog is not available yet.</div>
+        </div>
       <?php endif; ?>
       <div class="profile-info-row">
         <div class="profile-info-label">Member since</div>
@@ -436,6 +552,14 @@ $profileTheme = match ($role) {
             <input type="text" id="first_name" name="first_name" maxlength="80" required
                    value="<?php echo htmlspecialchars((string) $form_first_name, ENT_QUOTES, 'UTF-8'); ?>">
           </div>
+          <?php if ($role === 'faculty' && $has_column['middle_name']): ?>
+          <div class="form-group">
+            <label for="middle_name">Middle name / initial <span class="form-help">(optional)</span></label>
+            <input type="text" id="middle_name" name="middle_name" maxlength="80"
+                   value="<?php echo htmlspecialchars((string) $form_middle_name, ENT_QUOTES, 'UTF-8'); ?>"
+                   placeholder="Middle name or initial">
+          </div>
+          <?php endif; ?>
           <div class="form-group">
             <label for="last_name">Last name</label>
             <input type="text" id="last_name" name="last_name" maxlength="80" required
@@ -468,6 +592,23 @@ $profileTheme = match ($role) {
             </div>
             <?php endif; ?>
           <?php elseif ($role === 'faculty'): ?>
+            <?php if ($has_column['designation']): ?>
+            <div class="form-group">
+              <label for="designation">Designation</label>
+              <input type="text" id="designation" name="designation" maxlength="150"
+                     value="<?php echo htmlspecialchars((string) $form_designation, ENT_QUOTES, 'UTF-8'); ?>"
+                     placeholder="Optional designation">
+            </div>
+            <?php endif; ?>
+            <?php if ($has_column['appointment_status']): ?>
+            <div class="form-group">
+              <label for="appointment_status">Appointment / employment status</label>
+              <input type="text" id="appointment_status" name="appointment_status" maxlength="80"
+                     value="<?php echo htmlspecialchars((string) $form_appointment_status, ENT_QUOTES, 'UTF-8'); ?>"
+                     placeholder="Optional appointment status">
+              <span class="form-help">This is employment information and does not control RMS account access.</span>
+            </div>
+            <?php endif; ?>
             <?php if ($has_column['specialization']): ?>
             <div class="form-group full">
               <label for="specialization">Specialization</label>
@@ -483,13 +624,33 @@ $profileTheme = match ($role) {
                 <?php foreach ($rank_options as $opt): ?>
                   <option value="<?php echo htmlspecialchars($opt, ENT_QUOTES, 'UTF-8'); ?>"
                           <?php echo (string) $form_academic_rank === $opt ? 'selected' : ''; ?>>
-                    <?php echo $opt === '' ? '— Not set —' : htmlspecialchars($opt, ENT_QUOTES, 'UTF-8'); ?>
+                    <?php echo $opt === '' ? '— Not set —' : htmlspecialchars(rmsFacultyAcademicRankLabel($opt) . (!isset(rmsFacultyAcademicRanks()[$opt]) ? ' (previous rank; select a level)' : ''), ENT_QUOTES, 'UTF-8'); ?>
                   </option>
                 <?php endforeach; ?>
               </select>
             </div>
             <?php endif; ?>
           <?php else: /* research_staff / admin */ ?>
+            <?php if ($has_column['designation']): ?>
+            <div class="form-group">
+              <label for="designation">Designation</label>
+              <input type="text" id="designation" name="designation" maxlength="150"
+                     value="<?php echo htmlspecialchars((string) $form_designation, ENT_QUOTES, 'UTF-8'); ?>"
+                     placeholder="Optional designation">
+            </div>
+            <?php endif; ?>
+            <?php if ($has_column['academic_rank']): ?>
+            <div class="form-group">
+              <label for="academic_rank">Academic rank <span class="form-help">(optional)</span></label>
+              <select id="academic_rank" name="academic_rank">
+                <?php foreach ($rank_options as $opt): ?>
+                  <option value="<?php echo htmlspecialchars($opt, ENT_QUOTES, 'UTF-8'); ?>" <?php echo (string) $form_academic_rank === $opt ? 'selected' : ''; ?>>
+                    <?php echo $opt === '' ? 'Not applicable / not recorded' : htmlspecialchars(rmsFacultyAcademicRankLabel($opt), ENT_QUOTES, 'UTF-8'); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <?php endif; ?>
             <?php if ($has_column['office']): ?>
             <div class="form-group full">
               <label for="office">Office</label>
@@ -500,6 +661,29 @@ $profileTheme = match ($role) {
             <?php endif; ?>
           <?php endif; ?>
         </div>
+
+        <?php if (in_array($role, $academic_affiliation_roles, true)): ?>
+          <?php if ($academic_affiliation_enabled): ?>
+          <section class="academic-affiliation-editor" id="profileAcademicAffiliationEditor" data-academic-affiliation-editor
+                   data-catalog="<?php echo htmlspecialchars(json_encode($academic_affiliation_catalog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>"
+                   data-initial="<?php echo htmlspecialchars(json_encode($academic_affiliations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="academic_affiliations_submitted" value="1">
+            <div class="affiliation-editor-heading">
+              <div>
+                <h4>Academic Affiliation</h4>
+                <p>Institute: <strong>EARIST</strong>. Leave the program selection empty when it does not apply.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" type="button" data-add-affiliation>Add academic unit</button>
+            </div>
+            <div class="affiliation-editor-rows" data-affiliation-rows></div>
+          </section>
+          <?php else: ?>
+          <section class="academic-affiliation-editor unavailable">
+            <h4>Academic Affiliation</h4>
+            <p>Institute: <strong>EARIST</strong>. The affiliation catalog is not available yet.</p>
+          </section>
+          <?php endif; ?>
+        <?php endif; ?>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save changes</button>
@@ -514,7 +698,7 @@ $profileTheme = match ($role) {
       <div>
         <div class="card-index">03 &middot; Account security</div>
         <div class="card-title">Change Password</div>
-        <div class="card-subtitle">Choose a new password with at least 8 characters.</div>
+        <div class="card-subtitle">Choose a new password with at least <?php echo (int) rmsSetting('password_min_length'); ?> characters.</div>
       </div>
     </div>
     <div class="card-body">
@@ -530,12 +714,12 @@ $profileTheme = match ($role) {
         <div class="form-grid">
           <div class="form-group">
             <label for="new_password">New password</label>
-            <input type="password" id="new_password" name="new_password" minlength="8" required autocomplete="new-password">
-            <span class="form-help">Minimum 8 characters.</span>
+            <input type="password" id="new_password" name="new_password" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" required autocomplete="new-password">
+            <span class="form-help">Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters; include a letter and number.</span>
           </div>
           <div class="form-group">
             <label for="confirm_password">Confirm new password</label>
-            <input type="password" id="confirm_password" name="confirm_password" minlength="8" required autocomplete="new-password">
+            <input type="password" id="confirm_password" name="confirm_password" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" required autocomplete="new-password">
           </div>
         </div>
 
@@ -549,6 +733,32 @@ $profileTheme = match ($role) {
 </div>
 </div>
 
+<?php
+if ($academic_affiliation_enabled):
+?>
+<style>
+.academic-affiliation-editor{margin:22px 0 8px;padding:20px;border:1px solid #dbe3ec;border-radius:14px;background:#fbfcfe;--affiliation-accent:var(--profile-accent,#1d4ed8)}
+.academic-affiliation-editor.unavailable{color:#64748b}
+.academic-affiliation-editor h4{margin:0;color:#172033;font-size:15px}
+.academic-affiliation-editor p{margin:5px 0 0;color:#64748b;font-size:12px;line-height:1.5}
+.affiliation-editor-heading,.affiliation-row-controls{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.affiliation-editor-rows{display:grid;gap:12px;margin-top:16px}
+.affiliation-row{padding:15px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}
+.affiliation-group-field{display:grid;gap:7px;flex:1;max-width:520px}
+.affiliation-field-label{display:block;color:#475569;font-size:12px;font-weight:700}
+.affiliation-group-field select{width:100%;min-height:42px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#172033;font:inherit}
+.affiliation-group-field select:focus{outline:2px solid var(--affiliation-accent);outline-offset:2px}
+.affiliation-remove{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font:inherit;font-size:12px;cursor:pointer}
+.affiliation-program-field{margin:14px 0 0;padding:0;border:0}
+.affiliation-program-options{margin-top:8px}
+.affiliation-program-select{display:block;width:100%;min-height:96px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font:inherit;font-size:12px;line-height:1.4}
+.affiliation-program-select:focus{outline:2px solid var(--affiliation-accent);outline-offset:2px}
+.affiliation-empty{grid-column:1/-1;color:#64748b;font-size:12px}
+@media(max-width:640px){.academic-affiliation-editor{padding:15px}.affiliation-editor-heading{flex-direction:column}}
+</style>
+<script>window.RmsAcademicAffiliationCatalog = <?php echo json_encode($academic_affiliation_catalog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;</script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/academic-affiliation.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<?php endif; ?>
 <?php
 if ($role === 'admin') {
     renderAdminShellClose();

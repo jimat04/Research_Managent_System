@@ -14,11 +14,16 @@ require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
 require_once __DIR__ . '/../../includes/research-workflow.php';
+require_once __DIR__ . '/../../includes/academic-years.php';
 
-requireRole(['student', 'faculty']);
+requireRole('student');
 
 $user    = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$student_research_program_id = ($user['role'] ?? '') === 'student'
+    ? rms_student_research_program_id($conn, $user_id)
+    : 0;
+$student_submission = ($user['role'] ?? '') === 'student';
 
 /**
  * Team-management helpers
@@ -58,6 +63,16 @@ function crc_validate_candidates($conn, $candidate_ids, $requester_id) {
             WHERE user_id IN ($placeholders)
               AND role = 'student'
               AND status = 'active'
+              AND EXISTS (
+                  SELECT 1
+                    FROM programs p
+                   WHERE p.status = 1
+                     AND p.program_code IN ('BSIT', 'BSCS')
+                     AND (
+                         UPPER(TRIM(p.program_code)) = UPPER(TRIM(users.program))
+                         OR UPPER(TRIM(p.program_name)) = UPPER(TRIM(users.program))
+                     )
+              )
             ORDER BY last_name ASC, first_name ASC";
     $stmt = $conn->prepare($sql);
     if (!$stmt) return [];
@@ -79,6 +94,16 @@ function crc_search_students($conn, $query, $requester_id, $limit = 8) {
             WHERE role = 'student'
               AND status = 'active'
               AND user_id <> ?
+              AND EXISTS (
+                  SELECT 1
+                    FROM programs p
+                   WHERE p.status = 1
+                     AND p.program_code IN ('BSIT', 'BSCS')
+                     AND (
+                         UPPER(TRIM(p.program_code)) = UPPER(TRIM(users.program))
+                         OR UPPER(TRIM(p.program_name)) = UPPER(TRIM(users.program))
+                     )
+              )
               AND (first_name LIKE ?
                    OR last_name LIKE ?
                    OR CONCAT(first_name, ' ', last_name) LIKE ?
@@ -119,7 +144,8 @@ $rp_deleted_filter = $rp_has_deleted_at ? ' AND deleted_at IS NULL' : '';
 $project = null;
 if ($project_id > 0) {
     $stmt = $conn->prepare("
-        SELECT project_id, title, category_id, ay_id, research_area, abstract, status, created_by
+        SELECT project_id, title, title_option_1, title_option_2, title_option_3,
+               category_id, ay_id, research_area, abstract, status, created_by
         FROM research_projects
         WHERE project_id = ?" . $rp_deleted_filter . "
           AND created_by = ?
@@ -155,16 +181,43 @@ if ($title_upload_stmt) {
 }
 
 // Form field defaults — pre-fill from DB on first GET
-$title          = (string) $project['title'];
+$title_options  = [
+    (string) ($project['title_option_1'] ?? $project['title']),
+    (string) ($project['title_option_2'] ?? ''),
+    (string) ($project['title_option_3'] ?? ''),
+];
+$title          = $title_options[0];
 $category_id    = (int) $project['category_id'];
+$saved_category_id = $category_id;
+$category_name  = '';
 $ay_id          = (int) $project['ay_id'];
-$research_area  = (string) ($project['research_area'] ?? '');
+$saved_ay_id = $ay_id;
+$academic_years = rms_academic_year_options($conn, $saved_ay_id);
+$academic_year = array_search($saved_ay_id, $academic_years, true);
+if ($academic_year === false || $saved_ay_id === 0) {
+    $academic_year = rms_current_academic_year();
+}
+$research_area_ids = rms_project_area_ids($conn, $project_id);
+$saved_research_area_ids = $research_area_ids;
+$title_classifications = $student_submission
+    ? rms_project_title_classifications($conn, $project_id, $saved_category_id, $saved_research_area_ids)
+    : [];
+$saved_title_classifications = $title_classifications;
+$research_areas = rms_research_area_catalog($conn, false, $saved_research_area_ids);
 $abstract       = (string) ($project['abstract']    ?? '');
 
 // Handle POST submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $team_action = (string) ($_POST['action'] ?? '');
+    if (!in_array($team_action, ['add_member', 'remove_member', 'remove_attachment'], true)
+        && (
+            (($user['role'] ?? '') === 'student' && !rms_student_program_is_eligible($conn, $user_id))
+            || !rms_project_students_are_eligible($conn, $project_id)
+        )) {
+        $errors[] = 'Title changes and resubmissions require an eligible student lead and active BSIT/BSCS student co-researchers.';
+    }
     if (($_POST['action'] ?? '') === 'remove_attachment') {
         $requested_upload_id = (int) ($_POST['upload_id'] ?? 0);
         if ($is_locked
@@ -182,11 +235,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $errors[] = 'This project can no longer be edited because it is already ' . $project['status'] . '.';
     }
 
-    $title          = isset($_POST['title'])          ? trim($_POST['title'])          : '';
+    $title_options = ['', '', ''];
+    if (is_array($_POST['title_options'] ?? null)) {
+        foreach (array_slice(array_values($_POST['title_options']), 0, 3) as $index => $value) {
+            if (is_string($value)) {
+                $title_options[$index] = trim($value);
+            }
+        }
+    }
+    $title          = $title_options[0];
     $category_id    = isset($_POST['category_id'])    ? (int) $_POST['category_id']    : 0;
-    $ay_id          = isset($_POST['ay_id'])          ? (int) $_POST['ay_id']          : 0;
-    $research_area  = isset($_POST['research_area'])  ? trim($_POST['research_area'])  : '';
-    $abstract       = isset($_POST['abstract'])       ? trim($_POST['abstract'])       : '';
+    $academic_year = is_string($_POST['academic_year'] ?? null) ? trim($_POST['academic_year']) : '';
+    $research_area_ids = is_array($_POST['research_area_ids'] ?? null) ? array_values($_POST['research_area_ids']) : [];
+    $title_classifications = is_array($_POST['title_classifications'] ?? null) ? array_slice(array_values($_POST['title_classifications']), 0, 3) : $title_classifications;
+    $abstract       = $student_submission
+        ? (string) ($project['abstract'] ?? '')
+        : (isset($_POST['abstract']) ? trim($_POST['abstract']) : '');
     $action = isset($_POST['action']) ? $_POST['action'] : 'save';
     if ($action === 'resubmit'
         && !$current_title_upload
@@ -194,50 +258,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $errors[] = 'A proposal document is required to resubmit this title.';
     }
 
-    if (empty($title)) {
-        $errors[] = 'Project Title is required.';
-    } elseif (strlen($title) > 255) {
-        $errors[] = 'Project Title must not exceed 255 characters.';
+    try {
+        $title_options = rms_validate_title_options($_POST['title_options'] ?? null);
+        $title = $title_options[0];
+    } catch (InvalidArgumentException $exception) {
+        $errors[] = $exception->getMessage();
     }
 
-    if (empty($category_id)) {
+    if (!$student_submission && empty($category_id)) {
         $errors[] = 'Research Category is required.';
-    } else {
-        $cat_stmt = $conn->prepare("SELECT category_id FROM research_categories WHERE category_id = ? AND status = 1");
-        $cat_stmt->bind_param('i', $category_id);
-        $cat_stmt->execute();
-        if ($cat_stmt->get_result()->num_rows === 0) {
-            $errors[] = 'Invalid Research Category selected.';
+    } elseif (!$student_submission) {
+        try {
+            $category_row = rms_validate_research_category(
+                $conn,
+                $category_id,
+                $saved_category_id,
+                $student_research_program_id,
+                $student_submission
+            );
+            $category_name = (string) $category_row['category_name'];
+        } catch (InvalidArgumentException | RuntimeException $exception) {
+            $errors[] = $exception->getMessage();
         }
-        $cat_stmt->close();
     }
 
-    if (empty($ay_id)) {
-        $errors[] = 'Academic Year / Semester is required.';
-    } else {
-        $ay_stmt = $conn->prepare("SELECT ay_id FROM academic_years WHERE ay_id = ? AND is_active = 1");
-        $ay_stmt->bind_param('i', $ay_id);
-        $ay_stmt->execute();
-        if ($ay_stmt->get_result()->num_rows === 0) {
-            $errors[] = 'Invalid Academic Year selected.';
+    if ($student_submission) {
+        try {
+            $title_classifications = rms_validate_title_classifications($conn, $_POST['title_classifications'] ?? null, $saved_title_classifications, $student_research_program_id);
+            $category_id = (int) $title_classifications[0]['category_id'];
+            $category_name = (string) $title_classifications[0]['category_name'];
+            $research_area_ids = [(int) $title_classifications[0]['area_id']];
+        } catch (InvalidArgumentException | RuntimeException $exception) {
+            $errors[] = $exception->getMessage();
         }
-        $ay_stmt->close();
     }
 
-    if (empty($abstract)) {
-        $errors[] = 'Abstract is required.';
-    } elseif (strlen($abstract) > 5000) {
-        $errors[] = 'Abstract must not exceed 5000 characters.';
+    try {
+        $academic_year = rms_validate_academic_year($_POST['academic_year'] ?? null, $academic_years);
+    } catch (InvalidArgumentException $exception) {
+        $errors[] = $exception->getMessage();
     }
 
-    if (strlen($research_area) > 150) {
-        $errors[] = 'Research Area must not exceed 150 characters.';
+    if (!$student_submission) {
+        if (empty($abstract)) {
+            $errors[] = 'Abstract is required.';
+        } elseif (strlen($abstract) > 5000) {
+            $errors[] = 'Abstract must not exceed 5000 characters.';
+        }
+    }
+
+    if (!$student_submission) try {
+        $research_area_ids = rms_validate_research_area_ids($_POST['research_area_ids'] ?? null);
+        if ($category_id > 0) {
+            rms_validate_mapped_research_areas($conn, $category_id, $research_area_ids,
+                $category_id === $saved_category_id ? $saved_research_area_ids : [], $saved_category_id,
+                $student_research_program_id, $student_submission);
+        }
+        if (array_diff($saved_research_area_ids, $research_area_ids)
+            && ($_POST['confirm_area_removal'] ?? '') !== '1') {
+            throw new InvalidArgumentException('Confirm removal of previously saved research areas before saving.');
+        }
+    } catch (InvalidArgumentException $exception) {
+        $errors[] = $exception->getMessage();
+    } catch (RuntimeException $exception) {
+        $errors[] = $exception->getMessage();
     }
 
     if (empty($errors)) {
         $conn->begin_transaction();
         try {
-            $lock_stmt = $conn->prepare('SELECT status FROM research_projects WHERE project_id = ? AND created_by = ? FOR UPDATE');
+            $lock_stmt = $conn->prepare('SELECT status, category_id FROM research_projects WHERE project_id = ? AND created_by = ?' . $rp_deleted_filter . ' FOR UPDATE');
             if (!$lock_stmt) {
                 throw new Exception('Unable to verify that this title is still editable.');
             }
@@ -251,20 +341,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             if (!$locked_project || !in_array((string) $locked_project['status'], $editable_statuses, true)) {
                 throw new Exception('This title is no longer editable.');
             }
+            $current_area_ids = rms_project_area_ids($conn, $project_id);
+            if ($student_submission) {
+                $title_classifications = rms_validate_title_classifications($conn, $_POST['title_classifications'] ?? null, $saved_title_classifications, $student_research_program_id);
+                $category_id = (int) $title_classifications[0]['category_id'];
+                $research_area_ids = [(int) $title_classifications[0]['area_id']];
+            } else {
+                rms_validate_mapped_research_areas($conn, $category_id, $research_area_ids,
+                    $category_id === (int) $locked_project['category_id'] ? $current_area_ids : [], (int) $locked_project['category_id'],
+                    $student_research_program_id, false);
+            }
+            if (!$student_submission && array_diff($current_area_ids, $research_area_ids)
+                && ($_POST['confirm_area_removal'] ?? '') !== '1') {
+                throw new InvalidArgumentException('Confirm removal of previously saved research areas before saving.');
+            }
+            $legacy_research_area = (string) ($project['research_area'] ?? '');
+            $ay_id = rms_resolve_academic_year($conn, $academic_year, $saved_ay_id);
             $upd = $conn->prepare("
                 UPDATE research_projects
-                SET title = ?, category_id = ?, ay_id = ?, research_area = ?, abstract = ?, updated_at = NOW()
+                SET title = ?, title_option_1 = ?, title_option_2 = ?, title_option_3 = ?,
+                    category_id = ?, ay_id = ?, research_area = ?, abstract = ?, updated_at = NOW()
                 WHERE project_id = ? AND created_by = ?
                   AND status IN ('draft','for_revision','revision_required')
             ");
             if (!$upd) {
                 throw new Exception('Query error: ' . $conn->error);
             }
-            $upd->bind_param('siissii', $title, $category_id, $ay_id, $research_area, $abstract, $project_id, $user_id);
+            $upd->bind_param(
+                'ssssiissii',
+                $title,
+                $title_options[0],
+                $title_options[1],
+                $title_options[2],
+                $category_id,
+                $ay_id,
+                $legacy_research_area,
+                $abstract,
+                $project_id,
+                $user_id
+            );
             if (!$upd->execute()) {
                 throw new Exception('This title is no longer editable.');
             }
             $upd->close();
+            if (!$student_submission) {
+                rms_replace_project_areas($conn, $project_id, $research_area_ids);
+            }
+            if ($student_submission) {
+                rms_save_title_classifications($conn, $project_id, $title_classifications);
+            }
 
             // Optional new proposal file upload
             if (isset($_FILES['proposal_file']) && !empty($_FILES['proposal_file']['name'])) {
@@ -272,7 +397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     'inputName'    => 'proposal_file',
                     'folderTarget' => 'proposals',
                     'maxSize'      => 10000,
-                    'accept'       => ['.pdf', '.doc', '.docx'],
+                    'accept'       => ['.pdf'],
                     'projectId'    => $project_id,
                     'type'         => 'proposal',
                     'workflowType' => 'title',
@@ -308,6 +433,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 if ($attachment_row) {
                     $attachment_ids[] = (int) $attachment_row['upload_id'];
                 }
+                $area_snapshot = rms_research_area_snapshot($conn, $research_area_ids);
                 rms_capture_submission_version(
                     $conn,
                     $project_id,
@@ -316,9 +442,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     $user_id,
                     [
                         'title' => $title,
+                        'title_options' => $title_options,
                         'category_id' => $category_id,
+                        'category_name' => $category_name,
                         'ay_id' => $ay_id,
-                        'research_area' => $research_area,
+                        'research_area' => implode(', ', array_column($area_snapshot, 'area_name')),
+                        'research_areas' => $area_snapshot,
+                        'title_classifications' => $student_submission ? $title_classifications : [],
                         'abstract' => $abstract
                     ],
                     $attachment_ids
@@ -423,17 +553,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     }
 }
 
-// Dropdowns (same source as submit-research.php)
-$categories = [];
-$cat_result = $conn->query("SELECT category_id, category_name FROM research_categories WHERE status = 1 ORDER BY category_name ASC");
-if ($cat_result) {
-    while ($row = $cat_result->fetch_assoc()) { $categories[] = $row; }
-}
-
-$academic_years = [];
-$ay_result = $conn->query("SELECT ay_id, label, semester FROM academic_years WHERE is_active = 1 ORDER BY label DESC, semester ASC");
-if ($ay_result) {
-    while ($row = $ay_result->fetch_assoc()) { $academic_years[] = $row; }
+// Program-specific categories plus this owned project's historical category.
+$has_inactive_saved_category = false;
+$categories = rms_research_category_catalog(
+    $conn,
+    $student_submission,
+    $student_research_program_id,
+    $saved_category_id
+);
+foreach ($categories as $row) {
+    if ((int) $row['category_id'] === $saved_category_id && (int) $row['status'] !== 1) {
+        $has_inactive_saved_category = true;
+    }
 }
 
 $page_title = 'Edit Research';
@@ -510,7 +641,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         $crc_valid_row = $crc_valid[0];
 
         // Already a member?
-        $crc_dup_stmt = $conn->prepare("SELECT id FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1");
+        $crc_dup_stmt = $conn->prepare("SELECT project_member_id FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1");
         $crc_dup_stmt->bind_param('ii', $crc_project_id, $crc_new_id);
         $crc_dup_stmt->execute();
         $crc_dup_exists = $crc_dup_stmt->get_result()->num_rows > 0;
@@ -521,20 +652,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             exit;
         }
 
-        $crc_ins = $conn->prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'member')");
-        if (!$crc_ins) {
-            $_SESSION['module_error'] = 'Database error: ' . $conn->error;
-            header('Location: ' . SITE_URL . 'pages/researcher/edit-research.php?id=' . (int) $project_id);
-            exit;
-        }
-        $crc_ins->bind_param('ii', $crc_project_id, $crc_new_id);
-        if (!$crc_ins->execute()) {
+        $conn->begin_transaction();
+        try {
+            if (!rms_claim_student_project_slot($conn, $crc_new_id, $crc_project_id)) {
+                throw new DomainException('That student is already assigned to another research project. Remove that assignment before adding them.');
+            }
+            $crc_ins = $conn->prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'member')");
+            if (!$crc_ins) {
+                throw new RuntimeException('Could not prepare the team assignment.');
+            }
+            $crc_ins->bind_param('ii', $crc_project_id, $crc_new_id);
+            if (!$crc_ins->execute()) {
+                $crc_ins->close();
+                throw new RuntimeException('Could not add team member.');
+            }
             $crc_ins->close();
-            $_SESSION['module_error'] = 'Could not add team member.';
+            $conn->commit();
+        } catch (Throwable $exception) {
+            $conn->rollback();
+            $_SESSION['module_error'] = $exception instanceof DomainException
+                ? $exception->getMessage()
+                : 'Could not add team member.';
             header('Location: ' . SITE_URL . 'pages/researcher/edit-research.php?id=' . (int) $project_id);
             exit;
         }
-        $crc_ins->close();
 
         logActivity('Added co-researcher to research project', 'research');
 
@@ -566,7 +707,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             header('Location: ' . SITE_URL . 'pages/researcher/edit-research.php?id=' . (int) $project_id);
             exit;
         }
-        $crc_row_stmt = $conn->prepare("SELECT id, role, user_id FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1");
+        $crc_row_stmt = $conn->prepare("SELECT project_member_id, role, user_id FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1");
         $crc_row_stmt->bind_param('ii', $crc_project_id, $crc_rm_id);
         $crc_row_stmt->execute();
         $crc_row = $crc_row_stmt->get_result()->fetch_assoc();
@@ -586,10 +727,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             header('Location: ' . SITE_URL . 'pages/researcher/edit-research.php?id=' . (int) $project_id);
             exit;
         }
-        $crc_del = $conn->prepare("DELETE FROM project_members WHERE id = ?");
-        $crc_del->bind_param('i', $crc_row['id']);
-        $crc_del->execute();
-        $crc_del->close();
+        $conn->begin_transaction();
+        try {
+            $crc_del = $conn->prepare("DELETE FROM project_members WHERE project_member_id = ?");
+            if (!$crc_del) {
+                throw new RuntimeException('Could not prepare the team removal.');
+            }
+            $crc_del->bind_param('i', $crc_row['project_member_id']);
+            if (!$crc_del->execute() || $crc_del->affected_rows !== 1) {
+                $crc_del->close();
+                throw new RuntimeException('That team member could not be removed.');
+            }
+            $crc_del->close();
+            rms_release_student_project_slot($conn, $crc_rm_id, $crc_project_id);
+            $conn->commit();
+        } catch (Throwable $exception) {
+            $conn->rollback();
+            $_SESSION['module_error'] = 'Could not remove team member. Please try again.';
+            header('Location: ' . SITE_URL . 'pages/researcher/edit-research.php?id=' . (int) $project_id);
+            exit;
+        }
 
         logActivity('Removed co-researcher from research project', 'research');
         $_SESSION['module_success'] = 'Team member has been removed.';
@@ -837,6 +994,14 @@ if (($user['role'] ?? '') === 'faculty') {
     border-radius: 10px;
     margin-top: 8px;
   }
+  body.faculty-role .back-link,
+  body.faculty-role .crc-team-tag { color:#1D4ED8; background:rgba(29,78,216,.1); }
+  body.faculty-role .form-control:focus { border-color:#1D4ED8; box-shadow:0 0 0 3px rgba(29,78,216,.14); }
+  body.faculty-role .btn-primary { background:#1D4ED8; }
+  body.faculty-role .btn-primary:hover { background:#1E40AF; box-shadow:0 4px 12px rgba(29,78,216,.28); }
+  body.faculty-role .btn:focus-visible,
+  body.faculty-role .back-link:focus-visible,
+  body.faculty-role .form-control:focus-visible { outline:2px solid #60A5FA; outline-offset:3px; }
 </style>
 
 <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo (int) $project_id; ?>" class="back-link">← Back to Project</a>
@@ -889,49 +1054,110 @@ if (($user['role'] ?? '') === 'faculty') {
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="title">Project Title <span style="color: #ef4444;">*</span></label>
-      <input type="text" id="title" name="title" class="form-control"
-             value="<?php echo htmlspecialchars($title, ENT_QUOTES, 'UTF-8'); ?>"
-             maxlength="255" required>
-      <small class="form-hint">Max 255 characters</small>
+      <span class="form-label">Research Title Options <span style="color: #ef4444;">*</span></span>
+      <p class="form-hint">Enter three distinct options. An authorized reviewer will approve one, or return the proposal for revision.</p>
+      <?php foreach ($title_options as $index => $option): ?>
+        <div style="margin-bottom:12px">
+          <label class="form-label" for="title-option-<?php echo $index + 1; ?>">Title option <?php echo $index + 1; ?></label>
+          <input type="text" id="title-option-<?php echo $index + 1; ?>" name="title_options[]"
+                 class="form-control" value="<?php echo htmlspecialchars($option, ENT_QUOTES, 'UTF-8'); ?>"
+                 maxlength="255" required>
+        </div>
+      <?php endforeach; ?>
     </div>
 
+    <?php if ($student_submission): ?>
     <div class="form-group">
+      <span class="form-label">Research Category and Area for Each Title <span class="required">*</span></span>
+      <p class="form-hint">Your course determines the available categories. Choose one category and one related research area for each of your three title options.</p>
+      <?php for ($title_index = 0; $title_index < 3; $title_index++): ?>
+        <div data-title-classification style="border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin:10px 0;background:#FCFBFD">
+          <strong>Title option <?php echo $title_index + 1; ?></strong>
+          <label class="form-label" for="title-category-<?php echo $title_index + 1; ?>">Research category</label>
+          <select id="title-category-<?php echo $title_index + 1; ?>" name="title_classifications[<?php echo $title_index; ?>][category_id]" class="form-control title-category" required>
+            <option value="">-- Select Category --</option>
+            <?php foreach ($categories as $cat): ?>
+              <option value="<?php echo (int) $cat['category_id']; ?>" <?php echo (int) ($title_classifications[$title_index]['category_id'] ?? 0) === (int) $cat['category_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['category_name'] . ((int) $cat['status'] !== 1 ? ' (inactive - saved category)' : ''), ENT_QUOTES, 'UTF-8'); ?></option>
+            <?php endforeach; ?>
+          </select>
+          <label class="form-label" for="title-area-<?php echo $title_index + 1; ?>">Research area</label>
+          <select id="title-area-<?php echo $title_index + 1; ?>" name="title_classifications[<?php echo $title_index; ?>][area_id]" class="form-control title-area" required>
+            <option value="">-- Select a category first --</option>
+            <?php foreach ($research_areas as $area): ?>
+              <option value="<?php echo (int) $area['area_id']; ?>" data-category-ids="<?php echo htmlspecialchars(implode(',', $area['category_ids']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo (int) ($title_classifications[$title_index]['area_id'] ?? 0) === (int) $area['area_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($area['selection_label'], ENT_QUOTES, 'UTF-8'); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      <?php endfor; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!$student_submission): ?><div class="form-group">
       <label class="form-label" for="category_id">Research Category <span style="color: #ef4444;">*</span></label>
       <select id="category_id" name="category_id" class="form-control" required>
         <option value="">-- Select Category --</option>
         <?php foreach ($categories as $cat): ?>
           <option value="<?php echo (int) $cat['category_id']; ?>"
             <?php echo (int) $category_id === (int) $cat['category_id'] ? 'selected' : ''; ?>>
-            <?php echo htmlspecialchars($cat['category_name'], ENT_QUOTES, 'UTF-8'); ?>
+            <?php echo htmlspecialchars($cat['category_name'] . ((int) $cat['status'] !== 1 ? ' (inactive - saved category)' : ''), ENT_QUOTES, 'UTF-8'); ?>
           </option>
         <?php endforeach; ?>
       </select>
+      <?php if ($has_inactive_saved_category): ?>
+        <p class="form-hint">Your saved category is inactive for new proposals. You can retain it for this project or choose an active category.</p>
+      <?php endif; ?>
     </div>
+    <?php endif; ?>
 
     <div class="form-group">
-      <label class="form-label" for="ay_id">Academic Year / Semester <span style="color: #ef4444;">*</span></label>
-      <select id="ay_id" name="ay_id" class="form-control" required>
+      <label class="form-label" for="academic_year">Academic Year <span style="color: #ef4444;">*</span></label>
+      <select id="academic_year" name="academic_year" class="form-control" aria-describedby="academic-year-hint" required>
         <option value="">-- Select Academic Year --</option>
-        <?php foreach ($academic_years as $ay): ?>
-          <option value="<?php echo (int) $ay['ay_id']; ?>"
-            <?php echo (int) $ay_id === (int) $ay['ay_id'] ? 'selected' : ''; ?>>
-            <?php echo htmlspecialchars($ay['label'] . ' — ' . $ay['semester'], ENT_QUOTES, 'UTF-8'); ?>
+        <?php foreach (array_keys($academic_years) as $ay_label): ?>
+          <option value="<?php echo htmlspecialchars($ay_label, ENT_QUOTES, 'UTF-8'); ?>"
+            <?php echo $academic_year === $ay_label ? 'selected' : ''; ?>>
+            <?php echo htmlspecialchars($ay_label, ENT_QUOTES, 'UTF-8'); ?>
           </option>
         <?php endforeach; ?>
       </select>
+      <p id="academic-year-hint" class="form-hint">Your saved academic year is retained. The current year becomes available automatically each January.</p>
     </div>
 
-    <div class="form-group">
-      <label class="form-label" for="research_area">Research Area <span style="color: #999;">(Optional)</span></label>
-      <input type="text" id="research_area" name="research_area" class="form-control"
-             value="<?php echo htmlspecialchars($research_area, ENT_QUOTES, 'UTF-8'); ?>"
-             maxlength="150" placeholder="e.g., Computer Science, Social Sciences, etc.">
-      <small class="form-hint">Max 150 characters</small>
+    <?php if (!$student_submission): ?><div class="form-group">
+      <span class="form-label" id="research-area-label">Research Areas <span style="color: #ef4444;">*</span></span>
+      <p class="form-hint">Choose one to five areas. Saved legacy areas may be retained under the original category. Changing category requires mapped, enabled areas; uncheck mismatches explicitly.</p>
+      <?php if (!empty($project['research_area'])): ?>
+        <p class="form-hint">Preserved historical classification: <?php echo htmlspecialchars($project['research_area'], ENT_QUOTES, 'UTF-8'); ?></p>
+      <?php endif; ?>
+      <details id="research-area-picker" data-original-category="<?php echo (int) $project['category_id']; ?>" aria-labelledby="research-area-label" style="border:1px solid #D8D0E3;border-radius:10px;background:#FCFBFD">
+        <summary id="research-area-list" style="padding:12px;cursor:pointer;font-weight:650">Choose research areas <span id="research-area-count">(<?php echo count($research_area_ids); ?> selected)</span></summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px;border-top:1px solid #E6E0EB;max-height:300px;overflow:auto" role="group" aria-label="Research areas">
+          <?php foreach ($research_areas as $area): ?>
+            <?php
+              $selected_area_ids = array_map('intval', $research_area_ids);
+              $area_category_ids = implode(',', $area['category_ids']);
+            ?>
+            <label data-eligible="<?php echo $area['proposal_eligible'] ? '1' : '0'; ?>" data-saved="<?php echo in_array((int) $area['area_id'], $saved_research_area_ids, true) ? '1' : '0'; ?>" data-category-ids="<?php echo htmlspecialchars($area_category_ids, ENT_QUOTES, 'UTF-8'); ?>" style="display:flex;align-items:flex-start;gap:9px;padding:9px;border:1px solid #EAE5F0;border-radius:8px;background:#fff;font-size:12px">
+              <input type="checkbox" name="research_area_ids[]" value="<?php echo (int) $area['area_id']; ?>"
+                <?php echo in_array((int) $area['area_id'], $selected_area_ids, true) ? 'checked' : ''; ?>>
+              <span><?php echo htmlspecialchars($area['selection_label'], ENT_QUOTES, 'UTF-8'); ?><?php echo in_array((int) $area['area_id'], $saved_research_area_ids, true) ? ' (saved)' : ''; ?></span>
+            </label>
+          <?php endforeach; ?>
+          <?php if (!$research_areas): ?>
+            <p>No active research areas are available. Ask an administrator to configure the research-area catalog.</p>
+          <?php endif; ?>
+        </div>
+      </details>
+      <p id="research-area-message" role="status" aria-live="polite" style="margin:8px 0 0;color:#9A3412;font-size:13px" hidden></p>
+      <?php if ($saved_research_area_ids): ?>
+        <label><input type="checkbox" name="confirm_area_removal" value="1" <?php echo ($_POST['confirm_area_removal'] ?? '') === '1' ? 'checked' : ''; ?>> I confirm removal of any saved research areas I have unchecked.</label>
+      <?php endif; ?>
     </div>
+    <?php endif; ?>
   </div>
 
-  <!-- ABSTRACT -->
+  <?php if (!$student_submission): ?>
+  <!-- ABSTRACT (faculty projects only; student title proposals have no abstract field) -->
   <div class="card">
     <div class="card-header">
       <div class="card-title">Abstract</div>
@@ -944,6 +1170,7 @@ if (($user['role'] ?? '') === 'faculty') {
       <small class="form-hint">Max 5000 characters</small>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- PROPOSAL DOCUMENT (optional replacement) -->
   <div class="card">
@@ -952,21 +1179,21 @@ if (($user['role'] ?? '') === 'faculty') {
       <p class="card-sub">Optionally upload a new version of your proposal</p>
     </div>
     <?php if ($current_title_upload): ?>
-      <p>Current document: <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_title_upload['upload_id']; ?>"><?php echo htmlspecialchars($current_title_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a> · <?php echo number_format(((int) $current_title_upload['file_size']) / 1024, 1); ?> KB</p>
-      <button type="submit" name="action" value="remove_attachment" class="btn btn-secondary" onclick="return confirm('Remove this draft attachment?');">Remove draft attachment</button>
+      <p>Current document: <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_title_upload['upload_id']; ?>&amp;mode=viewer"><?php echo htmlspecialchars($current_title_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a> · <?php echo number_format(((int) $current_title_upload['file_size']) / 1024, 1); ?> KB</p>
+      <button type="submit" name="action" value="remove_attachment" formnovalidate class="btn btn-secondary" onclick="return confirm('Remove this draft attachment?');">Remove draft attachment</button>
       <input type="hidden" name="upload_id" value="<?php echo (int) $current_title_upload['upload_id']; ?>">
     <?php endif; ?>
     <?php
     echo renderFileUploader([
       'inputName'          => 'proposal_file',
-      'accept'             => '.pdf,.doc,.docx',
+      'accept'             => '.pdf',
       'maxSize'            => 10000,
       'folderTarget'       => 'proposals',
       'projectId'          => $project_id,
       'type'               => 'proposal',
       'label'              => 'Upload New Proposal',
       'description'        => 'Drag & drop a new version or click to browse',
-      'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
+      'allowedFormatsText' => 'PDF only • Max 10 MB',
       'required'           => false,
     ]);
     ?>
@@ -1135,6 +1362,7 @@ if (($user['role'] ?? '') === 'faculty') {
 
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <script src="../../js/app-forms.js" defer></script>
+<script src="<?php echo SITE_URL; ?>js/research-area-picker.js?v=<?php echo filemtime(__DIR__ . '/../../js/research-area-picker.js'); ?>" defer></script>
 
 <?php
 if (($user['role'] ?? '') === 'faculty') {

@@ -1,4 +1,6 @@
 <?php
+$archiveMode = 'list';
+require __DIR__ . '/../../includes/archival-copyright-route.php';
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
@@ -45,6 +47,10 @@ if ($tableCheck instanceof mysqli_result) {
 }
 
 $role = (string) ($user['role'] ?? 'student');
+if ($role === 'student') {
+    header('Location: ' . SITE_URL . 'pages/student/my-ip-contributions.php');
+    exit;
+}
 $userId = (int) ($user['user_id'] ?? 0);
 $returnToResearchOutputs = in_array($role, ['admin', 'research_staff'], true)
     && (string) ($_GET['module_page'] ?? '') === 'research_outputs';
@@ -67,7 +73,7 @@ $staffCanManageCopyrightType = static function (string $type) use ($staffCopyrig
     }
     return false;
 };
-$ownScope = in_array($role, ['faculty', 'student'], true);
+$ownScope = $role === 'faculty';
 $canReview = $role === 'admin';
 $flash = $_SESSION['copyrights_flash'] ?? null;
 unset($_SESSION['copyrights_flash']);
@@ -91,6 +97,23 @@ $typeInput = trim((string) ($_GET['output_type'] ?? ''));
 $outputType = preg_match('/^(software|research|instructional_material|module|other|patent|utility_model|innovation|technology_transfer)$/D', $typeInput) ? $typeInput : '';
 $ipScopeInput = trim((string) ($_GET['ip_scope'] ?? ''));
 $ipScope = preg_match('/^(patents_utility_models|innovation_technology_transfer)$/D', $ipScopeInput) ? $ipScopeInput : '';
+$yearInput = trim((string) ($_GET['year'] ?? ''));
+$year = preg_match('/^\d{4}$/D', $yearInput) ? $yearInput : '';
+$externalStatusInput = trim((string) ($_GET['external_status'] ?? ''));
+$external_status = in_array($externalStatusInput, ['filed', 'processing', 'registered', 'refused', 'withdrawn', 'other'], true) ? $externalStatusInput : '';
+$inactiveInput = trim((string) ($_GET['inactive'] ?? ''));
+$inactive = in_array($inactiveInput, ['', '1', 'all'], true) ? $inactiveInput : '';
+$ownerInput = trim((string) ($_GET['owner'] ?? ''));
+$owner = $ownerInput !== '' ? $ownerInput : null;
+$programInput = trim((string) ($_GET['program'] ?? ''));
+$program = $programInput !== '' ? $programInput : null;
+$pageSize = 25;
+$applicationPage = filter_var($_GET['page'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
+$registryPage = filter_var($_GET['registry_page'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
+$modulePageInput = trim((string) ($_GET['module_page'] ?? ''));
+$modulePage = in_array($modulePageInput, ['copyrights', 'patents_utility_models', 'innovation_technology_transfer', 'research_outputs'], true)
+    ? $modulePageInput
+    : '';
 $scopeOutputTypes = match ($ipScope) {
     'patents_utility_models' => ['patent', 'utility_model'],
     'innovation_technology_transfer' => ['innovation', 'technology_transfer'],
@@ -140,7 +163,7 @@ if ($role === 'research_staff') {
 if ($role !== 'research_staff' && $scopeOutputTypes !== []) {
     $staffScopeSql = ' AND output_type IN (' . implode(',', array_map(static fn(string $type): string => "'{$type}'", $scopeOutputTypes)) . ')';
 }
-$filtersActive = $query !== '' || $status !== '' || $outputType !== '' || $ipScope !== '';
+$filtersActive = $query !== '' || $status !== '' || $outputType !== '' || $ipScope !== '' || $year !== '' || $external_status !== '' || $inactive !== '' || $owner !== null || $program !== null;
 
 $view = match (true) {
     $status === 'registered' => 'records',
@@ -155,6 +178,10 @@ $registeredStats = ['total' => 0, 'this_year' => 0, 'top_type' => '', 'top_type_
 $stageCounts = array_fill_keys(array_keys($statusOptions), 0);
 $applications = [];
 $registryRecords = [];
+$applicationTotal = 0;
+$applicationTotalPages = 1;
+$registryTotal = 0;
+$registryTotalPages = 1;
 if ($copyrightsAvailable) {
     $statsSql = "SELECT COUNT(*) AS total, COALESCE(SUM(status = 'pending'), 0) AS pending, COALESCE(SUM(status = 'registered'), 0) AS registered FROM copyright_applications";
     if ($ownScope) {
@@ -217,16 +244,25 @@ if ($copyrightsAvailable) {
     }
     $stmt->close();
 
-    $registrySql = "SELECT copyright_id, copyright_ref_no, output_title, applicant_name, output_type, registered_at FROM copyright_applications WHERE status = 'registered' AND copyright_ref_no IS NOT NULL AND TRIM(copyright_ref_no) <> ''";
-    if ($ownScope) $registrySql .= ' AND applicant_id = ?';
-    $registrySql .= $staffScopeSql;
-    $registrySql .= ' ORDER BY copyright_ref_no ASC, copyright_id ASC LIMIT 250';
+    $registryWhereSql = " FROM copyright_applications WHERE status = 'registered' AND copyright_ref_no IS NOT NULL AND TRIM(copyright_ref_no) <> ''";
+    if ($ownScope) $registryWhereSql .= ' AND applicant_id = ?';
+    $registryWhereSql .= $staffScopeSql;
+    $stmt = $conn->prepare('SELECT COUNT(*) AS total' . $registryWhereSql);
+    $registryTotal = (int) (copyrightsRun($stmt, $scopeTypes, $scopeParams)->fetch_assoc()['total'] ?? 0);
+    $stmt->close();
+    $registryTotalPages = max(1, (int) ceil($registryTotal / $pageSize));
+    $registryPage = min($registryPage, $registryTotalPages);
+    $registryOffset = ($registryPage - 1) * $pageSize;
+    $registrySql = 'SELECT copyright_id, copyright_ref_no, output_title, applicant_name, output_type, registered_at'
+        . $registryWhereSql
+        . ' ORDER BY copyright_ref_no ASC, copyright_id ASC LIMIT ? OFFSET ?';
     $stmt = $conn->prepare($registrySql);
-    $result = copyrightsRun($stmt, $scopeTypes, $scopeParams);
+    $result = copyrightsRun($stmt, $scopeTypes . 'ii', array_merge($scopeParams, [$pageSize, $registryOffset]));
     while ($row = $result->fetch_assoc()) $registryRecords[] = $row;
     $stmt->close();
 
-    $sql = 'SELECT c.copyright_id, c.applicant_id, c.research_project_id, c.publication_id, c.copyright_ref_no, c.output_title, c.applicant_name, c.applicant_category, c.output_type, c.status, c.created_at, rp.title AS research_project_title, p.research_title AS publication_title FROM copyright_applications c LEFT JOIN research_projects rp ON rp.project_id = c.research_project_id LEFT JOIN publications p ON p.publication_id = c.publication_id WHERE 1 = 1';
+    $selectSql = 'SELECT c.copyright_id, c.applicant_id, c.research_project_id, c.publication_id, c.copyright_ref_no, c.output_title, c.applicant_name, c.applicant_category, c.output_type, c.status, c.created_at, rp.title AS research_project_title, p.research_title AS publication_title';
+    $sql = ' FROM copyright_applications c LEFT JOIN research_projects rp ON rp.project_id = c.research_project_id LEFT JOIN publications p ON p.publication_id = c.publication_id WHERE 1 = 1';
     $params = [];
     $types = '';
     if ($ownScope) {
@@ -259,11 +295,53 @@ if ($copyrightsAvailable) {
         $params[] = $outputType;
         $types .= 's';
     }
-    $sql .= $view === 'outputs'
-        ? ' ORDER BY c.output_type ASC, c.created_at DESC, c.copyright_id DESC LIMIT 250'
-        : ' ORDER BY c.created_at DESC, c.copyright_id DESC LIMIT 250';
+    if ($year !== '') {
+        $sql .= " AND YEAR(c.filing_date) = ?";
+        $params[] = $year;
+        $types .= 's';
+    }
+    if ($external_status !== '') {
+        $sql .= ' AND c.external_status = ?';
+        $params[] = $external_status;
+        $types .= 's';
+    }
+    if ($inactive === '1') {
+        $sql .= ' AND c.deactivated_at IS NOT NULL';
+    } elseif ($inactive === '' || $inactive === null) {
+        $sql .= ' AND c.deactivated_at IS NULL';
+    }
+    if ($owner !== null) {
+        if ($owner === 'unresolved') {
+            $sql .= ' AND (u.user_id IS NULL OR u.role <> "faculty" OR u.deleted_at IS NOT NULL)';
+            // Need to join users table for this filter
+            $sql = str_replace('LEFT JOIN research_projects', 'LEFT JOIN users u ON u.user_id = c.applicant_id LEFT JOIN research_projects', $sql);
+        } else {
+            $sql .= ' AND c.applicant_id = ?';
+            $params[] = (int) $owner;
+            $types .= 'i';
+        }
+    }
+    if ($program !== null) {
+        $sql .= ' AND u.program = ?';
+        $params[] = $program;
+        $types .= 's';
+        // Ensure users table is joined
+        if (strpos($sql, 'LEFT JOIN users u') === false) {
+            $sql = str_replace('LEFT JOIN research_projects', 'LEFT JOIN users u ON u.user_id = c.applicant_id LEFT JOIN research_projects', $sql);
+        }
+    }
+    $stmt = $conn->prepare('SELECT COUNT(*) AS total' . $sql);
+    $applicationTotal = (int) (copyrightsRun($stmt, $types, $params)->fetch_assoc()['total'] ?? 0);
+    $stmt->close();
+    $applicationTotalPages = max(1, (int) ceil($applicationTotal / $pageSize));
+    $applicationPage = min($applicationPage, $applicationTotalPages);
+    $applicationOffset = ($applicationPage - 1) * $pageSize;
+    $sql = $selectSql . $sql . ($view === 'outputs'
+        ? ' ORDER BY c.output_type ASC, c.created_at DESC, c.copyright_id DESC'
+        : ' ORDER BY c.created_at DESC, c.copyright_id DESC')
+        . ' LIMIT ? OFFSET ?';
     $stmt = $conn->prepare($sql);
-    $result = copyrightsRun($stmt, $types, $params);
+    $result = copyrightsRun($stmt, $types . 'ii', array_merge($params, [$pageSize, $applicationOffset]));
     while ($row = $result->fetch_assoc()) {
         $applications[] = $row;
     }
@@ -355,6 +433,24 @@ foreach ($applications as $application) {
         break;
     }
 }
+$copyrightsPageUrl = static function (string $pageKey, int $page) use ($query, $status, $outputType, $ipScope, $modulePage, $applicationPage, $registryPage, $year, $external_status, $inactive, $owner, $program): string {
+    $params = array_filter([
+        'q' => $query,
+        'status' => $status,
+        'output_type' => $outputType,
+        'ip_scope' => $ipScope,
+        'module_page' => $modulePage,
+        'year' => $year,
+        'external_status' => $external_status,
+        'inactive' => $inactive,
+        'owner' => $owner,
+        'program' => $program,
+    ], static fn($value): bool => $value !== '' && $value !== null);
+    $params['page'] = $applicationPage;
+    $params['registry_page'] = $registryPage;
+    $params[$pageKey] = $page;
+    return SITE_URL . 'pages/shared/copyrights.php?' . http_build_query($params);
+};
 
 $shell = match ($role) {
     'admin' => 'admin',
@@ -690,6 +786,40 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
 .copyright-hub .pipeline-label strong { color: var(--copyright-ink); }
 .copyright-hub .pipeline-track { height: 9px; background: #edf1f5; }
 .copyright-hub .pipeline-track span { background: var(--copyright-accent); }
+.copyright-hub .hub-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-top: 1px solid #edf1f5;
+  color: var(--copyright-copy);
+  font-size: 11px;
+}
+.copyright-hub .hub-pagination-links { display: flex; gap: 8px; }
+.copyright-hub .hub-pagination a,
+.copyright-hub .hub-pagination-disabled {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--copyright-line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--copyright-accent-hover);
+  font-weight: 700;
+  text-decoration: none;
+}
+.copyright-hub .hub-pagination a:hover {
+  border-color: var(--copyright-border-tint);
+  background: var(--copyright-tint);
+}
+.copyright-hub .hub-pagination a:focus-visible {
+  outline: 3px solid var(--copyright-tint);
+  outline-offset: 2px;
+}
+.copyright-hub .hub-pagination-disabled { color: #94a3b8; }
 @media (max-width: 980px) {
   .copyright-hub .filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .copyright-hub .stat-grid.stat-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -697,8 +827,9 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
 @media (max-width: 640px) {
   .copyright-hub .module-intro { display: block; padding: 23px 20px; }
   .copyright-hub .module-intro::after { right: 10px; bottom: -30px; font-size: 130px; }
-  .copyright-hub .copyright-header-actions { margin-top: 17px; }
-  .copyright-hub .copyright-header-actions .hub-button { width: 100%; }
+  .copyright-hub .module-intro > div:first-child { text-align: center; }
+  .copyright-hub .copyright-header-actions { margin-top: 17px; justify-content: center; }
+  .copyright-hub .copyright-header-actions .hub-button { width: auto; min-width: 160px; }
   .copyright-hub .stat-grid,
   .copyright-hub .stat-grid.stat-grid-four,
   .copyright-hub .filter-form,
@@ -729,9 +860,11 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
   <?php endif; ?>
 
   <?php if ($pageConfig['panel'] === 'registry' || $pageConfig['panel'] === 'registered_breakdown'): ?>
-  <section class="hub-panel" aria-labelledby="registry-panel-heading"><div class="panel-head"><div><h2 id="registry-panel-heading"><?= copyrightsEscape($pageConfig['panel_title']) ?></h2><p>Registered outputs with assigned reference numbers, sorted by reference.</p></div></div>
+  <section class="hub-panel" aria-labelledby="registry-panel-heading"><div class="panel-head"><div><h2 id="registry-panel-heading"><?= copyrightsEscape($pageConfig['panel_title']) ?></h2><p>Registered outputs with assigned reference numbers, sorted by reference; <?= $registryTotal ?> <?= $registryTotal === 1 ? 'record' : 'records' ?>.</p></div></div>
     <?php if (!$copyrightsAvailable || !$registryRecords): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#169;</div><h2>No registered outputs with reference numbers</h2><p><?= $copyrightsAvailable ? 'Registered records will appear here once a reference number has been assigned.' : 'The copyrights module is not installed on this database.' ?></p></div>
-    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><th>Reference no.</th><th>Output title</th><th>Applicant</th><th>Output type</th><th>Date registered</th></tr></thead><tbody><?php foreach ($registryRecords as $record): ?><tr><td class="ref"><?= copyrightsEscape($record['copyright_ref_no']) ?></td><td class="title-cell"><a href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $record['copyright_id']) ?>"><?= copyrightsEscape($record['output_title']) ?></a></td><td><?= copyrightsEscape($record['applicant_name'] ?: '—') ?></td><td><?= copyrightsEscape($typeOptions[$record['output_type']] ?? ucwords(str_replace('_', ' ', (string) $record['output_type']))) ?></td><td><?= $record['registered_at'] ? copyrightsEscape(date('M j, Y', strtotime((string) $record['registered_at']))) : '—' ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><th>Reference no.</th><th>Output title</th><th>Applicant</th><th>Output type</th><th>Date registered</th></tr></thead><tbody><?php foreach ($registryRecords as $record): ?><tr><td class="ref"><?= copyrightsEscape($record['copyright_ref_no']) ?></td><td class="title-cell"><a href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $record['copyright_id']) ?>"><?= copyrightsEscape($record['output_title']) ?></a></td><td><?= copyrightsEscape($record['applicant_name'] ?: '—') ?></td><td><?= copyrightsEscape($typeOptions[$record['output_type']] ?? ucwords(str_replace('_', ' ', (string) $record['output_type']))) ?></td><td><?= $record['registered_at'] ? copyrightsEscape(date('M j, Y', strtotime((string) $record['registered_at']))) : '—' ?></td></tr><?php endforeach; ?></tbody></table></div>
+      <?php if ($registryTotalPages > 1): ?><nav class="hub-pagination" aria-label="Registered outputs pages"><span>Page <?= $registryPage ?> of <?= $registryTotalPages ?></span><div class="hub-pagination-links"><?php if ($registryPage > 1): ?><a href="<?= copyrightsEscape($copyrightsPageUrl('registry_page', $registryPage - 1)) ?>">Previous</a><?php else: ?><span class="hub-pagination-disabled" aria-disabled="true">Previous</span><?php endif; ?><?php if ($registryPage < $registryTotalPages): ?><a href="<?= copyrightsEscape($copyrightsPageUrl('registry_page', $registryPage + 1)) ?>">Next</a><?php else: ?><span class="hub-pagination-disabled" aria-disabled="true">Next</span><?php endif; ?></div></nav><?php endif; ?>
+    <?php endif; ?>
   </section>
   <?php elseif ($pageConfig['panel'] === 'pipeline'): ?>
   <section class="hub-panel" aria-labelledby="copyright-pipeline-heading"><div class="panel-head"><div><h2 id="copyright-pipeline-heading">Stage pipeline</h2><p>Applications by current status<?= $ownScope ? ' in your portfolio' : '' ?>.</p></div></div>
@@ -740,10 +873,45 @@ else renderStudentShell($user, 'copyrights.php', $pageConfig['title'], $pageConf
   </section>
   <?php endif; ?>
 
-  <section class="hub-panel" aria-labelledby="copyright-directory-heading"><div class="panel-head"><div><h2 id="copyright-directory-heading"><?= copyrightsEscape($pageConfig['directory_title']) ?></h2><p><?= count($applications) ?> <?= count($applications) === 1 ? 'record' : 'records' ?> in view</p></div></div>
-    <form class="filter-form" method="get" action="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyrights.php') ?>"><?php if ($ipScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= copyrightsEscape($ipScope) ?>"><?php endif; ?><?php if ($returnToResearchOutputs): ?><input type="hidden" name="module_page" value="research_outputs"><?php endif; ?><div class="field"><label for="copyright-q">Title, applicant, or reference no.</label><input id="copyright-q" name="q" type="search" maxlength="150" value="<?= copyrightsEscape($query) ?>" placeholder="Search applications"></div><div class="field"><label for="copyright-status">Status</label><select id="copyright-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php if ($ipScope === '' || $staffPageKey === 'copyrights'): ?><div class="field"><label for="copyright-type">Output type</label><select id="copyright-type" name="output_type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= copyrightsEscape($value) ?>" <?= $outputType === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= copyrightsEscape($returnToResearchOutputs ? $researchOutputsUrl : ($role === 'research_staff' ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($staffPageKey) : SITE_URL . 'pages/shared/copyrights.php')) ?>">Clear</a><?php endif; ?></div></form>
+  <section class="hub-panel" aria-labelledby="copyright-directory-heading"><div class="panel-head"><div><h2 id="copyright-directory-heading"><?= copyrightsEscape($pageConfig['directory_title']) ?></h2><p><?= $applicationTotal ?> matching <?= $applicationTotal === 1 ? 'record' : 'records' ?></p></div></div>
+    <form class="filter-form" method="get" action="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyrights.php') ?>">
+    <?php if ($ipScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= copyrightsEscape($ipScope) ?>"><?php endif; ?>
+    <?php if ($returnToResearchOutputs): ?><input type="hidden" name="module_page" value="research_outputs"><?php endif; ?>
+    <?php
+    $filterFields = [
+        'q' => ['label' => 'Title, applicant, or reference no.', 'type' => 'search', 'placeholder' => 'Search applications'],
+        'year' => ['label' => 'Year', 'type' => 'number'],
+        'status' => ['label' => 'Application status', 'type' => 'select', 'options' => $statusOptions],
+        'output_type' => ['label' => 'Output type', 'type' => 'select', 'options' => $typeOptions, 'condition' => ($ipScope === '' || $staffPageKey === 'copyrights')],
+    ];
+    if ($role === 'research_staff') {
+        $filterFields['inactive'] = ['label' => 'Record availability', 'type' => 'select', 'options' => ['' => 'Active', '1' => 'Inactive', 'all' => 'All']];
+        $filterFields['owner'] = ['label' => 'Faculty owner ID (or unresolved)', 'type' => 'text'];
+        $filterFields['program'] = ['label' => 'Academic program', 'type' => 'text'];
+    }
+    ?>
+    <?php foreach ($filterFields as $key => $config): ?>
+        <?php if (empty($config['condition'] ?? true)) continue; ?>
+        <div class="field">
+            <label for="copyright-<?= $key ?>"><?= copyrightsEscape($config['label']) ?></label>
+            <?php if ($config['type'] === 'select'): ?>
+                <select id="copyright-<?= $key ?>" name="<?= $key ?>">
+                    <option value="">All <?= strtolower($config['label']) ?></option>
+                    <?php foreach ($config['options'] as $value => $label): ?>
+                        <option value="<?= copyrightsEscape($value) ?>" <?= ($$key ?? '') === $value ? 'selected' : '' ?>><?= copyrightsEscape($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            <?php else: ?>
+                <input id="copyright-<?= $key ?>" name="<?= $key ?>" type="<?= $config['type'] ?>" maxlength="<?= $key === 'q' ? '150' : ($key === 'year' ? '4' : '255') ?>" <?= $key === 'year' ? 'min="1900" max="9999" inputmode="numeric"' : '' ?> value="<?= copyrightsEscape($$key ?? '') ?>" <?= isset($config['placeholder']) ? 'placeholder="' . copyrightsEscape($config['placeholder']) . '"' : '' ?>>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
+    <div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= copyrightsEscape($returnToResearchOutputs ? $researchOutputsUrl : ($role === 'research_staff' ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($staffPageKey) : SITE_URL . 'pages/shared/copyrights.php')) ?>">Clear</a><?php endif; ?></div>
+</form>
     <?php if (!$copyrightsAvailable || !$applications): ?><div class="empty-state"><div class="empty-mark" aria-hidden="true">&#169;</div><h2><?= $copyrightsAvailable ? 'No applications found' : 'Copyrights are unavailable' ?></h2><p><?= $copyrightsAvailable ? ($ownScope ? 'No applications match your current search and filters.' : 'Adjust the search or filters to see more copyright records.') : 'Apply database migration 012 to enable this module.' ?></p></div>
-    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><?php if ($showReferenceColumn): ?><th>Reference no.</th><?php endif; ?><th>Output title</th><th>Applicant</th><th>Category</th><th>Output type</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach ($applications as $application): $badge = copyrightsStatusBadge((string) $application['status']); $detailUrl = SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $application['copyright_id']; $canEdit = $role === 'admin' || ($ownScope && (int) $application['applicant_id'] === $userId && $application['status'] === 'pending') || ($role === 'research_staff' && $staffCanManageCopyrightType((string) $application['output_type'])); ?><tr><?php if ($showReferenceColumn): ?><td class="ref"><?= copyrightsEscape($application['copyright_ref_no'] ?: '—') ?></td><?php endif; ?><td class="title-cell"><a href="<?= copyrightsEscape($detailUrl) ?>"><?= copyrightsEscape($application['output_title']) ?></a></td><td><?= copyrightsEscape($application['applicant_name'] ?: '—') ?></td><td><?= copyrightsEscape(ucfirst((string) $application['applicant_category'])) ?></td><td><?= copyrightsEscape($typeOptions[$application['output_type']] ?? ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?></td><td><span class="badge tone-<?= copyrightsEscape($badge['tone']) ?>"><?= copyrightsEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= copyrightsEscape($detailUrl) ?>">View</a><?php if ($canEdit): ?><a class="row-link" href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-form.php?id=' . (int) $application['copyright_id']) ?>">Edit</a><?php endif; ?></div></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+    <?php else: ?><div class="table-wrap"><table class="hub-table"><thead><tr><?php if ($showReferenceColumn): ?><th>Reference no.</th><?php endif; ?><th>Output title</th><th>Applicant</th><th>Category</th><th>Output type</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach ($applications as $application): $badge = copyrightsStatusBadge((string) $application['status']); $detailUrl = SITE_URL . 'pages/shared/copyright-detail.php?id=' . (int) $application['copyright_id']; $canEdit = $role === 'admin' || ($ownScope && (int) $application['applicant_id'] === $userId && $application['status'] === 'pending') || ($role === 'research_staff' && $staffCanManageCopyrightType((string) $application['output_type'])); ?><tr><?php if ($showReferenceColumn): ?><td class="ref"><?= copyrightsEscape($application['copyright_ref_no'] ?: '—') ?></td><?php endif; ?><td class="title-cell"><a href="<?= copyrightsEscape($detailUrl) ?>"><?= copyrightsEscape($application['output_title']) ?></a></td><td><?= copyrightsEscape($application['applicant_name'] ?: '—') ?></td><td><?= copyrightsEscape(ucfirst((string) $application['applicant_category'])) ?></td><td><?= copyrightsEscape($typeOptions[$application['output_type']] ?? ucwords(str_replace('_', ' ', (string) $application['output_type']))) ?></td><td><span class="badge tone-<?= copyrightsEscape($badge['tone']) ?>"><?= copyrightsEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= copyrightsEscape($detailUrl) ?>">View</a><?php if ($canEdit): ?><a class="row-link" href="<?= copyrightsEscape(SITE_URL . 'pages/shared/copyright-form.php?id=' . (int) $application['copyright_id']) ?>">Edit</a><?php endif; ?></div></td></tr><?php endforeach; ?></tbody></table></div>
+      <?php if ($applicationTotalPages > 1): ?><nav class="hub-pagination" aria-label="Application pages"><span>Page <?= $applicationPage ?> of <?= $applicationTotalPages ?></span><div class="hub-pagination-links"><?php if ($applicationPage > 1): ?><a href="<?= copyrightsEscape($copyrightsPageUrl('page', $applicationPage - 1)) ?>">Previous</a><?php else: ?><span class="hub-pagination-disabled" aria-disabled="true">Previous</span><?php endif; ?><?php if ($applicationPage < $applicationTotalPages): ?><a href="<?= copyrightsEscape($copyrightsPageUrl('page', $applicationPage + 1)) ?>">Next</a><?php else: ?><span class="hub-pagination-disabled" aria-disabled="true">Next</span><?php endif; ?></div></nav><?php endif; ?>
+    <?php endif; ?>
   </section>
 </div>
 

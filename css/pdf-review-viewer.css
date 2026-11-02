@@ -1,0 +1,485 @@
+.pdf-review-app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  width: min(100%, 1400px);
+  height: calc(100vh - 108px);
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  color-scheme: light;
+}
+
+.pdf-review-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #fff;
+}
+
+.pdf-review-page-control,
+.pdf-review-zoom-control,
+.pdf-review-annotation-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.pdf-review-toolbar button,
+.pdf-review-toolbar input {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font: inherit;
+}
+
+.pdf-review-toolbar button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.pdf-review-toolbar button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.pdf-review-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.pdf-review-toolbar button[data-add-annotation] {
+  border-color: #f57c00;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.pdf-review-toolbar button[data-area-annotation].is-active {
+  border-color: #f57c00;
+  background: #f57c00;
+  color: #fff;
+}
+
+.pdf-review-toolbar :focus-visible,
+.pdf-annotation-dialog :focus-visible,
+.pdf-review-scroll:focus-visible {
+  outline: 2px solid #f57c00;
+  outline-offset: 2px;
+}
+
+.pdf-review-page-control label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pdf-review-page-control input {
+  width: 62px;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.pdf-review-page-control span,
+.pdf-review-zoom-control span {
+  color: #475569;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-review-status {
+  min-height: 32px;
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+}
+
+.pdf-review-status.is-error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.pdf-review-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 14px 28px;
+  background: #e2e8f0;
+  overscroll-behavior: contain;
+}
+
+.pdf-review-scroll.has-comment-gutter .pdf-review-page {
+  margin-right: 0;
+  margin-left: 14px;
+}
+
+.pdf-review-page {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0 auto 18px;
+  overflow: visible;
+  background: #fff;
+  box-shadow: 0 2px 9px rgb(15 23 42 / 18%);
+  isolation: isolate;
+}
+
+.pdf-review-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+}
+
+.pdf-review-page .textLayer {
+  z-index: 1;
+  overflow: hidden;
+  opacity: 1;
+}
+
+.pdf-review-page .textLayer span {
+  color: transparent;
+}
+
+.pdf-annotation-layer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pdf-annotation-mark {
+  position: absolute;
+  min-width: 3px;
+  min-height: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--annotation-fill, rgb(250 204 21 / 24%));
+  box-shadow: inset 0 0 0 1px var(--annotation-outline, rgb(180 83 9 / 20%));
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pdf-annotation-mark:hover,
+.pdf-annotation-mark:focus-visible {
+  background: var(--annotation-hover-fill, rgb(251 191 36 / 36%));
+  outline: 1px solid var(--annotation-outline, rgb(180 83 9 / 52%));
+  outline-offset: 1px;
+}
+
+.is-color-yellow {--annotation-fill:rgb(250 204 21 / 24%);--annotation-hover-fill:rgb(250 204 21 / 40%);--annotation-outline:rgb(161 98 7 / 35%);--annotation-bubble-border:#eab308;--annotation-bubble-surface:#fffdf4}
+.is-color-blue {--annotation-fill:rgb(56 189 248 / 24%);--annotation-hover-fill:rgb(56 189 248 / 40%);--annotation-outline:rgb(3 105 161 / 35%);--annotation-bubble-border:#38bdf8;--annotation-bubble-surface:#f0f9ff}
+.is-color-green {--annotation-fill:rgb(74 222 128 / 24%);--annotation-hover-fill:rgb(74 222 128 / 40%);--annotation-outline:rgb(21 128 61 / 35%);--annotation-bubble-border:#4ade80;--annotation-bubble-surface:#f0fdf4}
+.is-color-pink {--annotation-fill:rgb(244 114 182 / 24%);--annotation-hover-fill:rgb(244 114 182 / 40%);--annotation-outline:rgb(190 24 93 / 35%);--annotation-bubble-border:#f472b6;--annotation-bubble-surface:#fdf2f8}
+.is-color-purple {--annotation-fill:rgb(167 139 250 / 24%);--annotation-hover-fill:rgb(167 139 250 / 40%);--annotation-outline:rgb(109 40 217 / 35%);--annotation-bubble-border:#a78bfa;--annotation-bubble-surface:#f5f3ff}
+
+.pdf-annotation-comment {
+  display: block;
+  position: absolute;
+  z-index: 5;
+  width: min(420px, calc(100vw - 56px), calc(100% - 24px));
+  margin: 0;
+  padding: 16px 38px 16px 18px;
+  border: 1px solid var(--annotation-bubble-border, #fb923c);
+  border-radius: 14px;
+  background: var(--annotation-bubble-surface, #fff);
+  color: #1e293b;
+  font: 15px/1.55 Inter, Arial, sans-serif;
+  font-weight: 550;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 20%);
+  pointer-events: auto;
+  cursor: pointer;
+  appearance: none;
+}
+
+.pdf-annotation-comment[hidden] {
+  display: none;
+}
+
+.pdf-annotation-comment:hover {
+  border-color: #f97316;
+  box-shadow: 0 12px 30px rgb(15 23 42 / 24%);
+}
+
+.pdf-annotation-comment:focus-visible {
+  outline: 2px solid #5b1ebc;
+  outline-offset: 3px;
+}
+
+.pdf-annotation-comment-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  color: #64748b;
+  font: 20px/1 Arial, sans-serif;
+}
+
+.pdf-annotation-comment::before,
+.pdf-annotation-comment::after {
+  position: absolute;
+  left: var(--annotation-pointer-x, 18px);
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+  content: "";
+}
+
+.pdf-annotation-comment::before {
+  bottom: 100%;
+  border-bottom-color: var(--annotation-bubble-border, #fb923c);
+}
+
+.pdf-annotation-comment::after {
+  bottom: calc(100% - 1px);
+  border-width: 6px;
+  border-bottom-color: var(--annotation-bubble-surface, #fff);
+}
+
+.pdf-annotation-comment.is-above::before,
+.pdf-annotation-comment.is-above::after {
+  top: 100%;
+  bottom: auto;
+  border-top-color: #fff;
+  border-bottom-color: transparent;
+}
+
+.pdf-annotation-comment.is-above::before {
+  border-top-color: var(--annotation-bubble-border, #fb923c);
+}
+
+.pdf-annotation-comment.is-above::after {
+  top: calc(100% - 1px);
+  border-top-color: var(--annotation-bubble-surface, #fff);
+}
+
+.pdf-annotation-comment.is-side-right::before,
+.pdf-annotation-comment.is-side-right::after {
+  top: var(--annotation-pointer-y, 18px);
+  right: 100%;
+  bottom: auto;
+  left: auto;
+  border-bottom-color: transparent;
+}
+
+.pdf-annotation-comment.is-side-right::before {
+  border-right-color: var(--annotation-bubble-border, #fb923c);
+}
+
+.pdf-annotation-comment.is-side-right::after {
+  right: calc(100% - 1px);
+  border-width: 6px;
+  border-right-color: var(--annotation-bubble-surface, #fff);
+}
+
+.pdf-review-scroll.is-marking-area,
+.pdf-review-scroll.is-marking-area * {
+  cursor: crosshair !important;
+}
+
+.pdf-review-scroll.is-marking-area .textLayer {
+  pointer-events: none;
+  user-select: none;
+}
+
+.pdf-area-selection-preview {
+  position: absolute;
+  border: 2px solid #f57c00;
+  background: rgb(250 204 21 / 35%);
+  pointer-events: none;
+}
+
+.pdf-annotation-dialog {
+  width: min(520px, calc(100vw - 28px));
+  max-width: none;
+  max-height: min(80vh, 720px);
+  padding: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 16px;
+  background: #fff;
+  color: #111827;
+  color-scheme: light;
+  box-shadow: 0 22px 64px rgb(15 23 42 / 28%);
+}
+
+.pdf-annotation-dialog::backdrop {
+  background: rgb(15 23 42 / 58%);
+}
+
+.pdf-annotation-dialog-inner {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+.pdf-annotation-dialog h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.pdf-annotation-dialog label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pdf-annotation-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.pdf-annotation-color-picker[hidden] {
+  display: none;
+}
+
+.pdf-annotation-color-picker legend {
+  padding: 0 4px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pdf-annotation-color-picker label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pdf-annotation-color-picker input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #5b1ebc;
+}
+
+.pdf-annotation-color-swatch {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgb(15 23 42 / 18%);
+  border-radius: 50%;
+}
+
+.pdf-annotation-color-swatch.is-color-yellow {background:#facc15}
+.pdf-annotation-color-swatch.is-color-blue {background:#38bdf8}
+.pdf-annotation-color-swatch.is-color-green {background:#4ade80}
+.pdf-annotation-color-swatch.is-color-pink {background:#f472b6}
+.pdf-annotation-color-swatch.is-color-purple {background:#a78bfa}
+
+.pdf-annotation-quote {
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-left: 3px solid #f57c00;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pdf-annotation-dialog textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.pdf-annotation-dialog textarea[readonly] {
+  background: #f8fafc;
+}
+
+.pdf-annotation-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.pdf-annotation-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.pdf-annotation-dialog-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.pdf-annotation-dialog-actions [data-annotation-delete] {
+  margin-right: auto;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.pdf-annotation-dialog-actions [data-annotation-save] {
+  border-color: #c2410c;
+  background: #f57c00;
+  color: #fff;
+}
+
+@media (max-width: 760px) {
+  .pdf-review-app {
+    height: calc(100vh - 90px);
+    min-height: 420px;
+  }
+
+  .pdf-review-toolbar {
+    justify-content: flex-start;
+    padding: 8px;
+  }
+
+  .pdf-review-toolbar button {
+    min-height: 40px;
+  }
+
+  .pdf-review-scroll {
+    padding: 12px 8px 24px;
+  }
+
+  .pdf-annotation-dialog-inner {
+    padding: 18px;
+  }
+}
+

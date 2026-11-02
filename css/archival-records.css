@@ -1,0 +1,233 @@
+.archive-page{max-width:1160px;margin:0 auto;color:#172033}.archive-heading,.archive-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.archive-heading{margin-bottom:22px}.archive-heading h1{margin:0;font-size:clamp(26px,3vw,36px);letter-spacing:-.035em}.archive-page p{line-height:1.6}.archive-muted,.archive-page small{color:#64748b}.archive-card{padding:24px;margin-bottom:20px;background:#fff;border:1px solid #dfe5ee;border-radius:16px;box-shadow:0 8px 26px rgba(42,67,108,.05)}.archive-button{display:inline-flex;justify-content:center;align-items:center;min-height:42px;padding:9px 15px;border:1px solid #315b9f;border-radius:9px;background:#315b9f;color:#fff;font:inherit;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer}.archive-button.secondary{background:#fff;color:#334155;border-color:#cbd5e1}.archive-button:hover{filter:brightness(.94)}.archive-page a{overflow-wrap:anywhere}.archive-page :focus-visible{outline:3px solid #8bb5fa;outline-offset:3px}.archive-grid,.archive-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.archive-filters{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.archive-field.full{grid-column:1/-1}.archive-field label,.archive-label{display:block;margin-bottom:7px;font-size:12px;font-weight:800;color:#334155}.archive-field input:not([type=checkbox]),.archive-field select,.archive-field textarea{box-sizing:border-box;width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#172033;font:inherit;font-size:13px}.archive-field textarea{min-height:90px;resize:vertical}.archive-field small{display:block;margin-top:7px}.archive-field--full{grid-column:1/-1}.archive-filters--publication{padding-top:4px}.archive-year-range{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}.archive-year-range label{margin:0}.archive-filter-panel{margin-top:6px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.archive-filter-panel>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border:0;cursor:pointer;color:#334155;font-size:13px;font-weight:700;list-style:none}.archive-filter-panel>summary::-webkit-details-marker{display:none}.archive-filter-panel[open]>summary{border-bottom:1px solid #e2e8f0}.archive-filter-panel .archive-filters{padding:16px}.archive-filter-actions{margin-top:20px}.archive-authors{max-height:230px;overflow:auto;padding:12px;border:1px solid #dfe5ee;border-radius:9px}.archive-authors label{font-weight:500}.archive-table-wrap{overflow:auto}.archive-table{border-collapse:collapse;width:100%;font-size:13px}.archive-table th,.archive-table td{padding:14px 10px;text-align:left;vertical-align:top;border-bottom:1px solid #e5e7eb}.archive-table th{font-size:11px;text-transform:uppercase;color:#64748b}.archive-table a{color:#315b9f;font-weight:700}.archive-links{display:flex;gap:12px;flex-wrap:wrap}.archive-badge{display:inline-block;padding:5px 9px;border-radius:20px;background:#eef3fb;color:#315b9f;font-size:11px;font-weight:700}.archive-error{background:#fff1f2;color:#991b1b;border:1px solid #fecaca;padding:15px;border-radius:10px;margin-bottom:18px}.archive-success{padding:15px;background:#eefaf4;color:#166534;border-radius:10px;margin-bottom:18px}.archive-stats{display:flex;gap:28px;flex-wrap:wrap;justify-content:space-between;align-items:flex-start}.archive-stats>div{flex:1 1 180px;min-width:160px;text-align:center}.archive-stats strong{font-size:27px;display:block;margin-bottom:4px}.archive-stats div{font-size:13px;color:#475569}.archive-detail dt{font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:6px}.archive-detail dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.archive-history{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.archive-page fieldset{border:0;margin:0;padding:0}.archive-page legend{font-weight:800;margin-bottom:10px}@media(max-width:650px){.archive-grid{grid-template-columns:1fr}.archive-card{padding:18px}.archive-actions .archive-button{width:100%;box-sizing:border-box}.archive-field.full{grid-column:auto}}
+@media (max-width: 650px) {
+  .archive-heading {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+  .archive-heading > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .archive-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  .archive-actions .archive-button {
+    width: auto;
+    min-width: 160px;
+  }
+}
+@media (min-width: 651px) {
+  .admin-body .archive-admin-publication-page {
+    max-width: none;
+  }
+}
+@media (min-width: 1200px) {
+  .admin-body .archive-admin-publication-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+  }
+  .admin-body .archive-admin-publication-heading > div:first-child {
+    min-width: 0;
+  }
+  .admin-body .archive-admin-publication-heading > .archive-actions {
+    width: max-content;
+    max-width: 100%;
+    justify-content: flex-end;
+    justify-self: end;
+  }
+}
+@media (min-width: 651px) and (max-width: 1199px) {
+  .admin-body .archive-admin-publication-heading {
+    align-items: flex-start;
+  }
+  .admin-body .archive-admin-publication-heading > .archive-actions {
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+}@media print{body *{visibility:hidden}.archive-page,.archive-page *{visibility:visible}.archive-page{position:absolute;left:0;top:0;width:100%;max-width:none}.archive-no-print{display:none!important}.archive-card{box-shadow:none}.archive-table-wrap{overflow:visible}}
+.archive-admin-report-summary{table-layout:fixed}.archive-admin-report-summary th:first-child,.archive-admin-report-summary td:first-child{width:50%;overflow-wrap:anywhere}.archive-admin-report-summary th:nth-child(2),.archive-admin-report-summary td:nth-child(2),.archive-admin-report-summary th:nth-child(3),.archive-admin-report-summary td:nth-child(3){width:25%;font-variant-numeric:tabular-nums;white-space:nowrap}body.admin-body .admin-page-content .archive-admin-report-summary :is(th,td):nth-child(n+2){text-align:right!important}
+
+
+/* Archive attachments: make each file and its actions readable as one unit. */
+.archive-documents-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.archive-documents-heading h2{margin:0}
+.archive-documents-heading p{margin:5px 0 0;color:#64748b;font-size:13px}
+.archive-documents-count{flex:none;padding:5px 10px;border-radius:999px;background:#eef3fb;color:#315b9f;font-size:12px;font-weight:700}
+.archive-document-list{display:grid;gap:12px}
+.archive-document{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px;border:1px solid #dfe5ee;border-radius:12px;background:#f8fafc}
+.archive-document-file-type{display:grid;place-items:center;width:48px;height:54px;border:1px solid #dbe3ef;border-radius:9px;background:#fff;color:#315b9f;font-size:10px;font-weight:800;letter-spacing:.04em}
+.archive-document-info{min-width:0}
+.archive-document-kind{margin:0 0 3px;color:#64748b;font-size:12px;font-weight:700}
+.archive-document-info h3{margin:0;color:#172033;font-size:15px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.archive-document-format{display:inline-block;margin-top:5px;color:#64748b;font-size:11px}
+.archive-document-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.archive-document-action{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 13px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#315b9f!important;font-size:13px;font-weight:700;text-decoration:none}
+.archive-document-action:hover{background:#f1f5f9}
+.archive-document-action.primary{border-color:#315b9f;background:#315b9f;color:#fff!important}
+.archive-document-action.primary:hover{background:#274c87}
+.archive-document-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#475569;font-size:14px}
+.archive-document-history-note{margin:14px 0 0;color:#64748b;font-size:12px}
+.archive-publication-authors{margin:4px 0 24px;padding:18px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
+.archive-publication-authors-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}
+.archive-publication-authors-heading h3{margin:0;color:#172033;font-size:16px}
+.archive-publication-authors-heading p{margin:4px 0 0;color:#64748b;font-size:12px}
+.archive-publication-authors-heading>span{flex:none;padding:5px 10px;border-radius:999px;background:#eef3fb;color:#315b9f;font-size:12px;font-weight:700}
+.archive-publication-author-list{list-style:none;margin:0;padding:0;counter-reset:publication-author}
+.archive-publication-author-list li{display:flex;align-items:center;gap:12px;min-height:48px;padding:9px 0;border-top:1px solid #e2e8f0;counter-increment:publication-author}
+.archive-publication-author-number{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid #dbe3ef;color:#315b9f;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.archive-publication-author-name{min-width:0;color:#172033;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.archive-publication-authors-empty{margin:0;color:#64748b;font-size:13px}
+@media(max-width:650px){.archive-document{grid-template-columns:44px minmax(0,1fr);gap:12px;padding:13px}.archive-document-file-type{width:42px;height:48px}.archive-document-actions{grid-column:1/-1;justify-content:flex-start;padding-left:54px}.archive-documents-heading{align-items:flex-start}}
+
+/* Keep admin publication row actions compact, consistent, and easy to scan. */
+.admin-body .archive-publication-admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  min-width: 232px;
+}
+.admin-body .archive-publication-admin-actions a {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  background: #fff;
+  color: #405471;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: border-color .16s ease, background-color .16s ease, color .16s ease;
+}
+.admin-body .archive-publication-admin-actions a:hover {
+  border-color: #f2b36f;
+  background: #fff7ed;
+  color: #c65f00;
+}
+.admin-body .archive-publication-admin-actions a:focus-visible {
+  outline: 2px solid #f57c00;
+  outline-offset: 2px;
+}
+@media(prefers-reduced-motion:reduce) {
+  .admin-body .archive-publication-admin-actions a { transition: none; }
+}
+
+.admin-body .archive-admin-publication-history > h2,
+.admin-body .archive-admin-publication-availability > h2 {
+  margin: 0 0 10px;
+  color: #172033;
+  font-size: 21px;
+  line-height: 1.3;
+}
+.admin-body .archive-admin-publication-history > p {
+  max-width: 980px;
+  margin: 0 0 12px;
+  color: #536176;
+  line-height: 1.6;
+}
+.admin-body .archive-admin-publication-history > details {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.admin-body .archive-admin-publication-history > details[open] {
+  border-color: #f2c38e;
+  background: #fff;
+}
+.admin-body .archive-admin-publication-history > details > summary {
+  position: relative;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  list-style: none;
+}
+.admin-body .archive-admin-publication-history > details > summary::-webkit-details-marker { display: none; }
+.admin-body .archive-admin-publication-history > details > summary::before {
+  content: '›';
+  flex: 0 0 14px;
+  color: #c65f00;
+  font-size: 22px;
+  line-height: 1;
+  transition: transform .16s ease;
+}
+.admin-body .archive-admin-publication-history > details[open] > summary::before { transform: rotate(90deg); }
+.admin-body .archive-admin-publication-history > details > :not(summary) { margin-right: 14px; margin-left: 37px; }
+.admin-body .archive-admin-publication-history .archive-history { padding-bottom: 10px; }
+.admin-body .archive-admin-publication-history > .archive-links { margin-top: 14px; }
+.admin-body .archive-admin-publication-availability {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 24px;
+  border-color: #f2d7ba;
+  background: linear-gradient(120deg, #fff 0%, #fffaf4 100%);
+}
+.admin-body .archive-admin-publication-availability > h2 { grid-column: 1; margin: 0; }
+.admin-body .archive-admin-publication-availability > p {
+  grid-column: 1;
+  max-width: 720px;
+  margin: 0;
+  color: #536176;
+}
+.admin-body .archive-admin-publication-availability > .archive-publication-availability-action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 168px;
+  min-height: 44px;
+  border-color: #e66f00;
+  background: #f57c00;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(245, 124, 0, .18);
+}
+.admin-body .archive-admin-publication-availability > .archive-publication-availability-action:hover {
+  border-color: #c65f00;
+  background: #d96b00;
+  filter: none;
+}
+.admin-body .archive-admin-publication-availability > .archive-publication-availability-action.is-restore {
+  border-color: #15803d;
+  background: #16a34a;
+  box-shadow: 0 3px 8px rgba(22, 163, 74, .16);
+}
+.admin-body .archive-admin-publication-availability > .archive-publication-availability-action.is-restore:hover {
+  border-color: #166534;
+  background: #15803d;
+}
+.admin-body .archive-admin-publication-history :is(summary, a):focus-visible,
+.admin-body .archive-admin-publication-availability .archive-button:focus-visible {
+  outline: 3px solid rgba(245, 124, 0, .42);
+  outline-offset: 3px;
+}
+@media(max-width:650px) {
+  .admin-body .archive-admin-publication-availability { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .admin-body .archive-admin-publication-availability > .archive-publication-availability-action {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+  .admin-body .archive-admin-publication-history > details > summary { align-items: flex-start; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .admin-body .archive-admin-publication-history > details > summary::before { transition: none; }
+}

@@ -2,6 +2,14 @@
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 
+$preserveArchiveIntent = ($_GET['continue'] ?? '') === RMS_RESEARCH_ARCHIVE_RETURN_VALUE;
+if ($preserveArchiveIntent) {
+    rmsSetResearchArchiveReturnIntent(RMS_RESEARCH_ARCHIVE_RETURN_VALUE);
+}
+$loginUrl = 'login.php' . ($preserveArchiveIntent
+    ? '?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE)
+    : '');
+
 $error = '';
 $success = '';
 
@@ -49,7 +57,7 @@ if (isset($_GET['token'])) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Email — <?php echo SITE_TITLE; ?></title>
+  <title>Verify Email — <?php echo htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8'); ?></title>
   <link rel="stylesheet" href="../css/style.css" />
 </head>
 <body style="background: linear-gradient(135deg, #0A0833 0%, #1a0a3a 50%, #0a1a3a 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
@@ -71,7 +79,7 @@ if (isset($_GET['token'])) {
           <?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
         </div>
 
-        <a href="login.php" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
+        <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
           🔑 Go to Login
         </a>
       </div>
@@ -89,7 +97,7 @@ if (isset($_GET['token'])) {
           You can now log in to your account and start using the Research Management System.
         </div>
 
-        <a href="login.php" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
+        <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
           🔑 Log In Now
         </a>
       </div>
@@ -101,5 +109,6 @@ if (isset($_GET['token'])) {
   </div>
 </div>
 
+<script src="../js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
 </body>
 </html>

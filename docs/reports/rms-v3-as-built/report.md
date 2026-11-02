@@ -1,0 +1,450 @@
+# RMS v3 As-Built System and Workflow Report
+
+Research paper alignment handoff | EARIST Research Management System | 20 October 2026 | Source inspection, not runtime certification
+
+Based on static source inspection only. No tests or database commands were run. The separate RMS E2E safety investigation was not modified or used as report evidence.
+
+Baseline Git reference: 9d996919f74f8c4e73d6fe77804146a9c2c7acb6. This report describes the inspected working tree, including existing uncommitted application changes. It does not certify a deployed version, installed schema, populated records, or a clean repository. Source hashes and navigation evidence make the snapshot reproducible without copying sensitive records.
+
+Audience: research-group members preparing the system description, scope, methodology, diagrams and evaluation chapters. Word is the editable handoff; PDF is the fixed reading copy. Evidence labels throughout refer to the appendix and evidence-index.csv.
+
+## 1. Reader guide and evidence rules
+
+Start with Sections 2–5 for the scope and actors, Sections 6–10 for the core process, Sections 11–16 for supporting workflows, and Sections 17–20 for limitations and paper alignment. Diagrams summarize the accompanying text; exact handler predicates take priority over simplified arrows.
+
+| Label | Meaning |
+| --- | --- |
+| Supported by inspected code | The cited source contains the described route, handler, predicate or declaration. This is not proof of successful execution, persistence or secure operation. |
+| Documented but not confirmed in code | A documentation claim is identified, but matching current behavior has not been established. Do not present it as an implemented feature. |
+| Unresolved | Sources differ, a prerequisite is not established, or confirmation would require execution that was excluded. |
+| Active / partial / legacy | A separate implementation classification: active means current navigation/handlers support a path; partial means part of a claimed process is unsupported or inconsistent; legacy means older compatibility behavior retained alongside v3. |
+| Not runtime-verified | Applies to every feature in this report. No tests, SQL execution, migrations, HTTP requests or browser automation supported this report. |
+
+Application helpers, role shells, canonical handler code, selected schema declarations and selected migration text were read as files. No environment settings, credentials, personal records, uploaded files, E2E investigation evidence or investigation reports were consumed as evidence. No source fixes are included.
+
+## 2. Executive system description
+
+RMS v3 is a role-based PHP/MySQLi research-management application. Students and faculty share researcher title and chapter pages. Administrators and authorized research staff review preserved title/chapter versions, return work with comments, or approve it. Supporting modules record research activities, publication/dissemination records and intellectual-property outputs. Role shells expose navigation; server handlers separately enforce access. [E02–E15] Supported by inspected code.
+
+The core sequence is title draft -> submitted locked snapshot -> approved title or return/revision -> chapter drafting and sequential review -> completion classification and output tracking. Publication and IP modules are related records, not compulsory final stages of a single enforced linear process. Optional links permit unlinked outputs. [E03–E08, E19, E22]
+
+The strongest paper description is a system for structured submission, traceable decisions and research-office record management. Do not claim an automated research-quality assessment, legal IP registration service, guaranteed five-chapter completion enforcement, or measured efficiency improvement from this inspection.
+
+## 3. Architecture and system boundaries
+
+| Layer | As-built responsibility and evidence |
+| --- | --- |
+| Public entry | The login/registration page processes account entry; the public archive presents stored completed/archived project records. Public metadata does not establish permission to download every file. [E43, E44, E27] |
+| Role navigation | Student and faculty shells share canonical researcher destinations. Staff navigation is built from allowed module subpages and retains defense/revision/document services. Administrator navigation includes five research-office module groups and institute administration. [E12–E15] |
+| Request handlers | Procedural PHP pages perform authorization, validate input, prepare SQL and render role shells. The module launcher resolves 15 destinations rather than implementing 15 separate databases or services. [E04–E11] |
+| Shared logic | Authentication, CSRF and permission helpers are in auth.php; version capture and review decisions are centralized in research-workflow.php; common uploads use file-uploader.php. [E02, E03, E28] |
+| Persistence | The schema declares projects, members, chapters/content, submitted versions/reviews, upload links, activities/participants, publications and IP records. Schema files describe intended structure; installed database state was not inspected. [E01, E47–E49] |
+| External boundary | Recorded publication/IP statuses describe locally maintained records. External journal acceptance, registration-office validation, email delivery and backup recovery success are not established by source inspection. [E20, E23, E37, E39] |
+
+![Figure 1. System context and the boundary between core submissions and supporting records. Evidence: E02–E15, E19–E28.](diagrams/system-map.svg)
+
+Figure 1. System context and the boundary between core submissions and supporting records. Evidence: E02–E15, E19–E28.
+
+## 4. Roles, permissions and ownership
+
+| Actor | Core research access | Supporting responsibilities |
+| --- | --- | --- |
+| Student | Create title; edit own eligible title; view own/member projects; submit eligible chapters for owned/member projects. No typed review authorization. [E03–E06, E09, E10] | Read allowed activities; create/edit own eligible publication/IP records; use messages, notifications and profile. [E12, E16–E24, E29–E31] |
+| Faculty | Use same title/chapter routes. Project detail also checks adviser assignment for visibility; this does not make the faculty member an authorized typed reviewer. [E03, E06, E09, E13] | Own eligible outputs and shared account/communication functions. Adviser visibility and output ownership use different predicates; do not assume one grants the other. [E09, E19, E22] |
+| Research staff | Queue view requires at least one relevant research-development subpage view/manage permission. Return requires research_review/manage; approval requires research_approval/manage. [E03, E07] | Five permission-scoped modules, plus separately role-gated defense/revision/document services. File/record access must be checked in each handler. [E11, E14, E27, E40–E42] |
+| Administrator | Typed helper permits title/chapter decisions and administrative views. [E03, E07] | User/permission administration, module records, archives, reports, departments/programs, logs, backup and diagnostic pages. [E15, E26, E32–E39] |
+
+The four stored role names are student, faculty, research_staff and admin. There is no distinct Reviewer role in the canonical schema. A retained is_reviewer field or adviser relationship must not be equated with the typed helper’s explicit admin/research_staff authorization. [E01, E03, E43]
+
+hasModulePermission accepts view for view/manage levels, requires an explicit subpage for manage, and allows administrators. rmsDefaultStaffPermissions defines view-level defaults; it does not justify claiming staff can approve by default. This report does not inspect the actual grants assigned to any account. [E02]
+
+A visible button or sidebar item is not sufficient evidence of authorization. Owner, team member, adviser, applicant, researcher and permission checks are distinct. For example, the title edit handler is creator-only, while chapter submit admits an owner or member. [E05, E06]
+
+## 5. Current module inventory
+
+Classification is based on current destinations and inspected handlers, not the existence of populated records or a successful page load. All rows below are supported by inspected code unless explicitly qualified.
+
+| Group / subpage | Destination or operation | Classification |
+| --- | --- | --- |
+| Capacity: seminars | activities.php?type=seminar; activity-form/detail manage records and participation. [E11, E16–E18] | Active |
+| Capacity: trainings | activities.php?type=training&capacity_page=trainings. [E11, E16–E18] | Active |
+| Capacity: workshops | activities.php?type=workshop&capacity_page=workshops. [E11, E16–E18] | Active |
+| Development: proposals | research-submission-review.php?module_page=research_proposals; versioned title intake. [E07, E11] | Active |
+| Development: review | Same shared page, research_review view; latest submitted versions and decisions. [E07, E11] | Active |
+| Development: approval | Same shared page, research_approval view; approved versions/history. [E07, E11] | Active |
+| Implementation: ongoing | implementation-outputs.php?view=ongoing; title_approved/ongoing predicate. [E08, E11] | Active, overlap caveat |
+| Implementation: completed | Same page, completed view; approved-existing-chapter aggregate or stored completed/archived status. [E08] | Partial against strict five-chapter claim |
+| Implementation: outputs | Same page, outputs view; published publications and registered IP aggregates. [E08] | Active |
+| Dissemination: journals | publications.php?publication_type=journal. [E11, E19–E21] | Active |
+| Dissemination: conferences | publications.php?publication_type=conference. [E11, E19–E21] | Active |
+| Dissemination: repository | publications.php?status=published&repository=1; distinct from project archive. [E11, E21, E25] | Active |
+| IP: copyrights | copyrights.php; output-specific form/detail operations. [E11, E22–E24] | Active |
+| IP: patents / utility models | Same IP list with ip_scope filter and explicit types. [E11, E22–E24] | Active record tracking |
+| IP: innovation / technology transfer | Same IP list with ip_scope; transfer/partner/agreement metadata. [E11, E22–E24] | Active record tracking |
+| Researcher workspace | Shared my-research, submit-research, edit-research, submit-chapter and detail pages. [E04–E10, E12, E13] | Active |
+| Shared services | Messages, notifications, profile and authorized download handlers. [E27, E29–E31] | Active |
+| Staff supplementary services | Defense schedule, revision monitor, document verification, contact messages. [E14, E39–E42] | Active navigation; retained process |
+| Administrative services | Project listing/archive, reports, users/permissions, departments/programs, logs, backup, settings, contact handling. [E15, E26, E32–E39, E50] | Active; backup execution unverified |
+| Public and dashboard surfaces | Account entry, public archive and personal dashboards; source-level display functionality only. [E43, E44, E51] | Active |
+
+The staff shell intentionally skips ongoing_research while constructing module links even though the launcher and handler provide that permission-scoped route. Treat route existence and menu exposure separately. [E11, E14]
+
+## 6. Title creation and initial submission
+
+Actors: authenticated student or faculty. Inputs: title, active research category, active academic year/semester, research area, abstract, optional selected co-researchers, and proposal attachment. The same form supports draft or submitted requests; a submission nonce is checked when the submit status is posted. [E04]
+
+| Step | State, action and persistence |
+| --- | --- |
+| Enter and validate | Title is required and at most 255 bytes by strlen; abstract is required and at most 5,000 bytes; research area is at most 150 bytes. Category and academic-year selections are checked against active rows. Do not describe these byte limits as Unicode character limits. [E04] |
+| Build team | Creator is inserted as lead. Picker candidates are active students, excluding self, deduplicated and capped at four co-researchers (five total members). Although faculty can submit titles, the picker does not thereby support selecting faculty co-researchers. [E04] |
+| Save draft | Project is inserted initially with status draft and creator/member links. Draft may be saved without a proposal file. A version snapshot is not created merely by saving an unsubmitted draft. [E04, E03] |
+| Submit for review | A proposal file is required for initial submission. Common uploader handles it; project is conditionally moved from draft to submitted and a title snapshot plus attachment links is captured within the handler transaction. [E04, E28] |
+| Feedback and notification | The handler contains success/error feedback, activity/notification code and transaction rollback paths. Delivery success and filesystem rollback behavior were not exercised. [E04] |
+
+Invalid CSRF, stale submission nonce, invalid category/year, missing required fields, excessive team size, or missing review attachment produce errors in the source. The report establishes code branches, not demonstrated user outcomes. [E04]
+
+## 7. Title revision, resubmission and version history
+
+The creator-only edit route accepts draft, for_revision and revision_required projects. Other statuses lock title editing. It repeats owner/status checks within a row-locking transaction. Resubmission sets submitted and captures a new immutable-by-workflow snapshot; earlier submitted versions/reviews remain stored. [E05, E03]
+
+The version helper chooses the next version within the project/submission-type/chapter grouping, stores snapshot_json, and links upload IDs in research_submission_version_uploads. A title has null chapter_id; a chapter version has its chapter reference. This is application-level version history, not a claim of cryptographic immutability or tamper-proof storage. [E03, E01]
+
+Reviewers must operate on the latest still-submitted version. A returned title has version.status = returned and project.status = for_revision; a submitted revision creates a new version.status = submitted. These fields must not be merged into one generic status in the paper. [E03]
+
+![Figure 2. Core lifecycle by researcher, system and authorized reviewer. Returns loop to revision; supporting outputs are separate linked records. Evidence: E03–E08.](diagrams/lifecycle-swimlane.svg)
+
+Figure 2. Core lifecycle by researcher, system and authorized reviewer. Returns loop to revision; supporting outputs are separate linked records. Evidence: E03–E08.
+
+## 8. Review decisions and exact transitions
+
+Queue entry is limited to admin/research_staff. The helper authorizes decisions using the reviewer’s stored role; staff return and approval rights are checked separately. A faculty adviser or reviewer flag does not satisfy this helper. [E03, E07]
+
+| Record | Input / current state | Action and resulting state |
+| --- | --- | --- |
+| Title project | draft / for_revision / revision_required | Creator submit/resubmit -> submitted; new submitted snapshot. [E04, E05] |
+| Title project | submitted / under_review / under_crec_review / under_erec_review | Approve latest submitted title version -> title_approved; return -> for_revision. Older queue names are accepted compatibility states, not required new workflow stages. [E03] |
+| Submitted version | submitted, and latest within its grouping | Decision approved -> approved; decision returned -> returned. Previously decided or superseded versions are rejected. [E03] |
+| Chapter | draft / revision_required | Save draft -> draft; submit -> submitted and snapshot capture. [E06] |
+| Chapter | submitted / under_review | Approved decision -> approved with approved_by/approved_at; return -> revision_required and clear approval metadata. [E03] |
+| Review history | New decision event | Insert version_id, reviewer_id, decision, comments and reviewed_at in research_submission_reviews. [E03, E01] |
+
+A returned decision requires trimmed reviewer comments of at least 10 characters using mb_strlen. The helper row-locks the selected version, checks the latest version, inserts history and conditionally updates version plus title/chapter before commit; failures roll back. The queue then contains notification/logging behavior. This is a traceable decision design, not evidence that concurrency or notification delivery has been tested. [E03, E07]
+
+![Figure 3. Distinct title, chapter and version status domains. Completion is a view calculation, not an automatic project-status arrow. Evidence: E03–E08.](diagrams/state-transitions.svg)
+
+Figure 3. Distinct title, chapter and version status domains. Completion is a view calculation, not an automatic project-status arrow. Evidence: E03–E08.
+
+## 9. Chapter drafting, locks and sequencing
+
+Students and faculty use the same submit-chapter route. The handler checks project ownership or membership, permits project statuses title_approved, approved and ongoing, and requires the previous chapter to be approved before chapter 2–5 can proceed. It repeats project/predecessor/status checks inside the transaction rather than relying only on page controls. [E06]
+
+| Chapter | Configured fields in current editor |
+| --- | --- |
+| 1. Introduction | Background; problem statement; objectives; scope; significance; definition of terms. |
+| 2. Related literature | Local literature; foreign literature; related studies; theoretical framework; conceptual framework. |
+| 3. Methodology | Research design; respondents; instruments; data gathering; statistical treatment. |
+| 4. Findings | Presentation of findings; analysis and interpretation. |
+| 5. Conclusions | Summary of findings; conclusions; recommendations. |
+
+The editor supports chapter numbers 1–5, but row creation is lazy: it inserts a chapters row and chapter_content row when that chapter is first saved/submitted. It does not scaffold five rows in the inspected title-creation path. [E04, E06]
+
+An existing chapter is editable only when draft or revision_required. A submission must contain at least one nonempty configured text field or a valid file; the source does not require every configured field to be populated. Chapter files are checked for PDF/DOC/DOCX extension and a 10 MB size limit in this route. Submitted and approved chapters remain locked; withdrawal is not a normal unlock mechanism. [E06]
+
+Submitting updates chapter status, captures the field snapshot and attachments, updates chapter.version to the captured version number, logs the action and commits. Save-draft behavior must not be described as a new reviewed version. [E06, E03]
+
+## 10. Completion, ongoing research and output monitoring
+
+This section reports the actual query rules. They differ from the simplified requirement that every completed study must have all five chapters approved. Supported by inspected code; impact on real records remains unresolved. [E08]
+
+| View | Implemented selection | Paper implication |
+| --- | --- | --- |
+| Ongoing | Project status is title_approved or ongoing. Displays total/approved/submitted/returned chapter counts and flags missing or >30-day-old chapter activity. [E08] | Not simply every noncompleted project; legacy approved status accepted by the editor is not included in this predicate. |
+| Completed | At least one nondeleted chapter row exists and approved_chapters equals total_chapters; OR stored project status is completed/archived. [E08] | This counts existing rows, not chapter numbers 1–5. A sparse project can satisfy the expression. Do not claim a strict five-chapter check. |
+| Outputs | Counts publications whose status is published and IP applications whose status is registered, with year/date aggregates. [E08] | Output totals are record aggregates, not a guarantee of one output per completed project. |
+| Project archive | Authenticated and public archive lists select stored project statuses completed/archived. [E25, E44] | A project classified complete by the aggregate does not necessarily appear in the status-based archive. |
+| Admin reports | Uses stored completed/archived statuses for relevant counts and separate supporting-module aggregates. [E35] | Counts can differ from the computed completed view; label denominators and definitions. |
+
+The reviewed decision helper updates a chapter or title and version; it does not set project.status = completed when chapter 5 is approved. Ongoing selection has no exclusion for a project that also satisfies the completed aggregate, so the two views can overlap. These are source-level reconciliation findings, not changes made by this reporting task. [E03, E08]
+
+## 11. Activities and participation workflow
+
+Current module destinations separate seminars, trainings and workshops by type and capacity-page key. Admin can manage; other permitted management is evaluated against the relevant subpage manage permission. Students/faculty have shared activity navigation, but navigation alone does not grant organizer management. [E11, E12–E18]
+
+Inputs include type, title, date/time, venue, speaker, organizer, description and scheduled/completed/cancelled status. The form validates request IDs, selected type/context and date/content values, and contains transaction-based create/edit persistence. Creation supports recipient scopes all/student/faculty/staff/specific among active eligible users. [E16]
+
+Activity detail supports completion/cancellation, deletion, adding/removing participants and saving attendance. Participant roles include speaker, organizer and attendee. Attendance is a stored flag, not automatic proof that a person attended. The handler checks action permissions and CSRF. Database relationships and deleted participant behavior must be distinguished from sending an invitation or external calendar synchronization. [E17, E01]
+
+Data: research_activities and activity_participants. Outputs: activity record, participant list and attendance information used by reporting. Unsupported claims: online event delivery, automatically verified attendance, or a measured capacity-building outcome. [E16–E18, E35]
+
+## 12. Publications and dissemination workflow
+
+A student/faculty owner creates a publication record with manuscript PDF, title, researcher identity/category, type, publisher/journal, date and identifier. Types are journal, conference, book_chapter and other (with a custom name field). The project reference is optional and checked when supplied. Owners are constrained to their own eligible records and submitted status; authorized administrators/staff can manage records on behalf of researchers. [E19]
+
+| Action name | Required current status | New status |
+| --- | --- | --- |
+| start_review | submitted | under_review |
+| return_submitted | under_review | submitted |
+| accept | under_review | accepted |
+| publish_review | under_review | published |
+| publish_accepted | accepted | published |
+
+These are the detail handler’s transitions, not a general externally validated publication lifecycle. It checks action/ID/CSRF and staff record-type permissions, then updates only if the expected source status matches. Owner edit rights cease when review begins. A published outcome triggers notification code when a researcher ID is present. [E20]
+
+The dissemination repository module is a published-publications view. It is not identical to the project-level archive or administrative journal tracking in research_publication_tracking. A publication may have no originating project, and the inspected form does not impose a universal completed-project prerequisite for the link. [E11, E19, E21, E25, E26]
+
+## 13. Intellectual property and utilization workflow
+
+IP records use copyright_applications for software, research, instructional_material, module, other, patent, utility_model, innovation and technology_transfer. The module launcher filters these into three IP areas rather than creating separate legal-registration systems. Optional research_project_id and publication_id preserve links without requiring every record to have them. [E01, E11, E22, E24, E49]
+
+Owners create pending records and may edit their own while pending. Staff authorization is resolved against the appropriate IP page; the form constrains available output types. Required fields and checks vary: output title/applicant/category/type; inventors and application number for patent/utility_model; transfer activities for innovation/technology_transfer; selected linked records and supporting file/date validation. [E22]
+
+| Action name | Required current status | New status / validation |
+| --- | --- | --- |
+| start_review | pending | under_review |
+| return_pending | under_review | pending |
+| register | under_review | registered; reference number length 3–120 required |
+| reject | under_review | rejected; supplied rejection reason at most 1,000 bytes by strlen |
+
+The rejected state has no reject-to-pending transition in the inspected detail map. Do not automatically apply the title resubmission loop to rejected IP records. A registered record is an administrator/staff-maintained local status with reference/date metadata, not evidence that the application integrates with an external IP office. [E23]
+
+## 14. Documents, archive and retained research services
+
+The common upload component records file metadata. Title and chapter handlers call it with workflow-specific options. Download-research-document accepts types research/publication/copyright, validates the record ID, evaluates actor access, checks an allowed stored path and extension, resolves the file under the upload root, and then serves it. Evidence of these checks is not a full upload/download security assessment. [E04, E06, E27, E28]
+
+Publication PDF access differs from IP attachments and project files. Published-publication visibility does not make an IP application attachment public. Staff scopes are evaluated per handler; a list permission is not automatically transferable to a download endpoint. A possible module-key mismatch is listed in Section 18. [E27]
+
+Admin archive management has separate colloquium, journal and archive operations using research_publication_tracking and, for archive handling, research_projects. Public/authenticated project archives select stored completed/archived records. Neither should be described as automatically following every publication or IP transition. [E25, E26, E44]
+
+| Retained service | Current code evidence | How to describe it |
+| --- | --- | --- |
+| Defense schedule | Navigable staff page, role-gated to research_staff/admin; schedule, mark_done, cancel, reschedule; scheduled/done/cancelled/rescheduled. [E14, E40] | Supplementary scheduling function, not an established compulsory gate in the canonical typed title/chapter helper. |
+| Revision returns | Role-gated read-only monitor for project/chapter revision requests. [E41] | Monitoring surface; do not equate it with the helper that makes review decisions. |
+| Document verification | Role-gated document lookup/integrity-check implementation. [E42] | Code capability only; no integrity check or file access was executed for this report. |
+| Old stages/report statuses | Schema retains proposal, committee, report and older chapter values. [E01] | Legacy compatibility/data vocabulary; presence in an enum does not prove a mandatory v3 transition. |
+
+## 15. Communication, identity and administration
+
+| Function | Current source behavior and limits |
+| --- | --- |
+| Account entry | Public registration permits student/faculty; students are assigned active and faculty pending in the inspected branch. Login checks password and active status and validates role selection. Admin/staff provisioning belongs to user management. No account was accessed. [E43, E32] |
+| Messaging | Send handler validates CSRF and recipient/content, inserts sender/recipient/subject/body. Viewing a received message contains recipient-scoped read marking via GET, illustrating why this report made no application requests. No message was sent or read. [E29] |
+| Notifications | Lists current-user records; CSRF-protected mark_read/mark_all_read/delete handlers constrain operations by user_id. Notifications generated by workflows are database-record code paths, not proof of delivery. [E30, E07] |
+| Profile/password | Profile allows selected own fields; role/email are not general self-editable profile inputs. Password change checks current password before writing a hash. [E31] |
+| User administration | Admin create/edit, status changes, password reset and staff-permission save actions exist. No live account/grant data was inspected. [E32] |
+| Departments/programs | Admin create/edit/status controls; programs reference departments. These are management records, not a new review-approval actor. [E33, E34] |
+| Reports/logs | Admin reports aggregate project status and supporting-module data; log viewer reads activity entries written by handlers. These are reporting capabilities, not measurements collected by this task. [E35, E36] |
+| Backup/status | Admin backup page contains create/delete logic; settings is a diagnostic/status page. Restore success, retention policy, operational readiness and current environment status remain unverified. No backup/diagnostic action was executed. [E37, E38] |
+| Contact handling | Admin/research_staff contact handler supports reply, resolve, archive and reopen. Mail-sending code is not evidence of successful delivery or two-way inbox integration. [E39] |
+
+## 16. Data model and record outputs
+
+![Figure 4. Focused entity relationships. Labels distinguish declared foreign keys from application associations; this is not a live-database ERD. Evidence: E01, E03, E04, E19, E22.](diagrams/data-model.svg)
+
+Figure 4. Focused entity relationships. Labels distinguish declared foreign keys from application associations; this is not a live-database ERD. Evidence: E01, E03, E04, E19, E22.
+
+| Entity group | Principal relationships / record output |
+| --- | --- |
+| users / projects / membership | research_projects.created_by references user identity; project_members connects user IDs and project IDs with lead/member roles. Ownership and member permissions differ. [E01, E04] |
+| chapters / chapter_content | Chapter rows belong to a project and carry chapter_number/status/version; content fields belong to a chapter. The current editor exposes five numbered templates. [E01, E06] |
+| submission_versions / reviews | Version references project, optional chapter and submitting user; review references version/reviewer; history stores decisions/comments/time. [E01, E03] |
+| uploads / version_uploads | Upload metadata associates files with workflow records; the join table ties uploaded items to a preserved submitted version. [E01, E03, E28] |
+| activities / participants | Participant records associate an activity with user/name/participant role and attendance. Treat optional user links differently from a guaranteed registered account. [E01, E16, E17] |
+| publications | Optional FK research_project_id; researcher ID/name/category represent attribution. Project linkage may be absent. [E01, E19] |
+| copyright_applications | Optional FKs research_project_id and publication_id; applicant/output/type/status/registration metadata. Project/publication deletion uses SET NULL for declared output links. [E01] |
+| publication_tracking | Project-level journal/colloquium/archive tracking is separate from standalone publications. [E01, E26] |
+| messages / notifications / activity_log | Message participants, notification recipient and logged action metadata support communication/auditing. Do not copy real message or personal data into the paper. [E01, E29, E30, E36] |
+
+The schema enum permits more statuses than the canonical workflow currently emits. A database column, an application association and a declared foreign-key constraint are different forms of evidence. The installed schema and applied migration ledger were not queried; selected migration files were read only as intended change descriptions. [E01, E47–E49]
+
+## 17. Exception and business-rule matrix
+
+| Condition | Source-level response / invariant | Evidence |
+| --- | --- | --- |
+| Unauthenticated route | Login/role guard precedes protected handler functionality; no direct route request was made. | E02, E04–E07 |
+| Wrong role or missing staff permission | Deny or redirect according to handler; action permissions differ from list visibility. | E02, E03, E07, E11 |
+| Wrong project owner | Title edit constrained by created_by; chapter/detail have separately defined owner/member/adviser predicates. | E05, E06, E09 |
+| Forged or expired state-changing request | CSRF validation and request-field validation in the inspected handlers. Not a claim of universal security coverage. | E04–E07, E16–E23 |
+| Submitted/approved title or chapter edited | Status rechecked in backend; canonical submitted work stays locked. | E05, E06 |
+| Chapter opened out of order | Title/project state and previous approved chapter required; rechecked under transaction. | E06 |
+| Superseded or decided version reviewed | Helper rejects non-submitted version and latest-version mismatch; conditional updates reject conflicting state. | E03 |
+| Return without useful comments | Typed return requires at least 10 trimmed characters; separate IP rejection has different validation. | E03, E23 |
+| Upload invalid or missing | Route-specific document rules/errors; no global assumption that every module accepts the same formats. | E04, E06, E19, E22, E28 |
+| Missing installed supporting table | Several pages contain schema-presence checks and unavailable-module messaging; installation completeness is not established. | E08, E16, E19, E22 |
+| Publication/IP stale state action | Update compares expected current state; invalid/stale transitions produce feedback. | E20, E23 |
+
+## 18. Discrepancies and unresolved items for the group
+
+| Finding | Static evidence and paper impact | Classification |
+| --- | --- | --- |
+| F01: completion denominator | Completed view checks all existing chapter rows, not exactly five; the editor inserts rows lazily. Describe the actual expression and list strict five-chapter enforcement as unresolved. [E06, E08] | Partial against intended claim; no runtime impact measured |
+| F02: completion is not a stored status update | Review helper does not set project completed; archive/reports rely on stored completed/archived states. Do not claim automatic archive inclusion after final approval. [E03, E08, E25, E35] | Supported code difference; reconciliation unresolved |
+| F03: ongoing/completed overlap | Ongoing filters title_approved/ongoing without excluding all-existing-chapters-approved; completed view can include the same project. [E08] | Supported predicate overlap; population unknown |
+| F04: staff route/menu difference | Launcher and handler support ongoing_research, while staff shell skips its module link. [E11, E14] | Supported navigation difference |
+| F05: download permission namespace | Publication download appends research_outputs then checks publication_dissemination for every candidate. The module map defines research_outputs under research_implementation_outputs. This suggests permission-path disagreement for staff granted only output access. [E02, E11, E27] | Unresolved access consistency; not a tested vulnerability |
+| F06: conflicting specification | docs/rms-spec.md describes canonical title/chapter routes as legacy and discusses older committee/final-approval assumptions, whereas current shells/helper implement shared researcher submission and staff action permissions. [E03, E12, E13, E45, E46] | Documented historical claim not confirmed as current v3 |
+| F07: outputs are optional links | Publication and IP forms/schema allow unlinked records; no universal completion prerequisite is established for linking. Do not draw a mandatory one-project/one-output chain. [E01, E19, E22] | Supported by inspected code |
+| F08: team picker scope | Faculty can submit, but picker candidates are active students and schema member roles are lead/member. Avoid claiming arbitrary faculty/staff team role selection. [E01, E04] | Supported constraint; wider teamwork claim partial |
+| F09: adviser versus typed reviewer | Faculty adviser visibility and retained reviewer fields do not grant typed admin/staff decision rights. [E03, E09] | Supported distinction |
+| F10: retained stage vocabulary | Legacy committee/report/defense statuses/routes remain; helper accepts compatibility states without requiring those stages. admin-research also queries in_progress although it is absent from the inspected canonical project enum. [E01, E03, E40, E50] | Legacy/partial consistency; installed data unresolved |
+
+These findings are documentation outputs only. No application code, SQL, records, permissions, environment files or investigation material was changed. They are not copied from the separate E2E safety investigation and must not be represented as its findings.
+
+## 19. Research-paper alignment matrix
+
+Use this matrix to revise claims; it is not a replacement for your approved research objectives. The final column is intentionally left for the group to fill in. Suggested phrasing summarizes source behavior and does not claim measured outcomes.
+
+| Paper area / capability | Evidence-backed wording / limit | Group objective or revision |
+| --- | --- | --- |
+| Objectives: research submission | Provide a shared title/chapter submission workspace for students and faculty; retain backend ownership and lock constraints. [E04–E06] | ________________ |
+| Objectives: review traceability | Preserve submitted versions and reviewer decisions/comments with identifiable actors and times. Not cryptographic tamper-proof auditing. [E03, E07] | ________________ |
+| Scope: user roles | Four roles with subpage-level staff permissions; adviser visibility is distinct from typed review authorization. [E01–E03, E09] | ________________ |
+| Scope: chapter process | Five configured chapter templates, sequential approval prerequisites, drafts and resubmission. Not every text field is mandatory. [E06] | ________________ |
+| Scope: completion | Report chapter-based completion indicators while disclosing existing-row denominator and status-view differences. [E08, F01–F03] | ________________ |
+| Scope: outputs | Maintain journal/conference and IP/utilization records with optional project/publication relationships. No external registration integration established. [E19–E24] | ________________ |
+| Scope: activities | Manage seminars/trainings/workshops and participant/attendance records under scoped permissions. Attendance is recorded, not independently verified. [E16–E18] | ________________ |
+| Methodology: architecture | Describe procedural PHP handlers, MySQLi persistence, shared auth/upload/workflow helpers and role shells. Do not claim frameworks absent from evidence. [E02–E15] | ________________ |
+| System diagrams / ERD | Use Figures 1–4 as implementation-informed drafts; distinguish optional links and computed views from stored states. [E01, E08] | ________________ |
+| Security discussion | Describe inspected authentication, CSRF, permission and upload/download checks as design mechanisms. No security effectiveness conclusion from this report. [E02, E27, E28] | ________________ |
+| Evaluation / results | Collect performance, usability, accuracy and satisfaction evidence separately under an approved methodology. This report supplies no scores, survey results or test pass rates. | ________________ |
+| Limitations / future work | Disclose F01–F10 and lack of runtime/schema confirmation; proposed fixes are future work, not completed implementation. | ________________ |
+
+## 20. Recommended group review procedure
+
+1. Assign one groupmate to scope/roles, one to workflows/diagrams, one to data/outputs, and one to claims/limitations. These are suggested human review assignments, not agent tasks executed by this report.
+
+2. Compare each existing paper statement with an evidence ID. Mark it supported, needs qualification, legacy, or outside this report. Replace committee/manual stage names where they conflict with the current typed workflow. Keep institutional policy discussion separate from implemented software behavior.
+
+3. Copy the exact state-domain distinction into the diagrams: title project for_revision is not chapter revision_required and neither is submission-version returned. Do not add an automatic project completed or archive arrow without separate evidence.
+
+4. Fill in the final matrix column using your approved objectives and chapter structure. Keep proposed enhancements in future work; do not silently describe them as delivered features. Agree as a group on how to disclose completion/reporting differences before finalizing the paper.
+
+5. Preserve this dated package. If source changes, commission a new source-inspection snapshot rather than treating these hashes as evidence for a later deployment. Runtime evaluation, if ever desired, is a separate task and is not authorized or performed by this package.
+
+## Appendix A. Status vocabulary reference
+
+| Domain | Canonical stored values / current use |
+| --- | --- |
+| User | active, pending, suspended. Registration/login behavior is described in Section 15. [E01, E43] |
+| Project enum | draft, proposal, submitted, under_review, under_crec_review, under_erec_review, for_revision, revision_required, rejected, title_approved, approved, ongoing, progress_report, terminal_review, completed, archived. Presence is not a prescribed sequence. [E01] |
+| Canonical title path | draft/for_revision/revision_required -> submitted -> title_approved or for_revision; review helper also accepts compatibility review states. [E03–E05] |
+| Chapter enum | draft, submitted, under_review, revision_required, revised, approved, rejected. Canonical editor/review path emits draft/submitted/revision_required/approved. [E01, E03, E06] |
+| Submitted version | submitted, returned, approved; decision map accepts approved/returned. [E01, E03] |
+| Publication | submitted, under_review, accepted, published; accepted is bypassable through publish_review. [E20] |
+| IP application | pending, under_review, registered, rejected; rejected has no reverse detail action in the inspected map. [E23] |
+| Research activity | scheduled, completed, cancelled. [E01, E17] |
+| Defense | scheduled, done, cancelled, rescheduled. Not the canonical chapter status. [E01, E40] |
+| Contact message | pending, resolved, archived. Separate from a research-submission review decision. [E01, E39] |
+
+## Appendix B. Evidence index
+
+Each entry identifies the inspected path, an anchor line and the evidence scope. Line numbers are snapshot-specific; use the adjacent anchor and frozen SHA-256 in evidence-index.csv if files change. Supporting handlers were inspected statically; an anchor is a navigation aid, not a claim that one line proves every rule.
+
+[E01] database/schema/rms_db.sql:400 | Anchor: CREATE TABLE `research_projects` | Canonical entity declarations; enums and foreign keys; seed rows are not report evidence.
+
+[E02] includes/auth.php:221 | Anchor: function rmsPermissionModules | Four roles, module/subpage permission checks and common authentication/CSRF helpers. Only application helpers are cited; investigation-related branches are excluded.
+
+[E03] includes/research-workflow.php:3 | Anchor: function rms_capture_submission_version | Version capture, actor checks, latest-version review, transaction and status updates.
+
+[E04] pages/researcher/submit-research.php:21 | Anchor: CRC_MAX_TOTAL_MEMBERS | Initial title form, team validation, proposal attachment, transactional insertion and version capture.
+
+[E05] pages/researcher/edit-research.php:142 | Anchor: $is_locked = | Owner editing, locked statuses, resubmission, team controls and new submitted versions.
+
+[E06] pages/researcher/submit-chapter.php:24 | Anchor: $chapter_fields = | Five chapter templates, predecessor gates, draft editing, submission and lazy chapter-row creation.
+
+[E07] pages/shared/research-submission-review.php:17 | Anchor: $can_view_review = | Typed queue views, action permissions, notifications and review handler.
+
+[E08] pages/shared/implementation-outputs.php:132 | Anchor: $chapterAggregate = | Actual ongoing/completed/output query predicates and aggregates.
+
+[E09] pages/shared/research-detail.php:34 | Anchor: $has_access = | Role/ownership/team/adviser visibility and shared project view.
+
+[E10] pages/researcher/my-research.php:20 | Anchor: $query = | Owner/member list, title feedback, navigation to edit and chapter submission.
+
+[E11] pages/admin/admin-research-module.php:14 | Anchor: $moduleMap = | All 15 module destinations, filters and staff entry permission checks.
+
+[E12] includes/student-shell.php:90 | Anchor: $nav = | Student navigation.
+
+[E13] includes/faculty-shell.php:92 | Anchor: $nav = | Faculty navigation to the same canonical researcher workflow.
+
+[E14] includes/staff-shell.php:116 | Anchor: $nav = | Permission-filtered staff module navigation and additional staff services.
+
+[E15] includes/admin-shell.php:78 | Anchor: $nav_groups = | Administrative module, management, communication and account destinations.
+
+[E16] pages/shared/activity-form.php:51 | Anchor: $canManageActivity = | Activity creation/editing, type-scoped permissions and recipient selection.
+
+[E17] pages/shared/activity-detail.php:37 | Anchor: $canManageActivity = | Activity decisions, participation, attendance and deletion handlers.
+
+[E18] pages/shared/activities.php:18 | Anchor: $capacityPageInput = | Activity listing and seminar/training/workshop filters.
+
+[E19] pages/shared/publication-form.php:34 | Anchor: $isOwnerRole = | Publication ownership, optional project linkage, PDF and field validation.
+
+[E20] pages/shared/publication-detail.php:123 | Anchor: $transitions = | Exact publication actions and compare-and-update status transitions.
+
+[E21] pages/shared/publications.php:9 | Anchor: requireLogin() | Publication/repository listing route used by the module launcher.
+
+[E22] pages/shared/copyright-form.php:34 | Anchor: $isOwnerRole = | IP types, owner/reviewer limits, optional links and type-specific validation.
+
+[E23] pages/shared/copyright-detail.php:108 | Anchor: $transitions = | Exact IP decisions, registration reference and reference/reason validation.
+
+[E24] pages/shared/copyrights.php:9 | Anchor: requireLogin() | IP list and type-scoped entry route.
+
+[E25] pages/shared/research-archive.php:72 | Anchor: $sql = | Authenticated archive keyed to stored completed/archived statuses.
+
+[E26] pages/admin/admin-archive.php:18 | Anchor: requireRole | Administrative colloquium, journal and archive tracking updates.
+
+[E27] pages/shared/download-research-document.php:12 | Anchor: $documentType = | Type/ID checks, record authorization, extension and resolved-path checks.
+
+[E28] includes/file-uploader.php:198 | Anchor: function handleRmsUpload | Common upload handler, extension checks, storage and upload metadata.
+
+[E29] pages/shared/messages.php:122 | Anchor: $action = | Message validation, sender/recipient storage and recipient read marking.
+
+[E30] pages/shared/notifications.php:115 | Anchor: $action = | User-scoped mark-read, mark-all-read and delete operations.
+
+[E31] pages/shared/profile.php:95 | Anchor: $action = | Profile updates and current-password-based password change.
+
+[E32] pages/admin/admin-users.php:6 | Anchor: requireRole | User administration, status changes and staff permission collection.
+
+[E33] pages/admin/admin-departments.php:6 | Anchor: requireRole | Department creation/editing/status management.
+
+[E34] pages/admin/admin-programs.php:6 | Anchor: requireRole | Department-linked program creation/editing/status management.
+
+[E35] pages/admin/admin-reports.php:6 | Anchor: requireRole | Status-based statistics, attendance/publication/IP aggregates and reporting.
+
+[E36] pages/admin/admin-logs.php:6 | Anchor: requireRole | Administrative activity-log view.
+
+[E37] pages/admin/admin-backup.php:6 | Anchor: requireRole | Backup creation/deletion handlers exist; no backup operation was performed.
+
+[E38] pages/admin/admin-settings.php:12 | Anchor: requireRole | Read-only system diagnostic/status page; no diagnostics executed.
+
+[E39] pages/admin/admin-contact.php:9 | Anchor: requireRole | Contact reply/resolve/archive/reopen actions; no messages were sent.
+
+[E40] pages/staff/staff-defense.php:33 | Anchor: requireRole | Retained, navigable defense scheduling/status actions.
+
+[E41] pages/staff/staff-revisions.php:13 | Anchor: requireRole | Read-only revision monitor.
+
+[E42] pages/staff/document-verification.php:13 | Anchor: requireRole | Document lookup and integrity-check implementation; not executed.
+
+[E43] public/login.php:209 | Anchor: $allowedRoles = | Login account-status checks; registration is student/faculty only.
+
+[E44] public/research-archive.php:291 | Anchor: $is_logged_in = | Public archive selection and public presentation.
+
+[E45] docs/rms-spec.md:5 | Anchor: Product scope note | Conflicting historical specification; documentation evidence only.
+
+[E46] CLAUDE.md:101 | Anchor: ### V3 Architecture | Current architectural guidance; does not supersede handler evidence.
+
+[E47] database/migrations/017_research_submission_versions.sql:4 | Anchor: research_submission_versions | Static version-table migration text, not execution or ledger evidence.
+
+[E48] database/migrations/018_research_title_approval_status.sql:12 | Anchor: title_approved | Static title-status migration text.
+
+[E49] database/migrations/015_explicit_ip_types_and_research_output_links.sql:33 | Anchor: research_project_id | Static optional output-link and explicit-IP migration text.
+
+[E50] pages/admin/admin-research.php:6 | Anchor: requireRole | Stored-status project administration/listing and older compatibility filters.
+
+[E51] pages/student/student-dashboard.php:14 | Anchor: $role = | Shared personal dashboard with role gate and supporting-module counts.
+
+## Appendix C. Scope and verification statement
+
+Based on static source inspection only. No tests or database commands were run. The separate RMS E2E safety investigation was not modified or used as report evidence.
+
+No runtime evidence, survey responses, performance measurements, successful transaction demonstrations, database introspection, installed migration state or security-certification conclusions are included. This package was produced through read-only source inspection and report-artifact generation. Export review concerns generated documents only and does not constitute application testing.
+
+Excluded: E2E investigation files/findings/configuration/work in progress, environment values, credentials, real users, message contents, private research documents and live records. Existing source changes were preserved. Files created by this task are confined to the report directory.

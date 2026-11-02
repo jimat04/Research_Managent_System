@@ -28,11 +28,13 @@
  *   ?type={all|proposal|chapter|defense|revision|manuscript|other}
  *   ?project_id={int}
  *
- * Read-only. No POSTs. No new CSS files.
+ * Draft-file removal reuses the guarded RMS upload helper. Submitted-version
+ * files and their review history remain protected.
  */
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/file-uploader.php';
 
 requireRole('student');
 
@@ -78,7 +80,7 @@ $ch_deleted_filter = $ch_has_deleted_at ? ' AND ch.deleted_at IS NULL' : '';
 // ------------------------------------------------------------------
 // Validate optional GET filters.
 // ------------------------------------------------------------------
-$valid_types = ['proposal', 'chapter', 'defense', 'revision', 'manuscript', 'other'];
+$valid_types = ['proposal', 'chapter', 'revision', 'manuscript', 'other'];
 $type_filter = (string) ($_GET['type'] ?? 'all');
 if (!in_array($type_filter, $valid_types, true) && $type_filter !== 'all') {
     $type_filter = 'all';
@@ -117,6 +119,98 @@ if ($proj_stmt) {
 
 $project_ids = array_keys($projects);
 $errors      = [];
+$document_action_success = '';
+if (isset($_GET['removed']) && (string) $_GET['removed'] === '1') {
+    $document_action_success = isset($_GET['removed_missing'])
+        ? 'Missing file record removed. Submitted versions and review history are retained.'
+        : 'Draft file removed. Submitted versions and review history are retained.';
+}
+
+$type_to_folder = [
+    'proposal'   => 'proposals',
+    'chapter'    => 'chapters',
+    'revision'   => 'chapters',
+    'defense'    => 'defense',
+    'manuscript' => 'manuscripts',
+    'other'      => 'other',
+    'engagement' => 'engagement',
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['delete_upload']) || isset($_POST['remove_missing_upload']))) {
+    if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
+        $errors[] = 'Your form has expired. Refresh the page and try again.';
+    } else {
+        $requested_upload_id = (int) ($_POST['upload_id'] ?? 0);
+        if (isset($_POST['remove_missing_upload'])) {
+            $conn->begin_transaction();
+            $lock_stmt = $conn->prepare(
+                'SELECT up.*, EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = up.upload_id) AS is_preserved_version
+                   FROM uploads up WHERE up.upload_id = ? FOR UPDATE'
+            );
+            $locked_upload = null;
+            if ($lock_stmt) {
+                $lock_stmt->bind_param('i', $requested_upload_id);
+                if ($lock_stmt->execute()) {
+                    $locked_upload = $lock_stmt->get_result()->fetch_assoc();
+                }
+                $lock_stmt->close();
+            }
+            $requested_project_id = (int) ($locked_upload['project_id'] ?? 0);
+            $owns_upload = $locked_upload && (int) ($locked_upload['uploaded_by'] ?? 0) === $user_id;
+            $is_deleted_upload = $locked_upload && $uploads_has_deleted_at && !empty($locked_upload['deleted_at']);
+            $is_unpreserved_missing_file = $locked_upload
+                && (int) ($locked_upload['is_preserved_version'] ?? 0) !== 1
+                && !mydoc_file_exists_check($locked_upload, $type_to_folder);
+
+            if (!$locked_upload || !$owns_upload || !isset($projects[$requested_project_id]) || $is_deleted_upload || !$is_unpreserved_missing_file) {
+                $conn->rollback();
+                $errors[] = 'Only your own missing file records that are not part of a submitted version can be removed.';
+            } else {
+                $remove_stmt = $uploads_has_deleted_at
+                    ? $conn->prepare('UPDATE uploads SET deleted_at = NOW() WHERE upload_id = ? AND uploaded_by = ? AND deleted_at IS NULL')
+                    : $conn->prepare('DELETE FROM uploads WHERE upload_id = ? AND uploaded_by = ?');
+                if ($remove_stmt) {
+                    $remove_stmt->bind_param('ii', $requested_upload_id, $user_id);
+                    $removed = $remove_stmt->execute() && $remove_stmt->affected_rows === 1;
+                    $remove_stmt->close();
+                } else {
+                    $removed = false;
+                }
+                if (!$removed) {
+                    $conn->rollback();
+                    $errors[] = 'The missing file record could not be removed. Refresh the page and try again.';
+                } else {
+                    $conn->commit();
+                    logActivity('Removed a missing research upload record #' . $requested_upload_id, 'research');
+                    $redirect_params = [];
+                    if ($type_filter !== 'all') { $redirect_params['type'] = $type_filter; }
+                    if ($project_filter > 0) { $redirect_params['project_id'] = $project_filter; }
+                    $redirect_params['removed'] = '1';
+                    $redirect_params['removed_missing'] = '1';
+                    header('Location: ' . SITE_URL . 'pages/student/my-documents.php?' . http_build_query($redirect_params));
+                    exit();
+                }
+            }
+        } else {
+            $requested_upload = $requested_upload_id > 0 ? getRmsUpload($requested_upload_id, $conn) : null;
+            $requested_project_id = (int) ($requested_upload['project_id'] ?? 0);
+            $owns_upload = $requested_upload && (int) ($requested_upload['uploaded_by'] ?? 0) === $user_id;
+            $is_deleted_upload = $requested_upload && $uploads_has_deleted_at && !empty($requested_upload['deleted_at']);
+            if (!$requested_upload || !$owns_upload || !isset($projects[$requested_project_id]) || $is_deleted_upload
+                || !deleteRmsUpload($requested_upload_id, $conn)) {
+                $errors[] = 'This file cannot be deleted. Only your own editable draft files can be removed; submitted files and review history are protected.';
+            } else {
+                logActivity('Removed an editable draft research upload #' . $requested_upload_id, 'research');
+                $redirect_params = [];
+                if ($type_filter !== 'all') { $redirect_params['type'] = $type_filter; }
+                if ($project_filter > 0) { $redirect_params['project_id'] = $project_filter; }
+                $redirect_params['removed'] = '1';
+                header('Location: ' . SITE_URL . 'pages/student/my-documents.php?' . http_build_query($redirect_params));
+                exit();
+            }
+        }
+    }
+}
 
 // ------------------------------------------------------------------
 // 2. Pull every upload for those projects. We join chapter for status
@@ -133,7 +227,8 @@ if (!empty($project_ids)) {
                 u.original_name, u.file_name, u.file_path, u.file_size,
                 u.mime_type, u.upload_date,
                 rp.title AS project_title, rp.status AS project_status,
-                ch.chapter_number, ch.chapter_title, ch.status AS chapter_status
+                ch.chapter_number, ch.chapter_title, ch.status AS chapter_status,
+                EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = u.upload_id) AS is_preserved_version
            FROM uploads u
            JOIN research_projects rp ON rp.project_id = u.project_id
            LEFT JOIN chapters ch ON ch.chapter_id = u.chapter_id
@@ -167,6 +262,58 @@ if (!empty($project_ids)) {
         $stmt->close();
     } else {
         $errors[] = 'Could not prepare the uploads query.';
+    }
+}
+
+// ------------------------------------------------------------------
+// 2a. Attach the latest review for each version linked to an upload.
+// Legacy files without a preserved version/review remain visible and are
+// labeled as having no linked review record.
+// ------------------------------------------------------------------
+$upload_reviews = [];
+if (!empty($upload_rows)) {
+    $review_upload_ids = array_values(array_unique(array_map(static function (array $row): int {
+        return (int) $row['upload_id'];
+    }, $upload_rows)));
+    $placeholders = implode(',', array_fill(0, count($review_upload_ids), '?'));
+    $review_sql =
+        "SELECT svu.upload_id, v.submission_type, v.version_number,
+                r.decision, r.comments, r.recommendation, r.reviewed_at,
+                CONCAT(u.first_name, ' ', u.last_name) AS reviewer_name
+           FROM research_submission_version_uploads svu
+           JOIN research_submission_versions v ON v.version_id = svu.version_id
+           JOIN research_submission_reviews r ON r.review_id = (
+                SELECT latest.review_id
+                  FROM research_submission_reviews latest
+                 WHERE latest.version_id = v.version_id
+                 ORDER BY latest.reviewed_at DESC, latest.review_id DESC
+                 LIMIT 1
+           )
+      LEFT JOIN users u ON u.user_id = r.reviewer_id
+          WHERE svu.upload_id IN ($placeholders)
+          ORDER BY svu.upload_id ASC, r.reviewed_at DESC, r.review_id DESC";
+    $review_stmt = $conn->prepare($review_sql);
+    if ($review_stmt) {
+        $review_types = str_repeat('i', count($review_upload_ids));
+        $review_bind = [$review_types];
+        foreach ($review_upload_ids as $index => $upload_id) {
+            $review_bind[] = &$review_upload_ids[$index];
+        }
+        call_user_func_array([$review_stmt, 'bind_param'], $review_bind);
+        if ($review_stmt->execute()) {
+            $review_result = $review_stmt->get_result();
+            while ($review_row = $review_result->fetch_assoc()) {
+                $review_upload_id = (int) $review_row['upload_id'];
+                if (!isset($upload_reviews[$review_upload_id])) {
+                    $upload_reviews[$review_upload_id] = $review_row;
+                }
+            }
+        } else {
+            $errors[] = 'Could not load review notes for the listed documents.';
+        }
+        $review_stmt->close();
+    } else {
+        $errors[] = 'Could not prepare the document review lookup.';
     }
 }
 
@@ -207,19 +354,9 @@ if (!empty($project_ids)) {
 }
 
 // ------------------------------------------------------------------
-// 4. Build download URLs. NEVER echo a raw user-controlled value —
-//    always derive the URL from the whitelisted type→folder map and
-//    the DB-stored file_name. rawurlencode() the file_name to be safe
-//    against spaces / unicode in the original filename.
+// 4. Build authenticated preview URLs from the upload ID, not a public
+//    storage path. Keep the folder/name validation for safe disk checks.
 // ------------------------------------------------------------------
-$type_to_folder = [
-    'proposal'   => 'proposals',
-    'chapter'    => 'chapters',
-    'revision'   => 'chapters', // revisions land alongside chapter files
-    'defense'    => 'defense',
-    'manuscript' => 'manuscripts',
-    'other'      => 'other',
-];
 $type_to_label = [
     'proposal'   => ['📄', 'Proposal',  '#2563EB', 'rgba(37,99,235,0.10)',  'rgba(37,99,235,0.25)'],
     'chapter'    => ['📘', 'Chapter',   '#7C3AED', 'rgba(124,58,237,0.10)', 'rgba(124,58,237,0.25)'],
@@ -266,7 +403,7 @@ function mydoc_storage_location(array $row, array $type_to_folder): array {
 
     $folder = $type_to_folder[$type];
     $stored_path = str_replace('\\', '/', (string) ($row['file_path'] ?? ''));
-    $allowed_folders = ['proposals', 'chapters', 'defense', 'manuscripts', 'other', 'milestones'];
+    $allowed_folders = ['proposals', 'chapters', 'defense', 'manuscripts', 'other', 'milestones', 'adviser_requests'];
     $path_pattern = '#^uploads/(' . implode('|', $allowed_folders) . ')/'
                   . preg_quote($name, '#') . '$#';
     if (preg_match($path_pattern, ltrim($stored_path, '/'), $matches)) {
@@ -278,10 +415,11 @@ function mydoc_storage_location(array $row, array $type_to_folder): array {
 
 function mydoc_resolve_url(array $row, array $type_to_folder): string {
     [$folder, $name] = mydoc_storage_location($row, $type_to_folder);
-    if ($folder === '' || $name === '') {
+    $upload_id = (int) ($row['upload_id'] ?? 0);
+    if ($folder === '' || $name === '' || $upload_id <= 0) {
         return '';
     }
-    return SITE_URL . 'uploads/' . $folder . '/' . rawurlencode($name);
+    return SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . $upload_id . '&mode=viewer';
 }
 
 function mydoc_file_exists_check(array $row, array $type_to_folder): bool {
@@ -289,8 +427,10 @@ function mydoc_file_exists_check(array $row, array $type_to_folder): bool {
     if ($folder === '' || $name === '') {
         return false;
     }
-    $path = __DIR__ . '/../../uploads/' . $folder . '/' . $name;
-    return is_file($path);
+    $uploads_root = realpath(UPLOADS_DIR);
+    $path = realpath(rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR . $name);
+    return $uploads_root && $path && is_file($path)
+        && strpos($path, rtrim($uploads_root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) === 0;
 }
 
 // Group uploads by project_id for the sectioned table.
@@ -602,6 +742,8 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
     border-radius: 12px;
     margin-bottom: 16px;
   }
+  .mydoc-success{margin-bottom:16px;padding:13px 17px;border:1px solid #A7DDC8;border-radius:13px;background:#EDFBF5;color:#087A59;font-size:13px;line-height:1.55}
+  .mydoc-delete-form{margin-top:7px}.mydoc-delete-button{display:block;width:100%;max-width:130px;min-height:34px;padding:7px 8px;border:1px solid #F1B5B5;border-radius:9px;background:#FFF1F1;color:#A82323;font:700 10px/1.25 'Inter',sans-serif;text-align:center;white-space:normal;overflow-wrap:anywhere;cursor:pointer}.mydoc-delete-button:hover{border-color:#DC2626;background:#DC2626;color:#fff}.mydoc-delete-button:focus-visible{outline:3px solid rgba(220,38,38,.22);outline-offset:2px}.mydoc-protected-file{display:block;margin-top:6px;color:#84798F;font-size:9px;line-height:1.4}
 
   @media (max-width: 720px) {
     .mydoc-field { width: 100%; min-width: 0; }
@@ -630,11 +772,13 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
   .mydoc-stats{grid-template-columns:repeat(4,1fr);gap:0;overflow:hidden;margin-bottom:20px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(45,24,76,.07)}.mydoc-stat{position:relative;min-height:104px;padding:21px 22px;border:0;border-right:1px solid #E8E1EF;border-radius:0;box-shadow:inset 0 3px 0 #5B1EBC}.mydoc-stat:last-child{border-right:0}.mydoc-stat.blue{background:#F2F6FF;box-shadow:inset 0 3px 0 #2563EB}.mydoc-stat.violet{background:#F7F1FF;box-shadow:inset 0 3px 0 #7C3AED}.mydoc-stat.slate{background:#F5F7FA;box-shadow:inset 0 3px 0 #64748B}.mydoc-stat:hover{z-index:1;transform:none;box-shadow:inset 0 3px 0 currentColor,0 10px 24px rgba(45,24,76,.1)}.mydoc-stat-icon{float:none;position:absolute;top:21px;right:20px;display:grid;width:35px;height:35px;place-items:center;border-radius:11px;background:#EEE5FA;font-size:17px;opacity:1}.mydoc-stat-num{font-size:29px;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.mydoc-stat-lbl{max-width:150px;margin-top:7px;color:#5F536C;font-size:11px;line-height:1.35}
   .mydoc-filters{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,1.3fr) auto;gap:14px;margin-bottom:22px;padding:18px 20px;border-color:#D9CCE7;border-radius:17px;background:rgba(255,255,255,.94);box-shadow:0 10px 28px rgba(45,24,76,.06)}.mydoc-field{gap:7px}.mydoc-field label{color:#5F536C;font-size:11px;font-weight:750}.mydoc-field select{width:100%;min-width:0;min-height:43px;padding:9px 12px;border-color:#D8D0E3;background:#FCFBFD;color:#24182F;font-size:12px;font-weight:550}.mydoc-field select:hover{border-color:#BAA9CB}.mydoc-actions{gap:8px}.mydoc-actions .btn{min-height:43px}.mydoc-actions .btn-secondary{background:#F5F0FA;color:#4B168F;border-color:#D7C9E5}
   .mydoc-group{margin-bottom:20px;border-color:#D9D0E4;border-radius:18px;box-shadow:0 13px 34px rgba(45,24,76,.07)}.mydoc-group-head{padding:19px 22px;background:linear-gradient(90deg,#F8F4FC 0%,#FBFAFD 68%,#F1E9FA 100%);border-bottom-color:#E4DBEC}.mydoc-group-title{font-size:16px;letter-spacing:-.02em}.mydoc-group-title .mydoc-link{color:#2D134C}.mydoc-group-title .mydoc-link:hover{color:#5B1EBC;text-decoration:none}.mydoc-group-sub{margin-top:5px;color:#7C7088;font-size:11px}.mydoc-table thead th{padding:12px 16px;background:#FCFBFD;color:#7D7288;font-size:10px;letter-spacing:.07em}.mydoc-table tbody td{padding:16px;color:#241A2E;border-top-color:#EEE8F3;font-size:12px;vertical-align:middle}.mydoc-table tbody tr{transition:background .2s ease}.mydoc-table tbody tr:hover{background:#FAF7FD}.mydoc-file-cell{display:flex;align-items:center;gap:12px;min-width:220px}.mydoc-file-tile{display:grid;flex:0 0 auto;width:42px;height:46px;place-items:center;border:1px solid #D6C7E7;border-radius:11px;background:#F3ECFB;color:#5B1EBC;font-size:9px;font-weight:800;letter-spacing:.04em}.mydoc-file-name{margin:0 0 4px;font-size:12px;line-height:1.4;word-break:break-word}.mydoc-file-name .mydoc-link{color:#2C2036;font-weight:700}.mydoc-file-name .mydoc-link:hover{color:#5B1EBC;text-decoration:none}.mydoc-file-meta{color:#91869B;font-size:10px}.mydoc-link{font-weight:700}.mydoc-table td:last-child .mydoc-link{display:inline-flex;min-height:34px;align-items:center;justify-content:center;padding:8px 12px;border:1px solid #D8C8E8;border-radius:9px;background:#F6F0FB;color:#4B168F;white-space:nowrap}.mydoc-table td:last-child .mydoc-link:hover{border-color:#5B1EBC;background:#5B1EBC;color:#fff;text-decoration:none}.mydoc-missing{font-size:10px}
+  .mydoc-table-wrap{width:100%;overflow-x:auto;overscroll-behavior-inline:contain}.mydoc-table-wrap:focus-visible{outline:3px solid rgba(91,30,188,.24);outline-offset:2px}.mydoc-table{min-width:1160px;table-layout:fixed}.mydoc-table th:nth-child(1),.mydoc-table td:nth-child(1){width:225px}.mydoc-table th:nth-child(2),.mydoc-table td:nth-child(2){width:100px}.mydoc-table th:nth-child(3),.mydoc-table td:nth-child(3){width:150px}.mydoc-table th:nth-child(4),.mydoc-table td:nth-child(4){width:135px}.mydoc-table th:nth-child(5),.mydoc-table td:nth-child(5){width:80px}.mydoc-table th:nth-child(6),.mydoc-table td:nth-child(6){width:105px}.mydoc-table th:nth-child(7),.mydoc-table td:nth-child(7){width:255px}.mydoc-table th:nth-child(8),.mydoc-table td:nth-child(8){width:110px}.mydoc-table th:last-child,.mydoc-table td:last-child{padding-right:28px}.mydoc-review-disclosure{max-width:100%;color:#334155;font-size:11px;line-height:1.55;overflow-wrap:anywhere}.mydoc-review-disclosure summary{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:7px 10px;border:1px solid #D8C8E8;border-radius:9px;background:#F6F0FB;color:#4B168F;font-size:11px;font-weight:750;cursor:pointer;list-style:none}.mydoc-review-disclosure summary::-webkit-details-marker{display:none}.mydoc-review-disclosure summary:hover{border-color:#5B1EBC;background:#EEE5FA}.mydoc-review-disclosure summary:focus-visible{outline:3px solid rgba(91,30,188,.24);outline-offset:2px}.mydoc-review-disclosure[open] summary{margin-bottom:8px}.mydoc-review-disclosure .review-feedback-hide{display:none}.mydoc-review-disclosure[open] .review-feedback-open{display:none}.mydoc-review-disclosure[open] .review-feedback-hide{display:inline}.mydoc-review-proof{margin-bottom:8px;color:#685B74;font-size:10px;line-height:1.5;text-align:left}.mydoc-review-decision{display:inline-flex;margin:0 0 5px;padding:3px 7px;border-radius:7px;background:#F0EAF8;color:#4B168F;font-size:10px;font-weight:750}.mydoc-review-decision.returned{background:#FFF1E7;color:#A04405}.mydoc-review-section{margin-top:8px;padding-top:8px;border-top:1px solid #E6DEF0}.mydoc-review-section strong{display:block;margin-bottom:3px;color:#4B168F;font-size:10px}.mydoc-review-text{margin:0;white-space:pre-wrap;text-align:justify;text-justify:inter-word}.mydoc-review-empty{color:#84798F;font-style:italic}
+  .mydoc-status-context{display:block;margin-bottom:4px;color:#84798F;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
   .mydoc-empty,.mydoc-no-results{padding:58px 24px;background:radial-gradient(circle at 50% 15%,rgba(91,30,188,.09),transparent 38%),#FBF9FD}.mydoc-empty-icon{display:grid;width:70px;height:70px;margin:0 auto 18px;place-items:center;border-radius:21px;background:#EEE4FA;font-size:31px}.mydoc-empty-title,.mydoc-no-results-title{color:#25172F;font-size:20px;font-weight:750;letter-spacing:-.025em}.mydoc-empty-sub{color:#766A81;line-height:1.65}.mydoc-error{border-color:#F1B5B5;border-radius:15px;background:#FFF1F1;box-shadow:0 10px 26px rgba(153,27,27,.06)}
   .mydoc-page .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:10px 17px;border:1px solid transparent;border-radius:10px;font:700 12px/1 'Inter',sans-serif;text-decoration:none;cursor:pointer;transition:transform .2s ease,box-shadow .2s ease,background .2s ease,color .2s ease}.mydoc-page .btn-primary{background:#5B1EBC;color:#fff}.mydoc-page .btn-primary:hover{transform:translateY(-1px);background:#491598;box-shadow:0 9px 18px rgba(91,30,188,.2)}.mydoc-page .btn-secondary{border-color:#D8D0E3;background:#fff;color:#281B35}.mydoc-page a:focus-visible,.mydoc-page button:focus-visible,.mydoc-page select:focus-visible{outline:3px solid rgba(91,30,188,.24);outline-offset:3px}
   @keyframes mydocEnter{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:no-preference){.mydoc-hero,.mydoc-stats,.mydoc-filters,.mydoc-group,.mydoc-error{animation:mydocEnter .48s cubic-bezier(.16,1,.3,1) both}.mydoc-stats{animation-delay:.05s}.mydoc-filters{animation-delay:.1s}.mydoc-group{animation-delay:.14s}}
   @media(max-width:900px){.mydoc-stats{grid-template-columns:1fr 1fr}.mydoc-stat:nth-child(2){border-right:0}.mydoc-stat:nth-child(-n+2){border-bottom:1px solid #E8E1EF}.mydoc-filters{grid-template-columns:1fr 1fr}.mydoc-actions{grid-column:1/-1}}
-  @media(max-width:720px){.mydoc-hero{grid-template-columns:1fr;padding:30px 24px}.mydoc-hero-side{padding:22px 0 0;border-top:1px solid rgba(255,255,255,.24);border-left:0}.mydoc-filters{grid-template-columns:1fr}.mydoc-actions{grid-column:auto}.mydoc-actions .btn{flex:1}.mydoc-table tbody tr{padding:9px 0}.mydoc-table tbody td{padding:8px 18px}.mydoc-table tbody td::before{margin-bottom:6px}.mydoc-file-cell{min-width:0}.mydoc-table td:last-child .mydoc-link{width:100%}}
+  @media(max-width:720px){.mydoc-hero{grid-template-columns:1fr;padding:30px 24px}.mydoc-hero-side{padding:22px 0 0;border-top:1px solid rgba(255,255,255,.24);border-left:0}.mydoc-filters{grid-template-columns:1fr}.mydoc-actions{grid-column:auto}.mydoc-actions .btn{flex:1}.mydoc-table-wrap{overflow-x:visible}.mydoc-table{min-width:0;table-layout:auto}.mydoc-table th,.mydoc-table td{width:auto!important}.mydoc-table tbody tr{padding:9px 0}.mydoc-table tbody td{padding:8px 18px}.mydoc-table tbody td::before{margin-bottom:6px}.mydoc-file-cell{min-width:0}.mydoc-table td:last-child .mydoc-link{width:100%}}
   @media(max-width:480px){.mydoc-stats{grid-template-columns:1fr}.mydoc-stat{border-right:0;border-bottom:1px solid #E8E1EF}.mydoc-stat:nth-child(3){border-bottom:1px solid #E8E1EF}.mydoc-hero{padding:27px 21px}.mydoc-group-head{align-items:flex-start;flex-direction:column}.mydoc-actions{flex-direction:column}.mydoc-actions .btn{width:100%}}
   @media(prefers-reduced-motion:reduce){.mydoc-page *{animation:none!important;transition:none!important}}
 </style>
@@ -661,6 +805,9 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
 
 <?php if (!empty($errors)): ?>
   <div class="mydoc-error"><?php echo mydoc_se(implode(' ', $errors)); ?></div>
+<?php endif; ?>
+<?php if ($document_action_success !== ''): ?>
+  <div class="mydoc-success" role="status"><?php echo mydoc_se($document_action_success); ?></div>
 <?php endif; ?>
 
 <?php if (empty($projects)): ?>
@@ -711,7 +858,6 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
       <option value="proposal"   <?php echo $type_filter === 'proposal'   ? 'selected' : ''; ?>>📄 Proposals</option>
       <option value="chapter"    <?php echo $type_filter === 'chapter'    ? 'selected' : ''; ?>>📘 Chapters</option>
       <option value="revision"   <?php echo $type_filter === 'revision'   ? 'selected' : ''; ?>>✏️ Revisions</option>
-      <option value="defense"    <?php echo $type_filter === 'defense'    ? 'selected' : ''; ?>>🛡️ Defense</option>
       <option value="manuscript" <?php echo $type_filter === 'manuscript' ? 'selected' : ''; ?>>📚 Manuscripts</option>
       <option value="other"      <?php echo $type_filter === 'other'      ? 'selected' : ''; ?>>📎 Other</option>
     </select>
@@ -774,6 +920,7 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
           <a class="mydoc-link" href="<?php echo mydoc_se($project_url); ?>" style="display:inline-block;margin-top:8px;">View project →</a>
         </div>
       <?php else: ?>
+      <div class="mydoc-table-wrap" tabindex="0" role="region" aria-label="Document files and review information">
       <table class="mydoc-table table-mobile-stack">
         <thead>
           <tr>
@@ -782,7 +929,8 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
             <th>Linked to</th>
             <th>Uploaded</th>
             <th>Size</th>
-            <th>Status</th>
+            <th>Current status</th>
+            <th>Review feedback</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -809,14 +957,33 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
                 $linked = mydoc_se($type_to_label[$type][1] ?? 'Document');
             }
 
-            // Status: chapter status for chapter/revision, else project status.
+            // Show the source of this current status separately from the review decision below.
             $status_html = '';
             if (($type === 'chapter' || $type === 'revision') && !empty($r['chapter_id'])) {
                 $cs = (string) ($r['chapter_status'] ?? '');
                 $status_html = mydoc_status_badge($cs, $chapter_to_label);
+                $status_context = 'Chapter status';
             } else {
                 $status_html = mydoc_status_badge((string) $g['project_status'], $project_to_label);
+                $status_context = 'Project status';
             }
+            $review = $upload_reviews[(int) $r['upload_id']] ?? null;
+            $review_decision = $review
+                ? ((string) $review['decision'] === 'approved' ? 'Approved' : 'Returned for revision')
+                : '';
+            $project_status = (string) ($r['project_status'] ?? '');
+            $chapter_status = (string) ($r['chapter_status'] ?? '');
+            $has_chapter = !empty($r['chapter_id']);
+            $editable_draft_state = $has_chapter
+                ? (in_array($project_status, ['approved', 'ongoing'], true)
+                    && in_array($chapter_status, ['draft', 'revision_required'], true))
+                : in_array($project_status, ['draft', 'for_revision', 'revision_required'], true);
+            $can_delete_upload = (int) ($r['uploaded_by'] ?? 0) === $user_id
+                && (int) ($r['is_preserved_version'] ?? 0) !== 1
+                && $editable_draft_state;
+            $can_remove_missing_record = !$exists
+                && (int) ($r['uploaded_by'] ?? 0) === $user_id
+                && (int) ($r['is_preserved_version'] ?? 0) !== 1;
         ?>
           <tr>
             <td data-label="File">
@@ -850,7 +1017,19 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
             <td data-label="Size" style="color:#475569;font-size:13px;white-space:nowrap;">
               <?php echo mydoc_se(mydoc_format_size($size_bytes)); ?>
             </td>
-            <td data-label="Status"><?php echo $status_html; ?></td>
+            <td data-label="Current status"><span class="mydoc-status-context"><?php echo mydoc_se($status_context); ?></span><?php echo $status_html; ?></td>
+            <td data-label="Review feedback">
+              <?php if ($review): ?>
+                <details class="mydoc-review-disclosure">
+                  <summary><span class="review-feedback-open">View feedback</span><span class="review-feedback-hide">Hide feedback</span></summary>
+                  <div class="mydoc-review-proof"><span class="mydoc-review-decision<?php echo $review_decision === 'Approved' ? '' : ' returned'; ?>"><?php echo mydoc_se($review_decision); ?></span><br>Version <?php echo (int) $review['version_number']; ?> · <?php echo mydoc_se(trim((string) $review['reviewer_name']) !== '' ? trim((string) $review['reviewer_name']) : 'Authorized reviewer'); ?> · <?php echo mydoc_se(mydoc_format_date($review['reviewed_at'])); ?></div>
+                  <div class="mydoc-review-section"><strong>Comments</strong><?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?><p class="mydoc-review-text"><?php echo nl2br(mydoc_se($review['comments'])); ?></p><?php else: ?><span class="mydoc-review-empty">No comments recorded.</span><?php endif; ?></div>
+                  <div class="mydoc-review-section"><strong>Suggestion</strong><?php if (trim((string) ($review['recommendation'] ?? '')) !== ''): ?><p class="mydoc-review-text"><?php echo nl2br(mydoc_se($review['recommendation'])); ?></p><?php else: ?><span class="mydoc-review-empty">No suggestion recorded.</span><?php endif; ?></div>
+                </details>
+              <?php else: ?>
+                <span class="mydoc-review-empty">No linked review record.</span>
+              <?php endif; ?>
+            </td>
             <td data-label="Action">
               <?php if ($download === ''): ?>
                 <span class="mydoc-missing">Unavailable</span>
@@ -858,14 +1037,30 @@ renderStudentShell($user, 'my-documents', 'My Documents', $subtitle);
                 <span class="mydoc-missing">File missing on disk</span>
               <?php else: ?>
                 <a class="mydoc-link" href="<?php echo mydoc_se($download); ?>" target="_blank" rel="noopener">
-                Download
+                Preview
                 </a>
+              <?php endif; ?>
+              <?php if ($can_remove_missing_record): ?>
+                <form class="mydoc-delete-form" method="post" onsubmit="return confirm('Remove this missing file record from My Documents? The missing file is not recoverable; submitted versions and review history are protected.');">
+                  <?php echo csrfField(); ?>
+                  <input type="hidden" name="upload_id" value="<?php echo (int) $r['upload_id']; ?>">
+                  <button class="mydoc-delete-button" type="submit" name="remove_missing_upload" value="1">Remove missing record</button>
+                </form>
+              <?php elseif ($can_delete_upload): ?>
+                <form class="mydoc-delete-form" method="post" onsubmit="return confirm('Delete this draft file? This cannot be undone. Submitted versions and review history are protected.');">
+                  <?php echo csrfField(); ?>
+                  <input type="hidden" name="upload_id" value="<?php echo (int) $r['upload_id']; ?>">
+                  <button class="mydoc-delete-button" type="submit" name="delete_upload" value="1">Delete draft</button>
+                </form>
+              <?php elseif ((int) ($r['is_preserved_version'] ?? 0) === 1): ?>
+                <span class="mydoc-protected-file">Submitted version and review history protected</span>
               <?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
+      </div>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>

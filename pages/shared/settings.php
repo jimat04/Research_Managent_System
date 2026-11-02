@@ -54,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Complete all password fields.';
         } elseif (!password_verify($currentPassword, $account['password'])) {
             $error = 'The current password is incorrect.';
-        } elseif (strlen($newPassword) < 8) {
-            $error = 'The new password must be at least 8 characters.';
+        } elseif (($passwordPolicyError = rmsValidatePasswordPolicy($newPassword)) !== null) {
+            $error = $passwordPolicyError;
         } elseif (password_verify($newPassword, $account['password'])) {
             $error = 'The new password must be different from your current password.';
         } elseif ($newPassword !== $confirmPassword) {
@@ -241,8 +241,8 @@ if ($shell === 'admin') {
                     <input type="hidden" name="action" value="change_password">
                     <div class="settings-security-note">Your current password is required before any security change can be saved.</div>
                     <div class="form-group"><label for="current_password">Current password</label><input type="password" id="current_password" name="current_password" autocomplete="current-password" required></div>
-                    <div class="form-group"><label for="new_password">New password</label><input type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password" required><p class="form-help">Use at least 8 characters and choose a password different from your current one.</p></div>
-                    <div class="form-group"><label for="confirm_password">Confirm new password</label><input type="password" id="confirm_password" name="confirm_password" minlength="8" autocomplete="new-password" required></div>
+                    <div class="form-group"><label for="new_password">New password</label><input type="password" id="new_password" name="new_password" minlength="<?= (int) rmsSetting('password_min_length') ?>" maxlength="64" autocomplete="new-password" required><p class="form-help">Use at least <?= (int) rmsSetting('password_min_length') ?> characters, include a letter and number, and choose a password different from your current one.</p></div>
+                    <div class="form-group"><label for="confirm_password">Confirm new password</label><input type="password" id="confirm_password" name="confirm_password" minlength="<?= (int) rmsSetting('password_min_length') ?>" maxlength="64" autocomplete="new-password" required></div>
                     <button class="settings-button" type="submit">Update password</button>
                 </form>
             </div>

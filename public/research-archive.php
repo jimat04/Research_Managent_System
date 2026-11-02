@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/academic-years.php';
+require_once __DIR__ . '/../includes/publication-classification.php';
 
 function archive_escape($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -22,8 +24,22 @@ $search = trim($_GET['search'] ?? '');
 $selected_category = filter_input(INPUT_GET, 'category_id', FILTER_VALIDATE_INT);
 $selected_ay = filter_input(INPUT_GET, 'ay_id', FILTER_VALIDATE_INT);
 $selected_program = trim((string) ($_GET['program'] ?? ''));
+$selected_type = is_string($_GET['type'] ?? null) ? $_GET['type'] : 'all';
+if (!in_array($selected_type, ['all', 'student_project', 'faculty_publication', 'faculty_research_record'], true)) {
+    $selected_type = 'all';
+}
 $selected_category = $selected_category ?: 0;
-$selected_ay = $selected_ay ?: 0;
+$selected_ay = array_key_exists('academic_year', $_GET) ? 0 : ($selected_ay ?: 0);
+$selected_academic_year = is_string($_GET['academic_year'] ?? null) ? trim($_GET['academic_year']) : '';
+// Preserve bookmarked semester-ID links, now matching the whole academic year.
+if ($selected_ay > 0) {
+    $legacy_year_stmt = $conn->prepare('SELECT label FROM academic_years WHERE ay_id = ?');
+    $legacy_year_stmt->bind_param('i', $selected_ay);
+    $legacy_year_stmt->execute();
+    $legacy_year = $legacy_year_stmt->get_result()->fetch_assoc();
+    $legacy_year_stmt->close();
+    $selected_academic_year = (string) ($legacy_year['label'] ?? '');
+}
 if (function_exists('mb_substr')) {
     $selected_program = mb_substr($selected_program, 0, 120);
 } else {
@@ -40,31 +56,47 @@ $snapshot_table_result = $conn->query("SHOW TABLES LIKE 'research_author_snapsho
 $has_author_snapshots = $snapshot_table_result instanceof mysqli_result && $snapshot_table_result->num_rows > 0;
 if ($snapshot_table_result instanceof mysqli_result) $snapshot_table_result->close();
 
-// @rms-db: Apply rms_db_migration.sql so research_projects.deleted_at is available for soft deletes.
-$count_stmt = $conn->prepare("SELECT COUNT(*) FROM research_projects WHERE status IN ('completed', 'archived')" . ($has_deleted_at ? ' AND deleted_at IS NULL' : ''));
+$count_stmt = $conn->prepare(
+    "SELECT
+        (SELECT COUNT(*) FROM research_projects rp
+          JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
+         WHERE rp.status IN ('completed','archived')" . ($has_deleted_at ? ' AND rp.deleted_at IS NULL' : '') . ") +
+        (SELECT COUNT(*) FROM publications p
+          JOIN public_research_releases pr ON pr.publication_id = p.publication_id AND pr.source_type = 'faculty_publication' AND pr.release_status = 'published'
+         WHERE p.researcher_category = 'faculty' AND (p.status = 'published' OR p.archival_status = 'archived') AND p.deactivated_at IS NULL) +
+        (SELECT COUNT(*) FROM faculty_research_records fr
+          JOIN public_research_releases pr ON pr.faculty_research_record_id = fr.research_record_id AND pr.source_type = 'faculty_research_record' AND pr.release_status = 'published'
+         WHERE fr.status = 'archived' AND fr.deleted_at IS NULL)"
+);
 $count_stmt->execute();
 $count_stmt->bind_result($archived_count);
 $count_stmt->fetch();
 $count_stmt->close();
 
-$category_stmt = $conn->prepare('SELECT category_id, category_name FROM research_categories WHERE status = 1 ORDER BY category_name, category_id');
+$category_stmt = $conn->prepare(
+    "SELECT DISTINCT rc.category_id, rc.category_name
+       FROM research_categories rc
+       JOIN research_projects rp ON rp.category_id = rc.category_id
+      JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
+      WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
+      ORDER BY rc.category_name, rc.category_id"
+);
 $categories = archive_fetch_all($category_stmt);
 $category_stmt->close();
 
-$year_stmt = $conn->prepare(
-    "SELECT DISTINCT ay.ay_id, ay.label, ay.semester
-     FROM academic_years ay
-     INNER JOIN research_projects rp ON rp.ay_id = ay.ay_id
-     WHERE ay.semester IN ('1st', '2nd')
-       AND ay.label <= COALESCE(
-           (SELECT MAX(current_ay.label) FROM academic_years current_ay WHERE current_ay.is_active = 1),
-           ay.label
-       )
-       AND rp.status IN ('completed', 'archived'){$deleted_filter}
-     ORDER BY ay.label DESC, FIELD(ay.semester, '1st', '2nd')"
+$academic_year_result = $conn->query(
+    "SELECT DISTINCT ay.label
+       FROM academic_years ay
+       JOIN research_projects rp ON rp.ay_id = ay.ay_id
+       JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
+      WHERE rp.status IN ('completed','archived'){$deleted_filter}
+      ORDER BY ay.label DESC"
 );
-$academic_years = archive_fetch_all($year_stmt);
-$year_stmt->close();
+$academic_years = [];
+if ($academic_year_result) {
+    while ($academic_year_row = $academic_year_result->fetch_assoc()) $academic_years[] = $academic_year_row['label'];
+    $academic_year_result->close();
+}
 
 if ($has_author_snapshots) {
     $program_sql = "
@@ -73,6 +105,7 @@ if ($has_author_snapshots) {
             SELECT ras.program
               FROM research_author_snapshots ras
               JOIN research_projects rp ON rp.project_id = ras.project_id
+              JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
              WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
                AND ras.program IS NOT NULL AND ras.program != ''
             UNION
@@ -80,6 +113,7 @@ if ($has_author_snapshots) {
               FROM project_members pm
               JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
               JOIN research_projects rp ON rp.project_id = pm.project_id
+              JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
              WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
                AND u.program IS NOT NULL AND u.program != ''
                AND NOT EXISTS (SELECT 1 FROM research_author_snapshots ras WHERE ras.project_id = rp.project_id)
@@ -87,6 +121,7 @@ if ($has_author_snapshots) {
             SELECT u.program
               FROM research_projects rp
               JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+              JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
              WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
                AND u.program IS NOT NULL AND u.program != ''
                AND NOT EXISTS (SELECT 1 FROM research_author_snapshots ras WHERE ras.project_id = rp.project_id)
@@ -101,12 +136,14 @@ if ($has_author_snapshots) {
               FROM project_members pm
               JOIN users u ON u.user_id = pm.user_id AND u.role = 'student'
               JOIN research_projects rp ON rp.project_id = pm.project_id
+              JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
              WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
                AND u.program IS NOT NULL AND u.program != ''
             UNION
             SELECT u.program
               FROM research_projects rp
               JOIN users u ON u.user_id = rp.created_by AND u.role = 'student'
+              JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
              WHERE rp.status IN ('completed', 'archived'){$deleted_filter}
                AND u.program IS NOT NULL AND u.program != ''
         ) archive_programs
@@ -125,24 +162,21 @@ $query = "
         rp.project_id,
         rp.title,
         rp.abstract,
-        rp.research_area,
-        rp.status,
         rp.updated_at,
+        pr.public_manuscript_version_id,
         rc.category_name,
         ay.label AS academic_year,
-        ay.semester,
         lead_user.first_name AS lead_first_name,
         lead_user.last_name AS lead_last_name,
-        lead_user.program AS lead_program,
-        COALESCE(pm.co_member_count, 0) AS co_member_count
+        lead_user.program AS lead_program
     FROM research_projects rp
+    JOIN public_research_releases pr ON pr.project_id = rp.project_id AND pr.source_type = 'student_project' AND pr.release_status = 'published'
     LEFT JOIN research_categories rc ON rc.category_id = rp.category_id
     LEFT JOIN academic_years ay ON ay.ay_id = rp.ay_id
     LEFT JOIN (
         SELECT
             project_id,
-            MAX(CASE WHEN role = 'lead' THEN user_id END) AS lead_user_id,
-            SUM(CASE WHEN role = 'member' THEN 1 ELSE 0 END) AS co_member_count
+            MAX(CASE WHEN role = 'lead' THEN user_id END) AS lead_user_id
         FROM project_members
         GROUP BY project_id
     ) pm ON pm.project_id = rp.project_id
@@ -153,6 +187,10 @@ $query = "
 
 $parameters = [];
 $types = '';
+
+if ($selected_type !== 'all' && $selected_type !== 'student_project') {
+    $query .= ' AND 1 = 0';
+}
 
 if ($search !== '') {
     $query .= ' AND (rp.title LIKE ? OR rp.abstract LIKE ?)';
@@ -168,7 +206,12 @@ if ($selected_category > 0) {
     $types .= 'i';
 }
 
-if ($selected_ay > 0) {
+if ($selected_academic_year !== '') {
+    $query .= ' AND ay.label = ?';
+    $parameters[] = $selected_academic_year;
+    $types .= 's';
+} elseif ($selected_ay > 0) {
+    // An unknown legacy ID must not silently broaden the archive results.
     $query .= ' AND rp.ay_id = ?';
     $parameters[] = $selected_ay;
     $types .= 'i';
@@ -288,6 +331,108 @@ if ($project_ids) {
     }
 }
 
+$student_specific_filters = $selected_category > 0 || $selected_academic_year !== '' || $selected_ay > 0 || $selected_program !== '';
+$includeFacultyRecords = !$student_specific_filters;
+$archive_records = [];
+foreach ($projects as $project) {
+    $archive_records[] = [
+        'source_type' => 'student_project',
+        'source_id' => (int) $project['project_id'],
+        'title' => $project['title'],
+        'abstract' => $project['abstract'],
+        'updated_at' => $project['updated_at'],
+        'category_name' => $project['category_name'] ?: 'Student research',
+        'academic_year' => $project['academic_year'] ?: 'Academic year unavailable',
+        'authors' => $authors_by_project[(int) $project['project_id']] ?? [],
+        'public_file_available' => (int) ($project['public_manuscript_version_id'] ?? 0) > 0,
+    ];
+}
+
+if ($includeFacultyRecords && in_array($selected_type, ['all', 'faculty_publication'], true)) {
+    $facultyPublicationSql = "SELECT p.publication_id, p.research_title, p.abstract_text, p.publication_type, p.publication_type_name, p.publication_date, p.updated_at, p.authors_json, p.researcher_name, r.publication_paper_released FROM publications p JOIN public_research_releases r ON r.publication_id = p.publication_id AND r.source_type = 'faculty_publication' AND r.release_status = 'published' WHERE p.researcher_category = 'faculty' AND (p.status = 'published' OR p.archival_status = 'archived') AND p.deactivated_at IS NULL";
+    $facultyPublicationParams = [];
+    $facultyPublicationTypes = '';
+    if ($search !== '') {
+        $facultyPublicationSql .= ' AND (p.research_title LIKE ? OR p.abstract_text LIKE ?)';
+        $likeSearch = '%' . $search . '%';
+        array_push($facultyPublicationParams, $likeSearch, $likeSearch);
+        $facultyPublicationTypes .= 'ss';
+    }
+    if ($selected_type === 'faculty_publication') {
+        // Type filter is handled by this source-specific query.
+    }
+    $facultyPublicationSql .= ' ORDER BY p.publication_date DESC, p.publication_id DESC';
+    $facultyPublicationStmt = $conn->prepare($facultyPublicationSql);
+    if ($facultyPublicationParams) $facultyPublicationStmt->bind_param($facultyPublicationTypes, ...$facultyPublicationParams);
+    $facultyPublicationStmt->execute();
+    $facultyPublications = $facultyPublicationStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $facultyPublicationStmt->close();
+    foreach ($facultyPublications as $publication) {
+        $publicationAuthors = array_map(static fn($name) => ['author_name' => $name, 'author_role' => 'member'], publicationAuthors($publication));
+        $archive_records[] = [
+            'source_type' => 'faculty_publication',
+            'source_id' => (int) $publication['publication_id'],
+            'title' => $publication['research_title'],
+            'abstract' => $publication['abstract_text'] ?? '',
+            'updated_at' => $publication['publication_date'] ?: $publication['updated_at'],
+            'category_name' => publicationTypeLabel($publication),
+            'academic_year' => $publication['publication_date'] ? date('Y', strtotime($publication['publication_date'])) : 'Publication year unavailable',
+            'authors' => $publicationAuthors,
+            'public_file_available' => (int) $publication['publication_paper_released'] === 1,
+        ];
+    }
+}
+
+if ($includeFacultyRecords && in_array($selected_type, ['all', 'faculty_research_record'], true)) {
+    $facultyResearchSql = "SELECT fr.research_record_id, fr.title, fr.work_type_label, fr.date_completed, fr.updated_at FROM faculty_research_records fr JOIN public_research_releases r ON r.faculty_research_record_id = fr.research_record_id AND r.source_type = 'faculty_research_record' AND r.release_status = 'published' WHERE fr.status = 'archived' AND fr.deleted_at IS NULL";
+    $facultyResearchParams = [];
+    $facultyResearchTypes = '';
+    if ($search !== '') {
+        $facultyResearchSql .= ' AND fr.title LIKE ?';
+        $facultyResearchParams[] = '%' . $search . '%';
+        $facultyResearchTypes = 's';
+    }
+    $facultyResearchSql .= ' ORDER BY fr.date_completed DESC, fr.updated_at DESC, fr.research_record_id DESC';
+    $facultyResearchStmt = $conn->prepare($facultyResearchSql);
+    if ($facultyResearchParams) $facultyResearchStmt->bind_param($facultyResearchTypes, ...$facultyResearchParams);
+    $facultyResearchStmt->execute();
+    $facultyResearchRecords = $facultyResearchStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $facultyResearchStmt->close();
+    $facultyResearchAuthors = [];
+    $facultyResearchIds = array_map(static fn($record) => (int) $record['research_record_id'], $facultyResearchRecords);
+    if ($facultyResearchIds) {
+        $facultyResearchIdList = implode(',', $facultyResearchIds);
+        $facultyResearchAuthorResult = $conn->query("SELECT research_record_id, full_name, author_role FROM faculty_research_record_authors WHERE research_record_id IN ({$facultyResearchIdList}) ORDER BY research_record_id, display_order, record_author_id");
+        if ($facultyResearchAuthorResult) {
+            while ($author = $facultyResearchAuthorResult->fetch_assoc()) {
+                $facultyResearchAuthors[(int) $author['research_record_id']][] = [
+                    'author_name' => $author['full_name'],
+                    'author_role' => $author['author_role'] === 'lead' ? 'lead' : 'member',
+                ];
+            }
+            $facultyResearchAuthorResult->close();
+        }
+    }
+    foreach ($facultyResearchRecords as $facultyRecord) {
+        $archive_records[] = [
+            'source_type' => 'faculty_research_record',
+            'source_id' => (int) $facultyRecord['research_record_id'],
+            'title' => $facultyRecord['title'],
+            'abstract' => $facultyRecord['work_type_label'] . ($facultyRecord['date_completed'] ? ' · Completed ' . $facultyRecord['date_completed'] : ''),
+            'updated_at' => $facultyRecord['date_completed'] ?: $facultyRecord['updated_at'],
+            'category_name' => $facultyRecord['work_type_label'] ?: 'Faculty research',
+            'academic_year' => $facultyRecord['date_completed'] ? substr((string) $facultyRecord['date_completed'], 0, 4) : 'Completion year unavailable',
+            'authors' => $facultyResearchAuthors[(int) $facultyRecord['research_record_id']] ?? [],
+            'public_file_available' => false,
+        ];
+    }
+}
+
+usort($archive_records, static function (array $left, array $right): int {
+    return strtotime((string) $right['updated_at']) <=> strtotime((string) $left['updated_at']);
+});
+$archived_count = count($archive_records);
+
 $is_logged_in = isLoggedIn();
 ?>
 <!DOCTYPE html>
@@ -295,57 +440,63 @@ $is_logged_in = isLoggedIn();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Research Archive | Research Management System</title>
+    <title>Research Archive | <?php echo htmlspecialchars(rmsSetting('site_name'), ENT_QUOTES, 'UTF-8'); ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/public-theme.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-theme.css'); ?>">
     <link rel="stylesheet" href="../css/style.css">
     <style>
         /* @rms-ui: Keep the archive scannable while reusing the shared public palette. */
         .archive-hero { min-height: 56vh; }
         .archive-hero .hero-container { grid-template-columns: 1.2fr 0.8fr; }
         .archive-hero .hero-content p { max-width: 620px; }
-        .archive-stat { display: flex; width: fit-content; gap: 8px; align-items: center; color: #D0D3E8; font-size: 0.9rem; line-height: 1.2; }
+        .archive-hero .hero-actions { margin-bottom: 16px; }
+        .archive-stat { display: flex; width: fit-content; gap: 12px; align-items: center; color: #D0D3E8; font-size: 0.9rem; line-height: 1.2; }
         .archive-stat strong { display: block; color: white; font-family: 'Poppins', sans-serif; font-size: 1.5rem; line-height: 1; }
         .archive-visual-icon { font-size: 7rem; filter: drop-shadow(0 12px 30px rgba(91, 30, 188, 0.35)); }
-        .archive-section { background: linear-gradient(180deg, #fff 0%, #F0EBFF 100%); }
+        .archive-section { background: linear-gradient(180deg, var(--public-surface) 0%, var(--public-bg) 100%); }
         .archive-filter { max-width: 1200px; margin: 0 auto 32px; }
-        .archive-filter .card-body { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(150px, 1fr)) auto auto; gap: 16px; align-items: end; }
+        .archive-filter .card-body { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(145px, 1fr)) auto auto; gap: 16px; align-items: end; }
         .archive-filter .form-group { margin-bottom: 0; }
-        .archive-filter .form-label { color: var(--text-dark); }
-        .archive-filter .form-control { background: #fff; border-color: var(--border); color: var(--text-dark); }
-        .archive-filter .form-control::placeholder { color: var(--text-muted); }
-        .archive-filter select.form-control option { color: var(--text-dark); }
-        .archive-reset { color: var(--primary); font-size: 0.85rem; font-weight: 600; padding-bottom: 12px; }
+        .archive-filter .form-label { color: var(--public-text); }
+        .archive-filter .form-control { background: var(--public-surface); border-color: var(--public-border); color: var(--public-text); }
+        .archive-filter .form-control::placeholder { color: var(--public-muted); }
+        .archive-filter select.form-control option { color: var(--public-text); }
+        .archive-reset { color: var(--rms-public-link); font-size: 0.85rem; font-weight: 600; padding-bottom: 12px; }
         .archive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; align-items: start; }
         .archive-card { display: flex; flex-direction: column; min-width: 0; height: 100%; transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease; }
         .archive-card:hover { transform: translateY(-3px); border-color: rgba(91, 30, 188, .28); box-shadow: 0 18px 42px rgba(45, 20, 84, .12); }
-        .archive-card.is-expanded { grid-column: 1 / -1; height: auto; transform: none; border-color: rgba(91, 30, 188, .34); box-shadow: 0 22px 52px rgba(45, 20, 84, .14); }
-        .archive-card .card-body { position: relative; display: flex; flex-direction: column; flex: 1; cursor: pointer; outline: none; }
+        .archive-card .card-body { position: relative; display: flex; flex-direction: column; flex: 1; cursor: pointer; outline: none; color: inherit; text-decoration: none; }
         .archive-card .card-body:focus-visible { box-shadow: inset 0 0 0 3px rgba(91, 30, 188, .22); }
-        .archive-card-title { color: var(--primary-dark); font-size: 1.1rem; line-height: 1.35; margin-bottom: 12px; }
+        .archive-card-title { color: var(--public-link); font-size: 1.1rem; line-height: 1.35; margin-bottom: 12px; }
         .archive-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
-        .archive-badge { background: rgba(91, 30, 188, 0.1); color: var(--primary); border-radius: 50px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; }
-        .archive-year { color: var(--text-muted); font-size: 0.78rem; }
+        .archive-badge { background: var(--rms-public-accent-wash); color: var(--rms-public-link); border-radius: 50px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; }
+        .archive-year { color: var(--public-muted); font-size: 0.78rem; }
         .archive-authors { display: grid; gap: 6px; margin-bottom: 14px; }
-        .archive-author { color: var(--text-light); font-size: 0.85rem; margin: 0; }
-        .archive-program { display: inline-block; margin-left: 6px; color: var(--primary); font-size: 0.75rem; font-weight: 700; }
-        .archive-abstract { color: var(--text-light); font-size: 0.9rem; line-height: 1.65; margin-bottom: 20px; }
-        .archive-published { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text-muted); font-size: 0.78rem; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
-        .archive-expand-label { color: var(--primary); font-weight: 700; white-space: nowrap; }
-        .archive-expand-label::after { content: '+'; display: inline-grid; width: 20px; height: 20px; margin-left: 7px; place-items: center; border-radius: 6px; background: rgba(91,30,188,.1); font-size: .9rem; transition: transform .2s ease, background .2s ease; }
-        .archive-card.is-expanded .archive-expand-label::after { content: '\2212'; transform: rotate(180deg); background: rgba(91,30,188,.16); }
-        .archive-card.is-expanded .archive-abstract { display: none; }
-        .archive-expanded[hidden] { display: none; }
-        .archive-expanded { margin: 4px 0 22px; padding: 24px; border: 1px solid rgba(91,30,188,.14); border-radius: 14px; background: linear-gradient(145deg, #fbf9ff, #fff); cursor: text; }
-        .archive-expanded h3 { margin: 0 0 11px; color: var(--primary-dark); font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-        .archive-full-abstract { width: 100%; max-width: none; margin: 0; color: var(--text-light); font-size: .94rem; line-height: 1.8; text-align: justify; text-align-last: left; white-space: pre-wrap; }
-        .archive-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 24px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; background: var(--border); }
-        .archive-detail { min-width: 0; padding: 15px 16px; background: #fff; }
-        .archive-detail span { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-        .archive-detail strong { display: block; color: var(--text-dark); font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
-        .archive-detail-authors { grid-column: span 2; }
-        .archive-detail-status { grid-column: 1 / -1; }
-        .archive-detail-author + .archive-detail-author { margin-top: 7px; }
-        .archive-detail-author b { color: var(--text-dark); font-size: .82rem; }
-        .archive-detail-author small { color: var(--primary); font-size: .75rem; font-weight: 700; }
+        .archive-author { color: var(--public-body); font-size: 0.85rem; margin: 0; }
+        .archive-program { display: inline-block; margin-left: 6px; color: var(--public-link); font-size: 0.75rem; font-weight: 700; }
+        .archive-abstract { color: var(--public-body); font-size: 0.9rem; line-height: 1.65; margin-bottom: 20px; }
+        .archive-published { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--public-muted); font-size: 0.78rem; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--public-border); }
+        .archive-expand-label { color: var(--public-link); font-weight: 700; white-space: nowrap; }
+        .archive-expand-label::after { content: '\2192'; display: inline-block; margin-left: 7px; }
+        .archive-access-dialog { position: fixed; inset: 0; width: min(480px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 36px; border: 1px solid var(--public-border); border-radius: 20px; background: var(--public-surface); color: var(--public-text); box-shadow: 0 28px 80px rgba(15, 23, 42, .28); }
+        .archive-access-dialog::before { content: ''; position: absolute; inset: 0 0 auto; height: 4px; background: var(--rms-public-primary-gradient); }
+        .archive-access-dialog::backdrop { background: rgba(15, 23, 42, .62); backdrop-filter: blur(3px); }
+        .archive-dialog-close { position: absolute; top: 16px; right: 16px; display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--public-border); border-radius: 50%; background: var(--public-surface); color: var(--public-body); font-size: 1.4rem; line-height: 1; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+        .archive-dialog-close:hover { border-color: var(--public-link); background: var(--rms-public-accent-wash); color: var(--public-link); }
+        .archive-dialog-heading { display: flex; align-items: center; gap: 14px; margin: 0 36px 22px 0; }
+        .archive-dialog-icon { display: grid; flex: 0 0 52px; width: 52px; height: 52px; place-items: center; border: 1px solid rgba(91, 30, 188, .14); border-radius: 15px; background: var(--rms-public-accent-wash); color: var(--public-link); }
+        .archive-dialog-icon svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+        .archive-access-dialog h2 { margin: 0; color: var(--public-text); font-size: 1.5rem; letter-spacing: -.035em; line-height: 1.22; text-wrap: balance; }
+        .archive-access-dialog p { margin: 0; color: var(--public-body); line-height: 1.7; }
+        .archive-access-dialog .archive-dialog-eyebrow { margin: 0 0 6px; color: var(--public-link); font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+        .archive-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 28px; }
+        .archive-dialog-actions .btn { min-height: 48px; padding: 0 16px; justify-content: center; }
+        body.public-v2 .archive-dialog-actions .btn-primary { color: var(--rms-public-primary-contrast); background: var(--rms-public-primary-gradient); border: 1px solid transparent; box-shadow: 0 8px 20px rgba(91, 30, 188, .24); transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+        body.public-v2 .archive-dialog-actions .btn-primary:hover { color: var(--rms-public-primary-contrast); background: var(--rms-public-primary-gradient); transform: translateY(-2px); box-shadow: 0 12px 26px rgba(91, 30, 188, .32); filter: saturate(1.08); }
+        body.public-v2 .archive-dialog-actions .btn-primary:active { transform: translateY(0) scale(.98); }
+        .archive-access-dialog :focus-visible { outline: 3px solid var(--rms-public-link); outline-offset: 3px; }
         .archive-empty { max-width: 700px; margin: 0 auto; text-align: center; padding: 56px 32px; }
         .archive-empty-icon { display: block; font-size: 2.5rem; margin-bottom: 12px; }
         @media (max-width: 1000px) {
@@ -356,39 +507,25 @@ $is_logged_in = isLoggedIn();
             .archive-hero .hero-container { grid-template-columns: 1fr; }
             .archive-visual { display: none; }
             .archive-filter .card-body, .archive-grid { grid-template-columns: 1fr; }
-            .archive-card.is-expanded { grid-column: auto; }
-            .archive-detail-grid { grid-template-columns: 1fr; }
-            .archive-detail-authors { grid-column: auto; }
             .archive-filter .btn, .archive-reset { width: 100%; text-align: center; }
         }
         @media (prefers-reduced-motion: reduce) {
-            .archive-card, .archive-expand-label::after { transition: none; }
+            .archive-card { transition: none; }
+        }
+        @media (max-width: 480px) {
+            .archive-access-dialog { padding: 30px 22px 24px; border-radius: 18px; }
+            .archive-dialog-heading { gap: 12px; margin-right: 34px; }
+            .archive-dialog-icon { flex-basis: 44px; width: 44px; height: 44px; border-radius: 13px; }
+            .archive-access-dialog h2 { font-size: 1.3rem; }
+            .archive-dialog-actions { grid-template-columns: 1fr; }
         }
     </style>
+    <link rel="stylesheet" href="assets/css/public-pages-v2.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-pages-v2.css'); ?>">
+    <link rel="stylesheet" href="assets/css/public-header.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-header.css'); ?>">
+    <link rel="stylesheet" href="assets/css/public-footer.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-footer.css'); ?>">
 </head>
-<body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <div class="nav-logo nav-logo-image">
-                <img src="../photos/rms-logo.png" alt="" width="42" height="42" aria-hidden="true">
-            </div>
-            <div class="nav-brand-text">
-                <span class="brand-main">Research<br>Management</span>
-                <span class="brand-sub">System</span>
-            </div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="index.php">Home</a></li>
-            <li><a href="about.php">About</a></li>
-            <li><a href="index.php#features">Features</a></li>
-            <li><a href="research-archive.php" class="active">Research Archive</a></li>
-            <li><a href="contact.php">Contact</a></li>
-        </ul>
-        <div class="nav-actions">
-            <a href="login.php" class="btn btn-secondary btn-sm">Login</a>
-            <a href="login.php#register" class="btn btn-primary btn-sm">Register</a>
-        </div>
-    </nav>
+<body class="public-v2">
+    <?php $publicHeaderActivePage = 'archive'; require __DIR__ . '/../includes/public-header.php'; ?>
 
     <section class="hero archive-hero">
         <div class="hero-container">
@@ -399,7 +536,7 @@ $is_logged_in = isLoggedIn();
                     <?php if ($is_logged_in): ?>
                         <a href="<?php echo archive_escape(SITE_URL . 'pages/researcher/submit-research.php'); ?>" class="btn btn-primary btn-lg">+ Submit Research</a>
                     <?php else: ?>
-                        <a href="login.php" class="btn btn-primary btn-lg">Login to submit your research</a>
+                        <a href="login.php?continue=research-archive" class="btn btn-primary btn-lg">Login to submit your research</a>
                     <?php endif; ?>
                 </div>
                 <div class="archive-stat"><strong><?php echo archive_escape($archived_count); ?></strong> research works archived</div>
@@ -413,7 +550,7 @@ $is_logged_in = isLoggedIn();
             <div class="card-header">
                 <div>
                     <div class="card-title">Find Research</div>
-                    <div class="card-subtitle">Search the public catalog by title, abstract, program, category, or academic year.</div>
+                    <div class="card-subtitle">Search released student research and faculty publications and records.</div>
                 </div>
             </div>
             <div class="card-body">
@@ -432,11 +569,11 @@ $is_logged_in = isLoggedIn();
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="ay_id">Academic Year</label>
-                        <select class="form-control" id="ay_id" name="ay_id">
-                            <option value="0">All academic years</option>
+                        <label class="form-label" for="academic_year">Academic Year</label>
+                        <select class="form-control" id="academic_year" name="academic_year">
+                            <option value="">All academic years</option>
                             <?php foreach ($academic_years as $academic_year): ?>
-                                <option value="<?php echo archive_escape($academic_year['ay_id']); ?>"<?php echo (int) $selected_ay === (int) $academic_year['ay_id'] ? ' selected' : ''; ?>><?php echo archive_escape($academic_year['label'] . ' - ' . $academic_year['semester']); ?></option>
+                                <option value="<?php echo archive_escape($academic_year); ?>"<?php echo $selected_academic_year === $academic_year ? ' selected' : ''; ?>><?php echo archive_escape($academic_year); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -449,13 +586,22 @@ $is_logged_in = isLoggedIn();
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label" for="type">Record type</label>
+                        <select class="form-control" id="type" name="type">
+                            <option value="all"<?php echo $selected_type === 'all' ? ' selected' : ''; ?>>All record types</option>
+                            <option value="student_project"<?php echo $selected_type === 'student_project' ? ' selected' : ''; ?>>Student projects</option>
+                            <option value="faculty_publication"<?php echo $selected_type === 'faculty_publication' ? ' selected' : ''; ?>>Faculty publications</option>
+                            <option value="faculty_research_record"<?php echo $selected_type === 'faculty_research_record' ? ' selected' : ''; ?>>Faculty research records</option>
+                        </select>
+                    </div>
                     <button class="btn btn-primary" type="submit">Search</button>
                     <a class="archive-reset" href="research-archive.php">Reset</a>
                 </form>
             </div>
         </div>
 
-        <?php if (empty($projects)): ?>
+        <?php if (empty($archive_records)): ?>
             <div class="card archive-empty">
                 <span class="archive-empty-icon">📭</span>
                 <h2 class="card-title">No research works match your filters.</h2>
@@ -463,139 +609,49 @@ $is_logged_in = isLoggedIn();
             </div>
         <?php else: ?>
             <div class="archive-grid">
-                <?php foreach ($projects as $project): ?>
+                <?php foreach ($archive_records as $project): ?>
                     <?php
                     $abstract = trim((string) ($project['abstract'] ?? ''));
                     $abstract_preview = function_exists('mb_substr') ? mb_substr($abstract, 0, 150) : substr($abstract, 0, 150);
                     $abstract_length = function_exists('mb_strlen') ? mb_strlen($abstract) : strlen($abstract);
-                    $lead_name = trim(($project['lead_first_name'] ?? '') . ' ' . ($project['lead_last_name'] ?? ''));
-                    $project_authors = $authors_by_project[(int) $project['project_id']] ?? [];
-                    if (!$project_authors && $lead_name !== '') {
-                        $project_authors[] = [
-                            'author_name' => $lead_name,
-                            'program' => $project['lead_program'] ?? null,
-                            'author_role' => 'lead',
-                        ];
+                    $project_authors = $project['authors'] ?? [];
+                    $project_type = (string) $project['source_type'];
+                    $record_url = SITE_URL . 'public/research-record.php?' . http_build_query(['type' => $project_type, 'id' => (int) $project['source_id']]);
+                    if (!$is_logged_in) {
+                        $record_url = SITE_URL . 'public/login.php?' . http_build_query(['continue' => 'public-record', 'record_type' => $project_type, 'record_id' => (int) $project['source_id']]);
                     }
-                    $published_year = date('Y', strtotime($project['updated_at']));
-                    $detail_id = 'archive-details-' . (int) $project['project_id'];
+                    $updated_timestamp = strtotime((string) ($project['updated_at'] ?? ''));
+                    $published_year = $updated_timestamp ? date('Y', $updated_timestamp) : 'Year unavailable';
+                    $year_label = $project_type === 'student_project' ? 'Academic year: ' : 'Year: ';
                     ?>
-                    <article class="card archive-card" data-archive-card data-research-title="<?php echo archive_escape($project['title']); ?>">
-                        <div class="card-body" role="button" tabindex="0" aria-expanded="false" aria-controls="<?php echo archive_escape($detail_id); ?>" aria-label="Read full record for <?php echo archive_escape($project['title']); ?>">
+                    <article class="card archive-card">
+                        <a class="card-body" href="<?php echo archive_escape($record_url); ?>" aria-label="Read full record for <?php echo archive_escape($project['title']); ?>">
                             <h2 class="archive-card-title"><?php echo archive_escape($project['title']); ?></h2>
                             <div class="archive-meta">
-                                <span class="archive-badge"><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></span>
-                                <span class="archive-year"><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Academic year unavailable'); ?></span>
+                                <span class="archive-badge"><?php echo archive_escape($project['category_name'] ?: 'Research'); ?></span>
+                                <span class="archive-year"><?php echo archive_escape($project['academic_year'] ?: 'Year unavailable'); ?></span>
                             </div>
-                            <div class="archive-authors" aria-label="Student authors and programs">
+                            <div class="archive-authors" aria-label="Recorded research authors">
                                 <?php if ($project_authors): ?>
                                     <?php foreach ($project_authors as $author): ?>
-                                        <p class="archive-author"><strong><?php echo ($author['author_role'] ?? 'member') === 'lead' ? 'Lead author:' : 'Co-author:'; ?></strong> <?php echo archive_escape($author['author_name']); ?><span class="archive-program"><?php echo archive_escape($author['program'] ?: 'Program unavailable'); ?></span></p>
+                                        <?php $authorRole = ($author['author_role'] ?? '') === 'lead' ? 'Lead author:' : (($project_type === 'student_project') ? 'Co-author:' : 'Author:'); ?>
+                                        <p class="archive-author"><strong><?php echo archive_escape($authorRole); ?></strong> <?php echo archive_escape($author['author_name']); ?><?php if ($project_type === 'student_project' && !empty($author['program'])): ?><span class="archive-program"><?php echo archive_escape($author['program']); ?></span><?php endif; ?></p>
                                     <?php endforeach; ?>
                                 <?php else: ?>
-                                    <p class="archive-author"><strong>Lead author:</strong> Author unavailable <span class="archive-program">Program unavailable</span></p>
+                                    <p class="archive-author">Authorship information unavailable</p>
                                 <?php endif; ?>
                             </div>
                             <p class="archive-abstract"><?php echo archive_escape($abstract ? $abstract_preview . ($abstract_length > 150 ? '…' : '') : 'No abstract available.'); ?></p>
-                            <div class="archive-expanded" id="<?php echo archive_escape($detail_id); ?>" hidden>
-                                <h3>Complete abstract</h3>
-                                <p class="archive-full-abstract"><?php echo archive_escape($abstract ?: 'No abstract available.'); ?></p>
-                                <div class="archive-detail-grid" aria-label="Research information">
-                                    <div class="archive-detail"><span>Research area</span><strong><?php echo archive_escape($project['research_area'] ?: 'Not specified'); ?></strong></div>
-                                    <div class="archive-detail"><span>Category</span><strong><?php echo archive_escape($project['category_name'] ?: 'Uncategorized'); ?></strong></div>
-                                    <div class="archive-detail"><span>Academic period</span><strong><?php echo archive_escape($project['academic_year'] ? $project['academic_year'] . ($project['semester'] ? ' · ' . $project['semester'] : '') : 'Unavailable'); ?></strong></div>
-                                    <div class="archive-detail archive-detail-authors"><span>Student authors and programs</span><?php if ($project_authors): ?><?php foreach ($project_authors as $author): ?><div class="archive-detail-author"><b><?php echo archive_escape($author['author_name']); ?></b> <small><?php echo archive_escape($author['program'] ?: 'Program unavailable'); ?></small></div><?php endforeach; ?><?php else: ?><strong>Author information unavailable</strong><?php endif; ?></div>
-                                    <div class="archive-detail"><span>Research team</span><strong><?php echo count($project_authors) > 1 ? archive_escape(count($project_authors) - 1) . ' co-author' . (count($project_authors) === 2 ? '' : 's') : 'Lead author only'; ?></strong></div>
-                                    <div class="archive-detail archive-detail-status"><span>Repository status</span><strong><?php echo archive_escape(ucfirst((string) $project['status'])); ?></strong></div>
-                                </div>
-                            </div>
-                            <div class="archive-published"><span>Year published: <?php echo archive_escape($published_year); ?></span><span class="archive-expand-label">Read full record</span></div>
-                        </div>
+                            <div class="archive-published"><span><?php echo archive_escape($year_label . ($project['academic_year'] ?? $published_year)); ?></span><span class="archive-expand-label">Read full record</span></div>
+                        </a>
                     </article>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </section>
 
-    <footer class="footer">
-        <div class="footer-grid">
-            <div class="footer-col">
-                <h4 style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"><img class="footer-brand-logo" src="../photos/rms-logo.png" alt="" width="30" height="30" aria-hidden="true"><span style="font-family: 'Poppins', sans-serif;">RMS</span></h4>
-                <p style="color: #8B8FAD; font-size: 0.85rem; line-height: 1.6;">Empowering academic institutions to streamline their research management processes with modern, intelligent technology.</p>
-            </div>
-            <div class="footer-col">
-                <h4>Quick Links</h4>
-                <ul>
-                    <li><a href="index.php">Home</a></li>
-                    <li><a href="about.php">About</a></li>
-                    <li><a href="index.php#features">Features</a></li>
-                    <li><a href="research-archive.php">Research Archive</a></li>
-                    <li><a href="contact.php">Contact</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h4>Resources</h4>
-                <ul>
-                    <li><a href="#">Guidelines</a></li>
-                    <li><a href="#">FAQ</a></li>
-                    <li><a href="#">Documentation</a></li>
-                    <li><a href="#">Support</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h4>Contact</h4>
-                <p style="font-size: 0.85rem; color: #8B8FAD; display: flex; gap: 8px;"><span>📧</span> research@university.edu.ph</p>
-                <p style="font-size: 0.85rem; color: #8B8FAD; display: flex; gap: 8px; margin-top: 8px;"><span>📞</span> +63 912 345 6789</p>
-            </div>
-        </div>
-        <div class="footer-bottom">© 2024 Research Management System. All rights reserved.</div>
-    </footer>
-    <script>
-    (() => {
-        const cards = [...document.querySelectorAll('[data-archive-card]')];
-
-        function setExpanded(card, expanded) {
-            const body = card.querySelector('.card-body');
-            const details = card.querySelector('.archive-expanded');
-            const label = card.querySelector('.archive-expand-label');
-            if (!body || !details) return;
-
-            card.classList.toggle('is-expanded', expanded);
-            body.setAttribute('aria-expanded', String(expanded));
-            body.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Read'} full record for ${card.dataset.researchTitle}`);
-            details.hidden = !expanded;
-            if (label) label.textContent = expanded ? 'Close record' : 'Read full record';
-
-            if (expanded) {
-                window.requestAnimationFrame(() => {
-                    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                    card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
-                });
-            }
-        }
-
-        function toggleCard(card) {
-            const shouldExpand = !card.classList.contains('is-expanded');
-            cards.forEach((otherCard) => {
-                if (otherCard !== card) setExpanded(otherCard, false);
-            });
-            setExpanded(card, shouldExpand);
-        }
-
-        cards.forEach((card) => {
-            const body = card.querySelector('.card-body');
-            body.addEventListener('click', (event) => {
-                if (event.target.closest('.archive-expanded')) return;
-                toggleCard(card);
-            });
-            body.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                event.preventDefault();
-                toggleCard(card);
-            });
-        });
-    })();
-    </script>
-<script src="../js/public-motion.js" defer></script>
+    <?php require __DIR__ . '/../includes/public-footer.php'; ?>
+    <script src="assets/js/public-pages-v2.js?v=<?php echo filemtime(__DIR__ . '/assets/js/public-pages-v2.js'); ?>" defer></script>
+    <script src="../js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
 </body>
 </html>

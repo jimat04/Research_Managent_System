@@ -1,0 +1,892 @@
+{
+  "version": 1,
+  "notes": [
+    "Read-only structural preparation; no template population is implemented.",
+    "XPath positions are one-based, namespace-qualified and guarded by the exact approved package hash.",
+    "Mixed cells/paragraphs require targeted run handling; never replace the entire cell or paragraph.",
+    "All images, headers, footers, relationships, fixed text, rubrics and signature regions are protected.",
+    "Template checkbox glyphs are not user answers. Annex A prechecks must not certify documents."
+  ],
+  "documents": {
+    "annex_a": {
+      "filename": "ANNEX A - Pre-Submission Clearance - Blank Template.docx",
+      "sha256": "9404f926d952f04bc3c49a95dc33c71d31a01ab3c26bd4f35d77e65a3d5b89f9",
+      "body_table_count": 6,
+      "total_table_count": 8,
+      "header_footer_hashes": {
+        "word/header1.xml": "b31aace3f0fcfc8f8668275f229bc29a110ab06182285580063ba0a0b74ca7d1",
+        "word/footer1.xml": "a051c0faadf9103c47c1cd97a1c3797c1784c2621299d2f5e428f09761ad0739"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.work_type"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Type of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[3]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[3]/w:tc[1]",
+          "guard_text": "Author(s) Information:1. Full Name, Position, Affiliation2. Full Name, Position, Affiliation"
+        },
+        {
+          "fields": [
+            "research.sdgs"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[4]/w:tc[1]",
+          "kind": "checkbox_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "research.sdgs",
+            "research.sdg_other"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[4]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "conference.title"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of the target Conference",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.host_organizer"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[2]/w:tc[1]",
+          "guard_text": "Which organization(s) or institution(s) will host and/or organize the conference?",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.dates"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[3]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[3]/w:tc[1]",
+          "guard_text": "Inclusive date of the conference proper",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "input.conference_deadline"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[4]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[4]/w:tc[1]",
+          "guard_text": "Deadline of Call for Submission",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.classification"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[5]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[5]/w:tc[1]",
+          "guard_text": "Nature of the conference"
+        },
+        {
+          "fields": [
+            "input.proceedings",
+            "input.conference_indexing"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[6]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[6]/w:tc[1]",
+          "guard_text": "Does the conference publish proceedings?"
+        },
+        {
+          "fields": [
+            "conference.modality",
+            "conference.venue"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[7]/w:tc[2]",
+          "kind": "mixed_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[7]/w:tc[1]",
+          "guard_text": "Presentation Modality"
+        },
+        {
+          "fields": [
+            "input.registration_fee",
+            "input.registration_currency"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[8]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[2]/w:tr[8]/w:tc[1]",
+          "guard_text": "How much is the registration fee?",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "journal.title"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of the target journal",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "journal.publisher"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[2]/w:tc[1]",
+          "guard_text": "Which organization(s) or institution(s) will publish the journal?",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "input.journal_deadline"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[3]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[3]/w:tc[1]",
+          "guard_text": "Deadline of Submission of Call for Papers",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "input.peer_review_clear"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[4]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[4]/w:tc[1]",
+          "guard_text": "Is the peer review process clear?"
+        },
+        {
+          "fields": [
+            "input.journal_indexing"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[5]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[5]/w:tc[1]",
+          "guard_text": "Is it internationally indexed?"
+        },
+        {
+          "fields": [
+            "input.scope_aligned",
+            "input.scope_explanation"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[6]/w:tc[2]",
+          "kind": "mixed_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[6]/w:tc[1]",
+          "guard_text": "Does the article have a direct relationship / aligned with the journal title, scope, or topic?"
+        },
+        {
+          "fields": [
+            "input.publication_fee",
+            "input.publication_currency"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[7]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[7]/w:tc[1]",
+          "guard_text": "How much is the publication/processing fee?",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "input.checklist_profiles",
+            "input.checklist_declaration",
+            "input.checklist_manuscript",
+            "input.checklist_target_details"
+          ],
+          "target": "./w:body/w:tbl[4]/w:tr[1]/w:tc[1]",
+          "kind": "prechecked_documentary_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "input.ai_used",
+            "input.ai_tools",
+            "reserved.evaluation",
+            "fixed.declarations"
+          ],
+          "target": "./w:body/w:tbl[5]/w:tr[1]/w:tc[1]",
+          "kind": "mixed_nested_tables",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "reserved.clearance",
+            "reserved.reference"
+          ],
+          "target": "./w:body/w:tbl[6]/w:tr[1]/w:tc[1]",
+          "kind": "protected_review_table",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "input.ai_tools"
+          ],
+          "target": "./w:body/w:tbl[5]/w:tr[1]/w:tc[1]/w:tbl[1]",
+          "kind": "repeat_ai_rows",
+          "expected_count": 1
+        }
+      ],
+      "template_checkbox_states": {
+        "documentary_requirements": {
+          "checked": 4,
+          "user_confirmation": false
+        }
+      }
+    },
+    "annex_b": {
+      "filename": "ANNEX B - Authors Certification - Blank Template.docx",
+      "sha256": "ca45a507d7eec1069730789ad61dda72820573a6666b50aafaa0d42acd16bd8e",
+      "body_table_count": 3,
+      "total_table_count": 3,
+      "header_footer_hashes": {
+        "word/header3.xml": "f27f2c95ad3f271e30d0460716c5c718f3c18aecc371127dd42397770d468707",
+        "word/footer1.xml": "7d15e673128fb25fc87486583460209bb41e83b8d1179233d44a2ace1427f1be",
+        "word/footer2.xml": "3402a41f3a6738bd3fe034fd3cfdf26de14d56f195bd93d2c05124dff405c1bd",
+        "word/header1.xml": "79b660a7b9f922de66bcef4815b83302edfa110e7f8cb7ddeb7d7bed3f0023d2",
+        "word/header2.xml": "5c2fbe5d7ee46165662e9b116e80b9661f226e73229e7071e422579396da2247",
+        "word/footer3.xml": "df1d16d7c9c47f8f7b1497de42b5c6dacf13aa86921240ecb9ca87e2216c4b2f"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of the Scholarly Work:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.date_started"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Date Started:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.date_completed"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[3]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[3]/w:tc[1]",
+          "guard_text": "Date Completed:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors",
+            "input.contributions"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[2]",
+          "kind": "repeat_author_rows",
+          "expected_count": 1,
+          "prototype_rows": 2,
+          "columns": {
+            "1": "saved author name and affiliation",
+            "2": "saved Lead Author / Co-Author role",
+            "3": "confirmed contribution categories",
+            "4": "confirmed contribution description",
+            "5": "confirmed contribution percentage"
+          }
+        },
+        {
+          "fields": [
+            "reserved.signatures"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[1]/w:tc[1]",
+          "kind": "protected_signature_region",
+          "expected_count": 1
+        }
+      ]
+    },
+    "annex_c": {
+      "filename": "ANNEX C - Quality Evaluation Sheet - Blank Template (Mabansag copy).docx",
+      "sha256": "b2fecb925262dd95e359e32d165df79e5403d23fad248a3f4892b71502c62733",
+      "body_table_count": 10,
+      "total_table_count": 10,
+      "header_footer_hashes": {
+        "word/header1.xml": "4984080696f2ff20bc3e660728db3744dec5f2da6297fb0f6fc0c36233e51cd6",
+        "word/footer1.xml": "b9d73a837d5e0241a7c751fd0c92fefd7e9f5a9496128ffa03314ae36c6e48fb"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.work_type"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Type of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[3]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[3]/w:tc[1]",
+          "guard_text": "Author(s) Information:"
+        },
+        {
+          "fields": [
+            "reserved.ratings",
+            "reserved.remarks",
+            "reserved.total"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[1]/w:tc[1]",
+          "kind": "protected_evaluation_table",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "reserved.evaluator"
+          ],
+          "target": "./w:body/w:p[11]",
+          "kind": "protected_signature_paragraph",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[11]",
+          "guard_text": "Signature over printed name      Position Date Evaluated"
+        },
+        {
+          "fields": [
+            "fixed.rubric",
+            "reserved.recommendation"
+          ],
+          "target": "./w:body/w:tbl[10]/w:tr[1]/w:tc[1]",
+          "kind": "protected_recommendation_matrix",
+          "expected_count": 1
+        }
+      ],
+      "provisional": true
+    },
+    "annex_d": {
+      "filename": "ANNEX D_RESARCH PORTAL_Certification of Quality Review (College Research Evaluation Committee) - Blank Template.docx",
+      "sha256": "8ed3a1aacdc7b2e8b3ebe4dbcb8046625ddcf1f37a01bf6166b31b82dc1f874b",
+      "body_table_count": 2,
+      "total_table_count": 2,
+      "header_footer_hashes": {
+        "word/footer3.xml": "154ac2003db20f61b7be5015181844b7b20b35dc0c28d96347b5fe8cd4e7efb3",
+        "word/footer1.xml": "2b487cf2bbdd0d9d4ddca3acb46cd36a1bd40d5b3f26f3019d65656a4d5f2ee4",
+        "word/footer2.xml": "32a08a27aef9e6588b3badf23fc9c43018300a36afd5e5cbbcb92aec690e695b",
+        "word/header3.xml": "c0dfea057b19448f18b0fb023857cd3d6416f963e6d63c8add8b24020561690e",
+        "word/header1.xml": "5a331cb3c18156db636afaa69133b16a9c67955132563f5f6331bc607d3367cb",
+        "word/header2.xml": "097bc2e307a8e36aa91abd2ad0161bfb3f086e78428e1731d0ef1916a6f658c3"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Author(s) Information:"
+        },
+        {
+          "fields": [
+            "reserved.verified_score"
+          ],
+          "target": "./w:body/w:p[14]",
+          "kind": "protected_score_placeholder",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[14]",
+          "guard_text": "Based on the evaluation results, the scholarly work received a final quality review score of: _____________/100"
+        },
+        {
+          "fields": [
+            "reserved.classification",
+            "fixed.officials"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[1]/w:tc[1]",
+          "kind": "protected_rating_options",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "reserved.certification"
+          ],
+          "target": "./w:body/w:p[22]",
+          "kind": "protected_issuance_placeholder",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[22]",
+          "guard_text": "Issued this _____ day of __________ 20____ at ____________________________."
+        },
+        {
+          "fields": [
+            "fixed.officials"
+          ],
+          "target": "./w:body/w:p[28]",
+          "kind": "fixed_officials",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[28]",
+          "guard_text": "DR. NANCY G. LIWANAGDR. JOSELITO D. MABANSAG"
+        }
+      ]
+    },
+    "annex_e": {
+      "filename": "ANNEX E - Intellectual Property Asset Evaluation Clearance ITSO - Blank Template.docx",
+      "sha256": "51248e2603a9954c3c204f991301e7c09304b3e853ab1c44dc3b5ea5b90e6da3",
+      "body_table_count": 1,
+      "total_table_count": 1,
+      "header_footer_hashes": {
+        "word/header1.xml": "370dbabe5fe70afcd4a3043ca5000522e60d1f36ba19bd3f9767ee751ba27297",
+        "word/footer1.xml": "8390d9983365b015224d25482054c2a3a97782d63feef595394d5c959f87b795"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Author(s) Information:1. Full Name, Position, Affiliation2. Full Name, Position, Affiliation"
+        },
+        {
+          "fields": [
+            "reserved.itso_result",
+            "fixed.statements"
+          ],
+          "target": "./w:body/w:p[14]",
+          "kind": "protected_checkbox_paragraph",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[14]",
+          "guard_text": "☐ No protectable intellectual property asset was identified. The scholarly work is cleared for publication, presentation, dissemination, and other forms of public disclosure."
+        },
+        {
+          "fields": [
+            "reserved.issuance"
+          ],
+          "target": "./w:body/w:p[23]",
+          "kind": "protected_issuance_placeholder",
+          "expected_count": 1,
+          "guard": "./w:body/w:p[23]",
+          "guard_text": "Issued this _____ day of __________ 20____ at ____________________________."
+        }
+      ]
+    },
+    "annex_f": {
+      "filename": "ANNEX F - Conflict of Interest and Confidentiality Declaration - Blank Template.docx",
+      "sha256": "e7715df21df0379386e43ff11093a5317d10363c96dd9ac4bb1eec8d395ac65d",
+      "body_table_count": 2,
+      "total_table_count": 2,
+      "header_footer_hashes": {
+        "word/footer3.xml": "fa7133fd1bef5ab7d9a968d5ec7539124054834a12cc8895e9a05b5b1aa87fd9",
+        "word/footer1.xml": "85c646943474f8f4aa0c8ebf6b1218afc1b9bed32977eb39eb4ec34aad074b44",
+        "word/footer2.xml": "fc1eab35d41397d2a0ecf2968e8c992db371febcadccefc20bd8d6db40a8d5ff",
+        "word/header3.xml": "7c7d0ca7b2ea503fc9ac59b05ac45fa1f42bae928c9ed12765db0255f3d02dd2",
+        "word/header1.xml": "f3ab8d52dc1383870828a50f8398ffa1a2f8b20b2a28d122d4adc743fb7027da",
+        "word/header2.xml": "bad3f702abe2202b1aa4d6f958b637a163c456a51ff9b2fbabea7aad6aea9885"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Scholarly Work",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Author(s) Information:1. Full Name, Position, Affiliation2. Full Name, Position, Affiliation"
+        },
+        {
+          "fields": [
+            "reserved.review_signatories"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[1]/w:tc[1]",
+          "kind": "protected_signatory_table",
+          "expected_count": 1
+        }
+      ],
+      "blank_review_signatory_rows": 7
+    },
+    "qsf_rds_019": {
+      "filename": "EARIST-QSF-RDS-019 - Request for Research Paper Presentation - Blank Template.docx",
+      "sha256": "379420f537b36324637c17855e20435b2f8305db26828b9da057b704cc70858e",
+      "body_table_count": 7,
+      "total_table_count": 7,
+      "header_footer_hashes": {
+        "word/header1.xml": "561579999b0cb210e42f99af2492b3bacb1f03f21b859e07a0a4766e9379aaa1",
+        "word/header2.xml": "b19c4657822897216d13025b61fbb2948b625294b59a9717a056e7d1c0f2280f",
+        "word/footer1.xml": "07b1c264dbe311551371994719bfa1a29a5f95bd117131ea0dd6bbfd7d63ee82",
+        "word/footer2.xml": "2091f3405e258a4696f18b4ebdb537b0a4ecab695300c1e884a1a064ed894f50",
+        "word/header3.xml": "3d19fe6c78bfb485cf13571c8b73b3b881489a654389a6a7b8501e39b69dec22",
+        "word/footer3.xml": "92b68ecc6a08e31ea273b970e04d505f76f9c8949307ca4a44baeed77d97a826"
+      },
+      "bindings": [
+        {
+          "fields": [
+            "applicant.name"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[1]/w:tc[1]",
+          "guard_text": "Full Name:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "applicant.appointment"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[2]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[2]/w:tc[1]",
+          "guard_text": "Status of Appointment:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "applicant.position"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[3]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[3]/w:tc[1]",
+          "guard_text": "Position/Designation:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "applicant.department"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[4]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[4]/w:tc[1]",
+          "guard_text": "College/Department:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "applicant.contact"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[5]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[5]/w:tc[1]",
+          "guard_text": "Contact Number:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "applicant.email"
+          ],
+          "target": "./w:body/w:tbl[1]/w:tr[6]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[1]/w:tr[6]/w:tc[1]",
+          "guard_text": "Email Address:",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.modality"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[2]/w:tc[1]",
+          "kind": "checkbox_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "input.qsf_classification"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[2]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "input.funding_source",
+            "input.estimated_expenses",
+            "input.expense_currency"
+          ],
+          "target": "./w:body/w:tbl[2]/w:tr[2]/w:tc[3]",
+          "kind": "mixed_cell",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "research.title"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[1]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[1]/w:tc[1]",
+          "guard_text": "Title of Paper",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "research.authors",
+            "presentation.presenter"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[2]/w:tc[2]",
+          "kind": "author_block",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[2]/w:tc[1]",
+          "guard_text": "Author(s) Information:Guide:Full Name, Position, Affiliation*Full Name, Position, AffiliationNote: *Presenter"
+        },
+        {
+          "fields": [
+            "research.sdgs"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[3]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[3]/w:tc[1]",
+          "guard_text": "SDG Alignment"
+        },
+        {
+          "fields": [
+            "conference.title"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[4]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[4]/w:tc[1]",
+          "guard_text": "Title of Conference",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.venue"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[5]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[5]/w:tc[1]",
+          "guard_text": "Venue",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.dates"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[6]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[6]/w:tc[1]",
+          "guard_text": "Date(s) [mm/dd/yyyy]",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "conference.organizer"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[7]/w:tc[2]",
+          "kind": "blank_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[7]/w:tc[1]",
+          "guard_text": "Organizer",
+          "expected_text": ""
+        },
+        {
+          "fields": [
+            "input.recognition"
+          ],
+          "target": "./w:body/w:tbl[3]/w:tr[8]/w:tc[2]",
+          "kind": "checkbox_region",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[3]/w:tr[8]/w:tc[1]",
+          "guard_text": "The Conference is endorsed/hosted/organized by CHED-recognized higher education institutions and/or other national government agencies and their attached agencies, recognized professional organizations, recognized accrediting bodies, or recognized HEI organizations."
+        },
+        {
+          "fields": [
+            "input.abstract_date"
+          ],
+          "target": "./w:body/w:tbl[4]/w:tr[1]/w:tc[2]",
+          "kind": "mixed_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[4]/w:tr[1]/w:tc[1]",
+          "guard_text": "Abstract Submitted"
+        },
+        {
+          "fields": [
+            "input.acceptance_date"
+          ],
+          "target": "./w:body/w:tbl[4]/w:tr[2]/w:tc[2]",
+          "kind": "mixed_cell",
+          "expected_count": 1,
+          "guard": "./w:body/w:tbl[4]/w:tr[2]/w:tc[1]",
+          "guard_text": "Accepted for Presentation"
+        },
+        {
+          "fields": [
+            "input.attachments"
+          ],
+          "target": "./w:body/w:tbl[5]/w:tr[1]/w:tc[1]",
+          "kind": "checkbox_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "reserved.signatures",
+            "fixed.privacy"
+          ],
+          "target": "./w:body/w:tbl[6]/w:tr[1]/w:tc[1]",
+          "kind": "protected_certification_region",
+          "expected_count": 1
+        },
+        {
+          "fields": [
+            "reserved.approval",
+            "fixed.officials"
+          ],
+          "target": "./w:body/w:tbl[7]/w:tr[1]/w:tc[1]",
+          "kind": "protected_approval_region",
+          "expected_count": 1
+        }
+      ],
+      "printed_sdg_options": [
+        8,
+        9
+      ]
+    }
+  },
+  "variants": {
+    "annex_c_liwanag": {
+      "filename": "ANNEX C - Quality Evaluation Sheet - Blank Template (Liwanag copy).docx",
+      "sha256": "0578ebcdea2e3c6ea02add8cbff16980e6a5fd9f5be1005bcc429557b6fe3888",
+      "body_table_count": 10,
+      "total_table_count": 10,
+      "header_footer_hashes": {
+        "word/header3.xml": "903e7d836a8313f03ec3aae7de24e13c713250796f73d4aa3aef2780c7030ae4",
+        "word/footer1.xml": "b492f03cfaf942a292c8d645d22aa850a72fd1cab8e7483131800c87d89c19d3",
+        "word/footer2.xml": "06bd92d8b1e0188bcf6e62a5f8f731033ae160e78d8d7c6e6b4ac71ee3fd6551",
+        "word/header1.xml": "5ad70ca0b1d25f3d3e7cd5014e8e8afb9847e84b2407105345fab64a62932c00",
+        "word/header2.xml": "9b5b8c5fd6ddd05791fcb5d3b0d2a8d8575270094edce1c4713680183582512a",
+        "word/footer3.xml": "567f82de7dde2ea7af4c7cc8d11c91967721b48cffa26a356e752422652fc128"
+      },
+      "bindings": []
+    }
+  },
+  "metadata_only_fields": {
+    "annex_a": [
+      "input.submission_target"
+    ],
+    "qsf_rds_019": [
+      "input.applicant_source",
+      "input.applicant_name",
+      "input.applicant_appointment",
+      "input.applicant_position",
+      "input.applicant_department",
+      "input.applicant_contact",
+      "input.applicant_email",
+      "input.presenter_author_id",
+      "input.abstract_submitted",
+      "input.accepted"
+    ]
+  },
+  "uncertainties": [
+    "Mabansag Annex C selection is provisional pending Word visual review; both variants preserved.",
+    "QSF only prints SDG 8 and 9; no destination is invented for the other selected SDGs or Others.",
+    "QSF milestone status rows label the event and date; there is no printed Yes/No checkbox. Status inputs govern date applicability only.",
+    "Annex D's 'Accordingly' certification result has no unambiguous variable destination; a future Admin renderer must verify it.",
+    "Annex A documentary prechecks contradict older notes; preserve the file and obtain an approved Phase 4 output policy.",
+    "Author/signature expansion, page-count wording and textboxes need visual verification before writing."
+  ]
+}

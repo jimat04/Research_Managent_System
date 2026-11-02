@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "skills": {
+    "banner-design": {
+      "source": "~/.claude/skills/banner-design",
+      "sha256": "13eb7a0c5ec4790b2db59d5c0d67a1988f95bf53fa411292125ff75d98cff932",
+      "files": 2,
+      "metadata": {
+        "name": "banner-design",
+        "description": "Design banners for social media, ads, website heroes, creative assets, and print. Multiple art direction options with AI-generated visuals. Actions: design, create, generate banner. Platforms: Facebook, Twitter/X, LinkedIn, YouTube, Instagram, Google Display, website hero, print. Styles: minimalist, gradient, bold typography, photo-based, illustrated, geometric, retro, glassmorphism, 3D, neon, duotone, editorial, collage. Uses ui-ux-pro-max, frontend-design, ai-artist, ai-multimodal skills."
+      }
+    },
+    "brand": {
+      "source": "~/.claude/skills/brand",
+      "sha256": "90002dd6d5cbe586c563d38495a3a8e1e985babad4ca145fa19588463101e240",
+      "files": 18,
+      "metadata": {
+        "name": "brand",
+        "description": "Brand voice, visual identity, messaging frameworks, asset management, brand consistency. Activate for branded content, tone of voice, marketing assets, brand compliance, style guides."
+      }
+    },
+    "brand-guidelines": {
+      "source": "~/.claude/skills/brand-guidelines",
+      "sha256": "59f7d76494f355ae5c6e51705e79d47296f3d02d734883bd9322c02d11a4f0d6",
+      "files": 2,
+      "metadata": {
+        "name": "brand-guidelines",
+        "description": "Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply."
+      }
+    },
+    "brandkit": {
+      "source": "~/.agents/skills/brandkit",
+      "sha256": "7334529714910fbad0d31080ea699cf756697da3af4effb4c093c73a0f49e95e",
+      "files": 1,
+      "metadata": {
+        "name": "brandkit",
+        "description": "Premium brand-kit image generation skill for creating high-end brand-guidelines boards, logo systems, identity decks, and visual-world presentations. Trained for minimalist, cinematic, editorial, dark-tech, luxury, cultural, security, gaming, developer-tool, and consumer-app brand systems. Optimized for intentional logo concepting, refined composition, sparse typography, strong symbolic meaning, premium mockups, art-directed imagery, and flexible grid layouts."
+      }
+    },
+    "canvas-design": {
+      "source": "~/.claude/skills/canvas-design",
+      "sha256": "866ab34241b6ba374ed76ab7263d603fcd8be974b98d6c0df6193da40c738856",
+      "files": 83,
+      "metadata": {
+        "name": "canvas-design",
+        "description": "Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations."
+      }
+    },
+    "design": {
+      "source": "~/.claude/skills/design",
+      "sha256": "36a379635512a5ffce6cae3cc1d2cea2bc517d0c4ed35c0ca14a8fa09c9e44cb",
+      "files": 36,
+      "metadata": {
+        "name": "design",
+        "description": "Comprehensive design skill: brand identity, design tokens, UI styling, logo generation (55 styles, Gemini or Atlas Cloud AI), corporate identity program (50 deliverables, CIP mockups), HTML presentations (Chart.js), banner design (22 styles, social/ads/web/print), icon design (15 styles, SVG, Gemini 3.1 Pro), social photos (HTML→screenshot, multi-platform). Actions: design logo, create CIP, generate mockups, build slides, design banner, generate icon, create social photos, social media images, brand identity, design system. Platforms: Facebook, Twitter, LinkedIn, YouTube, Instagram, Pinterest, TikTok, Threads, Google Ads."
+      }
+    },
+    "design-system": {
+      "source": "~/.claude/skills/design-system",
+      "sha256": "dd99659942aab5e5dd9d848ee0dbc168b2946dda78595f9b7a27b8a7d2d9c585",
+      "files": 27,
+      "metadata": {
+        "name": "design-system",
+        "description": "Token architecture, component specifications, and slide generation. Three-layer tokens (primitive→semantic→component), CSS variables, spacing/typography scales, component specs, strategic slide creation. Use for design tokens, systematic design, brand-compliant presentations."
+      }
+    },
+    "design-taste-frontend": {
+      "source": "~/.agents/skills/design-taste-frontend",
+      "sha256": "ad86fc0ae92ecd09bd059b6b7863a3d6702c7b00f2b1e55592b50794f075645f",
+      "files": 1,
+      "metadata": {
+        "name": "design-taste-frontend",
+        "description": "Anti-slop frontend skill for landing pages, portfolios, and redesigns. The agent reads the brief, infers the right design direction, and ships interfaces that do not look templated. Real design systems when applicable, audit-first on redesigns, strict pre-flight check."
+      }
+    },
+    "design-taste-frontend-v1": {
+      "source": "~/.agents/skills/design-taste-frontend-v1",
+      "sha256": "7a75a33f12f38f6feeec6f2f21b4d306b49050514c1b73c3a40f0d1c2586b762",
+      "files": 1,
+      "metadata": {
+        "name": "design-taste-frontend-v1",
+        "description": "The original v1 taste-skill, preserved for projects depending on its exact behavior. The current default is `design-taste-frontend` (v2 experimental), which is a substantial rewrite. Use this v1 install name only if you need exact backward compatibility."
+      }
+    },
+    "find-skills": {
+      "source": "~/.agents/skills/find-skills",
+      "sha256": "aeacfcbfeb7855c5b15790e996fb6b62dc72d4c920947f6b46764e25eb6bd855",
+      "files": 1,
+      "metadata": {
+        "name": "find-skills",
+        "description": "Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill."
+      }
+    },
+    "frontend-design": {
+      "source": "~/.claude/skills/frontend-design",
+      "sha256": "376d2d5a691d5bc82e31dd2535e277a7e951f3378c1996104681b08526d4f0a3",
+      "files": 2,
+      "metadata": {
+        "name": "frontend-design",
+        "description": "Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults."
+      }
+    },
+    "full-output-enforcement": {
+      "source": "~/.agents/skills/full-output-enforcement",
+      "sha256": "157f05019096af0355488972dd65683e9ee0312e46cd4d61c1f6868872c6115c",
+      "files": 1,
+      "metadata": {
+        "name": "full-output-enforcement",
+        "description": "Overrides default LLM truncation behavior. Enforces complete code generation, bans placeholder patterns, and handles token-limit splits cleanly. Apply to any task requiring exhaustive, unabridged output."
+      }
+    },
+    "gpt-taste": {
+      "source": "~/.agents/skills/gpt-taste",
+      "sha256": "fed13dab22be50faea84fc25d5e22613bd0366881bf1967cf37255a593c101d5",
+      "files": 1,
+      "metadata": {
+        "name": "gpt-taste",
+        "description": "Elite UX/UI & Advanced GSAP Motion Engineer. Enforces Python-driven true randomization for layout variance, strict AIDA page structure, wide editorial typography (bans 6-line wraps), gapless bento grids, strict GSAP ScrollTriggers (pinning, stacking, scrubbing), inline micro-images, and massive section spacing."
+      }
+    },
+    "graphify": {
+      "source": "~/.copilot/skills/graphify",
+      "sha256": "48a8dfcbc4c4bf819505e1bed35a41e66c56405928cd324497a32ce0f44f09bd",
+      "files": 10,
+      "metadata": {
+        "name": "graphify",
+        "description": "Use for any question about a codebase, its architecture, file relationships, or project content — especially when graphify-out/ exists, where the question should be treated as a graphify query first. Turns any input (code, docs, papers, images, videos) into a persistent knowledge graph with god nodes, community detection, and query/path/explain tools."
+      }
+    },
+    "high-end-visual-design": {
+      "source": "~/.agents/skills/high-end-visual-design",
+      "sha256": "0b845b775ff9cd153d768b5ebfc6aaf45e404b70f2ca12803835ff93e6890611",
+      "files": 1,
+      "metadata": {
+        "name": "high-end-visual-design",
+        "description": "Teaches the AI to design like a high-end agency. Defines the exact fonts, spacing, shadows, card structures, and animations that make a website feel expensive. Blocks all the common defaults that make AI designs look cheap or generic."
+      }
+    },
+    "image-to-code": {
+      "source": "~/.agents/skills/image-to-code",
+      "sha256": "dc4eb27c9394da4f044b1f8bb36b2d4ce6798a9df54daec9affc16f88426691f",
+      "files": 1,
+      "metadata": {
+        "name": "image-to-code",
+        "description": "Elite website image-to-code skill for Codex. For visually important web tasks, it must first generate the design image(s) itself, deeply analyze them, then implement the website to match them as closely as possible. In Codex, it must prefer large, readable, section-specific images instead of tiny compressed boards, generate fresh standalone images for sections or detail views instead of cropping old ones, avoid lazy under-generation, avoid cards-inside-cards-inside-cards UI, and keep the hero clean, spacious, readable, and visible on a small laptop."
+      }
+    },
+    "imagegen": {
+      "source": "~/.codex/skills/.system/imagegen",
+      "sha256": "19093b8c468518b32915f76c82c555c10bd5f729a7ae16acb0bc0b67fc48e95b",
+      "files": 12,
+      "metadata": {
+        "name": "imagegen",
+        "description": "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas."
+      }
+    },
+    "imagegen-frontend-mobile": {
+      "source": "~/.agents/skills/imagegen-frontend-mobile",
+      "sha256": "d5c01406c02d49d545ac33425d901e4ea23616e7ab4214093422319273b592f5",
+      "files": 1,
+      "metadata": {
+        "name": "imagegen-frontend-mobile",
+        "description": "Elite mobile app image-generation skill for creating premium, app-native screen concepts and flows. Designed for iOS, Android, and cross-platform mobile products. Prioritizes clean hierarchy, comfortably readable text, strong multi-screen consistency, controlled color palettes, non-generic creative direction, textured surfaces, image-led composition, tasteful custom iconography, and clean phone mockup framing. By default, screens should be shown inside a subtle premium iPhone or similar phone mockup with a visible frame, while the main focus stays on the app content itself. This skill generates images only. It does not write code."
+      }
+    },
+    "imagegen-frontend-web": {
+      "source": "~/.agents/skills/imagegen-frontend-web",
+      "sha256": "23ccb9ceb3c38e4aae02edcf4f4f2d840201cac3d75be9c97e501bfc56e19753",
+      "files": 1,
+      "metadata": {
+        "name": "imagegen-frontend-web",
+        "description": "Elite frontend image-direction skill for generating premium, conversion-aware website design references. CRITICAL OUTPUT RULE — generate ONE separate horizontal image FOR EVERY section. A landing page with 8 sections produces 8 images. Never compress multiple sections into one image. Enforces composition variety (not always left-text / right-image), background-image freedom, varied CTAs, varied hero scales (giant / mid / mini minimalist), narrative concept spine, second-read moments, and a single consistent palette across all images. Optimized for landing pages, marketing sites, and product comps that developers or coding models can accurately recreate."
+      }
+    },
+    "industrial-brutalist-ui": {
+      "source": "~/.agents/skills/industrial-brutalist-ui",
+      "sha256": "bc0d9bcca57ca912945d4178021f7c29ee02705746a4b405cfdd9c7e392ee03a",
+      "files": 1,
+      "metadata": {
+        "name": "industrial-brutalist-ui",
+        "description": "Raw mechanical interfaces fusing Swiss typographic print with military terminal aesthetics. Rigid grids, extreme type scale contrast, utilitarian color, analog degradation effects. For data-heavy dashboards, portfolios, or editorial sites that need to feel like declassified blueprints."
+      }
+    },
+    "minimalist-ui": {
+      "source": "~/.agents/skills/minimalist-ui",
+      "sha256": "401a57987071108e8b91152e2e9f156d293ea0910e9c64e80d2152a04a1ed533",
+      "files": 1,
+      "metadata": {
+        "name": "minimalist-ui",
+        "description": "Clean editorial-style interfaces. Warm monochrome palette, typographic contrast, flat bento grids, muted pastels. No gradients, no heavy shadows."
+      }
+    },
+    "openai-docs": {
+      "source": "~/.codex/skills/.system/openai-docs",
+      "sha256": "d2e50f89f8d1059e87f93c75762ffd955aa66db85fcdb494f0f5daeff66e73a2",
+      "files": 17,
+      "metadata": {
+        "name": "openai-docs",
+        "description": "Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, customization, automations, and self-knowledge—including 'you,' 'your,' 'this app,' or 'this coding agent' when they refer to Codex—and for OpenAI APIs/products and ChatGPT Work. Also use for model choice/migration, prompting, SDKs, Responses, Realtime, agents, evals, and Chat/Work/Codex comparisons. Do not use for generic app/software tasks that merely mention Codex."
+      }
+    },
+    "redesign-existing-projects": {
+      "source": "~/.agents/skills/redesign-existing-projects",
+      "sha256": "0ea6bf252953cafc6a6a49b07a39fef795d4a478ef2639677bd2cbdbdb1609f6",
+      "files": 1,
+      "metadata": {
+        "name": "redesign-existing-projects",
+        "description": "Upgrades existing websites and apps to premium quality. Audits current design, identifies generic AI patterns, and applies high-end design standards without breaking functionality. Works with any CSS framework or vanilla CSS."
+      }
+    },
+    "rms-e2e-path-audit": {
+      "source": "~/.copilot/skills/rms-e2e-path-audit",
+      "sha256": "b563dc30f7ff04ee746e051b21355f02160c63bc5b7ac2b50d9ca845b5368b44",
+      "files": 1,
+      "metadata": {
+        "name": "rms-e2e-path-audit",
+        "description": "Repeatable read-only checklist for auditing RMS E2E staging paths, routing, Composer dependencies, and isolation evidence. Use when reviewing Stage A staging-copy plans or RMS browser-test preflight readiness."
+      }
+    },
+    "skill-creator": {
+      "source": "~/.codex/skills/.system/skill-creator",
+      "sha256": "ae223f8f14c88029f8725f5cd021c6d64df60f5ca8e181499ead1a0564ce4ffb",
+      "files": 9,
+      "metadata": {
+        "name": "skill-creator",
+        "description": "Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources."
+      }
+    },
+    "skill-installer": {
+      "source": "~/.codex/skills/.system/skill-installer",
+      "sha256": "b952ceb5bfb5b3c72c66dc5c77be42239e1adf518431a9b0d3b162e70b8f60e6",
+      "files": 8,
+      "metadata": {
+        "name": "skill-installer",
+        "description": "Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos)."
+      }
+    },
+    "slides": {
+      "source": "~/.claude/skills/slides",
+      "sha256": "7263eeb801b8421813ae4c0edbe7dc2585c6e9a67d77cee3afb58da4c2d531a9",
+      "files": 6,
+      "metadata": {
+        "name": "slides",
+        "description": "Create strategic HTML presentations with Chart.js, design tokens, responsive layouts, copywriting formulas, and contextual slide strategies."
+      }
+    },
+    "stitch-design-taste": {
+      "source": "~/.agents/skills/stitch-design-taste",
+      "sha256": "d59f4b20b1d746a1d573d1a09e6673a4d7001b3971acc63bd868d68d50a1e674",
+      "files": 2,
+      "metadata": {
+        "name": "stitch-design-taste",
+        "description": "Semantic Design System Skill for Google Stitch. Generates agent-friendly DESIGN.md files that enforce premium, anti-generic UI standards — strict typography, calibrated color, asymmetric layouts, perpetual micro-motion, and hardware-accelerated performance."
+      }
+    },
+    "ui-styling": {
+      "source": "~/.claude/skills/ui-styling",
+      "sha256": "656dbe0ec5f008f9ec93b5fcc138d561e3d1f9ee48e0675c775edb2246ea4bb3",
+      "files": 98,
+      "metadata": {
+        "name": "ui-styling",
+        "description": "Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canvas-based visual designs. Use when building user interfaces, implementing design systems, creating responsive layouts, adding accessible components (dialogs, dropdowns, forms, tables), customizing themes and colors, implementing dark mode, generating visual designs and posters, or establishing consistent styling patterns across applications."
+      }
+    },
+    "ui-ux-pro-max": {
+      "source": "~/.claude/skills/ui-ux-pro-max",
+      "sha256": "510e701b3d4f3cb90e12611df548bce4c62a7c16b4609c31cc54189449e9ee16",
+      "files": 70,
+      "metadata": {
+        "name": "ui-ux-pro-max",
+        "description": "UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks."
+      }
+    },
+    "web-artifacts-builder": {
+      "source": "~/.claude/skills/web-artifacts-builder",
+      "sha256": "9caad638edeacf2df421539c0b6967f7dc6e04dff73da4435692705b9055c251",
+      "files": 5,
+      "metadata": {
+        "name": "web-artifacts-builder",
+        "description": "Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts."
+      }
+    },
+    "webapp-testing": {
+      "source": "~/.claude/skills/webapp-testing",
+      "sha256": "ea0986c3af798f34c87ebeacd091085cfd67c53fc7e431a0b67bc9b8b7766451",
+      "files": 6,
+      "metadata": {
+        "name": "webapp-testing",
+        "description": "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs."
+      }
+    }
+  }
+}

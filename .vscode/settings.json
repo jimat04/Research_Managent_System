@@ -1,0 +1,7 @@
+{
+  "chat.useAgentSkills": true,
+  "chat.useAgentsMdFile": true,
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "github.copilot.chat.cli.customAgents.enabled": true,
+  "python.terminal.useEnvFile": true
+}

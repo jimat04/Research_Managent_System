@@ -1,0 +1,73 @@
+:root {
+  --rms-public-bg: #F8FAFC;
+  --rms-public-hero: #F1ECFF;
+  --rms-public-surface: #FFFFFF;
+  --rms-public-subtle: #F1F5F9;
+  --rms-public-text: #172033;
+  --rms-public-text-muted: #475569;
+  --rms-public-muted: #64748B;
+  --rms-public-border: #CBD5E1;
+  --rms-public-link: #5B1EBC;
+  --rms-public-link-hover: #3D0F8A;
+  --rms-public-link-visited: #5B1EBC;
+  --rms-public-accent-wash: rgba(91, 30, 188, .09);
+  --rms-public-primary: #5B1EBC;
+  --rms-public-secondary: #0F6CBD;
+  --rms-public-cyan: #0B708A;
+  --rms-public-primary-contrast: #FFFFFF;
+  --rms-public-primary-gradient: linear-gradient(100deg, #5B1EBC, #0F6CBD);
+  --rms-public-hero-gradient: linear-gradient(100deg, #5B1EBC, #0F6CBD 72%, #0B708A);
+  --rms-public-student: #5930A4;
+  --rms-public-faculty: #176BB5;
+  --rms-public-staff: #12806F;
+  --rms-public-admin: #B45309;
+  --rms-public-capacity: #5B1EBC;
+  --rms-public-development: #0F6CBD;
+  --rms-public-implementation: #0C6984;
+  --rms-public-publication: #0C6984;
+  --rms-public-ip: #9A3412;
+  --rms-public-footer: #0B1A4F;
+  --rms-public-footer-text: #E2E8F0;
+  --rms-public-shadow: 0 8px 30px rgba(80, 60, 160, .12);
+  color-scheme: light;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+@keyframes publicPageZoomIn {
+  from { transform: scale(.985); }
+  to { transform: scale(1); }
+}
+
+html.motion-ready body.page-entering {
+  animation: publicPageZoomIn 1.1s cubic-bezier(.16, 1, .3, 1) both;
+  transform-origin: center center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.motion-ready body.page-entering { animation: none; }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: transparent;
+}
+
+

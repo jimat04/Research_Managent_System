@@ -134,6 +134,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // ---- Mark a linked notification as read, then open its own record ----
+    if ($action === 'open_record') {
+        $notification_id = (int) ($_POST['notification_id'] ?? 0);
+        $record_url = '';
+        if ($notification_id > 0) {
+            $stmt = $conn->prepare(
+                'SELECT link FROM notifications WHERE notification_id = ? AND user_id = ? LIMIT 1'
+            );
+            if ($stmt) {
+                $stmt->bind_param('ii', $notification_id, $user_id);
+                if ($stmt->execute()) {
+                    $result = $stmt->get_result();
+                    $notification = $result ? $result->fetch_assoc() : null;
+                } else {
+                    $notification = null;
+                }
+                $stmt->close();
+
+                if (is_array($notification) && trim((string) ($notification['link'] ?? '')) !== '') {
+                    $update_stmt = $conn->prepare(
+                        'UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?'
+                    );
+                    if ($update_stmt) {
+                        $update_stmt->bind_param('ii', $notification_id, $user_id);
+                        if ($update_stmt->execute()) {
+                            if ($update_stmt->affected_rows > 0) {
+                                logActivity('Marked notification as read', 'notifications');
+                            }
+                            $record_url = notif_link_url($notification['link']);
+                        }
+                        $update_stmt->close();
+                    }
+                }
+            }
+        }
+
+        if ($record_url !== '') {
+            header('Location: ' . $record_url);
+            exit;
+        }
+
+        $_SESSION['module_error'] = 'Unable to open this notification. Please try again.';
+        header('Location: ' . SITE_URL . 'pages/shared/notifications.php');
+        exit;
+    }
+
     // ---- Mark all of the user's notifications as read -----------------
     if ($action === 'mark_all_read') {
         $stmt = $conn->prepare(
@@ -263,7 +309,7 @@ notif_flash('error');
   .notif-commandbar{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:18px;margin:-18px 22px 0;padding:13px 15px;border:1px solid var(--notif-line);border-radius:13px;background:#f8fafc;box-shadow:0 12px 30px rgba(25,34,53,.08)}.notif-summary-counts{color:#667286;font-size:12px}.notif-summary-counts strong{color:#1f293b;font:720 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.notif-command-actions{display:flex;gap:9px;flex-wrap:wrap}
   .notif-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:8px 13px;border:1px solid transparent;border-radius:7px;background:none;color:inherit;font-family:inherit;font-size:12px;font-weight:680;line-height:1.2;text-decoration:none;cursor:pointer;transition:transform .2s ease,background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}.notif-btn:hover{transform:translateY(-1px)}.notif-btn:active{transform:translateY(0) scale(.98)}.notif-btn:focus-visible,.notif-link:focus-visible{outline:3px solid rgba(210,162,72,.3);outline-offset:2px}.notif-btn-primary{border-color:var(--notif-gold);background:var(--notif-gold);color:#182033;box-shadow:0 7px 17px rgba(210,162,72,.14)}.notif-btn-primary:hover{border-color:#dfb45f;background:#dfb45f}.notif-btn-secondary{border-color:#d8dfe8;background:#fff;color:#344054}.notif-btn-secondary:hover{border-color:#b3bdca;background:#f7f8fa}.notif-btn-danger{border-color:#ead6d1;background:#fff8f6;color:#984633}.notif-btn-danger:hover{border-color:#d39a8d;background:#faece8}.notif-btn-sm{min-height:34px;padding:7px 10px;font-size:11px}
   .notif-ledger{margin-top:34px;overflow:hidden;border:1px solid var(--notif-line);border-radius:18px;background:#fff;box-shadow:0 14px 38px rgba(31,42,63,.065)}.notif-ledger-header{display:flex;align-items:end;justify-content:space-between;gap:18px;padding:28px 31px 23px;border-bottom:1px solid #e8ecf1}.notif-panel-eyebrow{margin-bottom:8px;color:#987027}.notif-ledger-title{margin:0;color:#1c2639;font-size:25px;line-height:1.1;letter-spacing:-.03em}.notif-ledger-copy{max-width:620px;margin:8px 0 0;color:var(--notif-muted);font-size:13px;line-height:1.55}.notif-ledger-count{color:#8a95a5;font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
-  .notif-list{display:flex;flex-direction:column}.notif-item{position:relative;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:17px;align-items:start;padding:23px 30px;border-bottom:1px solid #edf0f4;background:#fff;transition:background .2s ease}.notif-item:last-child{border-bottom:0}.notif-item:hover{background:#fbfaf7}.notif-item.is-unread{background:#fcfaf4}.notif-item.is-unread:hover{background:#faf6eb}.notif-marker{position:relative;display:grid;place-items:center;width:44px;height:44px;border:1px solid #dfe5ec;border-radius:11px;background:#f3f5f8;color:#627084;font:750 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.notif-item.is-unread .notif-marker{border-color:#e2d1ae;background:#f8f1e3;color:#825e22}.notif-dot{position:absolute;right:-3px;top:-3px;width:9px;height:9px;border:2px solid #fff;border-radius:50%;background:#bb8330}.notif-item.is-read .notif-dot{display:none}.notif-body{min-width:0}.notif-title{margin:0 0 6px;color:#202a3d;font-size:15px;font-weight:690;line-height:1.35;text-wrap:pretty;overflow-wrap:anywhere}.notif-item.is-read .notif-title{color:#3f4b5f;font-weight:590}.notif-message{max-width:820px;margin:0;color:#667286;font-size:13px;line-height:1.58;overflow-wrap:anywhere}.notif-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;color:#919baa;font-size:11px}.notif-time{font-weight:680}.notif-absolute{color:#929cab}.notif-type{display:inline-flex;align-items:center;padding:4px 7px;border:1px solid #d7e3ef;border-radius:5px;background:#f0f5fa;color:#315b8c;font-size:9px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}.notif-type.type-success{border-color:#d4e8da;background:#f0f8f3;color:#347451}.notif-type.type-warning{border-color:#eadaba;background:#faf4e8;color:#865f24}.notif-type.type-error{border-color:#ead6d1;background:#faf0ed;color:#974b39}.notif-link{display:inline-flex;align-items:center;gap:5px;color:#825f25;font-size:11px;font-weight:720;text-decoration:none}.notif-link:hover{color:#513a16;text-decoration:underline}.notif-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.notif-action-form{display:inline;margin:0}
+  .notif-list{display:flex;flex-direction:column}.notif-item{position:relative;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:17px;align-items:start;padding:23px 30px;border-bottom:1px solid #edf0f4;background:#fff;transition:background .2s ease}.notif-item:last-child{border-bottom:0}.notif-item:hover{background:#fbfaf7}.notif-item.is-unread{background:#fcfaf4}.notif-item.is-unread:hover{background:#faf6eb}.notif-marker{position:relative;display:grid;place-items:center;width:44px;height:44px;border:1px solid #dfe5ec;border-radius:11px;background:#f3f5f8;color:#627084;font:750 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.notif-item.is-unread .notif-marker{border-color:#e2d1ae;background:#f8f1e3;color:#825e22}.notif-dot{position:absolute;right:-3px;top:-3px;width:9px;height:9px;border:2px solid #fff;border-radius:50%;background:#bb8330}.notif-item.is-read .notif-dot{display:none}.notif-body{min-width:0}.notif-title{margin:0 0 6px;color:#202a3d;font-size:15px;font-weight:690;line-height:1.35;text-wrap:pretty;overflow-wrap:anywhere}.notif-item.is-read .notif-title{color:#3f4b5f;font-weight:590}.notif-message{max-width:820px;margin:0;color:#667286;font-size:13px;line-height:1.58;overflow-wrap:anywhere}.notif-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;color:#919baa;font-size:11px}.notif-time{font-weight:680}.notif-absolute{color:#929cab}.notif-type{display:inline-flex;align-items:center;padding:4px 7px;border:1px solid #d7e3ef;border-radius:5px;background:#f0f5fa;color:#315b8c;font-size:9px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}.notif-type.type-success{border-color:#d4e8da;background:#f0f8f3;color:#347451}.notif-type.type-warning{border-color:#eadaba;background:#faf4e8;color:#865f24}.notif-type.type-error{border-color:#ead6d1;background:#faf0ed;color:#974b39}.notif-link{display:inline-flex;align-items:center;gap:5px;margin:0;padding:0;border:0;background:transparent;appearance:none;color:#825f25;font:inherit;font-size:11px;font-weight:720;line-height:1.2;text-decoration:none;cursor:pointer}.notif-link:hover{color:#513a16;text-decoration:underline}.notif-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.notif-action-form{display:inline;margin:0}
   .notif-empty{padding:72px 28px;text-align:center}.notif-empty-icon{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 16px;border:1px solid #e3d4b4;border-radius:14px;background:#fbf6eb;color:#876225;font:750 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.notif-empty-title{color:#273247;font-size:18px;font-weight:690}.notif-empty-subtitle{max-width:520px;margin:7px auto 0;color:#7a8596;font-size:13px;line-height:1.58}.notif-truncated-note{padding:15px 24px;border-top:1px solid #edf0f4;background:#fafbfc;color:#8791a1;font-size:11px;text-align:center}
   .notif-modal[hidden]{display:none}.notif-modal{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:22px;background:rgba(15,22,35,.64);backdrop-filter:blur(7px);opacity:0;transition:opacity .22s ease}.notif-modal.is-open{opacity:1}.notif-modal-panel{position:relative;width:min(100%,430px);overflow:hidden;border:1px solid rgba(255,255,255,.76);border-radius:18px;background:#fff;box-shadow:0 30px 80px rgba(15,22,35,.3),0 0 0 1px rgba(25,34,53,.08);transform:translateY(14px) scale(.975);transition:transform .26s cubic-bezier(.16,1,.3,1)}.notif-modal.is-open .notif-modal-panel{transform:translateY(0) scale(1)}.notif-modal-accent{height:5px;background:linear-gradient(90deg,#b65d46,#d58c71)}.notif-modal-content{display:grid;grid-template-columns:54px minmax(0,1fr);gap:17px;padding:28px 28px 21px}.notif-modal-icon{display:grid;width:50px;height:50px;place-items:center;border:1px solid #efd2ca;border-radius:14px;background:#fff3ef;color:#a94d37;font:800 21px/1 ui-monospace,SFMono-Regular,Consolas,monospace}.notif-modal-kicker{margin:1px 0 7px;color:#a14b37;font:750 9px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.13em;text-transform:uppercase}.notif-modal-title{margin:0;color:#1d2739;font-size:22px;font-weight:740;line-height:1.15;letter-spacing:-.035em}.notif-modal-copy{margin:10px 0 0;color:#697487;font-size:12px;line-height:1.6}.notif-modal-record{overflow:hidden;margin:15px 0 0;padding:10px 12px;border-left:3px solid #d48670;border-radius:4px 8px 8px 4px;background:#faf5f3;color:#4f596a;font-size:11px;font-weight:650;line-height:1.45;text-overflow:ellipsis;white-space:nowrap}.notif-modal-actions{display:flex;justify-content:flex-end;gap:9px;padding:15px 28px 22px;border-top:1px solid #e9edf2;background:#fafbfc}.notif-modal-actions .notif-btn{min-height:40px;padding-inline:16px}.notif-modal-confirm{border-color:#aa4d38;background:#aa4d38;color:#fff;box-shadow:0 8px 18px rgba(170,77,56,.18)}.notif-modal-confirm:hover{border-color:#913e2c;background:#913e2c}.notif-modal-confirm:focus-visible,.notif-modal-cancel:focus-visible{outline:3px solid rgba(180,91,67,.25);outline-offset:2px}body.notif-modal-open{overflow:hidden}
   .notifications-workspace .notif-hero{background:radial-gradient(circle at 84% 14%,rgba(255,255,255,.2),transparent 29%),linear-gradient(135deg,var(--notif-deep),var(--notif-accent));box-shadow:0 24px 58px rgba(var(--notif-rgb),.15)}
@@ -280,6 +326,12 @@ notif_flash('error');
   @media(max-width:1000px){.notif-hero{grid-template-columns:1fr;gap:30px}.notif-stat-stack{grid-template-columns:repeat(3,1fr)}.notif-stat{grid-template-columns:32px 1fr}.notif-stat-value{grid-column:2}.notif-item{grid-template-columns:44px minmax(0,1fr)}.notif-actions{grid-column:2;justify-content:flex-start}}
   @media(max-width:700px){.notif-hero{min-height:0;padding:30px 24px 48px;border-radius:18px 18px 7px 7px}.notif-hero h2{font-size:39px}.notif-stat-stack{grid-template-columns:1fr}.notif-stat{grid-template-columns:34px 1fr auto}.notif-stat-value{grid-column:auto}.notif-commandbar{align-items:stretch;flex-direction:column;margin:-17px 12px 0}.notif-command-actions,.notif-command-actions form,.notif-command-actions .notif-btn{width:100%}.notif-ledger{margin-top:24px}.notif-ledger-header{align-items:flex-start;flex-direction:column;padding:24px 20px 20px}.notif-ledger-count{white-space:normal}.notif-item{grid-template-columns:40px minmax(0,1fr);gap:13px;padding:19px}.notif-marker{width:38px;height:38px}.notif-actions{grid-column:1/-1;justify-content:stretch}.notif-actions form{flex:1}.notif-actions .notif-btn{width:100%}.notif-absolute{display:none}.notif-modal{padding:14px}.notif-modal-content{grid-template-columns:44px minmax(0,1fr);gap:13px;padding:23px 20px 19px}.notif-modal-icon{width:42px;height:42px;border-radius:12px;font-size:18px}.notif-modal-actions{padding:14px 20px 19px}.notif-modal-title{font-size:20px}}
   @media(prefers-reduced-motion:reduce){.notif-btn,.notif-item,.notif-modal,.notif-modal-panel{transition:none}}
+  /* Keep the confirmation usable on short screens; its portal sits outside
+     role-shell transforms and stacking contexts. */
+  .notif-modal,.notif-modal *{box-sizing:border-box}
+  .notif-modal{overflow-y:auto;overscroll-behavior:contain}
+  .notif-modal-panel{max-height:calc(100vh - 44px);max-height:calc(100dvh - 44px);overflow-y:auto;overscroll-behavior:contain}
+  @media(max-width:700px){.notif-modal-panel{max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px)}}
 </style>
 
 <div class="notifications-workspace">
@@ -360,7 +412,12 @@ notif_flash('error');
               <span class="notif-absolute">&middot; <?php echo notif_se($abs); ?></span>
             <?php endif; ?>
             <?php if ($link !== ''): ?>
-              <a class="notif-link" href="<?php echo notif_se(notif_link_url($link)); ?>" target="_blank" rel="noopener">Open record <span aria-hidden="true">&#8599;</span></a>
+              <form method="post" class="notif-action-form" target="_blank" rel="noopener">
+                <?php echo csrfField(); ?>
+                <input type="hidden" name="action" value="open_record">
+                <input type="hidden" name="notification_id" value="<?php echo $nid; ?>">
+                <button class="notif-link" type="submit">Open record <span aria-hidden="true">&#8599;</span></button>
+              </form>
             <?php endif; ?>
           </div>
         </div>
@@ -417,6 +474,10 @@ notif_flash('error');
 (() => {
   const modal = document.getElementById('notificationDeleteModal');
   if (!modal) return;
+
+  // Escape shell/page transforms and sticky-header stacking contexts so the
+  // fixed overlay is positioned against the viewport for every role.
+  document.body.appendChild(modal);
 
   const cancelButton = modal.querySelector('.notif-modal-cancel');
   const confirmButton = modal.querySelector('.notif-modal-confirm');

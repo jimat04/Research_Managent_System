@@ -1,0 +1,14 @@
+{
+  "runs": [
+    {
+      "date": "2026-10-21T17:16:43.616626+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "files": 290,
+      "token_counts_available": false
+    }
+  ],
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "note": "Cumulative token totals include only runs with reported counts; semantic subagent usage for this run was unavailable."
+}

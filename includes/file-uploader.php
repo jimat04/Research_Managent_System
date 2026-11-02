@@ -91,6 +91,17 @@ function renderFileUploader($options = []) {
     ];
 
     $opts = array_merge($defaults, $options);
+    if (function_exists('rmsEffectiveUploadLimit')) {
+        $opts['maxSize'] = max(1, (int) floor(rmsEffectiveUploadLimit((int) $opts['maxSize'] * 1024) / 1024));
+        $globalExtensions = rmsAllowedUploadExtensions();
+        $requestedExtensions = array_map('trim', explode(',', (string) $opts['accept']));
+        $opts['accept'] = implode(',', array_values(array_filter(
+            $requestedExtensions,
+            static function ($extension) use ($globalExtensions) {
+                return in_array(ltrim(strtolower($extension), '.'), $globalExtensions, true);
+            }
+        )));
+    }
 
     // Auto-generate allowed formats text if not provided
     if (empty($opts['allowedFormatsText'])) {
@@ -157,7 +168,6 @@ function renderFileUploader($options = []) {
 
         <!-- Error display -->
         <div class="rms-uploader-error" role="alert">
-            <div class="rms-uploader-error-icon">❌</div>
             <div class="rms-uploader-error-message"></div>
         </div>
 
@@ -222,6 +232,38 @@ function handleRmsUpload($options, $files, $conn) {
 
     $opts = array_merge($defaults, $options);
 
+    if ($opts['folderTarget'] === 'adviser_requests'
+        && ((string) ($_SESSION['role'] ?? '') !== 'student'
+            || $opts['projectId'] === null
+            || $opts['chapterId'] !== null
+            || $opts['type'] !== 'other'
+            || $opts['workflowType'] !== null)) {
+        return ['success' => false, 'error' => 'Only student adviser requests may use this upload destination'];
+    }
+
+    if ($opts['workflowType'] === 'final_manuscript' && $opts['projectId'] === null) {
+        return ['success' => false, 'error' => 'A project is required for a final manuscript upload'];
+    }
+
+    if ($opts['folderTarget'] === 'engagement') {
+        $role = (string) ($_SESSION['role'] ?? '');
+        if (!in_array($role, ['faculty', 'admin'], true)
+            || $opts['projectId'] !== null
+            || $opts['chapterId'] !== null
+            || $opts['type'] !== 'engagement') {
+            return ['success' => false, 'error' => 'You are not allowed to upload this engagement evidence'];
+        }
+    }
+
+    if ($opts['folderTarget'] === 'activities'
+        && ((string) ($_SESSION['role'] ?? '') !== 'admin'
+            || $opts['projectId'] !== null
+            || $opts['chapterId'] !== null
+            || $opts['type'] !== 'other'
+            || $opts['workflowType'] !== null)) {
+        return ['success' => false, 'error' => 'Only administrators may upload activity documents'];
+    }
+
     if ($opts['projectId'] !== null) {
         $projectId = (int) $opts['projectId'];
         $chapterId = $opts['chapterId'] !== null ? (int) $opts['chapterId'] : 0;
@@ -262,6 +304,18 @@ function handleRmsUpload($options, $files, $conn) {
         )) {
             return ['success' => false, 'error' => 'You are not allowed to upload files for this project'];
         }
+        if ($opts['folderTarget'] === 'adviser_requests'
+            && !in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing'], true)) {
+            return ['success' => false, 'error' => 'Adviser request documents require an approved research title'];
+        }
+        if (in_array($opts['workflowType'], ['title', 'chapter', 'final_manuscript'], true)
+            && !rms_project_students_are_eligible($conn, $projectId)) {
+            return ['success' => false, 'error' => 'All student researchers on this project must be active BSIT or BSCS students'];
+        }
+        if ((string) ($_SESSION['role'] ?? '') === 'student'
+            && !rms_student_program_is_eligible($conn, $user_id)) {
+            return ['success' => false, 'error' => 'Only active BSIT and BSCS students may submit research'];
+        }
         if ($opts['workflowType'] === 'title'
             && !in_array((string) $project['status'], ['draft', 'for_revision', 'revision_required'], true)) {
             return ['success' => false, 'error' => 'Submitted title attachments are locked'];
@@ -284,10 +338,28 @@ function handleRmsUpload($options, $files, $conn) {
                 return ['success' => false, 'error' => 'Submitted chapter attachments are locked'];
             }
         }
+        if ($opts['workflowType'] === 'final_manuscript') {
+            if (in_array((string) $project['status'], ['completed', 'archived'], true)) {
+                return ['success' => false, 'error' => 'Completed research cannot receive another complete research manuscript'];
+            }
+            if ($chapterId !== 0 || !rms_project_has_all_approved_chapters($conn, $projectId)) {
+                return ['success' => false, 'error' => 'Final manuscript uploads require all five approved chapters'];
+            }
+            if (in_array(rms_latest_final_manuscript_status($conn, $projectId), ['submitted', 'approved'], true)) {
+                return ['success' => false, 'error' => 'The final manuscript is locked while awaiting review or after approval'];
+            }
+        }
     }
 
     // FIX #2: Folder whitelist - defense in depth
-    $allowedFolders = ['proposals', 'chapters', 'defense', 'manuscripts'];
+    // Archive uploads are accepted only from a record handler after ownership/action checks.
+    // The public AJAX endpoint does not accept these destinations or this server-only flag.
+    if (in_array($opts['folderTarget'], ['publications', 'copyrights'], true)
+        && (empty($opts['archiveAuthorized']) || !in_array((string) ($_SESSION['role'] ?? ''), ['faculty','admin','research_staff'], true)
+            || $opts['projectId'] !== null || $opts['chapterId'] !== null || $opts['type'] !== 'other')) {
+        return ['success' => false, 'error' => 'Archive record authorization required'];
+    }
+    $allowedFolders = ['proposals', 'chapters', 'defense', 'manuscripts', 'engagement', 'activities', 'publications', 'copyrights', 'adviser_requests'];
     if (!in_array($opts['folderTarget'], $allowedFolders, true)) {
         return ['success' => false, 'error' => 'Invalid upload destination'];
     }
@@ -320,7 +392,10 @@ function handleRmsUpload($options, $files, $conn) {
     $mimeType = $file['type'];
 
     // Validate file size
-    $maxSizeBytes = $opts['maxSize'] * 1024;
+    $maxSizeBytes = (int) $opts['maxSize'] * 1024;
+    if (function_exists('rmsEffectiveUploadLimit')) {
+        $maxSizeBytes = rmsEffectiveUploadLimit($maxSizeBytes);
+    }
     if ($fileSize > $maxSizeBytes) {
         $maxSizeMB = number_format($opts['maxSize'] / 1024, 1);
         return ['success' => false, 'error' => "File is too large. Maximum size is {$maxSizeMB} MB."];
@@ -328,9 +403,17 @@ function handleRmsUpload($options, $files, $conn) {
 
     // Validate file extension
     $fileExtension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    $pdfOnlyWorkflow = in_array((string) $opts['workflowType'], ['title', 'chapter', 'final_manuscript'], true);
+    if ($pdfOnlyWorkflow && $fileExtension !== 'pdf') {
+        return ['success' => false, 'error' => 'Only PDF files are accepted for research title, chapter, and final manuscript submissions.'];
+    }
+
     $allowedExtensions = array_map(function($ext) {
         return ltrim(strtolower($ext), '.');
     }, $opts['accept']);
+    if (function_exists('rmsAllowedUploadExtensions')) {
+        $allowedExtensions = array_values(array_intersect($allowedExtensions, rmsAllowedUploadExtensions()));
+    }
 
     if (!in_array($fileExtension, $allowedExtensions, true)) {
         $allowedList = implode(', ', array_map('strtoupper', $allowedExtensions));
@@ -357,6 +440,17 @@ function handleRmsUpload($options, $files, $conn) {
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $detectedMime = $finfo->file($tmpPath);
 
+    if ($pdfOnlyWorkflow || in_array($opts['folderTarget'], ['activities','publications','copyrights'], true)) {
+        $tmpHandle = @fopen($tmpPath, 'rb');
+        $pdfSignature = $tmpHandle ? fread($tmpHandle, 5) : false;
+        if ($tmpHandle) {
+            fclose($tmpHandle);
+        }
+        if ($detectedMime !== 'application/pdf' || $pdfSignature !== '%PDF-') {
+            return ['success' => false, 'error' => 'The uploaded file must contain valid PDF content.'];
+        }
+    }
+
     if (isset($allowedMimes[$fileExtension])) {
         if (!in_array($detectedMime, $allowedMimes[$fileExtension], true)) {
             return ['success' => false, 'error' => "File appears to be corrupted or is not a valid " . strtoupper($fileExtension) . " file."];
@@ -377,7 +471,11 @@ function handleRmsUpload($options, $files, $conn) {
     // FIX #3: Path traversal protection - verify target stays within UPLOADS_DIR
     $realTargetDir = realpath($targetDir);
     $realUploadsDir = realpath(UPLOADS_DIR);
-    if ($realTargetDir === false || strpos($realTargetDir, $realUploadsDir) !== 0) {
+    $uploadsPrefix = $realUploadsDir
+        ? rtrim($realUploadsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
+        : '';
+    if ($realTargetDir === false || $realUploadsDir === false
+        || strpos($realTargetDir, $uploadsPrefix) !== 0) {
         return ['success' => false, 'error' => 'Invalid upload path'];
     }
 
@@ -483,7 +581,7 @@ function deleteRmsUpload($uploadId, $conn) {
                 EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = rp.project_id AND pm.user_id = ?) AS is_member,
                 EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = ?) AS submitted_version
            FROM research_projects rp
-          WHERE rp.project_id = ?' . $deletedFilter . '
+          WHERE rp.project_id = ?" . $deletedFilter . "
           LIMIT 1"
     );
     if (!$access) {
@@ -525,7 +623,11 @@ function deleteRmsUpload($uploadId, $conn) {
     }
 
     $uploadsRoot = realpath(UPLOADS_DIR);
-    $filePath = realpath(__DIR__ . '/../' . $upload['file_path']);
+    $normalizedStoredPath = str_replace('\\', '/', (string) $upload['file_path']);
+    $filePath = str_starts_with($normalizedStoredPath, 'uploads/')
+        ? realpath(rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, substr($normalizedStoredPath, strlen('uploads/'))))
+        : false;
     $fileIsInsideUploads = $uploadsRoot && $filePath
         && strpos($filePath, rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) === 0;
     $deletedCheck = $conn->query("SHOW COLUMNS FROM uploads LIKE 'deleted_at'");

@@ -1,0 +1,468 @@
+{
+  "report_date": "2026-10-20",
+  "timezone": "Asia/Taipei",
+  "head_reference": "9d996919f74f8c4e73d6fe77804146a9c2c7acb6",
+  "basis": "Inspected working-tree files, including pre-existing uncommitted changes; HEAD is a baseline, not a claim that these contents are committed.",
+  "limitations": "Based on static source inspection only. No tests or database commands were run. The separate RMS E2E safety investigation was not modified or used as report evidence.",
+  "sources": [
+    {
+      "id": "E01",
+      "path": "database/schema/rms_db.sql",
+      "line": 400,
+      "anchor": "CREATE TABLE `research_projects`",
+      "scope": "Canonical entity declarations; enums and foreign keys; seed rows are not report evidence.",
+      "sha256": "afb9495c0de9a6de4a72753d0ea32be8ed74d4efd77cd52f6bf72b438f9ce1fe",
+      "lines": 797
+    },
+    {
+      "id": "E02",
+      "path": "includes/auth.php",
+      "line": 221,
+      "anchor": "function rmsPermissionModules",
+      "scope": "Four roles, module/subpage permission checks and common authentication/CSRF helpers. Only application helpers are cited; investigation-related branches are excluded.",
+      "sha256": "d18cc2c495f5b1b3c834d65510e240efd7d7f2911351423d16dcbe36e4491f21",
+      "lines": 665
+    },
+    {
+      "id": "E03",
+      "path": "includes/research-workflow.php",
+      "line": 3,
+      "anchor": "function rms_capture_submission_version",
+      "scope": "Version capture, actor checks, latest-version review, transaction and status updates.",
+      "sha256": "4ff2581c444d5fe7e3a894a4e3edba9e308c2f0225a4d23610fbffe496d4c255",
+      "lines": 207
+    },
+    {
+      "id": "E04",
+      "path": "pages/researcher/submit-research.php",
+      "line": 21,
+      "anchor": "CRC_MAX_TOTAL_MEMBERS",
+      "scope": "Initial title form, team validation, proposal attachment, transactional insertion and version capture.",
+      "sha256": "acb0a2815cf91048466862d1d942fff83f951e682a171d39b24634a55affce07",
+      "lines": 880
+    },
+    {
+      "id": "E05",
+      "path": "pages/researcher/edit-research.php",
+      "line": 142,
+      "anchor": "$is_locked =",
+      "scope": "Owner editing, locked statuses, resubmission, team controls and new submitted versions.",
+      "sha256": "0e7b91d024a8559befe02e0bdf9c679d021f247d22eb8f21c44924adf6d8483e",
+      "lines": 1145
+    },
+    {
+      "id": "E06",
+      "path": "pages/researcher/submit-chapter.php",
+      "line": 24,
+      "anchor": "$chapter_fields =",
+      "scope": "Five chapter templates, predecessor gates, draft editing, submission and lazy chapter-row creation.",
+      "sha256": "085d7555f5ff0e4f94eec74b628fe12f5cb37211a7a835266c22c646db88025d",
+      "lines": 1012
+    },
+    {
+      "id": "E07",
+      "path": "pages/shared/research-submission-review.php",
+      "line": 17,
+      "anchor": "$can_view_review =",
+      "scope": "Typed queue views, action permissions, notifications and review handler.",
+      "sha256": "9271698d4c3a3f3927c8fa538114d8ea3ad611e8f690ed04681e0e99af6d00bb",
+      "lines": 580
+    },
+    {
+      "id": "E08",
+      "path": "pages/shared/implementation-outputs.php",
+      "line": 132,
+      "anchor": "$chapterAggregate =",
+      "scope": "Actual ongoing/completed/output query predicates and aggregates.",
+      "sha256": "30b1e34845b7d554b1dd52ecef2164f493b09bc3432b33fbbb500241161328cc",
+      "lines": 566
+    },
+    {
+      "id": "E09",
+      "path": "pages/shared/research-detail.php",
+      "line": 34,
+      "anchor": "$has_access =",
+      "scope": "Role/ownership/team/adviser visibility and shared project view.",
+      "sha256": "138ce98c28356263a285b110dea65b542deb571c1d5fed39e3f71fd264c529f0",
+      "lines": 662
+    },
+    {
+      "id": "E10",
+      "path": "pages/researcher/my-research.php",
+      "line": 20,
+      "anchor": "$query =",
+      "scope": "Owner/member list, title feedback, navigation to edit and chapter submission.",
+      "sha256": "8c0794b7d1c0d982b576032b6f590b482cc5e40dfb8951e81c222f356aa8068c",
+      "lines": 241
+    },
+    {
+      "id": "E11",
+      "path": "pages/admin/admin-research-module.php",
+      "line": 14,
+      "anchor": "$moduleMap =",
+      "scope": "All 15 module destinations, filters and staff entry permission checks.",
+      "sha256": "3baa50f76f6f3feaa06a3f7c3c3c02c8b57d7ef7b1c078814920569ed0ee4f11",
+      "lines": 53
+    },
+    {
+      "id": "E12",
+      "path": "includes/student-shell.php",
+      "line": 90,
+      "anchor": "$nav =",
+      "scope": "Student navigation.",
+      "sha256": "1c46a7ae2919e4daa9c5303e9390f352edef59a4e72c8549068a7df23e7143c4",
+      "lines": 295
+    },
+    {
+      "id": "E13",
+      "path": "includes/faculty-shell.php",
+      "line": 92,
+      "anchor": "$nav =",
+      "scope": "Faculty navigation to the same canonical researcher workflow.",
+      "sha256": "c9c7e7e2aa4d92303b4274d1ef0e10549e9129c34ef24bc17e5302bbf150bb37",
+      "lines": 256
+    },
+    {
+      "id": "E14",
+      "path": "includes/staff-shell.php",
+      "line": 116,
+      "anchor": "$nav =",
+      "scope": "Permission-filtered staff module navigation and additional staff services.",
+      "sha256": "d4d1cf7cdaae5f966ecc01bcbc532f7199ed05b22c85ce16bf4cb01d196f5097",
+      "lines": 382
+    },
+    {
+      "id": "E15",
+      "path": "includes/admin-shell.php",
+      "line": 78,
+      "anchor": "$nav_groups =",
+      "scope": "Administrative module, management, communication and account destinations.",
+      "sha256": "a3c56be424b84c103c56d1822fe1ce240ffef8c502ca86212dc15713dfadcc22",
+      "lines": 1211
+    },
+    {
+      "id": "E16",
+      "path": "pages/shared/activity-form.php",
+      "line": 51,
+      "anchor": "$canManageActivity =",
+      "scope": "Activity creation/editing, type-scoped permissions and recipient selection.",
+      "sha256": "6f6432809363b7b263ff5c3dfd1e0264adf9c84c8d82cb9c82115ea8fe197444",
+      "lines": 438
+    },
+    {
+      "id": "E17",
+      "path": "pages/shared/activity-detail.php",
+      "line": 37,
+      "anchor": "$canManageActivity =",
+      "scope": "Activity decisions, participation, attendance and deletion handlers.",
+      "sha256": "566e9f727e960641cc3cac1a45c542a2043df8378d7e8ac8fdd78f8046651fa7",
+      "lines": 315
+    },
+    {
+      "id": "E18",
+      "path": "pages/shared/activities.php",
+      "line": 18,
+      "anchor": "$capacityPageInput =",
+      "scope": "Activity listing and seminar/training/workshop filters.",
+      "sha256": "ff69e5443282b7766387bf8f359a1c7b02b23c25491be865ca860f2150de6b1e",
+      "lines": 846
+    },
+    {
+      "id": "E19",
+      "path": "pages/shared/publication-form.php",
+      "line": 34,
+      "anchor": "$isOwnerRole =",
+      "scope": "Publication ownership, optional project linkage, PDF and field validation.",
+      "sha256": "2273c60ca0f6eb3c4d09ed2df375c9fd6b5c78cbe540b35e9b6bbfa4b0362342",
+      "lines": 400
+    },
+    {
+      "id": "E20",
+      "path": "pages/shared/publication-detail.php",
+      "line": 123,
+      "anchor": "$transitions =",
+      "scope": "Exact publication actions and compare-and-update status transitions.",
+      "sha256": "40697420bbd10ae266fb831df3e6d7dec31047bb1f234f413365f8e884d7e39c",
+      "lines": 260
+    },
+    {
+      "id": "E21",
+      "path": "pages/shared/publications.php",
+      "line": 9,
+      "anchor": "requireLogin()",
+      "scope": "Publication/repository listing route used by the module launcher.",
+      "sha256": "f2b7b822c03e6109e38b90bc55a4166a228b9b61719b7cdc253c29876c95706b",
+      "lines": 894
+    },
+    {
+      "id": "E22",
+      "path": "pages/shared/copyright-form.php",
+      "line": 34,
+      "anchor": "$isOwnerRole =",
+      "scope": "IP types, owner/reviewer limits, optional links and type-specific validation.",
+      "sha256": "614d9aabbecbf7cadc62a8ec42a81cbe016880f348cd0e1f529dad2381766af7",
+      "lines": 459
+    },
+    {
+      "id": "E23",
+      "path": "pages/shared/copyright-detail.php",
+      "line": 108,
+      "anchor": "$transitions =",
+      "scope": "Exact IP decisions, registration reference and reference/reason validation.",
+      "sha256": "d5981258cd41ad0d93d555b4dbd12fa2fcb08b8e06c54b5373509318c320a402",
+      "lines": 274
+    },
+    {
+      "id": "E24",
+      "path": "pages/shared/copyrights.php",
+      "line": 9,
+      "anchor": "requireLogin()",
+      "scope": "IP list and type-scoped entry route.",
+      "sha256": "60e6e1abba58bab3ab31a75db8ea249e5b00a9eed397603da6feaf972f5cdd0e",
+      "lines": 755
+    },
+    {
+      "id": "E25",
+      "path": "pages/shared/research-archive.php",
+      "line": 72,
+      "anchor": "$sql =",
+      "scope": "Authenticated archive keyed to stored completed/archived statuses.",
+      "sha256": "a39f8da36363d0d34677652573d9b8257ee3dc6ae4b30019d4c6013c1bd41012",
+      "lines": 460
+    },
+    {
+      "id": "E26",
+      "path": "pages/admin/admin-archive.php",
+      "line": 18,
+      "anchor": "requireRole",
+      "scope": "Administrative colloquium, journal and archive tracking updates.",
+      "sha256": "ef53181df0a5f089140d9d50ed30154cb4cde99f73dd61a9b823bc8f4f270733",
+      "lines": 1185
+    },
+    {
+      "id": "E27",
+      "path": "pages/shared/download-research-document.php",
+      "line": 12,
+      "anchor": "$documentType =",
+      "scope": "Type/ID checks, record authorization, extension and resolved-path checks.",
+      "sha256": "7f82912418bc2cbb5a8c0fefb46b04ba9180e9857b110b82a632188b6d8d157b",
+      "lines": 201
+    },
+    {
+      "id": "E28",
+      "path": "includes/file-uploader.php",
+      "line": 198,
+      "anchor": "function handleRmsUpload",
+      "scope": "Common upload handler, extension checks, storage and upload metadata.",
+      "sha256": "146f1f029ecb38cb04944e1f65592975066f9bbecb9e854df6c5fe49a7ecd1bd",
+      "lines": 557
+    },
+    {
+      "id": "E29",
+      "path": "pages/shared/messages.php",
+      "line": 122,
+      "anchor": "$action =",
+      "scope": "Message validation, sender/recipient storage and recipient read marking.",
+      "sha256": "bb4085506902088493fbc57069362f0e2fe44dbcf62b1313360d530095c9bb2a",
+      "lines": 736
+    },
+    {
+      "id": "E30",
+      "path": "pages/shared/notifications.php",
+      "line": 115,
+      "anchor": "$action =",
+      "scope": "User-scoped mark-read, mark-all-read and delete operations.",
+      "sha256": "3b9a10b6b68b1010bf517d4c01fea88b8bf07c79e446557d5459ecd7d7ec11d8",
+      "lines": 493
+    },
+    {
+      "id": "E31",
+      "path": "pages/shared/profile.php",
+      "line": 95,
+      "anchor": "$action =",
+      "scope": "Profile updates and current-password-based password change.",
+      "sha256": "da4ab39d5ec2ded07e0035ec0e17c4380fdc09e4c560af1f9d3d0aaf59c0b413",
+      "lines": 562
+    },
+    {
+      "id": "E32",
+      "path": "pages/admin/admin-users.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "User administration, status changes and staff permission collection.",
+      "sha256": "a8d591c2f44e302d531e18bf41b271f98ecd16d5d21d1c2535da24d6275d13d2",
+      "lines": 1389
+    },
+    {
+      "id": "E33",
+      "path": "pages/admin/admin-departments.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Department creation/editing/status management.",
+      "sha256": "37d23a096c9b943f87666d25b7af911bbf75db356b338fe5b2cb6da243208381",
+      "lines": 658
+    },
+    {
+      "id": "E34",
+      "path": "pages/admin/admin-programs.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Department-linked program creation/editing/status management.",
+      "sha256": "4e6f985498014b6fa3a096ca023c60e79422e9fa25552a633db85cd091b1f250",
+      "lines": 859
+    },
+    {
+      "id": "E35",
+      "path": "pages/admin/admin-reports.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Status-based statistics, attendance/publication/IP aggregates and reporting.",
+      "sha256": "67bf931177baccf8f8c90e6e87ccb862ab42942a63f2e526f0244f4a69471868",
+      "lines": 467
+    },
+    {
+      "id": "E36",
+      "path": "pages/admin/admin-logs.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Administrative activity-log view.",
+      "sha256": "7ba8bf207fb5f009f4811e8ee05efc56aba169cf82eb0e4117410d8621974384",
+      "lines": 193
+    },
+    {
+      "id": "E37",
+      "path": "pages/admin/admin-backup.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Backup creation/deletion handlers exist; no backup operation was performed.",
+      "sha256": "803dfb7f6fe7c9d54700748b66cb5e4387c944c62f7495c083bc6177e2c8c8dc",
+      "lines": 249
+    },
+    {
+      "id": "E38",
+      "path": "pages/admin/admin-settings.php",
+      "line": 12,
+      "anchor": "requireRole",
+      "scope": "Read-only system diagnostic/status page; no diagnostics executed.",
+      "sha256": "a62fcefe33d68b6616191bbc174c3cd1f10e722fc3e517d8fe1a5526a96132cd",
+      "lines": 399
+    },
+    {
+      "id": "E39",
+      "path": "pages/admin/admin-contact.php",
+      "line": 9,
+      "anchor": "requireRole",
+      "scope": "Contact reply/resolve/archive/reopen actions; no messages were sent.",
+      "sha256": "1dd3bf71ca5542bffc651bf4faa9491edb9facaf0b483327e3e9cb2b5dbb4553",
+      "lines": 559
+    },
+    {
+      "id": "E40",
+      "path": "pages/staff/staff-defense.php",
+      "line": 33,
+      "anchor": "requireRole",
+      "scope": "Retained, navigable defense scheduling/status actions.",
+      "sha256": "edc5b96f986de8d96544b521cf8bd473fe5f958c4366f0e2bbd3024840d6e01b",
+      "lines": 1383
+    },
+    {
+      "id": "E41",
+      "path": "pages/staff/staff-revisions.php",
+      "line": 13,
+      "anchor": "requireRole",
+      "scope": "Read-only revision monitor.",
+      "sha256": "254cab6235c8567e071eb4714dc26141947c711b15db55b0b786b1ca841cbb07",
+      "lines": 370
+    },
+    {
+      "id": "E42",
+      "path": "pages/staff/document-verification.php",
+      "line": 13,
+      "anchor": "requireRole",
+      "scope": "Document lookup and integrity-check implementation; not executed.",
+      "sha256": "0c9db47916a09f96f767fa66594eb86b726aec32c794ea2213d0cb6753e67e28",
+      "lines": 377
+    },
+    {
+      "id": "E43",
+      "path": "public/login.php",
+      "line": 209,
+      "anchor": "$allowedRoles =",
+      "scope": "Login account-status checks; registration is student/faculty only.",
+      "sha256": "0bb54fb8128f6e222ed1a9715c47c5966415a4c8453bde1c03a1ce0e6ff7aa8a",
+      "lines": 1079
+    },
+    {
+      "id": "E44",
+      "path": "public/research-archive.php",
+      "line": 291,
+      "anchor": "$is_logged_in =",
+      "scope": "Public archive selection and public presentation.",
+      "sha256": "1ebbc64f7971be3c59816da73b194ffd420279d49d0ed434aa47d4de46bd9dd6",
+      "lines": 613
+    },
+    {
+      "id": "E45",
+      "path": "docs/rms-spec.md",
+      "line": 5,
+      "anchor": "Product scope note",
+      "scope": "Conflicting historical specification; documentation evidence only.",
+      "sha256": "7433aebec947e70f72d4f92ca0c6ef21b8d9883ae7f3cf2ab3fa200bd9c9768a",
+      "lines": 67
+    },
+    {
+      "id": "E46",
+      "path": "CLAUDE.md",
+      "line": 101,
+      "anchor": "### V3 Architecture",
+      "scope": "Current architectural guidance; does not supersede handler evidence.",
+      "sha256": "107007f385cf9304586545277e1549c7989381ca7db828180d5a5d3816b4cf3a",
+      "lines": 396
+    },
+    {
+      "id": "E47",
+      "path": "database/migrations/017_research_submission_versions.sql",
+      "line": 4,
+      "anchor": "research_submission_versions",
+      "scope": "Static version-table migration text, not execution or ledger evidence.",
+      "sha256": "f63310a676abc504e87c41a01231d15618498d894b96e232d5b68943262ad561",
+      "lines": 43
+    },
+    {
+      "id": "E48",
+      "path": "database/migrations/018_research_title_approval_status.sql",
+      "line": 12,
+      "anchor": "title_approved",
+      "scope": "Static title-status migration text.",
+      "sha256": "cb3fc488d6316fa56d2736ab72422961ce71ab48124f3b62d94666f7d5abd84f",
+      "lines": 19
+    },
+    {
+      "id": "E49",
+      "path": "database/migrations/015_explicit_ip_types_and_research_output_links.sql",
+      "line": 33,
+      "anchor": "research_project_id",
+      "scope": "Static optional output-link and explicit-IP migration text.",
+      "sha256": "2685a3d63df05665b9055e7d61f0ebe112f3aa5cb13e1eb49beb61a3df1956a0",
+      "lines": 259
+    },
+    {
+      "id": "E50",
+      "path": "pages/admin/admin-research.php",
+      "line": 6,
+      "anchor": "requireRole",
+      "scope": "Stored-status project administration/listing and older compatibility filters.",
+      "sha256": "e1584d34fecd10346ea58ec1c3c543ae763ec4c9a7f41e505317df0dedc79feb",
+      "lines": 638
+    },
+    {
+      "id": "E51",
+      "path": "pages/student/student-dashboard.php",
+      "line": 14,
+      "anchor": "$role =",
+      "scope": "Shared personal dashboard with role gate and supporting-module counts.",
+      "sha256": "9004d4eaa687a9dfe6227da01d0a3be3b1264fe386089664b0c4d58cd8de9ad9",
+      "lines": 441
+    }
+  ]
+}

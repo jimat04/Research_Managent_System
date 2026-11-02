@@ -1,0 +1,13 @@
+<?php // Existing directory pagination and permission-scoped query supply $records. ?>
+<section class="archive-card"><h2>Publication records</h2>
+<?php if(!$records): ?><p>No publications match these filters. Adjust the filters or add an authorized record.</p><?php else: ?>
+<div class="archive-table-wrap"><table class="archive-table"><thead><tr><th>Title / authors</th><th>Publication type</th><th>Subtype</th><th>Scope</th><th>Year</th><th>Source</th><th class="archive-no-print">Actions</th></tr></thead><tbody>
+<?php foreach($records as $row): $rid=(int)$row['publication_id']; $url=$detailUrl.'?id='.$rid.$navigationSuffix; ?>
+<tr><td><a href="<?= archiveEscape($url) ?>"><?= archiveEscape($row['research_title']) ?></a><p><?= archiveEscape(publicationAuthorLabel($row)) ?></p><small>Owner: <?= archiveEscape($row['owner_name']?:'Unresolved owner') ?></small><br><span class="archive-badge"><?= archiveEscape(archiveStatus($row)) ?></span></td>
+<td><?= archiveEscape(publicationTypeLabel($row)) ?></td><td><?= archiveEscape($row['classification_subtype_label']??'Not recorded') ?></td><td><?= archiveEscape($row['publication_scope_label']??'Not recorded') ?></td><td><?= archiveEscape(publicationYear($row)?:'Not recorded') ?></td><td><?= archiveEscape(publicationSource($row)?:'Not recorded') ?></td>
+<td class="archive-no-print"><div class="archive-links<?= $role === 'admin' ? ' archive-publication-admin-actions' : '' ?>"><a href="<?= archiveEscape($url) ?>">View</a><?php if(archiveCan($conn,'publication',$row,$user,'manage')&&empty($row['deactivated_at'])): ?><a href="<?= archiveEscape($formUrl.'?id='.$rid.$navigationSuffix) ?>">Edit</a><?php endif; ?>
+<?php if(!empty($row['file_path'])): ?><a href="<?= archiveEscape($documentDownloadUrl.'?type=publication&id='.$rid.'&mode=viewer') ?>">Published document</a><?php endif; ?>
+<?php $external=(string)($row['publication_url']?:($row['evidence_url']??'')); if(publicationHttpUrl($external)): ?><a href="<?= archiveEscape($external) ?>" target="_blank" rel="noopener noreferrer">Publication URL</a><?php endif; ?>
+<?php if($role==='admin'): ?><a href="<?= archiveEscape($url.'#record-availability') ?>"><?= $row['deactivated_at']?'Restore':'Archive / deactivate' ?></a><?php endif; ?>
+<a href="<?= archiveEscape($url.'#history') ?>">History</a></div></td></tr><?php endforeach; ?>
+</tbody></table></div><p>Page <?= $page ?> of <?= $pages ?> · <?= (int)$totals['total'] ?> records</p><nav class="archive-links archive-no-print" aria-label="Publication pages"><?php if($page>1): ?><a href="<?= archiveEscape($link(['page'=>$page-1])) ?>">Previous</a><?php endif; ?><?php if($page<$pages): ?><a href="<?= archiveEscape($link(['page'=>$page+1])) ?>">Next</a><?php endif; ?></nav><?php endif; ?></section>

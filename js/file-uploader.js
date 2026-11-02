@@ -136,6 +136,7 @@
         if (validation.valid) {
           validFiles.push(file);
         } else {
+          this.syncInputFiles();
           this.showError(validation.error);
           return; // Stop on first error
         }
@@ -143,9 +144,16 @@
 
       if (validFiles.length > 0) {
         this.files = validFiles;
+        this.syncInputFiles();
         this.renderFileList();
         this.announceToScreenReader(`${validFiles.length} file(s) selected and ready to upload`);
       }
+    }
+
+    syncInputFiles() {
+      const transfer = new DataTransfer();
+      this.files.forEach(file => transfer.items.add(file));
+      this.input.files = transfer.files;
     }
 
     validateFile(file) {
@@ -238,13 +246,13 @@
         // No files left, show dropzone again
         this.fileList.classList.remove('active');
         this.dropzone.style.display = 'block';
-        this.input.value = ''; // Clear input
         this.announceToScreenReader('File removed');
       } else {
         // Re-render file list
         this.renderFileList();
         this.announceToScreenReader('File removed');
       }
+      this.syncInputFiles();
     }
 
     replaceFile(index) {
@@ -261,6 +269,7 @@
 
           if (validation.valid) {
             this.files[index] = newFile;
+            this.syncInputFiles();
             this.renderFileList();
             this.announceToScreenReader('File replaced');
           } else {

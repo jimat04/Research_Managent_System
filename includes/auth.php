@@ -2,12 +2,108 @@
 // ============================================================
 // RESEARCH MANAGEMENT SYSTEM — AUTHENTICATION HELPERS
 // ============================================================
+require_once __DIR__ . '/staff-permission-schema.php';
+
+const RMS_RESEARCH_ARCHIVE_RETURN_VALUE = 'research-archive';
+const RMS_RESEARCH_ARCHIVE_RETURN_SESSION_KEY = 'rms_research_archive_return';
+const RMS_PUBLIC_RECORD_RETURN_SESSION_KEY = 'rms_public_record_return';
+
+function rmsSetPublicRecordReturnIntent($sourceType, $recordId): void
+{
+    $allowedTypes = ['student_project', 'faculty_publication', 'faculty_research_record'];
+    $recordId = filter_var($recordId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if (!is_string($sourceType) || !in_array($sourceType, $allowedTypes, true) || !$recordId) {
+        unset($_SESSION[RMS_PUBLIC_RECORD_RETURN_SESSION_KEY]);
+        return;
+    }
+    $_SESSION[RMS_PUBLIC_RECORD_RETURN_SESSION_KEY] = ['type' => $sourceType, 'id' => (int) $recordId];
+}
+
+function rmsPublicRecordReturnIntent(): ?array
+{
+    $intent = $_SESSION[RMS_PUBLIC_RECORD_RETURN_SESSION_KEY] ?? null;
+    if (!is_array($intent)) return null;
+    $allowedTypes = ['student_project', 'faculty_publication', 'faculty_research_record'];
+    $type = $intent['type'] ?? null;
+    $id = filter_var($intent['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    return is_string($type) && in_array($type, $allowedTypes, true) && $id
+        ? ['type' => $type, 'id' => (int) $id]
+        : null;
+}
+
+function rmsClearPublicRecordReturnIntent(): void
+{
+    unset($_SESSION[RMS_PUBLIC_RECORD_RETURN_SESSION_KEY]);
+}
+
+function rmsPublicRecordReturnUrl(): ?string
+{
+    $intent = rmsPublicRecordReturnIntent();
+    return $intent
+        ? SITE_URL . 'public/research-record.php?' . http_build_query(['type' => $intent['type'], 'id' => $intent['id']])
+        : null;
+}
 
 /**
- * Check if user is logged in
+ * Store the one supported post-onboarding destination; never accept a URL here.
+ */
+function rmsSetResearchArchiveReturnIntent($value) {
+    if ($value === RMS_RESEARCH_ARCHIVE_RETURN_VALUE) {
+        $_SESSION[RMS_RESEARCH_ARCHIVE_RETURN_SESSION_KEY] = RMS_RESEARCH_ARCHIVE_RETURN_VALUE;
+    }
+}
+
+function rmsHasResearchArchiveReturnIntent() {
+    return isset($_SESSION[RMS_RESEARCH_ARCHIVE_RETURN_SESSION_KEY])
+        && $_SESSION[RMS_RESEARCH_ARCHIVE_RETURN_SESSION_KEY] === RMS_RESEARCH_ARCHIVE_RETURN_VALUE;
+}
+
+function rmsClearResearchArchiveReturnIntent() {
+    unset($_SESSION[RMS_RESEARCH_ARCHIVE_RETURN_SESSION_KEY]);
+}
+
+/**
+ * Check the live account once per request, never trusting session presence alone.
  */
 function isLoggedIn() {
-    return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+    global $conn;
+    static $validatedUserId = null;
+
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+    if ($validatedUserId === $userId) {
+        return true;
+    }
+
+    $stmt = $conn->prepare("SELECT user_id, password FROM users WHERE user_id = ? AND status = 'active' AND deleted_at IS NULL LIMIT 1");
+    $active = false;
+    if ($stmt) {
+        $stmt->bind_param('i', $userId);
+        if ($stmt->execute()) {
+            $result = $stmt->get_result();
+            $account = $result ? $result->fetch_assoc() : null;
+            $active = is_array($account)
+                && isset($_SESSION['auth_password_hash'])
+                && hash_equals((string) $_SESSION['auth_password_hash'], (string) $account['password']);
+        }
+        $stmt->close();
+    }
+
+    if (!$active) {
+        // Drop identity, role, CSRF token and other authenticated session state.
+        $_SESSION = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        $validatedUserId = null;
+        return false;
+    }
+
+    $_SESSION['auth_password_hash'] = (string) $account['password'];
+    $validatedUserId = $userId;
+    return true;
 }
 
 /**
@@ -169,6 +265,62 @@ function createNotification($user_id, $title, $message, $type = 'info', $link = 
 }
 
 /**
+ * Count unread notifications linked to the research workspace sidebar groups.
+ */
+function getUnreadNotificationCountsByArea($user_id) {
+    global $conn;
+
+    $counts = ['my_research' => 0, 'research_modules' => 0];
+    $user_id = (int) $user_id;
+    if ($user_id <= 0) {
+        return $counts;
+    }
+
+    $stmt = $conn->prepare(
+        "SELECT
+            COALESCE(SUM(CASE
+                WHEN LOWER(COALESCE(link, '')) LIKE '%pages/researcher/%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/research-detail.php%'
+                THEN 1 ELSE 0
+            END), 0) AS my_research_count,
+            COALESCE(SUM(CASE
+                WHEN LOWER(COALESCE(link, '')) LIKE '%pages/shared/activities.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/activity-detail.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/publications.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/publication-detail.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/faculty/faculty-publications.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/faculty/faculty-publication-form.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/faculty/faculty-publication-detail.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/faculty/faculty-publication-reports.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/admin/admin-publications.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/admin/admin-publication-form.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/admin/admin-publication-detail.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/admin/admin-publication-reports.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/copyrights.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/copyright-detail.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/implementation-outputs.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/research-archive.php%'
+                  OR LOWER(COALESCE(link, '')) LIKE '%pages/shared/research-submission-review.php%'
+                THEN 1 ELSE 0
+            END), 0) AS research_modules_count
+         FROM notifications
+         WHERE user_id = ? AND is_read = 0"
+    );
+    if (!$stmt) {
+        throw new RuntimeException('Unable to load unread notification group counts: ' . $conn->error);
+    }
+
+    $stmt->bind_param('i', $user_id);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+
+    $counts['my_research'] = (int) ($row['my_research_count'] ?? 0);
+    $counts['research_modules'] = (int) ($row['research_modules_count'] ?? 0);
+    return $counts;
+}
+
+/**
  * Log activity
  *
  * Uses a prepared statement. $user_id and $module are bound as NULL when
@@ -189,7 +341,7 @@ function logActivity($action, $module = null) {
          VALUES (?, ?, ?, ?)"
     );
     if ($stmt === false) {
-        return;
+        return false;
     }
 
     // Type string depends on which nullable columns are NULL.
@@ -210,8 +362,9 @@ function logActivity($action, $module = null) {
         $stmt->bind_param('ssss', $null1, $action, $null2, $ip);
     }
 
-    $stmt->execute();
+    $ok = $stmt->execute();
     $stmt->close();
+    return $ok;
 }
 
 /**
@@ -223,6 +376,13 @@ function rmsPermissionModules(): array
         'research_capacity_building' => [
             'label' => 'Research Capacity Building',
             'pages' => [
+                'add_activity' => 'Add Activity',
+                'add_upcoming_activity' => 'Add Upcoming Activity',
+                'add_conducted_activity' => 'Add Completed Activity',
+                'view_activity' => 'View Activity',
+                'upcoming_activities' => 'Upcoming',
+                'ongoing_activities' => 'Ongoing',
+                'conducted_activities' => 'Completed',
                 'seminars' => 'Seminars',
                 'trainings' => 'Trainings',
                 'workshops' => 'Workshops',
@@ -232,8 +392,8 @@ function rmsPermissionModules(): array
             'label' => 'Research Development',
             'pages' => [
                 'research_proposals' => 'Research Proposals',
-                'research_review' => 'Research Review',
-                'research_approval' => 'Research Approval',
+                'research_review' => 'Chapter Review',
+                'research_approval' => 'Approved Proposals',
             ],
         ],
         'research_implementation_outputs' => [
@@ -248,7 +408,7 @@ function rmsPermissionModules(): array
             'label' => 'Publication & Dissemination',
             'pages' => [
                 'journal_publications' => 'Journal Publications',
-                'conference_presentations' => 'Conference Presentations',
+                'conference_presentations' => 'Conference Papers & Presentations',
                 'research_repository' => 'Research Repository',
             ],
         ],
@@ -271,6 +431,59 @@ function ensureStaffPermissionTable(): void
         return;
     }
 
+    if (defined('RMS_E2E_MODE') && RMS_E2E_MODE === true) {
+        rmsEnsureStaffPermissionSchema(
+            true,
+            static function () use ($conn): array {
+                try {
+                    $columnsResult = $conn->query("SHOW COLUMNS FROM `staff_permissions`");
+                } catch (mysqli_sql_exception $error) {
+                    return [];
+                }
+                if (!$columnsResult instanceof mysqli_result) {
+                    return [];
+                }
+                $columns = [];
+                while ($column = $columnsResult->fetch_assoc()) {
+                    $columns[$column['Field']] = [
+                        'type' => strtolower((string) $column['Type']),
+                        'null' => (string) $column['Null'],
+                        'default' => $column['Default'],
+                        'extra' => (string) $column['Extra'],
+                    ];
+                }
+                $columnsResult->free();
+
+                try {
+                    $indexesResult = $conn->query("SHOW INDEX FROM `staff_permissions`");
+                } catch (mysqli_sql_exception $error) {
+                    return [];
+                }
+                if (!$indexesResult instanceof mysqli_result) {
+                    return [];
+                }
+                $indexes = [];
+                while ($index = $indexesResult->fetch_assoc()) {
+                    $name = (string) $index['Key_name'];
+                    $indexes[$name] ??= [
+                        'nonUnique' => (int) $index['Non_unique'],
+                        'columns' => [],
+                    ];
+                    $indexes[$name]['columns'][(int) $index['Seq_in_index']] = (string) $index['Column_name'];
+                }
+                $indexesResult->free();
+                foreach ($indexes as &$index) {
+                    ksort($index['columns']);
+                    $index['columns'] = array_values($index['columns']);
+                }
+                unset($index);
+
+                return ['columns' => $columns, 'indexes' => $indexes];
+            }
+        );
+        return;
+    }
+
     $check = $conn->query("SHOW TABLES LIKE 'staff_permissions'");
     if ($check instanceof mysqli_result && $check->num_rows > 0) {
         if ($check instanceof mysqli_result) {
@@ -287,6 +500,7 @@ function ensureStaffPermissionTable(): void
             `module_key` varchar(64) NOT NULL,
             `subpage_key` varchar(64) NOT NULL DEFAULT '',
             `access_level` enum('none','view','manage') NOT NULL DEFAULT 'none',
+            `download_allowed` tinyint(1) NOT NULL DEFAULT 0,
             `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`permission_id`),
@@ -405,13 +619,14 @@ function getStaffPermissionMatrix(int $user_id): array
 
     $matrix = [];
     foreach (rmsPermissionModules() as $moduleKey => $moduleData) {
-        $matrix[$moduleKey] = ['access' => 'none', 'pages' => []];
+        $matrix[$moduleKey] = ['access' => 'none', 'pages' => [], 'downloads' => []];
         foreach ($moduleData['pages'] as $subpageKey => $label) {
             $matrix[$moduleKey]['pages'][$subpageKey] = 'none';
+            $matrix[$moduleKey]['downloads'][$subpageKey] = false;
         }
     }
 
-    $stmt = $conn->prepare('SELECT module_key, subpage_key, access_level FROM staff_permissions WHERE user_id = ?');
+    $stmt = $conn->prepare('SELECT module_key, subpage_key, access_level, download_allowed FROM staff_permissions WHERE user_id = ?');
     if (!$stmt) {
         return $matrix;
     }
@@ -428,7 +643,10 @@ function getStaffPermissionMatrix(int $user_id): array
         if ($subpageKey === null || $subpageKey === '') {
             $matrix[$moduleKey]['access'] = $level;
         } else {
-            $matrix[$moduleKey]['pages'][$subpageKey] = $level;
+            if (array_key_exists($subpageKey, $matrix[$moduleKey]['pages'])) {
+                $matrix[$moduleKey]['pages'][$subpageKey] = $level;
+                $matrix[$moduleKey]['downloads'][$subpageKey] = (int) ($row['download_allowed'] ?? 0) === 1;
+            }
         }
     }
     $stmt->close();
@@ -480,6 +698,59 @@ function hasModulePermission(int $user_id, string $module_key, string $required 
     return in_array($level, ['view', 'manage'], true);
 }
 
+function rmsCanDownloadWithStaffPermissionMatrix(
+    bool $isAdmin,
+    bool $isResearchStaff,
+    array $matrix,
+    string $moduleKey,
+    string $subpageKey
+): bool {
+    if ($isAdmin) {
+        return true;
+    }
+    if (!$isResearchStaff
+        || !isset($matrix[$moduleKey]['downloads'])
+        || !array_key_exists($subpageKey, $matrix[$moduleKey]['downloads'])) {
+        return false;
+    }
+
+    return $matrix[$moduleKey]['downloads'][$subpageKey] === true;
+}
+
+function hasDownloadPermission(int $userId, string $moduleKey, string $subpageKey): bool
+{
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $user = $GLOBALS['conn']->prepare('SELECT role FROM users WHERE user_id = ? LIMIT 1');
+    if (!$user) {
+        return false;
+    }
+    $user->bind_param('i', $userId);
+    $user->execute();
+    $roleRow = $user->get_result()->fetch_assoc();
+    $user->close();
+
+    if (!$roleRow) {
+        return false;
+    }
+    if ((string) $roleRow['role'] === 'admin') {
+        return true;
+    }
+    if ((string) $roleRow['role'] !== 'research_staff') {
+        return false;
+    }
+
+    return rmsCanDownloadWithStaffPermissionMatrix(
+        false,
+        true,
+        getStaffPermissionMatrix($userId),
+        $moduleKey,
+        $subpageKey
+    );
+}
+
 function requireModulePermission(string $module_key, string $required = 'view', ?string $subpage_key = null): void
 {
     if (isLoggedIn() && hasRole('admin')) {
@@ -493,7 +764,7 @@ function requireModulePermission(string $module_key, string $required = 'view', 
     }
 }
 
-function saveStaffPermissionCollection(int $user_id, array $moduleAccess): bool
+function saveStaffPermissionCollection(int $user_id, array $moduleAccess, array $downloadAccess = []): bool
 {
     global $conn;
 
@@ -511,9 +782,10 @@ function saveStaffPermissionCollection(int $user_id, array $moduleAccess): bool
         }
 
         $moduleEmpty = '';
-        $moduleStmt = $conn->prepare('INSERT INTO staff_permissions (user_id, module_key, subpage_key, access_level) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE access_level = VALUES(access_level)');
+        $moduleDownload = 0;
+        $moduleStmt = $conn->prepare('INSERT INTO staff_permissions (user_id, module_key, subpage_key, access_level, download_allowed) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE access_level = VALUES(access_level), download_allowed = VALUES(download_allowed)');
         if ($moduleStmt) {
-            $moduleStmt->bind_param('isss', $user_id, $moduleKey, $moduleEmpty, $moduleLevel);
+            $moduleStmt->bind_param('isssi', $user_id, $moduleKey, $moduleEmpty, $moduleLevel, $moduleDownload);
             $moduleStmt->execute();
             $moduleStmt->close();
         }
@@ -523,10 +795,12 @@ function saveStaffPermissionCollection(int $user_id, array $moduleAccess): bool
             if (isset($moduleAccess[$moduleKey]['pages'][$subpageKey]) && in_array($moduleAccess[$moduleKey]['pages'][$subpageKey], ['none', 'view', 'manage'], true)) {
                 $level = $moduleAccess[$moduleKey]['pages'][$subpageKey];
             }
+            $downloadAllowed = isset($downloadAccess[$moduleKey]['pages'][$subpageKey])
+                && (string) $downloadAccess[$moduleKey]['pages'][$subpageKey] === '1' ? 1 : 0;
 
-            $subStmt = $conn->prepare('INSERT INTO staff_permissions (user_id, module_key, subpage_key, access_level) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE access_level = VALUES(access_level)');
+            $subStmt = $conn->prepare('INSERT INTO staff_permissions (user_id, module_key, subpage_key, access_level, download_allowed) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE access_level = VALUES(access_level), download_allowed = VALUES(download_allowed)');
             if ($subStmt) {
-                $subStmt->bind_param('isss', $user_id, $moduleKey, $subpageKey, $level);
+                $subStmt->bind_param('isssi', $user_id, $moduleKey, $subpageKey, $level, $downloadAllowed);
                 $subStmt->execute();
                 $subStmt->close();
             }

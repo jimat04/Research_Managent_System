@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="700" viewBox="0 0 960 700">
+<rect width="960" height="700" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#66758a"/></marker></defs>
+<polyline points="165,121 165,233 360,233" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="480,121 480,195" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="795,121 795,233 600,233" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="400,271 165,315 165,350" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="480,271 480,350" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="560,271 795,315 795,350" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="165,426 165,500 360,545" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="480,426 480,545" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<polyline points="795,426 795,500 600,545" fill="none" stroke="#66758a" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="45" y="45" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="165.0" y="78.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Public entry / archive</text>
+<text x="165.0" y="95.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Account entry and public records</text>
+<rect x="360" y="45" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="480.0" y="78.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Student / faculty</text>
+<text x="480.0" y="95.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Shared researcher workspace</text>
+<rect x="675" y="45" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="795.0" y="78.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Admin / authorized staff</text>
+<text x="795.0" y="95.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Scoped review and record tools</text>
+<rect x="360" y="195" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="480.0" y="228.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">PHP handlers + shared helpers</text>
+<text x="480.0" y="245.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Auth / ownership / permissions</text>
+<rect x="45" y="350" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="165.0" y="375.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Core workflow records</text>
+<text x="165.0" y="392.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Projects, chapters, versions,</text>
+<text x="165.0" y="409.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">reviews</text>
+<rect x="360" y="350" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="480.0" y="383.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Supporting records</text>
+<text x="480.0" y="400.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Activities, publications, IP</text>
+<rect x="675" y="350" width="240" height="76" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="795.0" y="375.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Shared / admin services</text>
+<text x="795.0" y="392.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Messages, files, reports,</text>
+<text x="795.0" y="409.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">accounts</text>
+<rect x="280" y="545" width="400" height="85" rx="3" fill="#f2eefb" stroke="#7351ad"/>
+<text x="480.0" y="566.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">MySQL schema declarations + file</text>
+<text x="480.0" y="583.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">storage</text>
+<text x="480.0" y="600.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">Installed state and data not</text>
+<text x="480.0" y="617.0" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#172033">inspected</text>
+</svg>

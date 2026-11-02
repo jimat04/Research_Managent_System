@@ -7,6 +7,7 @@
  * this shell supplies the consistent navigation and visual frame.
  */
 require_once __DIR__ . '/logout-transition.php';
+require_once __DIR__ . '/notification-popover.php';
 
 if (!function_exists('adminShellIcon')) {
     function adminShellIcon(string $name): string
@@ -78,18 +79,36 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     $nav_groups = [
         [
             'title' => 'Research Capacity Building', 'icon' => 'seminar',
-            'links' => [
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=seminars', 'Seminars', 'seminar'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=trainings', 'Trainings', 'document'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=workshops', 'Workshops', 'records'],
+            'href' => SITE_URL . 'pages/shared/activities.php',
+            'children' => [
+                [
+                    'title' => 'Research Activities', 'icon' => 'activity',
+                    'children' => [
+                        [
+                            'title' => 'Add', 'icon' => 'activity',
+                            'links' => [
+                                [SITE_URL . 'pages/admin/admin-research-module.php?module=add_upcoming_activity', 'Upcoming', 'seminar'],
+                                [SITE_URL . 'pages/admin/admin-research-module.php?module=add_conducted_activity', 'Completed', 'records'],
+                            ],
+                        ],
+                        [
+                            'title' => 'View', 'icon' => 'monitor',
+                            'links' => [
+                                [SITE_URL . 'pages/admin/admin-research-module.php?module=upcoming_activities', 'Upcoming', 'document'],
+                                [SITE_URL . 'pages/admin/admin-research-module.php?module=ongoing_activities', 'Ongoing', 'monitor'],
+                                [SITE_URL . 'pages/admin/admin-research-module.php?module=conducted_activities', 'Completed', 'output'],
+                            ],
+                        ],
+                    ],
+                ],
             ],
         ],
         [
             'title' => 'Research Development', 'icon' => 'records',
             'links' => [
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=research_proposals', 'Research Proposals', 'document'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=research_review', 'Research Review', 'monitor'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=research_approval', 'Research Approval', 'reports'],
+                [SITE_URL . 'pages/admin/admin-research-module.php?module=research_review', 'Chapter Review', 'monitor'],
+                [SITE_URL . 'pages/admin/admin-research-module.php?module=research_approval', 'Approved Proposals', 'reports'],
             ],
         ],
         [
@@ -97,16 +116,16 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
             'links' => [
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=ongoing_research', 'Ongoing Research', 'monitor'],
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=completed_research', 'Completed Research', 'records'],
+                [SITE_URL . 'pages/admin/admin-public-releases.php', 'Public Research Releases', 'repository'],
                 [SITE_URL . 'pages/admin/admin-research-module.php?module=research_outputs', 'Research Outputs', 'output'],
             ],
         ],
         [
             'title' => 'Publication & Dissemination', 'icon' => 'publication',
             'links' => [
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=journal_publications', 'Journal Publications', 'publication'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=conference_presentations', 'Conference Presentations', 'presentation'],
-                [SITE_URL . 'pages/admin/admin-research-module.php?module=research_repository', 'Research Repository', 'repository'],
-                [SITE_URL . 'pages/admin/admin-archive.php', 'Archive Management', 'records'],
+                [SITE_URL . 'pages/admin/admin-publications.php', 'All Records', 'publication'],
+                [SITE_URL . 'pages/admin/admin-publication-form.php', 'Add New', 'document'],
+                [SITE_URL . 'pages/admin/admin-publication-reports.php', 'Reports', 'reports'],
             ],
         ],
         [
@@ -118,12 +137,22 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
             ],
         ],
         [
+            'title' => 'Faculty Research & Engagement', 'icon' => 'users',
+            'links' => [
+                [SITE_URL . 'pages/admin/admin-researchers.php?role=faculty', 'Faculty Research Profiles', 'profile'],
+                [SITE_URL . 'pages/admin/admin-earist-annex-d.php', 'Annex D Preparation & History', 'document'],
+                [SITE_URL . 'pages/admin/admin-faculty-engagement.php', 'Research Engagement Records', 'activity'],
+                [SITE_URL . 'pages/admin/admin-faculty-collaboration.php', 'Collaboration & Mentorship', 'users'],
+                [SITE_URL . 'pages/admin/admin-reports.php?report=faculty', 'Faculty Research Analytics', 'reports'],
+            ],
+        ],
+        [
             'title' => 'Institute administration', 'icon' => 'settings',
             'links' => [
                 [SITE_URL . 'pages/admin/admin-reports.php', 'Reports', 'reports'],
                 [SITE_URL . 'pages/admin/admin-users.php', 'Users', 'users'],
-                [SITE_URL . 'pages/admin/admin-departments.php', 'Departments', 'records'],
                 [SITE_URL . 'pages/admin/admin-programs.php', 'Programs', 'records'],
+                [SITE_URL . 'pages/admin/admin-research-areas.php', 'Research Classification', 'repository'],
                 [SITE_URL . 'pages/admin/admin-logs.php', 'Activity log', 'logs'],
                 [SITE_URL . 'pages/admin/admin-backup.php', 'Backup & recovery', 'backup'],
                 [SITE_URL . 'pages/admin/admin-settings.php', 'Settings', 'settings'],
@@ -134,7 +163,6 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
             'links' => [
                 [SITE_URL . 'pages/shared/messages.php', 'Messages', 'messages'],
                 [SITE_URL . 'pages/admin/admin-contact.php', 'Contact messages', 'contact'],
-                [SITE_URL . 'pages/shared/notifications.php', 'Notifications', 'notifications'],
                 [SITE_URL . 'pages/shared/profile.php', 'Administrator profile', 'profile'],
             ],
         ],
@@ -144,7 +172,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     if ($current_basename !== '' && !str_contains($current_basename, '.')) {
         $current_basename .= '.php';
     }
-    // Module links redirect through admin-research-module.php to shared pages.
+    // Module links redirect through admin-research-module.php to their role destinations.
     // Preserve the originating module so its sidebar item remains active and
     // the parent details group stays open after the redirect.
     $current_module_key = trim((string) ($_GET['module_page'] ?? ''));
@@ -157,10 +185,11 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
                 (string) ($_GET['type'] ?? '') === 'workshop' => 'workshops',
                 default => '',
             },
-            'publications.php', 'publication-form.php', 'publication-detail.php' => match (true) {
-                (string) ($_GET['repository'] ?? '') === '1' => 'research_repository',
-                (string) ($_GET['publication_type'] ?? '') === 'journal' => 'journal_publications',
-                (string) ($_GET['publication_type'] ?? '') === 'conference' => 'conference_presentations',
+            'publications.php', 'publication-form.php', 'publication-detail.php',
+            'admin-publications.php', 'admin-publication-form.php', 'admin-publication-detail.php', 'admin-publication-reports.php' => match (true) {
+                (string) ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'journal' => 'journal_publications',
+                (string) ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'conference' => 'conference_presentations',
+                (string) ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'book_chapter' => 'book_chapters',
                 (string) ($_GET['status'] ?? '') === 'published' => 'research_outputs',
                 default => '',
             },
@@ -170,7 +199,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
                 in_array((string) ($_GET['output_type'] ?? ''), ['innovation', 'technology_transfer'], true) => 'innovation_technology_transfer',
                 default => 'copyrights',
             },
-            'admin-research.php' => match (true) {
+            'admin-research-management.php' => match (true) {
                 (string) ($_GET['queue'] ?? '') === 'review' => 'research_review',
                 (string) ($_GET['status'] ?? '') === 'proposal' => 'research_proposals',
                 (string) ($_GET['status'] ?? '') === 'approved' => 'research_approval',
@@ -183,6 +212,12 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         };
     }
     $is_active = function ($href) use ($current_page, $current_basename, $current_module_key) {
+        if ($href === SITE_URL . 'pages/admin/admin-publications.php?publication_type=book_chapter') {
+            return $current_module_key === 'book_chapters' || ($current_module_key === '' &&
+                (string) ($_GET['publication_type'] ?? $_GET['record_type'] ?? '') === 'book_chapter' && in_array($current_basename, [
+                'admin-publications.php', 'admin-publication-form.php', 'admin-publication-detail.php', 'admin-publication-reports.php',
+            ], true));
+        }
         if ($href === $current_page) return true;
         $target = parse_url((string) $href);
         if (basename(str_replace('\\', '/', (string) ($target['path'] ?? ''))) === 'admin-research-module.php') {
@@ -191,6 +226,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
             return $current_module_key !== '' && $current_module_key === (string) ($target_query['module'] ?? '');
         }
         $target_basename = basename(str_replace('\\', '/', (string) ($target['path'] ?? '')));
+        if ($current_basename === 'admin-publication-detail.php' && $target_basename === 'admin-publications.php') return true;
         if ($current_basename === '' || $current_basename !== $target_basename) return false;
 
         $target_query = [];
@@ -207,18 +243,26 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
         }
         return true;
     };
+    $group_has_active_link = function (array $group) use (&$group_has_active_link, $is_active): bool {
+        if (isset($group['href']) && $is_active($group['href'])) return true;
+        foreach ($group['links'] ?? [] as $link) {
+            if ($is_active($link[0])) return true;
+        }
+        foreach ($group['children'] ?? [] as $child_group) {
+            if ($group_has_active_link($child_group)) return true;
+        }
+        return false;
+    };
 
     $section_label = $current_basename === 'admin-dashboard.php' ? 'Dashboard' : 'Administration';
     foreach ($nav_groups as $group) {
-        foreach ($group['links'] as [$href]) {
-            if ($is_active($href)) {
-                $section_label = $group['title'];
-                break 2;
-            }
+        if ($group_has_active_link($group)) {
+            $section_label = $group['title'];
+            break;
         }
     }
 
-    $url_style = SITE_URL . 'css/style.css';
+    $url_style = SITE_URL . 'css/style.css?v=' . filemtime(__DIR__ . '/../css/style.css');
     $url_shell = SITE_URL . 'css/admin-shell.css?v=' . filemtime(__DIR__ . '/../css/admin-shell.css');
     $url_logout = SITE_URL . 'public/logout.php';
     ?>
@@ -233,10 +277,10 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body class="admin-body">
-<div class="admin-dashboard">
+<div class="admin-dashboard" data-role-shell="admin">
   <a class="admin-skip-link" href="#admin-main-content">Skip to main content</a>
   <button type="button" class="admin-sidebar-scrim" aria-label="Close administrator navigation" tabindex="-1"></button>
-  <aside class="admin-sidebar" id="admin-sidebar" aria-label="Administrator navigation">
+  <aside class="admin-sidebar" id="admin-sidebar" aria-label="Administrator navigation" data-role-shell-sidebar>
     <div class="admin-sidebar-header">
       <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/admin/admin-dashboard.php', ENT_QUOTES, 'UTF-8'); ?>" class="admin-sidebar-logo" aria-label="RMS dashboard">
         <img src="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>" alt="RMS logo">
@@ -247,7 +291,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
       </div>
     </div>
 
-    <nav class="admin-sidebar-nav" aria-label="Primary">
+    <nav class="admin-sidebar-nav" aria-label="Primary" data-role-shell-nav>
       <?php $dashboard_active = $current_basename === 'admin-dashboard.php'; ?>
       <a class="admin-nav-item admin-nav-dashboard<?php echo $dashboard_active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars(SITE_URL . 'pages/admin/admin-dashboard.php', ENT_QUOTES, 'UTF-8'); ?>" title="Dashboard"<?php echo $dashboard_active ? ' aria-current="page"' : ''; ?>>
         <span class="admin-nav-icon"><?php echo adminShellIcon('dashboard'); ?></span><span class="admin-nav-label">Dashboard</span>
@@ -255,30 +299,93 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
       <?php foreach ($nav_groups as $group): ?>
         <?php
           $group_id = 'nav-group-' . substr(sha1($group['title']), 0, 8);
-          $group_open = false;
-          foreach ($group['links'] as [$candidate_href]) {
-              if ($is_active($candidate_href)) {
-                  $group_open = true;
-                  break;
-              }
-          }
+          $group_open = $group_has_active_link($group);
+          $group_has_link = !empty($group['href']);
+          $group_link_active = $group_has_link && $is_active($group['href']);
         ?>
-        <details class="admin-nav-group"<?php echo $group_open ? ' open' : ''; ?>>
-          <summary class="admin-nav-group-summary" title="<?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $group_id; ?>">
-            <span class="admin-nav-icon"><?php echo adminShellIcon($group['icon']); ?></span>
-            <span class="admin-nav-label"><?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?></span>
-            <span class="admin-nav-chevron" aria-hidden="true"></span>
-          </summary>
+        <?php if ($group_has_link): ?>
+          <div class="admin-nav-group admin-nav-linked">
+            <a class="admin-nav-item admin-nav-group-link<?php echo $group_link_active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($group['href'], ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?>"<?php echo $group_link_active ? ' aria-current="page"' : ''; ?>>
+              <span class="admin-nav-icon"><?php echo adminShellIcon($group['icon']); ?></span>
+              <span class="admin-nav-label"><?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?></span>
+            </a>
+            <details class="admin-nav-group admin-nav-disclosure"<?php echo $group_open ? ' open' : ''; ?>>
+              <summary class="admin-nav-group-summary admin-nav-disclosure-toggle" title="<?php echo htmlspecialchars('Toggle ' . $group['title'] . ' submenu', ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo htmlspecialchars('Toggle ' . $group['title'] . ' submenu', ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $group_id; ?>">
+                <span class="admin-nav-chevron" aria-hidden="true"></span>
+              </summary>
+        <?php else: ?>
+          <details class="admin-nav-group"<?php echo $group_open ? ' open' : ''; ?>>
+            <summary class="admin-nav-group-summary" title="<?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $group_id; ?>">
+              <span class="admin-nav-icon"><?php echo adminShellIcon($group['icon']); ?></span>
+              <span class="admin-nav-label"><?php echo htmlspecialchars($group['title'], ENT_QUOTES, 'UTF-8'); ?></span>
+              <span class="admin-nav-chevron" aria-hidden="true"></span>
+            </summary>
+        <?php endif; ?>
           <div class="admin-nav-subitems" id="<?php echo $group_id; ?>">
             <div class="admin-nav-subitems-inner">
-              <?php foreach ($group['links'] as [$href, $label, $icon]): $active = $is_active($href); ?>
-                <a class="admin-nav-item admin-nav-subitem<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
-                  <span class="admin-nav-icon"><?php echo adminShellIcon($icon); ?></span><span class="admin-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
-                </a>
-              <?php endforeach; ?>
+              <?php if (!empty($group['children'])): ?>
+                <?php foreach ($group['children'] as $child_group): ?>
+                  <?php
+                    $child_group_id = 'nav-group-' . substr(sha1($group['title'] . '|' . $child_group['title']), 0, 8);
+                    $child_group_open = $group_has_active_link($child_group);
+                  ?>
+                  <details class="admin-nav-group admin-nav-subgroup"<?php echo $child_group_open ? ' open' : ''; ?>>
+                    <summary class="admin-nav-group-summary" title="<?php echo htmlspecialchars($child_group['title'], ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $child_group_id; ?>">
+                      <span class="admin-nav-icon"><?php echo adminShellIcon($child_group['icon']); ?></span>
+                      <span class="admin-nav-label"><?php echo htmlspecialchars($child_group['title'], ENT_QUOTES, 'UTF-8'); ?></span>
+                      <span class="admin-nav-chevron" aria-hidden="true"></span>
+                    </summary>
+                    <div class="admin-nav-subitems" id="<?php echo $child_group_id; ?>">
+                      <div class="admin-nav-subitems-inner">
+                        <?php if (!empty($child_group['children'])): ?>
+                          <?php foreach ($child_group['children'] as $nested_group): ?>
+                            <?php
+                              $nested_group_id = 'nav-group-' . substr(sha1($group['title'] . '|' . $child_group['title'] . '|' . $nested_group['title']), 0, 8);
+                              $nested_group_open = $group_has_active_link($nested_group);
+                            ?>
+                            <details class="admin-nav-group admin-nav-subgroup"<?php echo $nested_group_open ? ' open' : ''; ?>>
+                              <summary class="admin-nav-group-summary" title="<?php echo htmlspecialchars($nested_group['title'], ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $nested_group_id; ?>">
+                                <span class="admin-nav-icon"><?php echo adminShellIcon($nested_group['icon']); ?></span>
+                                <span class="admin-nav-label"><?php echo htmlspecialchars($nested_group['title'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                <span class="admin-nav-chevron" aria-hidden="true"></span>
+                              </summary>
+                              <div class="admin-nav-subitems" id="<?php echo $nested_group_id; ?>">
+                                <div class="admin-nav-subitems-inner">
+                                  <?php foreach ($nested_group['links'] as [$href, $label, $icon]): $active = $is_active($href); ?>
+                                    <a class="admin-nav-item admin-nav-subitem<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
+                                      <span class="admin-nav-icon"><?php echo adminShellIcon($icon); ?></span><span class="admin-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
+                                    </a>
+                                  <?php endforeach; ?>
+                                </div>
+                              </div>
+                            </details>
+                          <?php endforeach; ?>
+                        <?php else: ?>
+                          <?php foreach ($child_group['links'] as [$href, $label, $icon]): $active = $is_active($href); ?>
+                            <a class="admin-nav-item admin-nav-subitem<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
+                              <span class="admin-nav-icon"><?php echo adminShellIcon($icon); ?></span><span class="admin-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
+                            </a>
+                          <?php endforeach; ?>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                  </details>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <?php foreach ($group['links'] as [$href, $label, $icon]): $active = $is_active($href); ?>
+                  <a class="admin-nav-item admin-nav-subitem<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
+                    <span class="admin-nav-icon"><?php echo adminShellIcon($icon); ?></span><span class="admin-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
+                  </a>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </div>
           </div>
-        </details>
+        <?php if ($group_has_link): ?>
+            </details>
+          </div>
+        <?php else: ?>
+          </details>
+        <?php endif; ?>
       <?php endforeach; ?>
     </nav>
 
@@ -294,20 +401,18 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
   </aside>
 
   <main class="admin-main" id="admin-main-content" tabindex="-1">
-    <header class="admin-topbar">
+    <header class="admin-topbar" data-role-shell-topbar>
       <div class="admin-topbar-left">
         <button type="button" class="admin-mobile-menu-btn" aria-label="Open administrator navigation" aria-controls="admin-sidebar" aria-expanded="false"><span aria-hidden="true">&#9776;</span></button>
-        <button type="button" class="admin-collapse-btn" aria-label="Collapse sidebar" aria-controls="admin-sidebar" title="Collapse sidebar"><span aria-hidden="true">&#8249;</span></button>
-        <div class="admin-topbar-search" role="search">
+        <button type="button" class="admin-collapse-btn" aria-label="Collapse sidebar" aria-controls="admin-sidebar" title="Collapse sidebar" data-role-shell-collapse><span aria-hidden="true">&#8249;</span></button>
+        <div class="admin-topbar-search">
           <span class="admin-topbar-search-icon" aria-hidden="true">⌕</span>
-          <input type="search" aria-label="Search in RMS" placeholder="Search in RMS..." value="">
+          <input type="search" id="admin-page-search" aria-label="Search pages in RMS" placeholder="Search pages..." value="" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="admin-search-suggestions" aria-expanded="false" data-role-shell-search>
+          <div class="admin-search-suggestions" id="admin-search-suggestions" role="listbox" aria-label="Matching RMS pages" hidden data-role-shell-suggestions></div>
         </div>
       </div>
       <div class="admin-topbar-right">
-        <a class="admin-topbar-icon-link admin-topbar-notification" href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/notifications.php', ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo $unread_notifications > 0 ? 'Notifications, ' . $unread_notifications . ' unread' : 'Notifications'; ?>" title="<?php echo $unread_notifications > 0 ? $unread_notifications . ' unread notifications' : 'Notifications'; ?>">
-          <?php echo adminShellIcon('notifications'); ?>
-          <?php if ($unread_notifications > 0): ?><span class="admin-topbar-badge" aria-hidden="true"><?php echo $unread_notifications > 99 ? '99+' : $unread_notifications; ?></span><?php endif; ?>
-        </a>
+        <?php renderNotificationPopover($user_id, $unread_notifications, 'admin'); ?>
         <div class="admin-topbar-separator" aria-hidden="true"></div>
         <details class="admin-profile-menu">
           <summary class="admin-topbar-user" aria-label="Open administrator profile menu">
@@ -317,8 +422,11 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
           </summary>
           <div class="admin-profile-dropdown">
             <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/profile.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo adminShellIcon('profile'); ?><span>Profile</span></a>
-            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/admin/admin-settings.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo adminShellIcon('settings'); ?><span>Account settings</span></a>
-            <a href="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>"><?php echo adminShellIcon('logout'); ?><span>Log out</span></a>
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/settings.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo adminShellIcon('settings'); ?><span>Account settings</span></a>
+            <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" data-logout-confirm>
+              <?php echo csrfField(); ?>
+              <button type="submit" class="admin-profile-action"><?php echo adminShellIcon('logout'); ?><span>Log out</span></button>
+            </form>
           </div>
         </details>
       </div>
@@ -334,36 +442,21 @@ function renderAdminShellClose()
   </main>
 </div>
 <?php renderLogoutTransition(); ?>
-<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js', ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js?v=' . filemtime(__DIR__ . '/../js/public-motion.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/role-shell-controls.js?v=' . filemtime(__DIR__ . '/../js/role-shell-controls.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 (() => {
   const shell = document.querySelector('.admin-dashboard');
   const sidebar = document.querySelector('.admin-sidebar');
   const mobileButton = document.querySelector('.admin-mobile-menu-btn');
-  const collapseButton = document.querySelector('.admin-collapse-btn');
   const scrim = document.querySelector('.admin-sidebar-scrim');
   if (!shell || !sidebar) return;
-
-  const storageKey = 'rms-admin-sidebar-collapsed';
-  const setCollapsed = (collapsed, persist = true) => {
-    shell.classList.toggle('is-collapsed', collapsed);
-    if (collapseButton) {
-      collapseButton.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
-      collapseButton.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
-      collapseButton.querySelector('span').textContent = collapsed ? '›' : '‹';
-    }
-    if (persist) {
-      try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (error) { /* Storage may be disabled. */ }
-    }
-  };
-  try { setCollapsed(localStorage.getItem(storageKey) === '1', false); } catch (error) { setCollapsed(false, false); }
 
   const closeDrawer = () => {
     sidebar.classList.remove('is-open');
     shell.classList.remove('drawer-open');
     if (mobileButton) mobileButton.setAttribute('aria-expanded', 'false');
   };
-  if (collapseButton) collapseButton.addEventListener('click', () => setCollapsed(!shell.classList.contains('is-collapsed')));
   if (mobileButton) mobileButton.addEventListener('click', (event) => {
     event.stopPropagation();
     const open = !sidebar.classList.contains('is-open');
@@ -394,99 +487,6 @@ function renderAdminShellClose()
     });
   });
 
-  const adminSearchInput = document.querySelector('.admin-topbar-search input');
-  if (adminSearchInput) {
-    const resetVisibleSearch = () => {
-      document.querySelectorAll('.admin-page-content [data-admin-search-hidden="true"]').forEach((element) => {
-        element.removeAttribute('data-admin-search-hidden');
-        element.style.display = '';
-      });
-      const emptyState = document.querySelector('[data-admin-search-empty]');
-      if (emptyState) emptyState.remove();
-    };
-
-    const syncSearchParam = (query) => {
-      const url = new URL(window.location.href);
-      if (query.trim()) {
-        url.searchParams.set('search', query.trim());
-      } else {
-        url.searchParams.delete('search');
-      }
-      const nextUrl = url.toString();
-      if (window.location.href !== nextUrl) {
-        window.history.replaceState({}, '', nextUrl);
-      }
-    };
-
-    const applyClientSearch = (query) => {
-      const value = query.trim().toLowerCase();
-      const contentRoot = document.querySelector('.admin-page-content');
-      if (!contentRoot) return;
-
-      if (!value) {
-        resetVisibleSearch();
-        return;
-      }
-
-      const searchableNodes = contentRoot.querySelectorAll('table tbody tr, .admin-record, .dashboard-card, .panel-card, .data-card, .user-row, .list-row, .activity-item, .notification-item, .research-item');
-      let visibleCount = 0;
-
-      searchableNodes.forEach((node) => {
-        const text = (node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const matches = text.includes(value);
-        const wasHidden = node.getAttribute('data-admin-search-hidden') === 'true';
-
-        if (matches) {
-          if (wasHidden) {
-            node.removeAttribute('data-admin-search-hidden');
-            node.style.display = '';
-          }
-          visibleCount += 1;
-        } else {
-          node.setAttribute('data-admin-search-hidden', 'true');
-          node.style.display = 'none';
-        }
-      });
-
-      const emptyState = document.querySelector('[data-admin-search-empty]');
-      if (emptyState) emptyState.remove();
-
-      if (!visibleCount) {
-        const message = document.createElement('div');
-        message.setAttribute('data-admin-search-empty', 'true');
-        message.style.cssText = 'padding: 28px 20px; border: 1px dashed #dfe6f2; border-radius: 14px; background: #f8fafc; color: #64748b; text-align: center; font-size: 14px;';
-        message.textContent = 'No matching results found for this search.';
-        contentRoot.appendChild(message);
-      }
-    };
-
-    adminSearchInput.addEventListener('input', () => {
-      const value = adminSearchInput.value;
-      syncSearchParam(value);
-      applyClientSearch(value);
-    });
-
-    adminSearchInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        const value = adminSearchInput.value.trim();
-        syncSearchParam(value);
-        applyClientSearch(value);
-      }
-    });
-
-    const initialQuery = new URLSearchParams(window.location.search).get('search');
-    if (initialQuery) {
-      adminSearchInput.value = initialQuery;
-      applyClientSearch(initialQuery);
-    }
-  }
-
-  document.querySelectorAll('.admin-nav-group').forEach((group) => {
-    group.addEventListener('toggle', () => {
-      if (shell.classList.contains('is-collapsed') && group.open) setCollapsed(false);
-    });
-  });
 })();
 </script>
 <style>
@@ -1205,6 +1205,7 @@ function renderAdminShellClose()
     }
   }
 </style>
+<script src="<?php echo htmlspecialchars(SITE_URL . 'js/notification-popover.js?v=' . filemtime(__DIR__ . '/../js/notification-popover.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 </body>
 </html>
 <?php

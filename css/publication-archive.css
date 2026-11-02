@@ -1,0 +1,61 @@
+.publication-form{--publication-accent:#800020}
+.publication-form .archive-card{border-top:3px solid var(--publication-accent)}
+.publication-form h2{font-size:20px;margin:0 0 18px;color:#65132b}
+.publication-form .archive-field{margin-bottom:12px}
+.publication-form fieldset{margin:20px 0}
+.publication-form legend{font-size:14px}
+.publication-form .archive-button:not(.secondary){background:var(--publication-accent);border-color:var(--publication-accent)}
+.publication-form .archive-field :is(input,textarea,select):focus-visible{outline-color:var(--publication-accent)}
+.publication-notice{padding:14px 18px;background:#faf3f5;border-left:3px solid #800020;line-height:1.7}
+.publication-author-row{display:flex;gap:8px;align-items:end;margin:12px 0}
+.publication-author-row label{flex:1;min-width:0;font-size:13px;font-weight:600}
+.publication-author-row input{box-sizing:border-box;display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}
+.publication-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}
+.publication-choices label{display:flex;align-items:center;gap:9px;min-height:40px;margin:0;font-size:13px;line-height:1.4;cursor:pointer}
+.publication-choices input[type=checkbox]{flex:0 0 18px;width:18px;height:18px;margin:0}
+.publication-field-error{color:#a21525!important;scroll-margin-block-start:120px}
+.publication-form [aria-invalid=true]{border-color:#a21525!important}
+.publication-form [hidden]{display:none!important}
+.publication-upload{margin:24px 0}
+.publication-setting{padding:16px 0;border-bottom:1px solid #e5e7eb}
+.publication-setting summary{cursor:pointer;font-weight:600;padding:8px 0}
+.publication-setting form{margin-top:18px}
+.publication-rule-form{padding-top:18px;border-top:1px solid #e5e7eb}
+.publication-rule-form button{margin-top:18px}
+.publication-form details{margin:20px 0}
+.publication-author-link-panel{border:1px solid #dfe7ef;border-radius:14px;background:#f8fafc;overflow:hidden}
+.publication-author-link-panel summary{list-style:none;display:flex;align-items:center;gap:10px;padding:16px 18px;cursor:pointer;font-weight:700;color:#1f2937;background:#fff;border-bottom:1px solid #e5edf5}
+.publication-author-link-panel summary::-webkit-details-marker{display:none}
+.publication-author-link-panel summary::before{content:"▾";display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:#60091a;font-size:14px;transition:transform .2s ease}
+.publication-author-link-panel[open] summary::before{transform:rotate(180deg)}
+.publication-author-link-body{padding:18px}
+.publication-author-link-row{display:flex;align-items:flex-end;gap:12px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #e7edf4}
+.publication-author-link-field{flex:1 1 auto;min-width:0}
+#publication-account-author{width:100%}
+#publication-link-author{white-space:nowrap;min-height:48px;padding:0 18px;background:var(--publication-accent);border-color:var(--publication-accent);color:#fff;font-weight:700;box-shadow:0 8px 18px rgba(128,0,32,.16)}
+.publication-author-link-panel .archive-authors{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 12px}
+.publication-author-link-panel .archive-authors label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #dfe7ef;border-radius:10px;background:#fff;color:#1f2937;font-size:13px;line-height:1.4}
+.publication-author-note{margin:12px 0 0;color:#475467;font-size:13px;line-height:1.6}
+.publication-form button:disabled{opacity:.5;cursor:default}
+.publication-form small{display:block;margin-top:8px;line-height:1.5}
+.publication-form :is(input[type=checkbox],input[type=radio]){accent-color:#800020}
+@media(max-width:650px){.publication-author-row{flex-wrap:wrap}.publication-author-row label{flex-basis:100%}.publication-author-link-row{flex-direction:column;align-items:stretch}.publication-author-link-panel .archive-authors{grid-template-columns:1fr}.publication-choices{grid-template-columns:1fr}.publication-form .archive-actions{justify-content:space-between}}
+
+.publication-confirm-dialog{--publication-confirm-tone:#800020;box-sizing:border-box;width:min(460px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 32px);margin:auto;padding:0;overflow:auto;border:1px solid #e7dfe3;border-radius:18px;background:#fff;color:#25212a;box-shadow:0 24px 72px rgba(27,18,23,.28)}
+.publication-confirm-dialog[data-tone=warning]{--publication-confirm-tone:#9a3412}
+.publication-confirm-dialog::backdrop{background:rgba(26,20,25,.58);backdrop-filter:blur(2px)}
+.publication-confirm-dialog__content{padding:26px}
+.publication-confirm-dialog__eyebrow{margin:0 0 8px;color:var(--publication-confirm-tone);font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.publication-confirm-dialog h2{margin:0 0 10px;color:#272127;font-size:21px;line-height:1.3}
+.publication-confirm-dialog__message{margin:0;color:#514b51;font-size:14px;line-height:1.65}
+.publication-confirm-dialog__actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+.publication-confirm-dialog__actions button{min-height:44px;padding:0 17px;border:1px solid transparent;border-radius:10px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:background-color .16s ease,border-color .16s ease,transform .16s ease}
+.publication-confirm-dialog__actions button:hover{transform:translateY(-1px)}
+.publication-confirm-dialog__actions button:active{transform:translateY(0)}
+.publication-confirm-dialog__actions button:focus-visible{outline:3px solid rgba(128,0,32,.28);outline-offset:2px}
+.publication-confirm-dialog__cancel{border-color:#d8d1d5!important;background:#fff;color:#3b3439}
+.publication-confirm-dialog__cancel:hover{background:#f8f5f6}
+.publication-confirm-dialog__confirm{background:var(--publication-confirm-tone);color:#fff}
+.publication-confirm-dialog__confirm:hover{filter:brightness(.92)}
+@media(max-width:480px){.publication-confirm-dialog__content{padding:22px}.publication-confirm-dialog__actions{flex-direction:column-reverse}.publication-confirm-dialog__actions button{width:100%}}
+@media(prefers-reduced-motion:reduce){.publication-confirm-dialog__actions button{transition:none}.publication-confirm-dialog__actions button:hover,.publication-confirm-dialog__actions button:active{transform:none}}

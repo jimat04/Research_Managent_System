@@ -236,10 +236,11 @@ if (!defined('SITE_URL')) {
                     <strong>Error ID:</strong> <?php echo bin2hex(random_bytes(4)); ?>
                 </p>
                 <p>
-                    <a href="<?php echo SITE_URL; ?>contact.php">Contact Technical Support</a>
+                    <a href="<?php echo SITE_URL; ?>public/about-us.php#contact-us">Contact Technical Support</a>
                 </p>
             </div>
         </div>
     </div>
+    <script src="<?php echo SITE_URL; ?>js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
 </body>
 </html>

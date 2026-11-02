@@ -1,0 +1,52 @@
+﻿id,path,line,anchor,scope,sha256,lines
+E01,database/schema/rms_db.sql,400,CREATE TABLE `research_projects`,Canonical entity declarations; enums and foreign keys; seed rows are not report evidence.,afb9495c0de9a6de4a72753d0ea32be8ed74d4efd77cd52f6bf72b438f9ce1fe,797
+E02,includes/auth.php,221,function rmsPermissionModules,"Four roles, module/subpage permission checks and common authentication/CSRF helpers. Only application helpers are cited; investigation-related branches are excluded.",d18cc2c495f5b1b3c834d65510e240efd7d7f2911351423d16dcbe36e4491f21,665
+E03,includes/research-workflow.php,3,function rms_capture_submission_version,"Version capture, actor checks, latest-version review, transaction and status updates.",4ff2581c444d5fe7e3a894a4e3edba9e308c2f0225a4d23610fbffe496d4c255,207
+E04,pages/researcher/submit-research.php,21,CRC_MAX_TOTAL_MEMBERS,"Initial title form, team validation, proposal attachment, transactional insertion and version capture.",acb0a2815cf91048466862d1d942fff83f951e682a171d39b24634a55affce07,880
+E05,pages/researcher/edit-research.php,142,$is_locked =,"Owner editing, locked statuses, resubmission, team controls and new submitted versions.",0e7b91d024a8559befe02e0bdf9c679d021f247d22eb8f21c44924adf6d8483e,1145
+E06,pages/researcher/submit-chapter.php,24,$chapter_fields =,"Five chapter templates, predecessor gates, draft editing, submission and lazy chapter-row creation.",085d7555f5ff0e4f94eec74b628fe12f5cb37211a7a835266c22c646db88025d,1012
+E07,pages/shared/research-submission-review.php,17,$can_view_review =,"Typed queue views, action permissions, notifications and review handler.",9271698d4c3a3f3927c8fa538114d8ea3ad611e8f690ed04681e0e99af6d00bb,580
+E08,pages/shared/implementation-outputs.php,132,$chapterAggregate =,Actual ongoing/completed/output query predicates and aggregates.,30b1e34845b7d554b1dd52ecef2164f493b09bc3432b33fbbb500241161328cc,566
+E09,pages/shared/research-detail.php,34,$has_access =,Role/ownership/team/adviser visibility and shared project view.,138ce98c28356263a285b110dea65b542deb571c1d5fed39e3f71fd264c529f0,662
+E10,pages/researcher/my-research.php,20,$query =,"Owner/member list, title feedback, navigation to edit and chapter submission.",8c0794b7d1c0d982b576032b6f590b482cc5e40dfb8951e81c222f356aa8068c,241
+E11,pages/admin/admin-research-module.php,14,$moduleMap =,"All 15 module destinations, filters and staff entry permission checks.",3baa50f76f6f3feaa06a3f7c3c3c02c8b57d7ef7b1c078814920569ed0ee4f11,53
+E12,includes/student-shell.php,90,$nav =,Student navigation.,1c46a7ae2919e4daa9c5303e9390f352edef59a4e72c8549068a7df23e7143c4,295
+E13,includes/faculty-shell.php,92,$nav =,Faculty navigation to the same canonical researcher workflow.,c9c7e7e2aa4d92303b4274d1ef0e10549e9129c34ef24bc17e5302bbf150bb37,256
+E14,includes/staff-shell.php,116,$nav =,Permission-filtered staff module navigation and additional staff services.,d4d1cf7cdaae5f966ecc01bcbc532f7199ed05b22c85ce16bf4cb01d196f5097,382
+E15,includes/admin-shell.php,78,$nav_groups =,"Administrative module, management, communication and account destinations.",a3c56be424b84c103c56d1822fe1ce240ffef8c502ca86212dc15713dfadcc22,1211
+E16,pages/shared/activity-form.php,51,$canManageActivity =,"Activity creation/editing, type-scoped permissions and recipient selection.",6f6432809363b7b263ff5c3dfd1e0264adf9c84c8d82cb9c82115ea8fe197444,438
+E17,pages/shared/activity-detail.php,37,$canManageActivity =,"Activity decisions, participation, attendance and deletion handlers.",566e9f727e960641cc3cac1a45c542a2043df8378d7e8ac8fdd78f8046651fa7,315
+E18,pages/shared/activities.php,18,$capacityPageInput =,Activity listing and seminar/training/workshop filters.,ff69e5443282b7766387bf8f359a1c7b02b23c25491be865ca860f2150de6b1e,846
+E19,pages/shared/publication-form.php,34,$isOwnerRole =,"Publication ownership, optional project linkage, PDF and field validation.",2273c60ca0f6eb3c4d09ed2df375c9fd6b5c78cbe540b35e9b6bbfa4b0362342,400
+E20,pages/shared/publication-detail.php,123,$transitions =,Exact publication actions and compare-and-update status transitions.,40697420bbd10ae266fb831df3e6d7dec31047bb1f234f413365f8e884d7e39c,260
+E21,pages/shared/publications.php,9,requireLogin(),Publication/repository listing route used by the module launcher.,f2b7b822c03e6109e38b90bc55a4166a228b9b61719b7cdc253c29876c95706b,894
+E22,pages/shared/copyright-form.php,34,$isOwnerRole =,"IP types, owner/reviewer limits, optional links and type-specific validation.",614d9aabbecbf7cadc62a8ec42a81cbe016880f348cd0e1f529dad2381766af7,459
+E23,pages/shared/copyright-detail.php,108,$transitions =,"Exact IP decisions, registration reference and reference/reason validation.",d5981258cd41ad0d93d555b4dbd12fa2fcb08b8e06c54b5373509318c320a402,274
+E24,pages/shared/copyrights.php,9,requireLogin(),IP list and type-scoped entry route.,60e6e1abba58bab3ab31a75db8ea249e5b00a9eed397603da6feaf972f5cdd0e,755
+E25,pages/shared/research-archive.php,72,$sql =,Authenticated archive keyed to stored completed/archived statuses.,a39f8da36363d0d34677652573d9b8257ee3dc6ae4b30019d4c6013c1bd41012,460
+E26,pages/admin/admin-archive.php,18,requireRole,"Administrative colloquium, journal and archive tracking updates.",ef53181df0a5f089140d9d50ed30154cb4cde99f73dd61a9b823bc8f4f270733,1185
+E27,pages/shared/download-research-document.php,12,$documentType =,"Type/ID checks, record authorization, extension and resolved-path checks.",7f82912418bc2cbb5a8c0fefb46b04ba9180e9857b110b82a632188b6d8d157b,201
+E28,includes/file-uploader.php,198,function handleRmsUpload,"Common upload handler, extension checks, storage and upload metadata.",146f1f029ecb38cb04944e1f65592975066f9bbecb9e854df6c5fe49a7ecd1bd,557
+E29,pages/shared/messages.php,122,$action =,"Message validation, sender/recipient storage and recipient read marking.",bb4085506902088493fbc57069362f0e2fe44dbcf62b1313360d530095c9bb2a,736
+E30,pages/shared/notifications.php,115,$action =,"User-scoped mark-read, mark-all-read and delete operations.",3b9a10b6b68b1010bf517d4c01fea88b8bf07c79e446557d5459ecd7d7ec11d8,493
+E31,pages/shared/profile.php,95,$action =,Profile updates and current-password-based password change.,da4ab39d5ec2ded07e0035ec0e17c4380fdc09e4c560af1f9d3d0aaf59c0b413,562
+E32,pages/admin/admin-users.php,6,requireRole,"User administration, status changes and staff permission collection.",a8d591c2f44e302d531e18bf41b271f98ecd16d5d21d1c2535da24d6275d13d2,1389
+E33,pages/admin/admin-departments.php,6,requireRole,Department creation/editing/status management.,37d23a096c9b943f87666d25b7af911bbf75db356b338fe5b2cb6da243208381,658
+E34,pages/admin/admin-programs.php,6,requireRole,Department-linked program creation/editing/status management.,4e6f985498014b6fa3a096ca023c60e79422e9fa25552a633db85cd091b1f250,859
+E35,pages/admin/admin-reports.php,6,requireRole,"Status-based statistics, attendance/publication/IP aggregates and reporting.",67bf931177baccf8f8c90e6e87ccb862ab42942a63f2e526f0244f4a69471868,467
+E36,pages/admin/admin-logs.php,6,requireRole,Administrative activity-log view.,7ba8bf207fb5f009f4811e8ee05efc56aba169cf82eb0e4117410d8621974384,193
+E37,pages/admin/admin-backup.php,6,requireRole,Backup creation/deletion handlers exist; no backup operation was performed.,803dfb7f6fe7c9d54700748b66cb5e4387c944c62f7495c083bc6177e2c8c8dc,249
+E38,pages/admin/admin-settings.php,12,requireRole,Read-only system diagnostic/status page; no diagnostics executed.,a62fcefe33d68b6616191bbc174c3cd1f10e722fc3e517d8fe1a5526a96132cd,399
+E39,pages/admin/admin-contact.php,9,requireRole,Contact reply/resolve/archive/reopen actions; no messages were sent.,1dd3bf71ca5542bffc651bf4faa9491edb9facaf0b483327e3e9cb2b5dbb4553,559
+E40,pages/staff/staff-defense.php,33,requireRole,"Retained, navigable defense scheduling/status actions.",edc5b96f986de8d96544b521cf8bd473fe5f958c4366f0e2bbd3024840d6e01b,1383
+E41,pages/staff/staff-revisions.php,13,requireRole,Read-only revision monitor.,254cab6235c8567e071eb4714dc26141947c711b15db55b0b786b1ca841cbb07,370
+E42,pages/staff/document-verification.php,13,requireRole,Document lookup and integrity-check implementation; not executed.,0c9db47916a09f96f767fa66594eb86b726aec32c794ea2213d0cb6753e67e28,377
+E43,public/login.php,209,$allowedRoles =,Login account-status checks; registration is student/faculty only.,0bb54fb8128f6e222ed1a9715c47c5966415a4c8453bde1c03a1ce0e6ff7aa8a,1079
+E44,public/research-archive.php,291,$is_logged_in =,Public archive selection and public presentation.,1ebbc64f7971be3c59816da73b194ffd420279d49d0ed434aa47d4de46bd9dd6,613
+E45,docs/rms-spec.md,5,Product scope note,Conflicting historical specification; documentation evidence only.,7433aebec947e70f72d4f92ca0c6ef21b8d9883ae7f3cf2ab3fa200bd9c9768a,67
+E46,CLAUDE.md,101,### V3 Architecture,Current architectural guidance; does not supersede handler evidence.,107007f385cf9304586545277e1549c7989381ca7db828180d5a5d3816b4cf3a,396
+E47,database/migrations/017_research_submission_versions.sql,4,research_submission_versions,"Static version-table migration text, not execution or ledger evidence.",f63310a676abc504e87c41a01231d15618498d894b96e232d5b68943262ad561,43
+E48,database/migrations/018_research_title_approval_status.sql,12,title_approved,Static title-status migration text.,cb3fc488d6316fa56d2736ab72422961ce71ab48124f3b62d94666f7d5abd84f,19
+E49,database/migrations/015_explicit_ip_types_and_research_output_links.sql,33,research_project_id,Static optional output-link and explicit-IP migration text.,2685a3d63df05665b9055e7d61f0ebe112f3aa5cb13e1eb49beb61a3df1956a0,259
+E50,pages/admin/admin-research.php,6,requireRole,Stored-status project administration/listing and older compatibility filters.,e1584d34fecd10346ea58ec1c3c543ae763ec4c9a7f41e505317df0dedc79feb,638
+E51,pages/student/student-dashboard.php,14,$role =,Shared personal dashboard with role gate and supporting-module counts.,9004d4eaa687a9dfe6227da01d0a3be3b1264fe386089664b0c4d58cd8de9ad9,441

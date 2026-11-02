@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
 if (!isLoggedIn()) {
     header('Location: ' . SITE_URL . 'public/login.php');
@@ -44,7 +45,7 @@ function archiveDetailLabel(?string $value): string
 }
 
 $schemaTables = [
-    'research_projects', 'project_members', 'defense_schedule', 'research_publication_tracking',
+    'research_projects', 'project_members', 'research_author_snapshots', 'defense_schedule', 'research_publication_tracking',
 ];
 $columns = [];
 foreach ($schemaTables as $table) {
@@ -58,11 +59,39 @@ $project = null;
 $proponents = [];
 $finalDefense = null;
 $publication = null;
+$finalManuscript = null;
 
 if ($projectId !== false && $projectId !== null && !empty($columns['research_projects'])) {
-    $abstractSelect = isset($columns['research_projects']['abstract']) ? 'rp.abstract' : 'NULL AS abstract';
     $deletedGuard = isset($columns['research_projects']['deleted_at']) ? ' AND rp.deleted_at IS NULL' : '';
-    $sql = "SELECT rp.project_id, rp.title, rp.status, rp.created_by, rp.updated_at, {$abstractSelect},
+    $studentProgramCandidates = [];
+    if (isset($columns['research_projects']['student_id'])) {
+        $studentProgramCandidates[] = "(SELECT NULLIF(TRIM(student_researcher.program), '')
+                                        FROM users student_researcher
+                                        WHERE student_researcher.user_id = rp.student_id
+                                          AND student_researcher.role = 'student'
+                                          AND student_researcher.deleted_at IS NULL
+                                        LIMIT 1)";
+    }
+    if (!empty($columns['project_members'])
+        && isset($columns['project_members']['project_id'], $columns['project_members']['user_id'])) {
+        $studentMemberOrder = isset($columns['project_members']['role'])
+            ? "ORDER BY CASE WHEN pm.role = 'lead' THEN 0 ELSE 1 END, pm.user_id"
+            : 'ORDER BY pm.user_id';
+        $studentProgramCandidates[] = "(SELECT NULLIF(TRIM(student_member.program), '')
+                                        FROM project_members pm
+                                        JOIN users student_member
+                                          ON student_member.user_id = pm.user_id
+                                         AND student_member.role = 'student'
+                                         AND student_member.deleted_at IS NULL
+                                        WHERE pm.project_id = rp.project_id
+                                        {$studentMemberOrder}
+                                        LIMIT 1)";
+    }
+    $studentProgramSelect = $studentProgramCandidates
+        ? 'COALESCE(' . implode(', ', $studentProgramCandidates) . ') AS student_program'
+        : 'NULL AS student_program';
+    $sql = "SELECT rp.project_id, rp.title, rp.status, rp.created_by, rp.updated_at,
+                   {$studentProgramSelect},
                    CONCAT_WS(' ', owner.first_name, owner.last_name) AS owner_name
             FROM research_projects rp
             JOIN users owner ON owner.user_id = rp.created_by
@@ -76,7 +105,31 @@ if ($projectId !== false && $projectId !== null && !empty($columns['research_pro
     $stmt->close();
 }
 
+if ($project && ($user['role'] ?? '') === 'faculty') {
+        $adviserStmt = $conn->prepare(
+                'SELECT 1 FROM research_projects rp
+                    WHERE rp.project_id = ? AND rp.deleted_at IS NULL
+                        AND (rp.adviser_id = ? OR EXISTS (
+                                SELECT 1 FROM project_advisers pa WHERE pa.project_id = rp.project_id AND pa.adviser_id = ?
+                        ))
+                    LIMIT 1'
+        );
+    if (!$adviserStmt) {
+        throw new RuntimeException('Unable to check faculty advising access: ' . $conn->error);
+    }
+    $adviserStmt->bind_param('iii', $projectId, $user['user_id'], $user['user_id']);
+    $adviserStmt->execute();
+    $isAssignedAdviser = $adviserStmt->get_result()->num_rows > 0;
+    $adviserStmt->close();
+    if (!$isAssignedAdviser) {
+        http_response_code(403);
+        exit('Access denied.');
+    }
+}
+
 if ($project) {
+    $project['approved_final_abstract'] = rms_approved_final_manuscript_abstract($conn, (int) $project['project_id']);
+
     $seenProponents = [];
     $ownerId = (int) $project['created_by'];
     $proponents[] = ['name' => (string) $project['owner_name'], 'role' => 'Lead proponent'];
@@ -108,6 +161,33 @@ if ($project) {
             ];
         }
         $stmt->close();
+    }
+
+    if (isset($columns['research_author_snapshots']['project_id'], $columns['research_author_snapshots']['user_id'], $columns['research_author_snapshots']['author_name'], $columns['research_author_snapshots']['author_role'])) {
+        $stmt = $conn->prepare(
+            'SELECT author_snapshot_id, user_id, author_name, author_role
+               FROM research_author_snapshots
+              WHERE project_id = ?
+              ORDER BY display_order, author_snapshot_id'
+        );
+        if ($stmt) {
+            $stmt->bind_param('i', $projectId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $memberId = (int) ($row['user_id'] ?? 0);
+                $seenKey = $memberId > 0 ? $memberId : 'snapshot-' . (int) $row['author_snapshot_id'];
+                if (isset($seenProponents[$seenKey])) {
+                    continue;
+                }
+                $seenProponents[$seenKey] = true;
+                $proponents[] = [
+                    'name' => (string) $row['author_name'],
+                    'role' => $row['author_role'] === 'lead' ? 'Lead proponent' : 'Member',
+                ];
+            }
+            $stmt->close();
+        }
     }
 
     $defenseColumns = $columns['defense_schedule'];
@@ -143,6 +223,19 @@ if ($project) {
         $publication = $stmt->get_result()->fetch_assoc();
         $stmt->close();
     }
+
+    // Fetch final manuscript document for students to view
+    $stmt = $conn->prepare(
+        "SELECT upload_id, original_name, file_name, file_path, file_size, upload_date
+         FROM uploads
+         WHERE project_id = ? AND type = 'manuscript'
+         ORDER BY upload_date DESC
+         LIMIT 1"
+    );
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    $finalManuscript = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 }
 
 $role = (string) ($user['role'] ?? 'student');
@@ -249,6 +342,23 @@ if ($shell === 'admin') {
     .detail-section-head p { margin: 5px 0 0; color: #64748b; font-size: 12px; }
     .detail-section-count { color: var(--detail-accent); font-size: 11px; font-weight: 850; }
     .detail-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; }
+    .detail-facts-panel { overflow: hidden; }
+    .detail-facts-panel .detail-section-head { align-items: flex-start; margin: 0 22px; padding: 18px 0 12px; border-top: 1px solid #e2e8f0; }
+    .detail-facts-panel .detail-section-head h2 { font-size: 15px; }
+    .detail-facts-panel .detail-section-head p { margin-top: 3px; }
+    .detail-facts-panel .detail-people { display: block; overflow: visible; }
+    .detail-facts-panel .detail-people-group { padding: 0 22px 18px; }
+    .detail-document-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; padding: 26px 28px; border-top: 1px solid #e2e8f0; }
+    .detail-document-section > .detail-section-label { grid-column: 1 / -1; margin-bottom: -8px; }
+    .detail-document-details { min-width: 0; }
+    .detail-document-open:focus-visible { outline: 2px solid var(--detail-accent); outline-offset: 3px; }
+    .detail-document-preview { min-width: 0; }
+    .detail-document-preview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+    .detail-document-preview-label { color: #475569; font-size: 11px; font-weight: 750; }
+    .detail-document-open { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 7px 11px; border: 1px solid rgba(var(--detail-rgb), .3); border-radius: 9px; background: var(--detail-tint); color: var(--detail-deep); font-size: 11px; font-weight: 750; line-height: 1.3; text-decoration: none; transition: background-color .18s ease, border-color .18s ease, color .18s ease; }
+    .detail-document-open:hover { border-color: var(--detail-deep); background: var(--detail-deep); color: #fff; }
+    .detail-document-open-arrow { font-size: 14px; line-height: 1; }
+    .detail-document-frame { display: block; width: 100%; height: clamp(520px, 72vh, 900px); border: 1px solid #dbe3ee; border-radius: 12px; background: #f8fafc; }
     .detail-people-group { padding: 24px 26px; }
     .detail-people-group + .detail-people-group { border-left: 1px solid #e2e8f0; }
     .detail-group-title { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 15px; }
@@ -289,12 +399,18 @@ if ($shell === 'admin') {
         .detail-hero { padding: 29px 24px; }
         .detail-hero-meta { flex-direction: column; gap: 7px; }
         .detail-section { padding: 22px 20px; }
+        .detail-document-section { grid-template-columns: minmax(0, 1fr); padding: 22px 20px; }
+        .detail-document-section > .detail-section-label { grid-column: 1; }
+        .detail-document-frame { height: clamp(420px, 72vh, 720px); }
         .detail-facts, .detail-people, .detail-milestones { grid-template-columns: 1fr; }
         .detail-fact + .detail-fact { border-top: 1px solid #e2e8f0; border-left: 0; }
         .detail-people-group + .detail-people-group, .detail-milestone + .detail-milestone { border-top: 1px solid #e2e8f0; border-left: 0; }
         .person-row { align-items: flex-start; }
         .metadata-row { grid-template-columns: 1fr; gap: 4px; }
         .detail-footer { align-items: flex-start; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .detail-document-open { transition: none; }
     }
 </style>
 
@@ -318,6 +434,7 @@ if ($shell === 'admin') {
                 <h1 id="research-detail-title"><?= archiveDetailEscape($project['title']) ?></h1>
                 <div class="detail-hero-meta">
                     <span>Lead proponent <strong><?= archiveDetailEscape($project['owner_name']) ?></strong></span>
+                    <span>Student researcher program <strong><?= archiveDetailEscape(trim((string) ($project['student_program'] ?? '')) ?: 'Not recorded') ?></strong></span>
                     <span>Archive year <strong><?= archiveDetailEscape(date('Y', strtotime($project['updated_at']))) ?></strong></span>
                 </div>
                 <span class="detail-badge"><?= archiveDetailEscape(ucfirst($project['status'])) ?> research</span>
@@ -325,54 +442,70 @@ if ($shell === 'admin') {
         </section>
 
         <div class="detail-overview">
-            <section class="detail-panel detail-section" aria-labelledby="detail-abstract-title">
-                <span class="detail-section-label">Research overview</span>
-                <h2 id="detail-abstract-title">Abstract</h2>
-                <?php if (trim((string) ($project['abstract'] ?? '')) !== ''): ?>
-                    <div class="detail-copy"><?= archiveDetailEscape($project['abstract']) ?></div>
-                <?php else: ?>
-                    <p class="detail-copy muted">No abstract has been recorded for this research project.</p>
-                <?php endif; ?>
-            </section>
+            <?php if ($project['approved_final_abstract'] !== null): ?>
+                <section class="detail-panel detail-section" aria-labelledby="detail-abstract-title">
+                    <span class="detail-section-label">Approved manuscript</span>
+                    <h2 id="detail-abstract-title">Abstract</h2>
+                    <div class="detail-copy"><?= archiveDetailEscape($project['approved_final_abstract']) ?></div>
+                </section>
+            <?php endif; ?>
 
-            <aside class="detail-panel" aria-label="Research facts">
+            <aside class="detail-panel detail-facts-panel" aria-label="Research facts">
                 <dl class="detail-facts">
                     <div class="detail-fact"><dt>Archive status</dt><dd><?= archiveDetailEscape(archiveDetailLabel($project['status'])) ?></dd></div>
                     <div class="detail-fact"><dt>Research team</dt><dd><?= count($proponents) ?> <?= count($proponents) === 1 ? 'proponent' : 'proponents' ?></dd></div>
                 </dl>
+                <div class="detail-section-head">
+                    <div>
+                        <h2>People behind the research</h2>
+                        <p>Recorded proponents for this project.</p>
+                    </div>
+                </div>
+                <section class="detail-people" aria-label="Research proponents">
+                    <div class="detail-people-group">
+                        <div class="people-list">
+                            <?php foreach ($proponents as $proponent): ?>
+                                <?php
+                                $nameParts = preg_split('/\s+/', trim((string) $proponent['name'])) ?: [];
+                                $initials = '';
+                                foreach (array_slice($nameParts, 0, 2) as $namePart) {
+                                    $initials .= strtoupper(substr($namePart, 0, 1));
+                                }
+                                ?>
+                                <div class="person-row">
+                                    <div class="person-identity">
+                                        <span class="person-initials" aria-hidden="true"><?= archiveDetailEscape($initials ?: 'P') ?></span>
+                                        <span class="person-name"><?= archiveDetailEscape($proponent['name']) ?></span>
+                                    </div>
+                                    <span class="person-tag"><?= archiveDetailEscape($proponent['role']) ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </section>
             </aside>
         </div>
 
-        <div class="detail-section-head">
-            <div>
-                <h2>People behind the research</h2>
-                <p>Recorded proponents for this project.</p>
-            </div>
-            <span class="detail-section-count"><?= count($proponents) ?> people</span>
-        </div>
-        <section class="detail-panel detail-people" aria-label="Research proponents">
-            <div class="detail-people-group">
-                <div class="detail-group-title"><h3>Proponents</h3><span><?= count($proponents) ?> recorded</span></div>
-                <div class="people-list">
-                    <?php foreach ($proponents as $proponent): ?>
-                        <?php
-                        $nameParts = preg_split('/\s+/', trim((string) $proponent['name'])) ?: [];
-                        $initials = '';
-                        foreach (array_slice($nameParts, 0, 2) as $namePart) {
-                            $initials .= strtoupper(substr($namePart, 0, 1));
-                        }
-                        ?>
-                        <div class="person-row">
-                            <div class="person-identity">
-                                <span class="person-initials" aria-hidden="true"><?= archiveDetailEscape($initials ?: 'P') ?></span>
-                                <span class="person-name"><?= archiveDetailEscape($proponent['name']) ?></span>
-                            </div>
-                            <span class="person-tag"><?= archiveDetailEscape($proponent['role']) ?></span>
-                        </div>
-                    <?php endforeach; ?>
+        <?php if ($finalManuscript): ?>
+            <?php $manuscriptViewerUrl = SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . (int) $finalManuscript['upload_id'] . '&mode=viewer'; ?>
+            <?php $manuscriptInlineUrl = SITE_URL . 'pages/shared/download-research-document.php?type=research&id=' . (int) $finalManuscript['upload_id'] . '&mode=inline'; ?>
+            <section class="detail-panel detail-document-section" aria-labelledby="detail-manuscript-title">
+                <span class="detail-section-label">Research document</span>
+                <div class="detail-document-details">
+                    <h2 id="detail-manuscript-title">Final manuscript</h2>
                 </div>
-            </div>
-        </section>
+                <div class="detail-document-preview">
+                    <div class="detail-document-preview-head">
+                        <span class="detail-document-preview-label">Inline document preview</span>
+                        <a class="detail-document-open" href="<?= archiveDetailEscape($manuscriptViewerUrl) ?>" target="_blank" rel="noopener noreferrer" aria-label="Open final manuscript in full view (opens a new tab)">
+                            <span class="detail-document-open-arrow" aria-hidden="true">↗</span>
+                            <span>Click to open full view</span>
+                        </a>
+                    </div>
+                    <iframe class="detail-document-frame" src="<?= archiveDetailEscape($manuscriptInlineUrl) ?>" title="Inline preview of <?= archiveDetailEscape($finalManuscript['original_name']) ?>" loading="lazy"></iframe>
+                </div>
+            </section>
+        <?php endif; ?>
 
         <?php if ($finalDefense || $publication): ?>
             <div class="detail-section-head">

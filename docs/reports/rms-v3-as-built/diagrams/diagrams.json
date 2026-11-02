@@ -1,0 +1,1081 @@
+[
+  {
+    "id": "system-map",
+    "title": "System map and persistence boundary",
+    "width": 960,
+    "height": 700,
+    "nodes": [
+      {
+        "id": "public",
+        "x": 45,
+        "y": 45,
+        "w": 240,
+        "h": 76,
+        "text": "Public entry / archive\nAccount entry and public records"
+      },
+      {
+        "id": "people",
+        "x": 360,
+        "y": 45,
+        "w": 240,
+        "h": 76,
+        "text": "Student / faculty\nShared researcher workspace"
+      },
+      {
+        "id": "office",
+        "x": 675,
+        "y": 45,
+        "w": 240,
+        "h": 76,
+        "text": "Admin / authorized staff\nScoped review and record tools"
+      },
+      {
+        "id": "auth",
+        "x": 360,
+        "y": 195,
+        "w": 240,
+        "h": 76,
+        "text": "PHP handlers + shared helpers\nAuth / ownership / permissions"
+      },
+      {
+        "id": "core",
+        "x": 45,
+        "y": 350,
+        "w": 240,
+        "h": 76,
+        "text": "Core workflow records\nProjects, chapters, versions, reviews"
+      },
+      {
+        "id": "support",
+        "x": 360,
+        "y": 350,
+        "w": 240,
+        "h": 76,
+        "text": "Supporting records\nActivities, publications, IP"
+      },
+      {
+        "id": "services",
+        "x": 675,
+        "y": 350,
+        "w": 240,
+        "h": 76,
+        "text": "Shared / admin services\nMessages, files, reports, accounts"
+      },
+      {
+        "id": "store",
+        "x": 280,
+        "y": 545,
+        "w": 400,
+        "h": 85,
+        "text": "MySQL schema declarations + file storage\nInstalled state and data not inspected"
+      }
+    ],
+    "edges": [
+      {
+        "points": [
+          [
+            165,
+            121
+          ],
+          [
+            165,
+            233
+          ],
+          [
+            360,
+            233
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            480,
+            121
+          ],
+          [
+            480,
+            195
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            795,
+            121
+          ],
+          [
+            795,
+            233
+          ],
+          [
+            600,
+            233
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            400,
+            271
+          ],
+          [
+            165,
+            315
+          ],
+          [
+            165,
+            350
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            480,
+            271
+          ],
+          [
+            480,
+            350
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            560,
+            271
+          ],
+          [
+            795,
+            315
+          ],
+          [
+            795,
+            350
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            165,
+            426
+          ],
+          [
+            165,
+            500
+          ],
+          [
+            360,
+            545
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            480,
+            426
+          ],
+          [
+            480,
+            545
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            795,
+            426
+          ],
+          [
+            795,
+            500
+          ],
+          [
+            600,
+            545
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      }
+    ],
+    "lanes": []
+  },
+  {
+    "id": "lifecycle-swimlane",
+    "title": "Title and chapter lifecycle swimlane",
+    "width": 960,
+    "height": 700,
+    "nodes": [
+      {
+        "id": "draft",
+        "x": 40,
+        "y": 70,
+        "w": 240,
+        "h": 62,
+        "text": "Draft / revise title"
+      },
+      {
+        "id": "capture",
+        "x": 360,
+        "y": 70,
+        "w": 240,
+        "h": 62,
+        "text": "Submit -> locked version\nProject: submitted"
+      },
+      {
+        "id": "review",
+        "x": 680,
+        "y": 70,
+        "w": 240,
+        "h": 62,
+        "text": "Review latest submitted version"
+      },
+      {
+        "id": "revise",
+        "x": 40,
+        "y": 215,
+        "w": 240,
+        "h": 70,
+        "text": "Respond to title comments\nResubmit as a new version"
+      },
+      {
+        "id": "return",
+        "x": 680,
+        "y": 215,
+        "w": 240,
+        "h": 70,
+        "text": "Return -> comments required\nProject: for_revision"
+      },
+      {
+        "id": "approved",
+        "x": 360,
+        "y": 350,
+        "w": 240,
+        "h": 68,
+        "text": "Title approved\nProject: title_approved"
+      },
+      {
+        "id": "chapter",
+        "x": 40,
+        "y": 475,
+        "w": 240,
+        "h": 76,
+        "text": "Draft next eligible chapter\nTitle / predecessor gates apply"
+      },
+      {
+        "id": "chapterv",
+        "x": 360,
+        "y": 475,
+        "w": 240,
+        "h": 76,
+        "text": "Submit chapter -> locked version\nRepeat per chapter 1–5"
+      },
+      {
+        "id": "chapterreview",
+        "x": 680,
+        "y": 475,
+        "w": 240,
+        "h": 76,
+        "text": "Approve chapter OR return\nrevision_required -> revise"
+      },
+      {
+        "id": "outputs",
+        "x": 360,
+        "y": 610,
+        "w": 240,
+        "h": 68,
+        "text": "Completion VIEW + supporting outputs\nSee denominator caveat in report"
+      }
+    ],
+    "edges": [
+      {
+        "points": [
+          [
+            280,
+            101
+          ],
+          [
+            360,
+            101
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            600,
+            101
+          ],
+          [
+            680,
+            101
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            800,
+            132
+          ],
+          [
+            800,
+            215
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            680,
+            250
+          ],
+          [
+            280,
+            250
+          ]
+        ],
+        "label": "return",
+        "labelX": 455,
+        "labelY": 230
+      },
+      {
+        "points": [
+          [
+            160,
+            215
+          ],
+          [
+            160,
+            165
+          ],
+          [
+            480,
+            165
+          ],
+          [
+            480,
+            132
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            920,
+            105
+          ],
+          [
+            945,
+            105
+          ],
+          [
+            945,
+            384
+          ],
+          [
+            600,
+            384
+          ]
+        ],
+        "label": "approve",
+        "labelX": 867,
+        "labelY": 365
+      },
+      {
+        "points": [
+          [
+            360,
+            384
+          ],
+          [
+            160,
+            384
+          ],
+          [
+            160,
+            475
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            280,
+            513
+          ],
+          [
+            360,
+            513
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            600,
+            513
+          ],
+          [
+            680,
+            513
+          ]
+        ],
+        "label": "",
+        "labelX": 0,
+        "labelY": 0
+      },
+      {
+        "points": [
+          [
+            800,
+            551
+          ],
+          [
+            800,
+            580
+          ],
+          [
+            160,
+            580
+          ],
+          [
+            160,
+            551
+          ]
+        ],
+        "label": "return / next approved chapter",
+        "labelX": 340,
+        "labelY": 583
+      },
+      {
+        "points": [
+          [
+            920,
+            513
+          ],
+          [
+            935,
+            513
+          ],
+          [
+            935,
+            644
+          ],
+          [
+            600,
+            644
+          ]
+        ],
+        "label": "approved progress",
+        "labelX": 805,
+        "labelY": 660
+      }
+    ],
+    "lanes": [
+      {
+        "x": 30,
+        "width": 260,
+        "text": "Researcher (student / faculty)"
+      },
+      {
+        "x": 350,
+        "width": 260,
+        "text": "System / persistence"
+      },
+      {
+        "x": 670,
+        "width": 260,
+        "text": "Authorized admin / staff"
+      }
+    ]
+  },
+  {
+    "id": "state-transitions",
+    "title": "Separate state domains",
+    "width": 960,
+    "height": 700,
+    "nodes": [
+      {
+        "id": "tdraft",
+        "x": 40,
+        "y": 70,
+        "w": 200,
+        "h": 60,
+        "text": "draft"
+      },
+      {
+        "id": "tsub",
+        "x": 380,
+        "y": 70,
+        "w": 200,
+        "h": 60,
+        "text": "submitted"
+      },
+      {
+        "id": "tapp",
+        "x": 720,
+        "y": 70,
+        "w": 200,
+        "h": 60,
+        "text": "title_approved"
+      },
+      {
+        "id": "treturn",
+        "x": 380,
+        "y": 180,
+        "w": 200,
+        "h": 60,
+        "text": "for_revision"
+      },
+      {
+        "id": "cdraft",
+        "x": 40,
+        "y": 325,
+        "w": 240,
+        "h": 68,
+        "text": "Chapter: draft / revision_required"
+      },
+      {
+        "id": "csub",
+        "x": 360,
+        "y": 325,
+        "w": 240,
+        "h": 68,
+        "text": "Chapter: submitted"
+      },
+      {
+        "id": "capp",
+        "x": 680,
+        "y": 325,
+        "w": 240,
+        "h": 68,
+        "text": "Chapter: approved"
+      },
+      {
+        "id": "vsub",
+        "x": 40,
+        "y": 525,
+        "w": 240,
+        "h": 64,
+        "text": "Version: submitted"
+      },
+      {
+        "id": "vapp",
+        "x": 360,
+        "y": 525,
+        "w": 240,
+        "h": 64,
+        "text": "Version: approved"
+      },
+      {
+        "id": "vret",
+        "x": 680,
+        "y": 525,
+        "w": 240,
+        "h": 64,
+        "text": "Version: returned"
+      }
+    ],
+    "edges": [
+      {
+        "points": [
+          [
+            240,
+            100
+          ],
+          [
+            380,
+            100
+          ]
+        ],
+        "label": "submit",
+        "labelX": 290,
+        "labelY": 80
+      },
+      {
+        "points": [
+          [
+            580,
+            100
+          ],
+          [
+            720,
+            100
+          ]
+        ],
+        "label": "approve",
+        "labelX": 625,
+        "labelY": 80
+      },
+      {
+        "points": [
+          [
+            480,
+            130
+          ],
+          [
+            480,
+            180
+          ]
+        ],
+        "label": "return",
+        "labelX": 490,
+        "labelY": 147
+      },
+      {
+        "points": [
+          [
+            380,
+            210
+          ],
+          [
+            300,
+            210
+          ],
+          [
+            300,
+            100
+          ],
+          [
+            380,
+            100
+          ]
+        ],
+        "label": "resubmit",
+        "labelX": 240,
+        "labelY": 151
+      },
+      {
+        "points": [
+          [
+            280,
+            359
+          ],
+          [
+            360,
+            359
+          ]
+        ],
+        "label": "submit",
+        "labelX": 290,
+        "labelY": 338
+      },
+      {
+        "points": [
+          [
+            600,
+            359
+          ],
+          [
+            680,
+            359
+          ]
+        ],
+        "label": "approve",
+        "labelX": 615,
+        "labelY": 338
+      },
+      {
+        "points": [
+          [
+            480,
+            393
+          ],
+          [
+            480,
+            435
+          ],
+          [
+            160,
+            435
+          ],
+          [
+            160,
+            393
+          ]
+        ],
+        "label": "return -> revision_required",
+        "labelX": 270,
+        "labelY": 440
+      },
+      {
+        "points": [
+          [
+            280,
+            557
+          ],
+          [
+            360,
+            557
+          ]
+        ],
+        "label": "approve",
+        "labelX": 287,
+        "labelY": 535
+      },
+      {
+        "points": [
+          [
+            160,
+            589
+          ],
+          [
+            160,
+            625
+          ],
+          [
+            800,
+            625
+          ],
+          [
+            800,
+            589
+          ]
+        ],
+        "label": "return",
+        "labelX": 440,
+        "labelY": 630
+      }
+    ],
+    "lanes": [
+      {
+        "x": 20,
+        "width": 920,
+        "text": "Title project (canonical path; compatibility inputs omitted here)"
+      }
+    ]
+  },
+  {
+    "id": "data-model",
+    "title": "Focused data relationships (source schema, not live database)",
+    "width": 960,
+    "height": 700,
+    "nodes": [
+      {
+        "id": "u",
+        "x": 40,
+        "y": 30,
+        "w": 240,
+        "h": 64,
+        "text": "users\nIdentity / role"
+      },
+      {
+        "id": "rp",
+        "x": 360,
+        "y": 30,
+        "w": 240,
+        "h": 64,
+        "text": "research_projects\ncreated_by / project_id"
+      },
+      {
+        "id": "pm",
+        "x": 680,
+        "y": 30,
+        "w": 240,
+        "h": 64,
+        "text": "project_members\nProject + user association"
+      },
+      {
+        "id": "ch",
+        "x": 360,
+        "y": 175,
+        "w": 240,
+        "h": 68,
+        "text": "chapters + chapter_content\nProject / chapter content"
+      },
+      {
+        "id": "v",
+        "x": 40,
+        "y": 325,
+        "w": 240,
+        "h": 76,
+        "text": "research_submission_versions\nProject + optional chapter FK"
+      },
+      {
+        "id": "rv",
+        "x": 40,
+        "y": 505,
+        "w": 240,
+        "h": 76,
+        "text": "research_submission_reviews\nVersion FK + reviewer"
+      },
+      {
+        "id": "up",
+        "x": 360,
+        "y": 325,
+        "w": 240,
+        "h": 76,
+        "text": "uploads + version_uploads\nVersion attachment links"
+      },
+      {
+        "id": "pub",
+        "x": 680,
+        "y": 175,
+        "w": 240,
+        "h": 68,
+        "text": "publications\nOptional research_project_id FK"
+      },
+      {
+        "id": "ip",
+        "x": 680,
+        "y": 505,
+        "w": 240,
+        "h": 76,
+        "text": "copyright_applications\nOptional project / publication FKs"
+      },
+      {
+        "id": "act",
+        "x": 360,
+        "y": 505,
+        "w": 240,
+        "h": 76,
+        "text": "research_activities\n+ activity_participants"
+      }
+    ],
+    "edges": [
+      {
+        "points": [
+          [
+            280,
+            62
+          ],
+          [
+            360,
+            62
+          ]
+        ],
+        "label": "creator FK",
+        "labelX": 287,
+        "labelY": 40
+      },
+      {
+        "points": [
+          [
+            600,
+            62
+          ],
+          [
+            680,
+            62
+          ]
+        ],
+        "label": "team",
+        "labelX": 620,
+        "labelY": 40
+      },
+      {
+        "points": [
+          [
+            480,
+            94
+          ],
+          [
+            480,
+            175
+          ]
+        ],
+        "label": "project",
+        "labelX": 492,
+        "labelY": 125
+      },
+      {
+        "points": [
+          [
+            360,
+            62
+          ],
+          [
+            320,
+            62
+          ],
+          [
+            320,
+            280
+          ],
+          [
+            200,
+            280
+          ],
+          [
+            200,
+            325
+          ]
+        ],
+        "label": "project FK",
+        "labelX": 222,
+        "labelY": 260
+      },
+      {
+        "points": [
+          [
+            360,
+            209
+          ],
+          [
+            120,
+            209
+          ],
+          [
+            120,
+            325
+          ]
+        ],
+        "label": "optional chapter FK",
+        "labelX": 30,
+        "labelY": 242
+      },
+      {
+        "points": [
+          [
+            160,
+            401
+          ],
+          [
+            160,
+            505
+          ]
+        ],
+        "label": "version FK",
+        "labelX": 173,
+        "labelY": 447
+      },
+      {
+        "points": [
+          [
+            280,
+            363
+          ],
+          [
+            360,
+            363
+          ]
+        ],
+        "label": "link",
+        "labelX": 300,
+        "labelY": 343
+      },
+      {
+        "points": [
+          [
+            600,
+            62
+          ],
+          [
+            640,
+            62
+          ],
+          [
+            640,
+            140
+          ],
+          [
+            800,
+            140
+          ],
+          [
+            800,
+            175
+          ]
+        ],
+        "label": "optional project FK",
+        "labelX": 678,
+        "labelY": 150
+      },
+      {
+        "points": [
+          [
+            800,
+            243
+          ],
+          [
+            800,
+            505
+          ]
+        ],
+        "label": "optional publication FK",
+        "labelX": 645,
+        "labelY": 365
+      },
+      {
+        "points": [
+          [
+            600,
+            62
+          ],
+          [
+            620,
+            62
+          ],
+          [
+            620,
+            468
+          ],
+          [
+            800,
+            468
+          ],
+          [
+            800,
+            505
+          ]
+        ],
+        "label": "optional project FK",
+        "labelX": 682,
+        "labelY": 450
+      }
+    ],
+    "lanes": []
+  }
+]

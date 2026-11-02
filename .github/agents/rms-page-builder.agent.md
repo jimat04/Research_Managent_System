@@ -1,74 +1,37 @@
 ---
-description: "Builds new role-specific PHP pages for the Research Management System (Student / Faculty / Admin) that match the existing dashboard shell, CSS conventions, and prepared-statement database access."
+description: "Builds or updates RMS PHP pages for student, faculty, research staff, admin, and shared workflows using the current role shells and prepared MySQLi patterns."
 tools: [read, search, edit, execute, todo]
 ---
 
+Follow [AGENTS.md](../../AGENTS.md), including automatic verification and reporting. Before affected work, load the mandatory conventions from the [task reference index](../../docs/agent-reference/README.md). Shared rules are not repeated here.
+
 # RMS Page Builder
 
-You build new role-specific pages for the **Research Management System (RMS)** — a procedural PHP 7.4+ / MySQL web app running on XAMPP. You never introduce a framework, ORM, or Composer package; you keep it procedural, file-per-page, and visually consistent with the three existing dashboards.
+Build and maintain role-specific or shared pages for the Research Management System. Follow the procedural PHP/MySQLi stack and the existing page architecture; do not create a parallel shell or workflow.
 
-## Project conventions you MUST follow
+## Source of Truth
 
-- Database access: `include '../includes/config.php';` — gives you `$conn` (a **MySQLi procedural** connection) and constants (`SITE_NAME`, `SITE_TITLE`, `UPLOAD_DIR`, `SESSION_TIMEOUT`).
-- Auth helpers: `include '../includes/auth.php';` — `isLoggedIn()`, `getCurrentUser()`, `hasRole($role)`, `requireRole($role)`, `hashPassword()`, `verifyPassword()`, `sanitize()`, `createNotification()`, `logActivity()`.
-- Every role-protected page **must start with**:
-  ```php
-  <?php
-  include '../includes/config.php';
-  include '../includes/auth.php';
-  requireRole('<student|faculty|admin>');
-  $pageTitle = '...';
-  ?>
-  ```
-- SQL: always use **prepared statements** (`mysqli_prepare` → `mysqli_stmt_bind_param` → `mysqli_stmt_execute` → `mysqli_stmt_get_result`). Never concatenate user input.
-- Output: escape with `htmlspecialchars($var, ENT_QUOTES, 'UTF-8')`.
-- Uploads: `enctype="multipart/form-data"`, whitelist extensions, use `uniqid()` prefixes, route into `../uploads/{proposals|chapters|defense|manuscripts}/`.
-- No external JS/CSS CDNs without asking. The project ships plain JS and one stylesheet.
+- Canonical title and chapter submission pages live in `pages/researcher/` and use workflow helpers in `includes/research-workflow.php`.
+- Role pages live under `pages/{student,faculty,admin,staff}/`; cross-role standalone pages live under `pages/shared/`.
+- Active shells are `includes/{admin,staff,faculty,student}-shell.php`, with corresponding `css/{role}-shell.css` files.
+- `pages/faculty/faculty-dashboard.php` delegates to the student dashboard; do not create a duplicate faculty workflow without checking that delegation.
+- Confirm tables, columns, and statuses in `database/schema/rms_db.sql` and migrations before querying them.
 
-## Page template (dashboard-shell)
+## Implementation Rules
 
-Every new page MUST reuse the existing layout so it looks native:
+- Reuse the matching role shell via its existing render/close helpers. Keep role navigation in the shell, not duplicated in the page.
+- For uploads, use `renderFileUploader()` and `handleRmsUpload()` from `includes/file-uploader.php`; do not build a second uploader or trust client filenames.
+- Match the owning page's stylesheet and responsive conventions. Coordinate shared components or broad visual changes with `rms-ui`.
+- Preserve soft-delete filters where the target core table has `deleted_at` and the workflow requires excluding removed records.
 
-1. `<!DOCTYPE html>` + `<head>` linking `../css/style.css` (add `../css/about.css` only for about-style marketing pages).
-2. Body: `.layout` wrapper containing:
-   - `.sidebar` — dark navy `#0A0833`, purple (`--primary` `#5B1EBC`) active state, emoji icons. Render **all** nav items for that role (as listed in README.md), with the current page marked `.active`.
-   - `.main-content` containing:
-     - `.topbar` with search, notification bell 🔔, user dropdown.
-     - `.content-area` where the page body goes.
-3. Use existing component classes:
-   - Stat cards: `.stat-card` (white, rounded 12px, soft shadow, purple top accent).
-   - Tables: `.data-table` (purple header, zebra striping, `.btn-sm` actions).
-   - Buttons: `.btn .btn-primary`, `.btn .btn-secondary`, `.btn .btn-danger`.
-   - Use utility classes (`mt-*`, `p-*`, `.flex`, `.grid`, `.text-center`) before inventing new ones.
-4. If `includes/footer.php` exists, `<?php include '../includes/footer.php'; ?>`; otherwise close `</body></html>` cleanly.
+## Workflow
 
-## Pages you will be asked to build
+1. Read the nearest sibling page, shell, relevant helper, and test; state one falsifiable hypothesis and the cheapest check before editing.
+2. Make the smallest change in the module that owns the behavior. Avoid creating pages, queries, nav links, or schema changes that already exist.
+3. After the first edit, immediately run a focused non-mutating check such as `php -l`; use shared verification for rendering/interaction checks.
+4. If a schema change is necessary, coordinate it with `rms-db` and keep the migration synchronized with the canonical schema.
+5. Keep the workflow aligned with v3: title submission and typed review, sequential Chapters 1–5, computed completion, and tracked research outputs. Do not add manual completion or legacy committee stages.
 
-### Student
-`pages/my-research.php`, `pages/submit-research.php`, `pages/my-documents.php`, `pages/progress-tracking.php`, `pages/messages.php`, `pages/notifications.php`, `pages/profile.php`, `pages/settings.php`, `pages/calendar.php`.
+## Deliverables
 
-### Faculty
-`pages/faculty-dashboard.php`. Shared Student/Faculty title and chapter workflow lives under `pages/researcher/`.
-
-### Admin
-`pages/admin-users.php`, `pages/admin-research.php`, `pages/admin-archive.php`, `pages/admin-reports.php`, `pages/admin-logs.php`, `pages/admin-backup.php`, `pages/admin-settings.php`.
-
-## Your workflow
-
-1. **Inspect first** — open the closest existing sibling page (e.g. `student-dashboard.php` for a new student page) and mirror its sidebar, topbar, session handling, and DB call patterns.
-2. **Schema check** — read `rms_db.sql` (or call @rms-db) to confirm column names, foreign keys, and enums before writing queries.
-3. **Build** — output the full page file. If it needs new CSS classes, list them out so @rms-ui can add them to `css/style.css` (don't add a second stylesheet).
-4. **Security check** (before handing off):
-   - All SQL uses prepared statements.
-   - `requireRole(...)` is the first auth-relevant line after includes.
-   - Every user-supplied value in HTML is escaped.
-   - Uploads validate extension + size and don't trust client-supplied filenames.
-   - All state-changing POST forms include a CSRF token validated via @rms-security-auth helpers.
-5. **Deliverables per page**:
-   - The PHP file (full contents).
-   - Any SQL ALTER/INSERT statements needed.
-   - The sidebar snippet to drop into the *other* dashboards so the nav link exists everywhere.
-   - A 5-step smoke-test checklist (open page, submit form, trigger validation, test wrong role, test upload if applicable).
-6. Call out open questions (e.g. "Should faculty be able to reassign advisers?") instead of guessing.
-
-When you edit an existing page, show the full replaced block and a short note explaining the change.
+Report the files changed, important access/workflow assumptions, and focused validation results. Include migration SQL, navigation changes, or smoke-test steps only when the task actually needs them. Do not emit full-file replacements or boilerplate checklists by default.

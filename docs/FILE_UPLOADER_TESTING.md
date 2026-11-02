@@ -1,6 +1,8 @@
 # RMS File Uploader Component — Testing Guide
 
-**Current source check:** October 10, 2026. This is a manual test recipe, not a fresh test report. Run it only against a local disposable database/account. Never use the documented steps to upload test files to production.
+**Current source check:** October 22, 2026. This is a manual test recipe, not a fresh test report. Run it only against a local disposable database/account. Never use the documented steps to upload test files to production.
+
+For current verification, use the [collaborative user-operated manual testing guide](testing/MANUAL_TESTING_GUIDE.md). Treat the scenarios below as reference cases to prepare there; the user performs all application interactions. No browser E2E suite is maintained.
 
 ## Overview
 
@@ -12,7 +14,19 @@ Premium file uploader component for RMS matching the purple/lavender design lang
 - `includes/file-uploader.php` — Server-side handler & HTML renderer
 - `public/api/upload.php` — AJAX upload endpoint
 
-**Current integrations:** Student proposal submit/edit and chapter submission pages. These currently use their normal form POST handlers. The JavaScript XHR method and API endpoint exist, but the current page integrations do not call them; this guide's submit step therefore does not exercise XHR progress.
+**Current integrations:** Proposal submit/edit, chapter submission, publication, and copyright forms. These use their normal form POST handlers. The JavaScript XHR method and API endpoint exist, but the page integrations do not call them; the smoke tests below do not exercise XHR progress.
+
+## Authenticated file preview and download checks
+
+Files in `uploads/` must not be fetched directly by URL. Use the authenticated RMS viewer route, which currently renders verified PDF and plain-text files inline and reports other accepted formats as unavailable. No office-document conversion service is configured.
+
+- Verify a project owner/member and assigned faculty adviser can preview an authorized research file but receive `403` from a direct `mode=download` request.
+- Verify staff can preview only with the relevant module's view access; a per-page download grant is required for `mode=download`.
+- Verify admins can preview and download.
+- Verify a staff permission with download enabled but module view disabled still cannot read/download the file.
+- Verify direct `/uploads/...` requests are denied, including under nested upload folders.
+- Verify PDF preview is inline and sends byte-range responses; verify text is served as `text/plain` and Office/ZIP formats show the unavailable state.
+- Use only authorized local/test accounts and disposable records/files, following the manual testing guide. Do not use production data or the normal `rms_db` database for mutations.
 
 ---
 
@@ -82,6 +96,17 @@ Premium file uploader component for RMS matching the purple/lavender design lang
       - `file_path` points to a generated `rms_...pdf` file under `uploads/proposals/`
       - `uploaded_by` = student's user ID
   - Physical file saved in `uploads/proposals/` directory
+
+## Publication and copyright form checks
+
+Run these UI checks on the publication and copyright forms using a local disposable account and records:
+
+- Confirm each form displays the shared drag-and-drop PDF uploader and shows the existing filename when editing a record with a file.
+- On a new record, confirm the PDF field is required. Select a valid PDF by browsing and then repeat by dragging a PDF onto the dropzone; submit each through the form's normal button.
+- On an editable record with an existing file, confirm no replacement is required and saving without a new file preserves the current file.
+- Replace a file using both Browse/Replace and drag-and-drop. Confirm the selected replacement reaches the normal form POST handler and the existing record-specific replacement behavior completes.
+- Try an unsupported extension and an oversized PDF. Confirm client-side feedback appears and server-side validation remains authoritative.
+- Do not use the normal development database `rms_db` for mutating browser tests. Use only a verified isolated E2E database as described above.
 
 ---
 
@@ -197,7 +222,7 @@ These settings belong to `public/api/upload.php`; page-level form uploads can pa
 ✅ **CSRF protection** — Token required for AJAX uploads  
 ✅ **Session gating** — `requireLogin()` on upload endpoint  
 ✅ **File permissions** — `chmod 0644` on stored files  
-✅ **Directory protection** — `uploads/.htaccess` blocks PHP execution  
+✅ **Directory protection** — `uploads/.htaccess` denies direct HTTP access; authenticated application routes serve files
 ✅ **Prepared statements** — SQL injection prevention  
 
 `uploads.project_id` is `NOT NULL` in the canonical schema. Supply a valid project ID to `handleRmsUpload()` even though the generic renderer/handler option defaults to `null`.

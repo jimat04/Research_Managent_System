@@ -1,6 +1,10 @@
 <?php
+$archiveMode = 'form';
+require __DIR__ . '/../../includes/archival-copyright-route.php';
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/file-uploader.php';
+require_once __DIR__ . '/../../includes/output-contributors.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
@@ -22,8 +26,8 @@ function copyrightFormStoredFile(string $relativePath): ?string
 {
     $normalized = ltrim(str_replace('\\', '/', $relativePath), '/');
     if (!preg_match('#^uploads/copyrights/[A-Za-z0-9._-]+\.pdf$#D', $normalized)) return null;
-    $uploadRoot = realpath(__DIR__ . '/../../uploads');
-    $resolved = realpath(__DIR__ . '/../../' . $normalized);
+    $uploadRoot = realpath(UPLOADS_DIR);
+    $resolved = realpath(rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . substr($normalized, strlen('uploads/')));
     if (!$uploadRoot || !$resolved || !is_file($resolved)) return null;
     $prefix = rtrim($uploadRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
     return str_starts_with($resolved, $prefix) ? $resolved : null;
@@ -31,7 +35,8 @@ function copyrightFormStoredFile(string $relativePath): ?string
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$isOwnerRole = in_array($role, ['faculty', 'student'], true);
+$contributorTablesAvailable = rmsOutputContributorTablesAvailable($conn);
+$isOwnerRole = $role === 'faculty';
 $isReviewer = $role === 'admin';
 $staffCopyrightPages = static function (string $type): array {
     return match ($type) {
@@ -98,6 +103,8 @@ $defaultOutputType = isset($typeOptions[$requestedOutputType])
     : (string) (array_key_first($typeOptions) ?? 'research');
 $statusOptions = ['pending' => 'Pending', 'under_review' => 'Under review', 'registered' => 'Registered', 'rejected' => 'Rejected'];
 $currentName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+$contributorOptions = $contributorTablesAvailable ? rmsOutputContributorOptions($conn) : [];
+$selectedContributorIds = [];
 $editRequested = array_key_exists('id', $_GET);
 $copyrightId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 if ($editRequested && !$copyrightId) {
@@ -168,6 +175,14 @@ if ($isEdit && $copyrightsAvailable) {
         header('Location: ' . SITE_URL . 'public/403.php');
         exit;
     }
+    if ($contributorTablesAvailable) {
+        $contributorsStmt = $conn->prepare('SELECT user_id FROM copyright_contributors WHERE copyright_id = ? AND user_id <> ?');
+        $contributorsStmt->bind_param('ii', $copyrightId, $userId);
+        $contributorsStmt->execute();
+        $contributorsResult = $contributorsStmt->get_result();
+        while ($contributorRow = $contributorsResult->fetch_assoc()) $selectedContributorIds[] = (int) $contributorRow['user_id'];
+        $contributorsStmt->close();
+    }
     foreach ($values as $key => $_value) $values[$key] = (string) ($existing[$key] ?? '');
     if ($isOwnerRole) {
         $values['applicant_name'] = $currentName;
@@ -182,6 +197,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) $errors[] = 'Your form expired. Please try again.';
+    $selectedContributorIds = array_values(array_unique(array_map('intval', is_array($_POST['contributor_ids'] ?? null) ? $_POST['contributor_ids'] : [])));
+    $validatedContributorIds = rmsValidateOutputContributorIds($conn, $selectedContributorIds, $userId);
+    if ($isOwnerRole && $validatedContributorIds === null) $errors[] = 'Choose only active student or faculty contributors.';
     if (!$copyrightsAvailable && !in_array('The copyrights module is not installed.', $errors, true)) $errors[] = 'The copyrights module is not installed.';
 
     $formMode = (string) ($_POST['form_mode'] ?? '');
@@ -299,7 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
             $size = (int) ($file['size'] ?? 0);
             if ($extension !== 'pdf') $errors[] = 'Only PDF files are accepted.';
-            if ($size < 1 || $size > MAX_UPLOAD_SIZE) $errors[] = 'The PDF must not exceed ' . number_format(MAX_UPLOAD_SIZE / 1048576, 0) . ' MB.';
+            if ($size < 1 || $size > rmsEffectiveUploadLimit()) $errors[] = 'The PDF must not exceed ' . number_format(rmsEffectiveUploadLimit() / 1048576, 2) . ' MB.';
             if (strlen($originalName) > 255) $errors[] = 'The original file name must not exceed 255 characters.';
             if (!function_exists('finfo_open')) {
                 $errors[] = 'Server-side file validation is unavailable.';
@@ -335,9 +353,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($validatedUpload) {
-                $targetDirectory = __DIR__ . '/../../uploads/copyrights';
+                $targetDirectory = rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'copyrights';
                 if (!is_dir($targetDirectory) && !mkdir($targetDirectory, 0755, true)) throw new RuntimeException('Unable to create the copyright upload directory.');
-                $uploadRoot = realpath(__DIR__ . '/../../uploads');
+                $uploadRoot = realpath(UPLOADS_DIR);
                 $realTargetDirectory = realpath($targetDirectory);
                 if (!$uploadRoot || !$realTargetDirectory || !str_starts_with($realTargetDirectory, rtrim($uploadRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) throw new RuntimeException('Invalid upload destination.');
                 $safeName = 'copyright_' . bin2hex(random_bytes(12)) . '.pdf';
@@ -373,6 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute();
             if (!$isEdit) $copyrightId = (int) $stmt->insert_id;
             $stmt->close();
+            if ($isOwnerRole && $contributorTablesAvailable) rmsSyncOutputContributors($conn, 'copyright', $copyrightId, $userId, $validatedContributorIds ?? []);
             $conn->commit();
             $saveCompleted = true;
         } catch (Throwable $exception) {
@@ -416,6 +435,7 @@ elseif ($shell === 'faculty') renderFacultyShell($user, 'copyrights.php', $pageT
 else renderStudentShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
 ?>
 
+<link rel="stylesheet" href="<?= copyrightFormEscape(SITE_URL . 'css/file-uploader.css') ?>">
 <style>
 .copyright-form-page{max-width:980px;margin:0 auto;color:#172033}.form-heading{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:20px}.form-heading h1{margin:0;font-size:clamp(25px,3vw,36px);letter-spacing:-.035em}.form-heading p{max-width:620px;margin:8px 0 0;color:#64748b;line-height:1.55}.back-link{color:#9a5b13;font-size:12px;font-weight:800;text-decoration:none}.form-card{overflow:hidden;border:1px solid #e9e1d5;border-radius:18px;background:#fff;box-shadow:0 15px 38px rgba(88,62,30,.07)}.form-note{padding:13px 20px;border-bottom:1px solid #eee6db;background:#fcfaf7;color:#526176;font-size:12px}.form-errors{margin:0 0 18px;padding:15px 18px;border:1px solid #fecaca;border-radius:12px;background:#fff1f2;color:#991b1b}.form-errors strong{display:block;margin-bottom:6px}.form-errors ul{margin:0;padding-left:19px}.copyright-form{padding:26px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:19px 18px}.field.full{grid-column:1/-1}.field label{display:block;margin-bottom:7px;color:#334155;font-size:12px;font-weight:800}.required{color:#b42318}.optional{margin-left:5px;color:#64748b;font-size:10px;font-weight:650}.field input,.field select,.field textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:11px 12px;background:#fff;color:#172033;font:inherit;font-size:13px}.field textarea{min-height:96px;resize:vertical;line-height:1.5}.field input[readonly]{background:#f8fafc;color:#526176}.field input:focus,.field select:focus,.field textarea:focus,.button:focus-visible,.back-link:focus-visible{border-color:#9a5b13;outline:3px solid rgba(154,91,19,.12);outline-offset:2px}.field small{display:block;margin-top:6px;color:#64748b;font-size:11px;line-height:1.45}.file-field{padding:17px;border:1px dashed #cdbb9e;border-radius:12px;background:#fcfaf7}.file-field input{padding:9px;background:#fff}.current-file{margin:0 0 10px;color:#9a5b13;font-size:12px;font-weight:750}.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid #eee8e0}.button{display:inline-flex;align-items:center;justify-content:center;min-height:43px;border:1px solid #9a5b13;border-radius:9px;padding:9px 17px;background:#9a5b13;color:#fff;font:inherit;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;transition:transform .18s ease,background .18s ease}.button:hover{background:#79450b;color:#fff;transform:translateY(-1px)}.button.secondary{border-color:#cbd5e1;background:#fff;color:#475569}@media(max-width:640px){.form-heading{display:block}.back-link{display:inline-block;margin-top:14px}.copyright-form{padding:20px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.form-actions{flex-direction:column-reverse}.button{width:100%;box-sizing:border-box}}
 </style>
@@ -439,18 +459,32 @@ else renderStudentShell($user, 'copyrights.php', $pageTitle, $pageSubtitle);
         <div class="field"><label for="filing-date">Filing date</label><input id="filing-date" name="filing_date" type="date" value="<?= copyrightFormEscape($values['filing_date']) ?>"></div>
         <div class="field full"><label for="inventors">Inventors / researchers</label><textarea id="inventors" name="inventors" maxlength="500" placeholder="List inventors or researchers, separated by commas"><?= copyrightFormEscape($values['inventors']) ?></textarea></div>
         <div class="field full"><label for="co-authors">Co-authors / collaborators</label><textarea id="co-authors" name="co_authors" maxlength="500" placeholder="List co-authors or collaborators, separated by commas"><?= copyrightFormEscape($values['co_authors']) ?></textarea></div>
+        <?php if ($isOwnerRole && $contributorTablesAvailable): ?><div class="field full"><span class="field-label">RMS co-authors / inventors</span><div class="contributor-options"><?php foreach ($contributorOptions as $contributor): if ((int) $contributor['user_id'] === $userId) continue; $contributorId = (int) $contributor['user_id']; ?><label><input type="checkbox" name="contributor_ids[]" value="<?= $contributorId ?>" <?= in_array($contributorId, $selectedContributorIds, true) ? 'checked' : '' ?>> <?= copyrightFormEscape(trim($contributor['first_name'] . ' ' . $contributor['last_name']) . ' (' . ucfirst($contributor['role']) . ')') ?></label><?php endforeach; ?></div><small>Choose RMS accounts to credit. Keep external or historical names in the free-text field above.</small></div><?php endif; ?>
         <div class="field"><label for="potential-partners">Potential partners</label><input id="potential-partners" name="potential_partners" type="text" maxlength="500" value="<?= copyrightFormEscape($values['potential_partners']) ?>" placeholder="Organizations or industry partners"></div>
         <div class="field"><label for="agreement-reference">Agreement reference</label><input id="agreement-reference" name="agreement_reference" type="text" maxlength="120" value="<?= copyrightFormEscape($values['agreement_reference']) ?>"></div>
         <div class="field"><label for="utilization-status">Utilization status</label><input id="utilization-status" name="utilization_status" type="text" maxlength="120" value="<?= copyrightFormEscape($values['utilization_status']) ?>" placeholder="Concept, transferred, in use, etc."></div>
         <div class="field full"><label for="transfer-activities">Technology-transfer activities</label><textarea id="transfer-activities" name="transfer_activities" maxlength="10000" placeholder="Describe licensing, partner engagement, demonstrations, agreements, or utilization activities"><?= copyrightFormEscape($values['transfer_activities']) ?></textarea></div>
         <?php if ($isReviewer && $isEdit): ?><div class="field"><label for="application-status">Current status</label><input id="application-status" type="text" value="<?= copyrightFormEscape(ucwords(str_replace('_', ' ', $values['status']))) ?>" readonly><small>Change status from the application detail page using a valid processing action.</small></div><?php endif; ?>
-        <div class="field full file-field"><label for="supporting-file">Supporting file (PDF) <?php if (!$values['file_path']): ?><span class="required">*</span><?php else: ?><span class="optional">optional replacement</span><?php endif; ?></label><?php if ($values['file_name']): ?><p class="current-file">Current file: <?= copyrightFormEscape($values['file_name']) ?></p><?php endif; ?><input id="supporting-file" name="supporting_file" type="file" accept=".pdf,application/pdf" <?= $values['file_path'] ? '' : 'required' ?>><small>PDF only, up to <?= copyrightFormEscape(number_format(MAX_UPLOAD_SIZE / 1048576, 0)) ?> MB. Uploading a new file replaces the current supporting document after the record saves.</small></div>
+        <div class="field full">
+          <?php if ($values['file_name']): ?><p class="current-file">Current file: <?= copyrightFormEscape($values['file_name']) ?></p><?php endif; ?>
+          <?= renderFileUploader([
+              'inputName' => 'supporting_file',
+              'accept' => '.pdf',
+              'maxSize' => (int) ceil(rmsEffectiveUploadLimit() / 1024),
+              'folderTarget' => 'copyrights',
+              'label' => 'Supporting file (PDF)' . ($values['file_path'] ? ' (optional replacement)' : ''),
+              'description' => 'Drop a supporting PDF here or click to browse',
+              'required' => empty($values['file_path']),
+          ]); ?>
+          <small>Uploading a new file replaces the current supporting document after the record saves.</small>
+        </div>
       </div>
       <div class="form-actions"><a class="button secondary" href="<?= copyrightFormEscape($isEdit && $copyrightId ? SITE_URL . 'pages/shared/copyright-detail.php?id=' . $copyrightId : SITE_URL . 'pages/shared/copyrights.php') ?>">Cancel</a><button class="button" type="submit"><?= $isEdit ? 'Save changes' : 'Submit application' ?></button></div>
     </form>
   </section>
 </div>
 
+<script src="<?= copyrightFormEscape(SITE_URL . 'js/file-uploader.js') ?>"></script>
 <?php
 if ($shell === 'admin') renderAdminShellClose();
 elseif ($shell === 'staff') renderStaffShellClose();

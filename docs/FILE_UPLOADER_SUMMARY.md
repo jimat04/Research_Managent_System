@@ -1,6 +1,6 @@
 # RMS File Uploader Component — Implementation Summary
 
-**Source checked:** October 10, 2026. This is an implementation summary, not a record of a fresh runtime test. The reusable control is currently used by student proposal submit/edit and chapter submission pages. Those pages handle uploads through their normal form POST flows; the AJAX endpoint and XHR progress method exist, but are not called by the current page integrations.
+**Source checked:** October 22, 2026. This is an implementation summary, not a record of a fresh runtime test. The reusable control is used by proposal submit/edit, chapter submission, publication, and copyright forms. These pages retain their normal form POST handling; the AJAX endpoint and XHR progress method exist, but are not called by these page integrations.
 
 ## 🎯 Deliverables Completed
 
@@ -16,7 +16,7 @@
 ### 2. **JavaScript Component** (`js/file-uploader.js`)
 - ✅ Vanilla JavaScript (no dependencies)
 - ✅ Auto-initializes all `.rms-file-uploader` elements on page load
-- ✅ Drag-and-drop support with drag-over state
+- ✅ Drag-and-drop support with drag-over state; browse, dropped, and replaced files are synchronized to the form input
 - ✅ Click-to-browse file picker
 - ✅ Client-side validation (file type + size)
 - ⚠️ Multi-file selection exists in the UI, but the PHP handler currently processes one `$_FILES` file record; end-to-end multiple-file upload is not supported.
@@ -45,11 +45,13 @@
 - ✅ Dynamic config based on folder target
 - ✅ HTTP status codes (200/400/403/405)
 
-### 5. **Current student integrations**
+### 5. **Current form integrations**
 - `pages/researcher/submit-research.php` — proposal upload during submission
 - `pages/researcher/edit-research.php` — optional replacement proposal upload
 - `pages/researcher/submit-chapter.php` — optional chapter document upload
-- These use the page's normal form POST handling; the AJAX progress UI is not active in these flows.
+- `pages/shared/publication-form.php` — required PDF on create, optional replacement when a current file exists
+- `pages/shared/copyright-form.php` — required PDF on create, optional replacement when a current file exists
+- These use the page's normal form POST handling; the AJAX progress UI is not active in these flows. The publication and copyright forms retain their own PDF validation and record-specific storage logic.
 
 ### 6. **Testing Documentation** (`docs/FILE_UPLOADER_TESTING.md`)
 - ✅ 7-step smoke test (idle → hover → drag → select → errors → success → DB verification)
@@ -60,6 +62,12 @@
 - ✅ Security features checklist
 - ✅ Troubleshooting guide
 - ✅ Browser compatibility matrix
+
+### 7. **Authenticated preview and downloads**
+- Research, publication, and copyright files are accessed through the authenticated `pages/shared/download-research-document.php` route; direct HTTP access to files under `uploads/` is denied.
+- The in-project viewer previews files detected as PDF or plain text. Other accepted formats, including Office documents and archives, show an unavailable-preview message; RMS currently has no configured office-to-PDF converter.
+- Admins retain downloads. Research staff need both the relevant module view permission and an explicit per-page download grant. Students and faculty can preview within their existing project/record access but do not receive the application's download action.
+- Browser preview is not DRM and cannot prevent users from capturing content displayed on screen.
 
 ---
 
@@ -107,7 +115,7 @@
 3. **CSRF Protection** — Token required for AJAX uploads
 4. **Session Gating** — `requireLogin()` on upload endpoint
 5. **File Permissions** — `chmod 0644` (read-only for web server)
-6. **Directory Protection** — `uploads/.htaccess` blocks PHP execution
+6. **Directory Protection** — `uploads/.htaccess` denies direct HTTP access; application routes authenticate file access
 7. **Prepared Statements** — SQL injection prevention
 8. **Size Limits** — Enforced server-side. Current page integrations set proposal/chapter limits to 10,000 KB; the AJAX endpoint defines 20,000 KB for defense and manuscript targets.
 
@@ -140,19 +148,19 @@ The canonical `uploads.project_id` column is `NOT NULL`; a valid project ID must
 
 ### Where to Use
 
-1. **Student Module**
-   - ✅ Proposal submission and optional replacement — `submit-research.php`, `edit-research.php`
-   - ✅ Chapter document — `submit-chapter.php`
-   - ⏳ Defense and manuscript targets are accepted by the AJAX endpoint but are not currently integrated by these page flows.
+1. **Researcher workflow**
+   - ✅ Proposal submission and optional replacement — `pages/researcher/submit-research.php`, `pages/researcher/edit-research.php`
+   - ✅ Chapter document — `pages/researcher/submit-chapter.php`
+   - These shared researcher pages retain their existing role and workflow authorization.
 
-2. **Faculty Module**
-   - Not currently integrated.
+2. **Publication and intellectual-property forms**
+   - ✅ PDF manuscript — `pages/shared/publication-form.php`
+   - ✅ Supporting PDF — `pages/shared/copyright-form.php`
+   - Availability follows each form's existing role and permission checks. These forms keep their own validation and record-specific storage behavior.
 
-3. **Staff Module**
-   - Not currently integrated.
-
-4. **Admin Module**
-   - Not currently integrated.
+3. **Other upload paths**
+   - Defense and generic manuscript targets are accepted by the AJAX endpoint but are not integrated into active form flows.
+   - `pages/student/submit-milestone.php` redirects before its upload workflow, so it is not an active uploader integration.
 
 ### Usage Template
 
@@ -271,8 +279,13 @@ rms/
 │   └── api/
 │       └── upload.php             ← AJAX endpoint
 ├── pages/
-│   └── student/
-│       └── submit-research.php    ← Demo integration
+│   ├── researcher/
+│   │   ├── submit-research.php   ← Proposal integration
+│   │   ├── edit-research.php
+│   │   └── submit-chapter.php
+│   └── shared/
+│       ├── publication-form.php
+│       └── copyright-form.php
 ├── uploads/                       ← Upload storage
 │   ├── .htaccess                  ← Security rules
 │   ├── proposals/

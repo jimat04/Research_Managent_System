@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
 require_once __DIR__ . '/../../includes/research-workflow.php';
 
-requireRole(['student', 'faculty']);
+requireRole('student');
 
 $user = getCurrentUser();
 $user_id = $user['user_id'];
@@ -18,7 +18,7 @@ $chapter_titles = [
     2 => 'Chapter 2: Review of Related Literature',
     3 => 'Chapter 3: Research Methodology',
     4 => 'Chapter 4: Presentation, Analysis and Interpretation of Data',
-    5 => 'Chapter 5: Summary of Findings, Conclusions and Recommendations'
+    5 => 'Chapter 5: Summary of Findings, Conclusions and Suggestions'
 ];
 
 $chapter_fields = [
@@ -51,7 +51,7 @@ $chapter_fields = [
     5 => [
         'summary_text' => 'Summary of Findings',
         'conclusions' => 'Conclusions',
-        'recommendations' => 'Recommendations'
+        'recommendations' => 'Suggestions'
     ]
 ];
 
@@ -67,7 +67,6 @@ $errors = [];
 $success = '';
 $project = null;
 $chapter = null;
-$content = [];
 $current_upload = null;
 $chapter_review_history = [];
 $chapter_has_review_activity = false;
@@ -205,14 +204,6 @@ if (!$invalid_chapter && $project) {
     }
 
     if ($chapter) {
-        $content_stmt = $conn->prepare('SELECT * FROM chapter_content WHERE chapter_id = ? LIMIT 1');
-        if ($content_stmt) {
-            $content_stmt->bind_param('i', $chapter['chapter_id']);
-            $content_stmt->execute();
-            $content = $content_stmt->get_result()->fetch_assoc() ?: [];
-            $content_stmt->close();
-        }
-
         $review_stmt = $conn->prepare('SELECT 1 FROM comments WHERE chapter_id = ? LIMIT 1');
         if ($review_stmt) {
             $review_stmt->bind_param('i', $chapter['chapter_id']);
@@ -222,7 +213,7 @@ if (!$invalid_chapter && $project) {
         }
 
         $history_stmt = $conn->prepare(
-            'SELECT v.version_number, r.decision, r.comments, r.reviewed_at,
+            'SELECT v.version_number, r.decision, r.comments, r.recommendation, r.reviewed_at,
                     CONCAT(u.first_name, " ", u.last_name) AS reviewer_name
                FROM research_submission_versions v
                JOIN research_submission_reviews r ON r.version_id = v.version_id
@@ -250,8 +241,8 @@ if (!$invalid_chapter && $project) {
         $deleted_column_stmt->close();
     }
     $upload_query = $uploads_have_deleted_at
-        ? "SELECT * FROM uploads WHERE project_id = ? AND chapter_id = ? AND type = 'chapter' AND deleted_at IS NULL ORDER BY upload_id DESC LIMIT 1"
-        : "SELECT * FROM uploads WHERE project_id = ? AND chapter_id = ? AND type = 'chapter' ORDER BY upload_id DESC LIMIT 1";
+        ? "SELECT uploads.*, EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = uploads.upload_id) AS is_preserved_version FROM uploads WHERE project_id = ? AND chapter_id = ? AND type = 'chapter' AND deleted_at IS NULL ORDER BY upload_id DESC LIMIT 1"
+        : "SELECT uploads.*, EXISTS(SELECT 1 FROM research_submission_version_uploads svu WHERE svu.upload_id = uploads.upload_id) AS is_preserved_version FROM uploads WHERE project_id = ? AND chapter_id = ? AND type = 'chapter' ORDER BY upload_id DESC LIMIT 1";
     $upload_stmt = $conn->prepare($upload_query);
     if ($upload_stmt) {
         $existing_chapter_id = $chapter ? $chapter['chapter_id'] : 0;
@@ -264,6 +255,10 @@ if (!$invalid_chapter && $project) {
 
 $chapter_stage_available = $project
     && in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing'], true);
+$research_eligibility_ok = $project
+    && (($user['role'] ?? '') !== 'student' || rms_student_program_is_eligible($conn, (int) $user_id))
+    && rms_project_students_are_eligible($conn, $project_id);
+$chapter_stage_available = $chapter_stage_available && $research_eligibility_ok;
 if ($chapter_stage_available && $chapter_number > 1) {
     $previous_stmt = $conn->prepare(
         "SELECT status FROM chapters WHERE project_id = ? AND chapter_number = ? AND deleted_at IS NULL LIMIT 1"
@@ -300,24 +295,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         }
     } else {
     if (!$chapter_stage_available) {
-        $errors[] = 'Chapter submission is available only after title approval, and each later chapter unlocks after the previous chapter is approved.';
+        $errors[] = !$research_eligibility_ok
+            ? 'All student researchers on this project must be active BSIT or BSCS students before submitting chapters.'
+            : 'Chapter submission is available only after title approval, and each later chapter unlocks after the previous chapter is approved.';
     }
-    $submitted_content = [];
-    foreach ($chapter_fields[$chapter_number] as $field => $label) {
-        $submitted_content[$field] = isset($_POST[$field]) ? trim($_POST[$field]) : '';
-    }
-
     $is_submit = isset($_POST['submit_review']);
+    $submitted_content = array_fill_keys(array_keys($chapter_fields[$chapter_number]), '');
     $editable_statuses = ['draft', 'revision_required'];
     if ($chapter && !in_array($chapter['status'], $editable_statuses, true)) {
         $errors[] = 'This chapter is locked while awaiting review or after approval.';
-    }
-    $has_content = false;
-    foreach ($submitted_content as $value) {
-        if ($value !== '') {
-            $has_content = true;
-            break;
-        }
     }
 
     $file_uploaded = isset($_FILES['chapter_file']) && $_FILES['chapter_file']['error'] !== UPLOAD_ERR_NO_FILE;
@@ -328,8 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if ($file['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'File upload error. Please try again.';
-        } elseif (!in_array($file_extension, ['pdf', 'doc', 'docx'], true)) {
-            $errors[] = 'Invalid file format. Accepted formats: PDF, DOC, DOCX.';
+        } elseif ($file_extension !== 'pdf') {
+            $errors[] = 'Chapter submissions must be PDF files.';
         } elseif ($file['size'] > 10 * 1024 * 1024) {
             $errors[] = 'File size must not exceed 10 MB.';
         } else {
@@ -337,8 +323,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         }
     }
 
-    if ($is_submit && !$has_content && !$file_valid) {
-        $errors[] = 'Add content or upload a chapter document before submitting for review.';
+    if ($is_submit && !$file_valid) {
+        $errors[] = 'Upload the completed chapter document before submitting for review.';
     }
 
     if (empty($errors)) {
@@ -412,29 +398,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 }
             }
 
-            $set_parts = [];
-            foreach ($submitted_content as $field => $value) {
-                $set_parts[] = "`$field` = ?";
-            }
-            $content_update = $conn->prepare('UPDATE chapter_content SET ' . implode(', ', $set_parts) . ' WHERE chapter_id = ?');
-            if (!$content_update) {
-                throw new Exception('Unable to prepare content update.');
-            }
-            $content_values = array_values($submitted_content);
-            $content_values[] = $chapter_id;
-            $content_types = str_repeat('s', count($submitted_content)) . 'i';
-            $content_update->bind_param($content_types, ...$content_values);
-            if (!$content_update->execute()) {
-                throw new Exception('Unable to save chapter content.');
-            }
-            $content_update->close();
-
             if ($file_valid) {
                 $upload_result = handleRmsUpload([
                     'inputName' => 'chapter_file',
                     'folderTarget' => 'chapters',
                     'maxSize' => 10000,
-                    'accept' => ['.pdf', '.doc', '.docx'],
+                    'accept' => ['.pdf'],
                     'projectId' => $project_id,
                     'chapterId' => $chapter_id,
                     'type' => 'chapter',
@@ -507,13 +476,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
 
             logActivity($is_submit ? 'Chapter submitted' : 'Chapter saved as draft', 'chapters');
             $conn->commit();
+            if ($is_submit) {
+                $_SESSION['module_success'] = 'Version ' . $new_version
+                    . ' of Chapter ' . $chapter_number . ' has been submitted for review.';
+            }
             header('Location: ' . SITE_URL . 'pages/shared/research-detail.php?id=' . $project_id . '&chapter_saved=1');
             exit();
         } catch (Exception $exception) {
             $conn->rollback();
             if ($uploaded_file_path !== '') {
-                $orphaned_path = realpath(__DIR__ . '/../../' . $uploaded_file_path);
-                $uploads_root = realpath(__DIR__ . '/../../uploads');
+                $orphaned_relative = str_replace('\\', '/', (string) $uploaded_file_path);
+                $orphaned_path = strpos($orphaned_relative, 'uploads/') === 0
+                    ? realpath(rtrim(UPLOADS_DIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, substr($orphaned_relative, strlen('uploads/'))))
+                    : false;
+                $uploads_root = realpath(UPLOADS_DIR);
                 if ($orphaned_path && $uploads_root && strpos($orphaned_path, $uploads_root . DIRECTORY_SEPARATOR) === 0 && is_file($orphaned_path)) {
                     unlink($orphaned_path);
                 }
@@ -521,7 +497,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             $errors[] = 'Unable to save chapter: ' . $exception->getMessage();
         }
     }
-    $content = array_merge($content, $submitted_content);
     }
 }
 
@@ -747,6 +722,15 @@ if (($user['role'] ?? '') === 'faculty') {
   .picker-num.revision_required { background: #EA580C; }
   .picker-num.submitted         { background: #7C3AED; }
   .picker-num.draft             { background: #64748B; }
+  .chapter-review-history{margin-bottom:20px;padding:20px 22px;border:1px solid #DED5E8;border-radius:16px;background:rgba(255,255,255,.96);box-shadow:0 10px 28px rgba(45,24,76,.05)}
+  .chapter-review-history summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;color:#352248;font-size:14px;font-weight:700;cursor:pointer;list-style:none}
+  .chapter-review-history summary::-webkit-details-marker{display:none}
+  .chapter-review-history .review-history-hide{display:none}
+  .chapter-review-history[open] .review-history-open{display:none}
+  .chapter-review-history[open] .review-history-hide{display:inline}
+  .chapter-review-history summary::after{content:'+';display:grid;width:28px;height:28px;flex:none;place-items:center;border:1px solid #D9C9EB;border-radius:9px;background:#F4EDFC;color:#5B1EBC;font-size:18px;line-height:1}
+  .chapter-review-history[open] summary::after{content:'−'}
+  .chapter-review-history summary:focus-visible{outline:2px solid #5B1EBC;outline-offset:3px;border-radius:4px}
   .picker-empty {
     text-align: center;
     padding: 60px 40px;
@@ -778,6 +762,24 @@ if (($user['role'] ?? '') === 'faculty') {
   .chapter-page.role-student .chapter-hero,.chapter-page.role-faculty .chapter-hero{border-color:rgba(255,255,255,.2);background:radial-gradient(circle at 91% 8%,var(--chapter-hero-glow),transparent 28%),radial-gradient(circle at 8% 118%,var(--chapter-hero-edge),transparent 32%),linear-gradient(135deg,var(--chapter-hero-start) 0%,var(--chapter-hero-mid) 57%,var(--chapter-hero-end) 100%);box-shadow:0 22px 52px var(--chapter-hero-shadow)}
   .chapter-page.role-student .chapter-eyebrow,.chapter-page.role-faculty .chapter-eyebrow{color:var(--chapter-hero-eyebrow)}
   .chapter-page.role-student .chapter-guide-steps .is-current span,.chapter-page.role-faculty .chapter-guide-steps .is-current span{color:var(--chapter-hero-active)}
+  .chapter-page.role-faculty{--purple:#1D4ED8;--ink:#111827;--muted:#5D6B81;--line:#DCE4EF}
+  .chapter-page.role-faculty .chapter-hero h1{color:#fff}
+  .chapter-page.role-faculty .chapter-breadcrumbs a{color:#1D4ED8!important}
+  .chapter-page.role-faculty .chapter-breadcrumbs a:hover{color:#1E40AF!important}
+  .chapter-page.role-faculty .chapter-guide-steps .is-current span{color:#1D4ED8}
+  .chapter-page.role-faculty .picker-item::after{color:#1D4ED8}
+  .chapter-page.role-faculty .picker-item:hover{border-color:#93B4EE}
+  .chapter-page.role-faculty .picker-num{background:#1D4ED8;box-shadow:0 8px 16px rgba(29,78,216,.18)}
+  .chapter-page.role-faculty .picker-empty{background:radial-gradient(circle at 50% 15%,rgba(29,78,216,.09),transparent 38%),#FBFCFF}
+  .chapter-page.role-faculty form>.card:nth-of-type(1){border-top-color:#1D4ED8}
+  .chapter-page.role-faculty form>.card:nth-of-type(1) .card-title::before{background:#E8F0FF;color:#1D4ED8}
+  .chapter-page.role-faculty .form-control:focus{border-color:#1D4ED8;box-shadow:0 0 0 4px rgba(29,78,216,.13)}
+  .chapter-page.role-faculty input[type=file].form-control::file-selector-button{background:#1D4ED8}
+  .chapter-page.role-faculty input[type=file].form-control::file-selector-button:hover{background:#1E40AF}
+  .chapter-page.role-faculty form>.card:nth-of-type(3) a{color:#1D4ED8}
+  .chapter-page.role-faculty form>.card:nth-of-type(3) a[style]{color:#1D4ED8!important}
+  .chapter-page.role-faculty .btn-primary{background:#1D4ED8}
+  .chapter-page.role-faculty .btn-primary:hover{background:#1E40AF}
 </style>
 
 <main class="chapter-page role-<?php echo htmlspecialchars((string) ($user['role'] ?? 'student'), ENT_QUOTES, 'UTF-8'); ?>">
@@ -817,7 +819,7 @@ if (($user['role'] ?? '') === 'faculty') {
     <ol class="chapter-guide-steps">
       <li class="<?php echo $sch_picker_mode === 'project' ? 'is-current' : ''; ?>"><span>01</span> Choose a project</li>
       <li class="<?php echo $sch_picker_mode === 'chapter' ? 'is-current' : ''; ?>"><span>02</span> Select a chapter</li>
-      <li class="<?php echo $sch_picker_mode === '' && $project && !$invalid_chapter ? 'is-current' : ''; ?>"><span>03</span> Write or upload</li>
+      <li class="<?php echo $sch_picker_mode === '' && $project && !$invalid_chapter ? 'is-current' : ''; ?>"><span>03</span> Prepare and upload</li>
     </ol>
   </div>
 </section>
@@ -938,11 +940,12 @@ if (($user['role'] ?? '') === 'faculty') {
   <?php if (isset($_GET['attachment_removed'])): ?><div class="alert alert-success">Draft attachment removed.</div><?php endif; ?>
   <?php if ($success): ?><div class="alert alert-success"><strong>Chapter updated.</strong> <?php echo htmlspecialchars($success); ?></div><?php endif; ?>
   <?php if (!empty($errors)): ?><div class="alert alert-error"><ul style="margin: 0; padding-left: 20px;"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
-  <?php if (!$chapter_stage_available): ?><div class="alert alert-error">This chapter is locked. Title approval is required first, and later chapters unlock only after the previous chapter is approved.</div><?php endif; ?>
+  <?php if (!$research_eligibility_ok): ?><div class="alert alert-error" role="alert">Chapter submissions are available only when the student lead and all student co-researchers are active BSIT or BSCS students.</div><?php elseif (!$chapter_stage_available): ?><div class="alert alert-error">This chapter is locked. Title approval is required first, and later chapters unlock only after the previous chapter is approved.</div><?php endif; ?>
   <?php if ($chapter_review_history): ?>
-    <div class="card" style="margin-bottom:20px"><div class="card-header"><div class="card-title">Review feedback and history</div></div>
-      <?php foreach ($chapter_review_history as $review): ?><div style="padding:12px 0;border-top:1px solid #E5E7EB"><strong>Version <?php echo (int) $review['version_number']; ?> · <?php echo htmlspecialchars(ucfirst($review['decision']), ENT_QUOTES, 'UTF-8'); ?></strong><small style="display:block;color:#64748B;margin-top:4px"><?php echo htmlspecialchars($review['reviewer_name'] ?: 'Authorized reviewer', ENT_QUOTES, 'UTF-8'); ?> · <?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($review['reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?></small><p style="white-space:pre-wrap;color:#334155"><?php echo htmlspecialchars($review['comments'], ENT_QUOTES, 'UTF-8'); ?></p></div><?php endforeach; ?>
-    </div>
+    <details class="chapter-review-history">
+      <summary><span class="review-history-open">Open previous review comments and suggestions</span><span class="review-history-hide">Hide previous review comments and suggestions</span></summary>
+      <?php foreach ($chapter_review_history as $review): ?><div style="padding:12px 0;border-top:1px solid #E5E7EB"><strong>Version <?php echo (int) $review['version_number']; ?> · <?php echo htmlspecialchars(ucfirst($review['decision']), ENT_QUOTES, 'UTF-8'); ?></strong><small style="display:block;color:#64748B;margin-top:4px"><?php echo htmlspecialchars($review['reviewer_name'] ?: 'Authorized reviewer', ENT_QUOTES, 'UTF-8'); ?> · <?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($review['reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?></small><?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?><p style="white-space:pre-wrap;color:#334155"><strong>Review comments:</strong><br><?php echo htmlspecialchars($review['comments'], ENT_QUOTES, 'UTF-8'); ?></p><?php endif; ?><?php if (trim((string) ($review['recommendation'] ?? '')) !== ''): ?><p style="white-space:pre-wrap;color:#334155"><strong>Suggestion:</strong><br><?php echo htmlspecialchars($review['recommendation'], ENT_QUOTES, 'UTF-8'); ?></p><?php endif; ?></div><?php endforeach; ?>
+    </details>
   <?php endif; ?>
 
   <form method="post" enctype="multipart/form-data">
@@ -957,26 +960,50 @@ if (($user['role'] ?? '') === 'faculty') {
       <?php if ($chapter): ?><div><strong>Last updated</strong><div><?php echo !empty($chapter['updated_at']) ? date('M d, Y', strtotime($chapter['updated_at'])) : 'N/A'; ?></div></div><?php endif; ?>
     </div></div>
 
-    <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter Content</div></div><div class="card-body" style="display: block;">
-      <?php foreach ($chapter_fields[$chapter_number] as $field => $label): ?><div class="form-group"><label class="form-label" for="<?php echo $field; ?>"><?php echo htmlspecialchars($label); ?></label><textarea id="<?php echo $field; ?>" name="<?php echo $field; ?>" class="form-control" rows="8" placeholder="Write your content here..." <?php echo $can_edit_chapter ? '' : 'disabled'; ?>><?php echo htmlspecialchars($content[$field] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea><small class="text-muted"><?php echo $can_edit_chapter ? 'Add your content for this section. You may continue editing it later.' : 'This chapter is locked while it is awaiting review or has already been approved.'; ?></small></div><?php endforeach; ?>
+    <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">What to include in this chapter</div></div><div class="card-body" style="display: block;">
+      <p class="text-muted" style="margin-top: 0;">Prepare the complete chapter in your document editor, then upload it below. Use these sections as a guide:</p>
+      <ul style="margin: 0; padding-left: 22px; line-height: 1.8;">
+        <?php foreach ($chapter_fields[$chapter_number] as $label): ?>
+          <li><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></li>
+        <?php endforeach; ?>
+      </ul>
+      <p class="text-muted" style="margin-bottom: 0;">Include the relevant explanations, evidence, tables, figures, and citations for your selected chapter. Follow your department's formatting requirements.</p>
+      <a href="<?php echo SITE_URL; ?>public/assets/research-chapter-template.docx" download style="display: inline-block; margin-top: 12px; font-weight: 600;">
+        Download the blank chapter DOCX starter
+      </a>
     </div></div>
 
     <div class="card" style="margin-bottom: 20px;"><div class="card-header"><div class="card-title">Chapter File</div></div><div class="card-body" style="display: block;">
       <?php echo renderFileUploader([
           'inputName' => 'chapter_file',
-          'accept' => '.pdf,.doc,.docx',
+          'accept' => '.pdf',
           'maxSize' => 10000,
           'folderTarget' => 'chapters',
           'label' => 'Upload formatted chapter',
-          'description' => 'Drag and drop a PDF, DOC, or DOCX file, or click to browse',
-          'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
+          'description' => 'Upload a PDF file for this chapter.',
+          'allowedFormatsText' => 'PDF only • Max 10 MB',
           'required' => false,
           'disabled' => !$can_edit_chapter,
           'projectId' => $project_id,
           'chapterId' => $chapter['chapter_id'] ?? null
       ]); ?>
-      <small class="text-muted">A document is optional when saving a draft. Add written content or a file before submitting for review.</small>
-      <?php if ($current_upload): ?><div style="margin-top: 14px;">📄 Current uploaded file: <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_upload['upload_id']; ?>"><?php echo htmlspecialchars($current_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a> · <?php echo number_format(((int) $current_upload['file_size']) / 1024, 1); ?> KB<?php if ($can_edit_chapter): ?><div style="color: #64748B; font-size: 13px;">New uploads are kept as separate files; submitted-version attachments remain preserved.</div><button type="submit" class="btn btn-secondary" name="remove_attachment" value="1" style="margin-top:8px">Remove draft attachment</button><input type="hidden" name="upload_id" value="<?php echo (int) $current_upload['upload_id']; ?>"><?php endif; ?></div><?php endif; ?>
+      <small class="text-muted">A document is optional when saving a draft. Upload the completed chapter document before submitting or resubmitting for review.</small>
+      <?php if ($current_upload): ?>
+        <div style="margin-top: 14px;">
+          📄 Current uploaded file:
+          <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $current_upload['upload_id']; ?>&amp;mode=viewer"><?php echo htmlspecialchars($current_upload['original_name'], ENT_QUOTES, 'UTF-8'); ?></a>
+          · <?php echo number_format(((int) $current_upload['file_size']) / 1024, 1); ?> KB
+          <?php if ($can_edit_chapter): ?>
+            <?php if (!empty($current_upload['is_preserved_version'])): ?>
+              <div style="color: #64748B; font-size: 13px;">This file is preserved with a submitted version. Upload a replacement PDF below; the existing version will remain unchanged.</div>
+            <?php else: ?>
+              <div style="color: #64748B; font-size: 13px;">New uploads are kept as separate files; submitted-version attachments remain preserved.</div>
+              <button type="submit" class="btn btn-secondary" name="remove_attachment" value="1" style="margin-top:8px">Remove draft attachment</button>
+              <input type="hidden" name="upload_id" value="<?php echo (int) $current_upload['upload_id']; ?>">
+            <?php endif; ?>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
     </div></div>
 
     <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">

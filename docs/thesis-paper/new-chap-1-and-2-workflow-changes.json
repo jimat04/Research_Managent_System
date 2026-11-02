@@ -1,0 +1,227 @@
+[
+  {
+    "location": "Introduction: progress visibility",
+    "before": "Students, faculty researchers, advisers, and research personnel need access that is appropriate to their responsibilities, so that progress can be seen clearly and each person remains accountable for their part in the work. A useful system must therefore distinguish editable drafts from submitted versions and retain decisions and recommendations. It should also show chapter progress without giving every user review authority.     Research metadata, supporting documents, publications, and intellectual-property records need consistent organization so that they can be found and managed with ease. These records also require appropriate access controls to protect them from unauthorized use. The study should therefore establish existing retrieval practices and measure representative retrieval tasks before claiming an improvement.RMS addresses these needs through browser-based interfaces, server-side processing, and relational data storage. Its implemented stack uses HTML, CSS, JavaScript, PHP, and MySQLi for database access. The project is developed locally using XAMPP. Centralized records and backend controls support the intended workflow; security, reliability, usability, and efficiency remain matters to evaluate through defined tasks and technical checks.",
+    "after": "Student and faculty researchers need clear visibility into their research-title and chapter submissions, review decisions, and recommendations. Both follow the same submission workflow. The system distinguishes editable drafts from locked submissions, preserves submission history, and displays chapter progress. Administrators and research staff with the required permissions perform formal review and approval.     Research metadata, supporting documents, publications, and intellectual-property records need consistent organization so that they can be found and managed with ease. These records also require appropriate access controls to protect them from unauthorized use. The study should therefore establish existing retrieval practices and measure representative retrieval tasks before claiming an improvement.RMS addresses these needs through browser-based interfaces, server-side processing, and relational data storage. Its implemented stack uses HTML, CSS, JavaScript, PHP, and MySQLi for database access. The project is developed locally using XAMPP. Centralized records and backend controls support the intended workflow; security, reliability, usability, and efficiency remain matters to evaluate through defined tasks and technical checks.",
+    "xml_node_path": [
+      0,
+      0,
+      150
+    ]
+  },
+  {
+    "location": "Scope: users",
+    "before": "Users  The platform uses four account roles—administrator, research staff, faculty, and student—with dedicated navigation and access controls. Access depends on the role, assigned action permissions, and the ownership or assignment rules of the relevant record:",
+    "after": "Users  The platform accommodates four account roles: Administrator, Research Staff, Faculty, and Student. Faculty and students participate as researchers and follow the same title-and-chapter submission workflow. Administrators and research staff perform administrative and decision-making tasks according to their permissions. Access to individual records depends on the applicable role permissions, record ownership, and project membership.",
+    "xml_node_path": [
+      0,
+      0,
+      197
+    ]
+  },
+  {
+    "location": "Scope: faculty",
+    "before": "Faculty  May submit and track their own research through the canonical title-and-chapter workflow. Assigned advisers may view and guide relevant student research where supported. Adviser assignment alone does not authorize formal title or chapter decisions.",
+    "after": "Faculty  Creates and edits research-title drafts, submits titles for review, and submits Chapters 1–5 sequentially after title approval. Faculty researchers view decisions and recommendations, revise returned submissions, and resubmit their work through the same workflow used by student researchers. Submitted versions remain locked during review and after approval. Formal review and approval are performed by administrators and research staff with the required permissions.",
+    "xml_node_path": [
+      0,
+      0,
+      201
+    ]
+  },
+  {
+    "location": "Scope: student",
+    "before": "Student  Creates and edits eligible research drafts, submits titles and sequential chapters, views decisions and recommendations, and revises returned work. Access to documents and associated records remains subject to the applicable backend rules.",
+    "after": "Student  Creates and edits research-title drafts, submits titles for review, and submits Chapters 1–5 sequentially after title approval. Student researchers view decisions and recommendations, revise returned submissions, and resubmit their work through the same workflow used by faculty researchers. Submitted versions remain locked during review and after approval. Formal review and approval are performed by administrators and research staff with the required permissions.",
+    "xml_node_path": [
+      0,
+      0,
+      202
+    ]
+  },
+  {
+    "location": "Scope: data covered within technology paragraph",
+    "before": "Technologies Used Frontend HTML, CSS, and JavaScript, with custom role-specific page shells and styling Backend PHP with MySQLi database access and prepared statements in the inspected workflow handlers.  Database A MySQL-compatible relational schema. The deployed database engine and version should be recorded during evaluation rather than inferred from the XAMPP label.  Declared Composer packages: PHPMailer and phpdotenv. Bootstrap, DataTables, Chart.js, and Dompdf are not part of the verified implementation description.  Development Environment XAMPP providing the local Apache/PHP/database environment. Production deployment characteristics are outside this source-based description. Data Covered Account and profile records; research-title and chapter data; project membership and adviser links; submission snapshots and attachment references,  review decisions, recommendations research activities,  publication records, intellectual-property, utilization records,  in-app notifications, and activity logs. Visibility and modification rights depend on the relevant record and permission rules.",
+    "after": "Technologies Used Frontend HTML, CSS, and JavaScript, with custom role-specific page shells and styling Backend PHP with MySQLi database access and prepared statements in the inspected workflow handlers.  Database A MySQL-compatible relational schema. The deployed database engine and version should be recorded during evaluation rather than inferred from the XAMPP label.  Declared Composer packages: PHPMailer and phpdotenv. Bootstrap, DataTables, Chart.js, and Dompdf are not part of the verified implementation description.  Development Environment XAMPP providing the local Apache/PHP/database environment. Production deployment characteristics are outside this source-based description. Data Covered The system manages account and profile records; research-title and chapter data; researcher ownership and project membership; submission snapshots and attachment references; review decisions and recommendations; research activities; publication records; intellectual-property and utilization records; in-app notifications; and activity logs. Access and modification rights follow the permissions and record-access rules implemented for each module.",
+    "xml_node_path": [
+      0,
+      0,
+      211
+    ]
+  },
+  {
+    "location": "Significance: faculty researchers",
+    "before": "Faculty Researchers and Advisers.  Supports faculty-owned research submissions and chapter tracking, while retaining assigned-adviser visibility and guidance where available. Formal approval remains with the authorized administrator or staff account.",
+    "after": "Faculty Researchers.  Provides a centralized interface for preparing research-title and chapter submissions, viewing decisions and recommendations, revising returned work, and monitoring recorded research progress. Faculty researchers use the same submission workflow as student researchers.",
+    "xml_node_path": [
+      0,
+      0,
+      224
+    ]
+  },
+  {
+    "location": "Significance: student researchers",
+    "before": "Student Researchers.  Provides an interface for drafting and submitting research titles and chapters, viewing recommendations, revising returned work, and tracking recorded progress.",
+    "after": "Student Researchers.  Provides a centralized interface for preparing research-title and chapter submissions, viewing decisions and recommendations, revising returned work, and monitoring recorded research progress. Student researchers use the same submission workflow as faculty researchers.",
+    "xml_node_path": [
+      0,
+      0,
+      225
+    ]
+  },
+  {
+    "location": "Definition: faculty within combined definitions",
+    "before": "Faculty Researcher / Adviser.  A faculty account may own research and use the shared submission workflow. Adviser assignment supports guidance and relevant project visibility, and does not itself grant formal title or chapter approval authority. ISO/IEC 25010  2023.  The product-quality model used as the proposed evaluation basis in this revision. Five characteristics are selected for the study; the selection is not a complete assessment of the model or a certification claim.  MySQLi.  The PHP database extension used by the inspected application to communicate with its MySQL-compatible relational database, including prepared statements.",
+    "after": "Faculty Researcher.  A user with a faculty account who creates, submits, revises, and tracks research titles and chapters through the same workflow used by student researchers. The faculty role does not grant formal title or chapter review and approval authority. ISO/IEC 25010  2023.  The product-quality model used as the proposed evaluation basis in this revision. Five characteristics are selected for the study; the selection is not a complete assessment of the model or a certification claim.  MySQLi.  The PHP database extension used by the inspected application to communicate with its MySQL-compatible relational database, including prepared statements.",
+    "xml_node_path": [
+      0,
+      0,
+      236
+    ]
+  },
+  {
+    "location": "Definition: student researcher",
+    "before": "Student Researcher.  A student account that uses RMS to create and submit eligible research work, view recorded decisions, and revise returned submissions.",
+    "after": "Student Researcher.  A user with a student account who creates, submits, revises, and tracks research titles and chapters through the same workflow used by faculty researchers.",
+    "xml_node_path": [
+      0,
+      0,
+      244
+    ]
+  },
+  {
+    "location": "Definition: role-based access control",
+    "before": "Role-Based Access Control.  Restriction of application actions by account role, supplemented in RMS by explicit staff action permissions and relevant ownership or assignment checks.",
+    "after": "Role-Based Access Control.  A mechanism that restricts application functions according to account roles and explicit action permissions. In RMS, faculty and students use the shared researcher workflow, while administrators and appropriately authorized research staff perform formal review and approval. Access to research records also follows the applicable ownership and project-membership rules.",
+    "xml_node_path": [
+      0,
+      0,
+      243
+    ]
+  },
+  {
+    "location": "Related literature: application processing",
+    "before": "Application Processing. PHP handles requests, authenticated sessions, permitted actions, validation, and document operations. Canonical title and chapter submission pages are shared by student and faculty researchers. The review helper separates administrator authority from research-staff permissions and records decisions against preserved submission versions.",
+    "after": "Application Processing. PHP handles requests, authenticated sessions, permitted actions, validation, and document operations. Faculty and student researchers use the same title-and-chapter submission pages. Administrators and research staff with the required permissions review submitted versions and record decisions and recommendations. The application preserves submission history and enforces editing restrictions on submitted work.",
+    "xml_node_path": [
+      0,
+      0,
+      267
+    ]
+  },
+  {
+    "location": "Quality discussion: security",
+    "before": "Security. Check permitted and prohibited actions, record ownership or assignment, direct-route document access, CSRF handling, input validation, and submitted-version locks. Survey responses alone cannot establish security effectiveness.",
+    "after": "Security. Verify that faculty and student researchers can perform permitted actions on eligible research records and cannot perform formal title or chapter review and approval. Check administrator and research-staff permissions, record ownership, project-membership access, direct-route document access, CSRF handling, input validation, and submitted-version locks. Respondent ratings alone cannot establish that these controls are effective.",
+    "xml_node_path": [
+      0,
+      0,
+      285
+    ]
+  },
+  {
+    "location": "Synthesis: access-control paragraph",
+    "before": "Fourth, role-based access-control research supports separating authority from simple participation in a project. For RMS, faculty researcher or adviser access does not replace administrator/staff decision permissions. Security checks must include attempted actions outside the assigned authority.",
+    "after": "Fourth, role-based access-control research supports a clear distinction between research submission and formal decision-making authority. Faculty and students use the same researcher workflow, while administrators and research staff with the required permissions perform title and chapter review and approval. Security verification must include attempts to access other researchers’ records, modify locked submissions, or perform decisions without authorization.",
+    "xml_node_path": [
+      0,
+      0,
+      331
+    ]
+  },
+  {
+    "location": "Theoretical framework: application processing",
+    "before": "Application Processing.  PHP handles authorization, validation, uploads/downloads, locked submissions, version capture, and review decisions. Following the access-policy verification focus of Le et al. (2022), tests should compare implemented rights with intended permissions.",
+    "after": "Application Processing.  PHP handles authorization, validation, document operations, submission locks, version capture, and review decisions. Faculty and students follow the same researcher workflow. Administrators and research staff exercise decision-making authority according to their permissions. Following the access-policy verification focus of Le et al. (2022), tests should compare implemented access rights with the intended permissions.",
+    "xml_node_path": [
+      0,
+      0,
+      350
+    ]
+  },
+  {
+    "location": "Conceptual framework narrative: input",
+    "before": "Input. Institutional documents and validated campus requirements; needs of administrators, research staff, faculty users, and students; the current title-and-chapter workflow and record-access rules; the implemented technology stack; supporting activity, publication, and IP functions; and the selected evaluation characteristics and baseline task definitions.",
+    "after": "Input. Institutional documents and validated campus requirements; the needs of administrators, research staff, faculty researchers, and student researchers; the shared faculty/student title-and-chapter workflow; record-access rules and administrator/staff decision permissions; the implemented technology stack; supporting activity, publication, and intellectual-property functions; and the selected evaluation characteristics and baseline task definitions.",
+    "xml_node_path": [
+      0,
+      0,
+      367
+    ]
+  },
+  {
+    "location": "Conceptual framework narrative: output",
+    "before": "Output.  The implemented RMS with shared student/faculty title and chapter processing, authorized review, revision history, chapter-progress indicators, research activities, publication and IP records, archive views, and administrative functions. Evaluation reports will state the tested scope, observed results, unresolved defects, and limitations. No quality rating, percentage improvement, or deployment success is presumed by this framework.",
+    "after": "Output.  The implemented RMS provides a shared faculty/student title-and-chapter submission workflow, administrator and authorized research-staff review and approval, preserved submission versions, recommendations, revision history, chapter-progress indicators, research activities, publication and intellectual-property records, archive views, and administrative functions. Evaluation reports will identify the tested scope, observed results, unresolved defects, and limitations. No quality rating or measured improvement is presumed.",
+    "xml_node_path": [
+      0,
+      0,
+      369
+    ]
+  },
+  {
+    "location": "Table 2.1: EARIST RMS documented capabilities",
+    "before": "Shared title/chapter submissions, versions and locks, authorized decisions, and connected research records.",
+    "after": "Shared faculty/student title-and-chapter submissions; editable drafts; locked submitted versions; preserved submission history; administrator and authorized research-staff review and approval; and connected research records.",
+    "xml_node_path": [
+      0,
+      0,
+      320,
+      7,
+      2,
+      1
+    ]
+  },
+  {
+    "location": "Figure 2.1: architecture and authorization block",
+    "before": "ACCEPTANCE PERSPECTIVETAM applications reviewed by Granić and Marangunić (2019): perceived usefulness and perceived ease of use.ARCHITECTURE AND AUTHORIZATIONBrowser presentation → PHP processing → relational persistence.Access-policy verification informed by Le et al. (2022); explicit permissions and record-access rules.PRODUCT QUALITYFive selected ISO/IEC 25010:2023 characteristics: Functional Suitability, Interaction Capability, Performance Efficiency, Reliability, and Security.These bases guide planned evaluation; no completed results are presumed.",
+    "after": "ACCEPTANCE PERSPECTIVETAM applications reviewed by Granić and Marangunić (2019): perceived usefulness and perceived ease of use.ARCHITECTURE AND AUTHORIZATIONBrowser presentation → PHP processing → relational persistence.Faculty and students use the same title-and-chapter submission workflow.Administrators and authorized research staff perform formal review and approval.Access-policy verification is informed by Le et al. (2022).PRODUCT QUALITYFive selected ISO/IEC 25010:2023 characteristics: Functional Suitability, Interaction Capability, Performance Efficiency, Reliability, and Security.These bases guide planned evaluation; no completed results are presumed.",
+    "xml_node_path": [
+      0,
+      0,
+      341,
+      3,
+      0,
+      1
+    ]
+  },
+  {
+    "location": "Figure 2.2: IPO input bullets",
+    "before": "• Institutional documents and validated campus requirements• Administrator, staff, faculty, and student tasks• Shared title/chapter workflow and access rules• Activity, publication, IP, and archive requirements• HTML, CSS, JavaScript, PHP/MySQLi, relational database, XAMPP• Selected quality characteristics and baseline tasks",
+    "after": "• Institutional documents and validated campus requirements• Requirements of administrators, research staff, faculty researchers, and student researchers• Shared faculty/student title-and-chapter workflow, record-access rules, and administrator/staff decision permissions• Activity, publication, IP, and archive requirements• HTML, CSS, JavaScript, PHP/MySQLi, relational database, XAMPP• Selected quality characteristics and baseline tasks",
+    "xml_node_path": [
+      0,
+      0,
+      361,
+      3,
+      0,
+      1
+    ]
+  },
+  {
+    "location": "Figure 2.2: IPO process steps 3 and 4",
+    "before": "1. Validate requirements and evaluation scope2. Align architecture, records, permissions, and interfaces3. Develop connected persistent behavior4. Verify workflow, locks, history, invalid requests, and access5. Conduct user tasks and collect assessments6. Compare baseline observations and report limitationsMutating browser checks require a verified disposable test database.",
+    "after": "1. Validate requirements and evaluation scope2. Align architecture, records, permissions, and interfaces3. Develop the shared faculty/student submission workflow and permission-controlled administrator/staff review actions.4. Verify persistence, submission locks, sequential chapter eligibility, revision history, record access, and rejection of unauthorized actions.5. Conduct user tasks and collect assessments6. Compare baseline observations and report limitationsMutating browser checks require a verified disposable test database.",
+    "xml_node_path": [
+      0,
+      0,
+      363,
+      3,
+      0,
+      1
+    ]
+  },
+  {
+    "location": "Figure 2.2: IPO expected-output bullet",
+    "before": "• Implemented RMS and documented module boundaries• Title/chapter versions, authorized decisions, and revision history• Computed chapter-progress and connected research records• Test evidence and user findings for the evaluated scope• Documented defects and limitationsResults are reported after testing and evaluation; no favorable rating is assumed.",
+    "after": "• Implemented RMS and documented module boundaries• Shared faculty/student title-and-chapter submissions, preserved versions, administrator/staff decisions, and revision history• Computed chapter-progress and connected research records• Test evidence and user findings for the evaluated scope• Documented defects and limitationsResults are reported after testing and evaluation; no favorable rating is assumed.",
+    "xml_node_path": [
+      0,
+      0,
+      365,
+      3,
+      0,
+      1
+    ]
+  }
+]

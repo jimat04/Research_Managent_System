@@ -9,6 +9,7 @@
 // Load dependencies
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
 
 // Set JSON header
@@ -38,12 +39,12 @@ $chapterId = isset($_POST['chapter_id']) ? (int) $_POST['chapter_id'] : null;
 // Determine upload type and settings based on folder target
 $uploadConfig = [
     'proposals' => [
-        'accept' => ['.pdf', '.doc', '.docx'],
+        'accept' => ['.pdf'],
         'maxSize' => 10000, // 10MB
         'type' => 'proposal'
     ],
     'chapters' => [
-        'accept' => ['.pdf', '.doc', '.docx'],
+        'accept' => ['.pdf'],
         'maxSize' => 10000, // 10MB
         'type' => 'chapter'
     ],
@@ -53,9 +54,19 @@ $uploadConfig = [
         'type' => 'defense'
     ],
     'manuscripts' => [
-        'accept' => ['.pdf', '.doc', '.docx'],
+        'accept' => ['.pdf'],
         'maxSize' => 20000, // 20MB
         'type' => 'manuscript'
+    ],
+    'engagement' => [
+        'accept' => ['.pdf', '.doc', '.docx'],
+        'maxSize' => 10000, // 10MB
+        'type' => 'engagement'
+    ],
+    'activities' => [
+        'accept' => ['.pdf'],
+        'maxSize' => 20000, // 20MB
+        'type' => 'other'
     ]
 ];
 
@@ -65,6 +76,16 @@ if (!isset($uploadConfig[$folderTarget])) {
     exit;
 }
 $config = $uploadConfig[$folderTarget];
+if ($folderTarget === 'engagement' && !in_array((string) ($_SESSION['role'] ?? ''), ['faculty', 'admin'], true)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'You are not allowed to upload engagement evidence']);
+    exit;
+}
+if ($folderTarget === 'activities' && (string) ($_SESSION['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Only administrators may upload activity documents']);
+    exit;
+}
 
 // Detect input name (check both singular and array formats)
 $inputName = null;
@@ -87,9 +108,11 @@ $result = handleRmsUpload([
     'projectId' => $projectId,
     'chapterId' => $chapterId,
     'type' => $config['type'],
-    'workflowType' => in_array($folderTarget, ['proposals', 'chapters'], true)
-        ? ($folderTarget === 'proposals' ? 'title' : 'chapter')
-        : null
+    'workflowType' => [
+        'proposals' => 'title',
+        'chapters' => 'chapter',
+        'manuscripts' => 'final_manuscript',
+    ][$folderTarget] ?? null
 ], $_FILES, $conn);
 
 // Return JSON response

@@ -7,6 +7,9 @@ reset-*.php
 # Dependencies
 vendor/
 node_modules/
+!public/assets/vendor/
+!public/assets/vendor/pdfjs/
+!public/assets/vendor/pdfjs/**
 
 # User uploads
 uploads/
@@ -22,11 +25,16 @@ uploads/copyrights/*
 uploads/copyright/*
 !uploads/copyright/.htaccess
 *.docx
+!public/assets/research-proposal-template.docx
+!public/assets/research-chapter-template.docx
 *.pdf
 ~$*
 
 # IDE / OS files
 .vscode/
+!/.vscode/
+/.vscode/*
+!/.vscode/settings.json
 .idea/
 .DS_Store
 Thumbs.db
@@ -38,3 +46,13 @@ Thumbs.db
 .claude/
 backups/
 .playwright-mcp/
+
+# Private EARIST runtime files; retain the deny rules in source control.
+/storage/earist/*
+!/storage/earist/.htaccess
+!/storage/earist/scratch/
+/storage/earist/scratch/*
+!/storage/earist/scratch/.htaccess
+!/storage/earist/generated/
+/storage/earist/generated/*
+!/storage/earist/generated/.htaccess

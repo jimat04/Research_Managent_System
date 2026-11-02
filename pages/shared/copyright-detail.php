@@ -1,4 +1,6 @@
 <?php
+$archiveMode = 'detail';
+require __DIR__ . '/../../includes/archival-copyright-route.php';
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
@@ -32,7 +34,7 @@ function copyrightDetailStatusBadge(string $status): array
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
 $canReview = $role === 'admin';
-$ownerRole = in_array($role, ['faculty', 'student'], true);
+$ownerRole = $role === 'faculty';
 $typeOptions = [
     'software' => 'Software',
     'research' => 'Research',
@@ -213,7 +215,7 @@ $applicationScope = $application && in_array((string) $application['output_type'
     ? 'patents_utility_models'
     : ($application && in_array((string) $application['output_type'], ['innovation', 'technology_transfer'], true) ? 'innovation_technology_transfer' : '');
 $fileUrl = $application && trim((string) $application['file_path']) !== ''
-    ? SITE_URL . 'pages/shared/download-research-document.php?type=copyright&id=' . (int) $application['copyright_id']
+    ? SITE_URL . 'pages/shared/download-research-document.php?type=copyright&id=' . (int) $application['copyright_id'] . '&mode=viewer'
     : null;
 $canEdit = $application && ($canReview || ($ownerRole && (int) $application['applicant_id'] === $userId && $application['status'] === 'pending'));
 ?>
@@ -245,7 +247,7 @@ $canEdit = $application && ($canReview || ($ownerRole && (int) $application['app
         <?php if ($application['inventors']): ?><div class="detail-field full"><span>Inventors / researchers</span><p><?= copyrightDetailEscape($application['inventors']) ?></p></div><?php endif; ?>
         <div class="detail-field full"><span>Co-authors</span><p><?= copyrightDetailEscape($application['co_authors'] ?: 'None recorded') ?></p></div>
         <?php if ($application['transfer_activities']): ?><div class="detail-field full"><span>Technology-transfer activities</span><p><?= nl2br(copyrightDetailEscape($application['transfer_activities'])) ?></p></div><?php endif; ?>
-        <div class="detail-field"><span>Supporting file</span><?php if ($fileUrl): ?><a class="text-link" href="<?= copyrightDetailEscape($fileUrl) ?>" download="<?= copyrightDetailEscape($application['file_name'] ?: 'copyright-application.pdf') ?>">Download <?= copyrightDetailEscape($application['file_name'] ?: 'copyright-application.pdf') ?></a><p class="file-note">The stored file was verified inside the copyright upload directory.</p><?php elseif ($application['file_path']): ?><strong>File unavailable</strong><p class="file-note">The stored file could not be safely resolved.</p><?php else: ?><strong>No file attached</strong><?php endif; ?></div>
+        <div class="detail-field"><span>Supporting file</span><?php if ($fileUrl): ?><a class="text-link" href="<?= copyrightDetailEscape($fileUrl) ?>">Preview <?= copyrightDetailEscape($application['file_name'] ?: 'supporting file') ?></a><p class="file-note">The stored file is served through the authenticated RMS preview route.</p><?php elseif ($application['file_path']): ?><strong>File unavailable</strong><p class="file-note">The stored file could not be safely resolved.</p><?php else: ?><strong>No file attached</strong><?php endif; ?></div>
         <div class="detail-field"><span>Submitted</span><strong><?= copyrightDetailEscape(date('F j, Y, g:i a', strtotime((string) $application['created_at']))) ?></strong></div>
         <div class="detail-field"><span>Last updated</span><strong><?= copyrightDetailEscape(date('F j, Y, g:i a', strtotime((string) $application['updated_at']))) ?></strong></div>
       </div>

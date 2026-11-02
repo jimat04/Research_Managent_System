@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
+require_once __DIR__ . '/../../includes/academic-years.php';
 
 if (!isLoggedIn()) {
     header('Location: ' . SITE_URL . 'public/login.php');
@@ -14,6 +15,10 @@ $user = getCurrentUser();
 if (!$user) {
     header('Location: ' . SITE_URL . 'public/login.php');
     exit;
+}
+if (($user['role'] ?? '') === 'faculty') {
+    http_response_code(403);
+    exit('Faculty access to the general research archive is not available.');
 }
 if (($user['role'] ?? '') === 'research_staff') {
     requireModulePermission('research_implementation_outputs', 'view', 'completed_research');
@@ -57,8 +62,13 @@ $query = trim((string) ($_GET['q'] ?? ''));
 if (strlen($query) > 150) {
     $query = substr($query, 0, 150);
 }
-$yearInput = trim((string) ($_GET['year'] ?? ''));
-$year = preg_match('/^\d{4}$/D', $yearInput) ? $yearInput : '';
+$yearInput = $_GET['academic_year'] ?? $_GET['year'] ?? '';
+$yearInput = is_string($yearInput) ? trim($yearInput) : '';
+// Existing year links now select the academic year beginning in that year.
+if (preg_match('/^\d{4}$/D', $yearInput)) {
+    $yearInput .= '-' . ((int) $yearInput + 1);
+}
+$year = preg_match('/^\d{4}-\d{4}$/D', $yearInput) ? $yearInput : '';
 
 $selectPublication = [
     isset($publicationColumns['journal_status']) ? 'rpt.journal_status' : "NULL AS journal_status",
@@ -68,12 +78,14 @@ $publicationJoin = $publicationAvailable
     ? 'LEFT JOIN research_publication_tracking rpt ON rpt.project_id = rp.project_id'
     : '';
 $deletedGuard = isset($projectColumns['deleted_at']) ? ' AND rp.deleted_at IS NULL' : '';
+$academicYears = rms_archive_academic_year_options($conn, isset($projectColumns['deleted_at']));
 
-$sql = 'SELECT rp.project_id, rp.title, rp.status, rp.updated_at,
+$sql = 'SELECT rp.project_id, rp.title, rp.status, rp.updated_at, ay.label AS academic_year,
                CONCAT_WS(\' \', owner.first_name, owner.last_name) AS owner_name,
                ' . implode(', ', $selectPublication) . '
         FROM research_projects rp
         JOIN users owner ON owner.user_id = rp.created_by
+        LEFT JOIN academic_years ay ON ay.ay_id = rp.ay_id
         ' . $publicationJoin . "
         WHERE rp.status IN ('completed', 'archived')" . $deletedGuard;
 $params = [];
@@ -88,9 +100,9 @@ if ($query !== '') {
     $types .= 'ss';
 }
 if ($year !== '') {
-    $sql .= ' AND YEAR(rp.updated_at) = ?';
-    $params[] = (int) $year;
-    $types .= 'i';
+    $sql .= ' AND ay.label = ?';
+    $params[] = $year;
+    $types .= 's';
 }
 $sql .= ' ORDER BY rp.updated_at DESC, rp.project_id DESC LIMIT 101';
 
@@ -227,9 +239,10 @@ if ($shell === 'admin') {
     }
     .archive-toolbar-copy strong { display: block; color: #0f172a; font-size: 15px; }
     .archive-toolbar-copy span { display: block; margin-top: 5px; color: #64748b; font-size: 12px; line-height: 1.5; }
-    .archive-filters { display: grid; grid-template-columns: minmax(230px, 1fr) 130px auto; gap: 12px; align-items: end; }
+    .archive-filters { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(180px, 220px) auto; gap: 12px; align-items: end; }
     .archive-field label { display: block; margin-bottom: 6px; color: #475569; font-size: 11px; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
-    .archive-field input {
+    .archive-field input,
+    .archive-field select {
         width: 100%;
         box-sizing: border-box;
         min-height: 43px;
@@ -243,7 +256,8 @@ if ($shell === 'admin') {
         transition: border-color .18s ease, box-shadow .18s ease;
     }
     .archive-field input::placeholder { color: #94a3b8; }
-    .archive-field input:focus { border-color: var(--archive-accent); box-shadow: 0 0 0 3px rgba(var(--archive-rgb), .1); outline: 0; }
+    .archive-field input:focus,
+    .archive-field select:focus { border-color: var(--archive-accent); box-shadow: 0 0 0 3px rgba(var(--archive-rgb), .1); outline: 0; }
     .archive-actions { display: flex; gap: 8px; }
     .archive-button {
         display: inline-flex;
@@ -355,7 +369,7 @@ if ($shell === 'admin') {
         <div class="archive-hero-copy">
             <span class="archive-kicker">Institutional research repository</span>
             <h1 id="archive-hero-title">Explore completed research and institutional work.</h1>
-            <p>Search finalized studies by title, lead proponent, or year, then open a record to review its full research details.</p>
+            <p>Search finalized studies by title, lead proponent, or academic year, then open a record to review its full research details.</p>
         </div>
         <div class="archive-hero-summary" aria-label="Archive summary">
             <div class="archive-hero-stat">
@@ -380,8 +394,13 @@ if ($shell === 'admin') {
                 <input id="archive-q" name="q" type="search" maxlength="150" value="<?= archiveEscape($query) ?>" placeholder="Search research records">
             </div>
             <div class="archive-field">
-                <label for="archive-year">Year</label>
-                <input id="archive-year" name="year" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" value="<?= archiveEscape($year) ?>" placeholder="YYYY">
+                <label for="archive-year">Academic Year</label>
+                <select id="archive-year" name="academic_year">
+                    <option value="">All academic years</option>
+                    <?php foreach ($academicYears as $academicYear): ?>
+                        <option value="<?= archiveEscape($academicYear) ?>"<?= $year === $academicYear ? ' selected' : '' ?>><?= archiveEscape($academicYear) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="archive-actions">
                 <button type="submit" class="archive-button">Search</button>
@@ -404,7 +423,7 @@ if ($shell === 'admin') {
         <section class="archive-empty" aria-live="polite">
             <div class="archive-empty-mark" aria-hidden="true">⌕</div>
             <h2>No research records found</h2>
-            <p>Try a broader title, check the proponent name, or remove the year to see more results.</p>
+            <p>Try a broader title, check the proponent name, or remove the academic year filter to see more results.</p>
             <?php if ($filtersActive): ?>
                 <a class="archive-button" href="<?= archiveEscape(SITE_URL . 'pages/shared/research-archive.php') ?>">View all research</a>
             <?php endif; ?>
@@ -421,7 +440,7 @@ if ($shell === 'admin') {
                         </h3>
                         <div class="archive-meta">
                             <span>Lead proponent: <?= archiveEscape($project['owner_name']) ?></span>
-                            <span>Completed <?= archiveEscape(date('Y', strtotime($project['updated_at']))) ?></span>
+                            <span>Academic Year: <?= archiveEscape($project['academic_year'] ?: 'Unavailable') ?></span>
                         </div>
                         <div class="archive-badges">
                             <span class="archive-badge <?= $project['status'] === 'archived' ? 'badge-archived' : 'badge-completed' ?>">
@@ -442,7 +461,7 @@ if ($shell === 'admin') {
             <?php endforeach; ?>
         </section>
         <?php if ($isCapped): ?>
-            <p class="archive-note">Showing the first 100 results. Refine the search or year filter to narrow the archive.</p>
+            <p class="archive-note">Showing the first 100 results. Refine the search or academic year filter to narrow the archive.</p>
         <?php endif; ?>
     <?php endif; ?>
 </div>

@@ -3,6 +3,8 @@ require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
 require_once __DIR__ . '/../../includes/admin-shell.php';
+require_once __DIR__ . '/../../includes/research-approval-list.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
 requireLogin();
 $user = getCurrentUser();
@@ -41,6 +43,51 @@ function monitoringDashboardEscape(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function monitoringDashboardIcon(string $moduleKey): string
+{
+    $icons = [
+        'research_capacity_building' => '<path d="m2 10 10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c4 2.5 8 2.5 12 0v-5M22 10v6"/>',
+        'research_development' => '<path d="M9 18h6M10 22h4M8.5 14.5a7 7 0 1 1 7 0c-.9.6-1.5 1.5-1.5 2.5h-4c0-1-.6-1.9-1.5-2.5Z"/>',
+        'research_implementation_outputs' => '<path d="M3 21V3M3 21h18M7 16v-4M12 16V8M17 16v-6"/>',
+        'publication_dissemination' => '<path d="M6 3h9l5 5v13H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v6h6M8 13h8M8 17h8"/>',
+        'intellectual_property_utilization' => '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/>',
+    ];
+
+    return $icons[$moduleKey] ?? '<circle cx="12" cy="12" r="9"/>';
+}
+
+function monitoringDashboardPageDetail(array $modulePage): string
+{
+    $count = (int) ($modulePage['count'] ?? 0);
+
+    return match ($modulePage['key']) {
+        'seminars', 'trainings', 'workshops' => 'recorded',
+        'upcoming_activities', 'ongoing_activities', 'conducted_activities' => $count === 1 ? 'activity' : 'activities',
+        'research_proposals' => 'proposals',
+        'research_review' => 'requiring review',
+        'research_approval' => 'approved proposals',
+        'ongoing_research' => 'ongoing',
+        'completed_research' => 'completed',
+        'research_outputs' => 'outputs',
+        'research_repository' => 'archived / legacy published',
+        'journal_publications', 'conference_presentations', 'copyrights' => $count === 1 ? 'record' : 'records',
+        'patents_utility_models', 'innovation_technology_transfer' => $count === 1 ? 'output' : 'outputs',
+        default => (string) ($modulePage['detail'] ?? ''),
+    };
+}
+
+function monitoringDashboardSectionLabel(string $moduleKey): string
+{
+    return match ($moduleKey) {
+        'research_capacity_building' => 'Capacity Building',
+        'research_development' => 'Research Development',
+        'research_implementation_outputs' => 'Implementation & Outputs',
+        'publication_dissemination' => 'Publication & Dissemination',
+        'intellectual_property_utilization' => 'IP & Utilization',
+        default => '',
+    };
+}
+
 function monitoringDashboardTableExists(mysqli $connection, string $table): bool
 {
     $allowedTables = [
@@ -49,6 +96,8 @@ function monitoringDashboardTableExists(mysqli $connection, string $table): bool
         'publications',
         'copyright_applications',
         'research_projects',
+        'research_submission_versions',
+        'chapters',
     ];
 
     if (!in_array($table, $allowedTables, true)) {
@@ -68,7 +117,7 @@ function monitoringDashboardStatusBadge(string $status): array
         'scheduled', 'pending', 'submitted' => ['label' => ucfirst($status), 'tone' => 'warning'],
         'under_review' => ['label' => 'Under review', 'tone' => 'review'],
         'accepted' => ['label' => 'Accepted', 'tone' => 'info'],
-        'completed', 'published', 'registered' => ['label' => ucfirst($status), 'tone' => 'success'],
+        'archived', 'completed', 'published', 'registered' => ['label' => ucfirst($status), 'tone' => 'success'],
         'cancelled', 'rejected' => ['label' => ucfirst($status), 'tone' => 'danger'],
         default => ['label' => ucwords(str_replace('_', ' ', $status)), 'tone' => 'neutral'],
     };
@@ -80,7 +129,21 @@ $tables = [
     'publications' => monitoringDashboardTableExists($conn, 'publications'),
     'copyrights' => monitoringDashboardTableExists($conn, 'copyright_applications'),
     'projects' => monitoringDashboardTableExists($conn, 'research_projects'),
+    'submissions' => monitoringDashboardTableExists($conn, 'research_submission_versions'),
+    'chapters' => monitoringDashboardTableExists($conn, 'chapters'),
 ];
+if ($role === 'admin') {
+    foreach ([
+        'activities' => 'research_activities',
+        'projects' => 'research_projects',
+        'publications' => 'publications',
+        'copyrights' => 'copyright_applications',
+    ] as $sourceKey => $sourceTable) {
+        if (!$tables[$sourceKey]) {
+            error_log('RMS dashboard count source unavailable: ' . $sourceTable);
+        }
+    }
+}
 
 $projectHasDeletedAt = false;
 if ($tables['projects']) {
@@ -107,6 +170,9 @@ $stats = [
     'seminars' => 0,
     'trainings' => 0,
     'workshops' => 0,
+    'upcoming_activities' => 0,
+    'capacity_ongoing_activities' => 0,
+    'conducted_activities' => 0,
     'capacity_upcoming' => 0,
     'capacity_total' => 0,
     'journal_publications' => 0,
@@ -120,8 +186,8 @@ $stats = [
     'copyright_total' => 0,
     'copyright_applications' => 0,
     'registered_copyrights' => 0,
-    'software_outputs' => 0,
-    'module_outputs' => 0,
+    'patent_utility_models' => 0,
+    'innovation_technology_transfer' => 0,
     'proposals' => 0,
     'review_required' => 0,
     'approval_required' => 0,
@@ -133,7 +199,7 @@ if ($tables['activities']) {
     $seminarType = 'seminar';
     $trainingType = 'training';
     $workshopType = 'workshop';
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS workshops, COALESCE(SUM(activity_type = 'seminar' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_workshops FROM research_activities");
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS workshops, COALESCE(SUM(status IN ('upcoming', 'scheduled')), 0) AS upcoming_activities, COALESCE(SUM(status = 'ongoing'), 0) AS capacity_ongoing_activities, COALESCE(SUM(status IN ('conducted', 'completed')), 0) AS conducted_activities, COALESCE(SUM(activity_type = 'seminar' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_workshops FROM research_activities");
     $stmt->bind_param('sss', $seminarType, $trainingType, $workshopType);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
@@ -141,17 +207,16 @@ if ($tables['activities']) {
     $stats['seminars'] = (int) ($row['seminars'] ?? 0);
     $stats['trainings'] = (int) ($row['trainings'] ?? 0);
     $stats['workshops'] = (int) ($row['workshops'] ?? 0);
+    $stats['upcoming_activities'] = (int) ($row['upcoming_activities'] ?? 0);
+    $stats['capacity_ongoing_activities'] = (int) ($row['capacity_ongoing_activities'] ?? 0);
+    $stats['conducted_activities'] = (int) ($row['conducted_activities'] ?? 0);
     $stats['capacity_total'] = $stats['seminars'] + $stats['trainings'] + $stats['workshops'];
     $stats['upcoming_seminars'] = (int) ($row['upcoming_seminars'] ?? 0);
     $stats['upcoming_trainings'] = (int) ($row['upcoming_trainings'] ?? 0);
     $stats['upcoming_workshops'] = (int) ($row['upcoming_workshops'] ?? 0);
 }
 if ($tables['publications']) {
-    $published = 'published';
-    $submitted = 'submitted';
-    $underReview = 'under_review';
-    $stmt = $conn->prepare("SELECT COUNT(*) AS publication_total, COALESCE(SUM(status = ?), 0) AS published, COALESCE(SUM(status IN (?, ?)), 0) AS pending_publications, COALESCE(SUM(publication_type = 'journal'), 0) AS journal_publications, COALESCE(SUM(publication_type = 'conference'), 0) AS conference_publications, COALESCE(SUM(publication_type = 'journal' AND status <> 'published'), 0) AS journal_unpublished, COALESCE(SUM(publication_type = 'conference' AND status <> 'published'), 0) AS conference_unpublished FROM publications");
-    $stmt->bind_param('sss', $published, $submitted, $underReview);
+    $stmt = $conn->prepare("SELECT COUNT(*) AS publication_total, COALESCE(SUM(archival_status = 'archived' OR status = 'published'),0) AS published, COALESCE(SUM(archival_status = 'legacy'),0) AS pending_publications, COALESCE(SUM(publication_type = 'journal'),0) AS journal_publications, COALESCE(SUM(publication_type = 'conference'),0) AS conference_publications, COALESCE(SUM(publication_type = 'journal' AND archival_status = 'legacy' AND status <> 'published'),0) AS journal_unpublished, COALESCE(SUM(publication_type = 'conference' AND archival_status = 'legacy' AND status <> 'published'),0) AS conference_unpublished FROM publications WHERE deactivated_at IS NULL");
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
     $stmt->close();
@@ -165,33 +230,114 @@ if ($tables['publications']) {
     $stats['conference_unpublished'] = (int) ($row['conference_unpublished'] ?? 0);
 }
 if ($tables['copyrights']) {
-    $pending = 'pending';
-    $underReview = 'under_review';
-    $registered = 'registered';
-    $stmt = $conn->prepare("SELECT COUNT(*) AS copyright_total, COALESCE(SUM(status IN (?, ?)), 0) AS copyright_applications, COALESCE(SUM(status = ?), 0) AS registered_copyrights, COALESCE(SUM(output_type = 'software'), 0) AS software_outputs, COALESCE(SUM(output_type = 'module'), 0) AS module_outputs FROM copyright_applications");
-    $stmt->bind_param('sss', $pending, $underReview, $registered);
+    $stmt = $conn->prepare("SELECT COUNT(*) AS copyright_total, COALESCE(SUM(output_type IN ('software','research','instructional_material','module','other')),0) AS copyright_applications, COALESCE(SUM(external_status='registered' OR (external_status IS NULL AND status='registered' AND (output_type IN ('patent','utility_model','innovation','technology_transfer') OR NULLIF(copyright_ref_no,'') IS NOT NULL))),0) AS registered_copyrights, COALESCE(SUM(output_type IN ('patent','utility_model')),0) AS patent_utility_models, COALESCE(SUM(output_type IN ('innovation','technology_transfer')),0) AS innovation_technology_transfer FROM copyright_applications WHERE deactivated_at IS NULL");
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
     $stmt->close();
     $stats['copyright_total'] = (int) ($row['copyright_total'] ?? 0);
     $stats['copyright_applications'] = (int) ($row['copyright_applications'] ?? 0);
     $stats['registered_copyrights'] = (int) ($row['registered_copyrights'] ?? 0);
-    $stats['software_outputs'] = (int) ($row['software_outputs'] ?? 0);
-    $stats['module_outputs'] = (int) ($row['module_outputs'] ?? 0);
+    $stats['patent_utility_models'] = (int) ($row['patent_utility_models'] ?? 0);
+    $stats['innovation_technology_transfer'] = (int) ($row['innovation_technology_transfer'] ?? 0);
 }
 if ($tables['projects']) {
     $deletedClause = $projectHasDeletedAt ? ' WHERE deleted_at IS NULL' : '';
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(status = 'proposal') AS proposals, SUM(status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review', 'for_revision', 'revision_required')) AS review_required, SUM(status = 'approved') AS approval_required, SUM(status IN ('ongoing', 'in_progress')) AS ongoing, SUM(status = 'completed') AS completed, SUM(status = 'archived') AS archived FROM research_projects{$deletedClause}");
+    $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(status = 'archived') AS archived FROM research_projects{$deletedClause}");
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
     $stmt->close();
-    $stats['proposals'] = (int) ($row['proposals'] ?? 0);
-    $stats['review_required'] = (int) ($row['review_required'] ?? 0);
-    $stats['approval_required'] = (int) ($row['approval_required'] ?? 0);
-    $stats['ongoing'] = (int) ($row['ongoing'] ?? 0);
-    $stats['completed'] = (int) ($row['completed'] ?? 0);
     $stats['archived'] = (int) ($row['archived'] ?? 0);
     $stats['total_projects'] = (int) ($row['total'] ?? 0);
+}
+
+// Use the same computed lifecycle rules as the research directory.
+$implementationAvailable = $tables['projects'] && $tables['chapters'] && $tables['submissions'];
+if ($implementationAvailable) {
+    $ongoingPredicate = rms_ongoing_research_predicate();
+    $completedPredicate = rms_completed_research_predicate();
+    $stmt = $conn->prepare("SELECT
+        COALESCE(SUM($ongoingPredicate), 0) AS ongoing,
+        COALESCE(SUM($completedPredicate), 0) AS completed
+        FROM research_projects rp
+        LEFT JOIN (
+            SELECT project_id,
+                COUNT(DISTINCT CASE WHEN chapter_number BETWEEN 1 AND 5 THEN chapter_number END) AS total_chapters,
+                COUNT(DISTINCT CASE WHEN chapter_number BETWEEN 1 AND 5 AND status = 'approved' THEN chapter_number END) AS approved_chapters
+            FROM chapters WHERE deleted_at IS NULL GROUP BY project_id
+        ) ca ON ca.project_id = rp.project_id
+        WHERE rp.deleted_at IS NULL");
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    $stats['ongoing'] = (int) ($row['ongoing'] ?? 0);
+    $stats['completed'] = (int) ($row['completed'] ?? 0);
+}
+
+// Match the output register's active publications and permitted registered records.
+$canViewAllOutputCopyrights = $dashboardCanViewPage('intellectual_property_utilization', 'copyrights');
+$canViewPatentOutputs = $dashboardCanViewPage('intellectual_property_utilization', 'patents_utility_models');
+$canViewInnovationOutputs = $dashboardCanViewPage('intellectual_property_utilization', 'innovation_technology_transfer');
+$outputCopyrightsAvailable = $tables['copyrights']
+    && ($canViewAllOutputCopyrights || $canViewPatentOutputs || $canViewInnovationOutputs);
+$outputsAvailable = $tables['publications'] || $outputCopyrightsAvailable;
+$stats['research_outputs'] = $tables['publications'] ? $stats['publication_total'] : 0;
+if ($outputCopyrightsAvailable) {
+    if ($canViewAllOutputCopyrights) {
+        $stats['research_outputs'] += $stats['registered_copyrights'];
+    } else {
+        $patentScope = (int) $canViewPatentOutputs;
+        $innovationScope = (int) $canViewInnovationOutputs;
+        $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM copyright_applications
+            WHERE deactivated_at IS NULL
+                AND (external_status = 'registered' OR (external_status IS NULL AND status = 'registered'))
+                AND (
+                (? = 1 AND output_type IN ('patent', 'utility_model')) OR
+                (? = 1 AND output_type IN ('innovation', 'technology_transfer'))
+            )");
+        $stmt->bind_param('ii', $patentScope, $innovationScope);
+        $stmt->execute();
+        $stats['research_outputs'] += (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+        $stmt->close();
+    }
+}
+
+// Match the default destinations: pending titles, pending chapters, approved titles.
+$developmentAvailable = $tables['projects'] && $tables['submissions'];
+$stats['development_total'] = 0;
+if ($developmentAvailable) {
+    $approvedCondition = rms_approval_latest_version_condition();
+    $canSeeProposals = (int) $dashboardCanViewPage('research_development', 'research_proposals');
+    $canSeeReview = (int) $dashboardCanViewPage('research_development', 'research_review');
+    $canSeeApproval = (int) $dashboardCanViewPage('research_development', 'research_approval');
+    $stmt = $conn->prepare("SELECT
+        COUNT(CASE WHEN v.submission_type = 'title' AND v.status = 'submitted' THEN 1 END) AS proposals,
+        COUNT(CASE WHEN v.submission_type = 'chapter' AND v.status = 'submitted' THEN 1 END) AS review_required,
+        COUNT(DISTINCT CASE WHEN v.submission_type = 'title' AND ($approvedCondition) THEN v.project_id END) AS approval_required,
+        COUNT(DISTINCT CASE WHEN
+            (? = 1 AND v.submission_type = 'title' AND v.status = 'submitted') OR
+            (? = 1 AND v.submission_type = 'chapter' AND v.status = 'submitted') OR
+            (? = 1 AND v.submission_type = 'title' AND ($approvedCondition))
+            THEN v.project_id END) AS development_total
+        FROM research_submission_versions v
+        JOIN research_projects rp ON rp.project_id = v.project_id AND rp.deleted_at IS NULL
+        JOIN users researcher ON researcher.user_id = rp.created_by AND researcher.deleted_at IS NULL
+        JOIN users submitter ON submitter.user_id = v.submitted_by AND submitter.deleted_at IS NULL
+        LEFT JOIN chapters ch ON ch.chapter_id = v.chapter_id
+        WHERE (v.chapter_id IS NULL OR (ch.chapter_id IS NOT NULL AND ch.deleted_at IS NULL))
+          AND NOT EXISTS (
+              SELECT 1 FROM research_submission_versions newer
+              WHERE newer.project_id = v.project_id
+                AND newer.submission_type = v.submission_type
+                AND newer.chapter_id <=> v.chapter_id
+                AND newer.version_number > v.version_number
+          )");
+    $stmt->bind_param('iii', $canSeeProposals, $canSeeReview, $canSeeApproval);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    foreach (['proposals', 'review_required', 'approval_required', 'development_total'] as $key) {
+        $stats[$key] = (int) ($row[$key] ?? 0);
+    }
 }
 
 $monthStart = (new DateTimeImmutable('first day of this month'))->modify('-5 months');
@@ -244,7 +390,7 @@ if ($tables['activities']) {
     $stmt->close();
 }
 if ($tables['publications']) {
-    $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS month_key, COUNT(*) AS total FROM publications WHERE created_at >= ? AND created_at < ? GROUP BY DATE_FORMAT(created_at, '%Y-%m')");
+    $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS month_key, COUNT(*) AS total FROM publications WHERE deactivated_at IS NULL AND created_at >= ? AND created_at < ? GROUP BY DATE_FORMAT(created_at, '%Y-%m')");
     $stmt->bind_param('ss', $chartStartDate, $chartNextMonthDate);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -257,7 +403,7 @@ if ($tables['publications']) {
     $stmt->close();
 }
 if ($tables['copyrights']) {
-    $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS month_key, COUNT(*) AS total FROM copyright_applications WHERE created_at >= ? AND created_at < ? GROUP BY DATE_FORMAT(created_at, '%Y-%m')");
+    $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS month_key, COUNT(*) AS total FROM copyright_applications WHERE deactivated_at IS NULL AND created_at >= ? AND created_at < ? GROUP BY DATE_FORMAT(created_at, '%Y-%m')");
     $stmt->bind_param('ss', $chartStartDate, $chartNextMonthDate);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -284,16 +430,16 @@ if ($tables['activities']) {
     $eventParts[] = "SELECT ra.created_at AS event_at, CONCAT(UCASE(LEFT(ra.activity_type, 1)), SUBSTRING(ra.activity_type, 2), ' created') AS event_label, COALESCE(NULLIF(ra.organizer, ''), NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), 'Institutional activity') AS actor_name, ra.status, 'activity' AS source_type, ra.activity_id AS source_id FROM research_activities ra LEFT JOIN users u ON u.user_id = ra.created_by";
 }
 if ($tables['publications']) {
-    $eventParts[] = "SELECT p.created_at AS event_at, 'Publication submitted' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, p.status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p";
-    $eventParts[] = "SELECT p.updated_at AS event_at, 'Publication published' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, 'published' AS status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p WHERE p.status = 'published'";
+    $eventParts[] = "SELECT p.created_at AS event_at, 'Publication recorded' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, p.archival_status AS status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p WHERE p.deactivated_at IS NULL";
+    $eventParts[] = "SELECT COALESCE(p.publication_date, p.updated_at, p.created_at) AS event_at, 'Publication published' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, 'published' AS status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p WHERE p.deactivated_at IS NULL AND p.archival_status = 'legacy' AND p.status = 'published'";
 }
 if ($tables['copyrights']) {
-    $eventParts[] = "SELECT c.created_at AS event_at, 'Copyright applied' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, c.status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c";
-    $eventParts[] = "SELECT c.updated_at AS event_at, 'Copyright registered' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, 'registered' AS status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c WHERE c.status = 'registered'";
+    $eventParts[] = "SELECT c.created_at AS event_at, 'Copyright record added' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, CASE WHEN c.output_type IN ('software','research','instructional_material','module','other') THEN c.archival_status ELSE c.status END AS status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c WHERE c.deactivated_at IS NULL";
+    $eventParts[] = "SELECT COALESCE(c.registered_at, c.updated_at, c.created_at) AS event_at, 'Copyright registered' AS event_label, COALESCE(NULLIF(c.applicant_name, ''), 'Unnamed applicant') AS actor_name, 'registered' AS status, 'copyright' AS source_type, c.copyright_id AS source_id FROM copyright_applications c WHERE c.deactivated_at IS NULL AND (c.external_status='registered' OR (c.external_status IS NULL AND c.status='registered' AND (c.output_type IN ('patent','utility_model','innovation','technology_transfer') OR NULLIF(c.copyright_ref_no,'') IS NOT NULL)))";
 }
 $recentEvents = [];
 if ($eventParts) {
-    $eventSql = 'SELECT event_at, event_label, actor_name, status, source_type, source_id FROM (' . implode(' UNION ALL ', $eventParts) . ') AS module_events ORDER BY event_at DESC LIMIT 6';
+    $eventSql = 'SELECT event_at, event_label, actor_name, status, source_type, source_id FROM (' . implode(' UNION ALL ', $eventParts) . ') AS module_events WHERE event_at IS NOT NULL ORDER BY event_at DESC LIMIT 6';
     $stmt = $conn->prepare($eventSql);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -339,7 +485,11 @@ $dashboardModuleCards = [
         'key' => 'research_capacity_building',
         'class' => 'module-capacity',
         'label' => 'Research Capacity Building',
-        'pages' => [
+        'pages' => $role === 'admin' ? [
+            ['key' => 'upcoming_activities', 'label' => 'Upcoming', 'count' => $tables['activities'] ? $stats['upcoming_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
+            ['key' => 'ongoing_activities', 'label' => 'Ongoing', 'count' => $tables['activities'] ? $stats['capacity_ongoing_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
+            ['key' => 'conducted_activities', 'label' => 'Conducted', 'count' => $tables['activities'] ? $stats['conducted_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
+        ] : [
             ['key' => 'seminars', 'label' => 'Seminars', 'count' => $tables['activities'] ? $stats['seminars'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
             ['key' => 'trainings', 'label' => 'Trainings', 'count' => $tables['activities'] ? $stats['trainings'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
             ['key' => 'workshops', 'label' => 'Workshops', 'count' => $tables['activities'] ? $stats['workshops'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
@@ -350,9 +500,9 @@ $dashboardModuleCards = [
         'class' => 'module-development',
         'label' => 'Research Development',
         'pages' => [
-            ['key' => 'research_proposals', 'label' => 'Research Proposals', 'count' => $tables['projects'] ? $stats['proposals'] : null, 'detail' => $tables['projects'] ? 'proposals' : 'unavailable'],
-            ['key' => 'research_review', 'label' => 'Research Review', 'count' => $tables['projects'] ? $stats['review_required'] : null, 'detail' => $tables['projects'] ? 'requiring review' : 'unavailable'],
-            ['key' => 'research_approval', 'label' => 'Research Approval', 'count' => $tables['projects'] ? $stats['approval_required'] : null, 'detail' => $tables['projects'] ? 'awaiting approval' : 'unavailable'],
+            ['key' => 'research_proposals', 'label' => 'Research Proposals', 'count' => $developmentAvailable ? $stats['proposals'] : null, 'detail' => $developmentAvailable ? 'proposals' : 'unavailable'],
+            ['key' => 'research_review', 'label' => 'Chapter Review', 'count' => $developmentAvailable ? $stats['review_required'] : null, 'detail' => $developmentAvailable ? 'requiring review' : 'unavailable'],
+            ['key' => 'research_approval', 'label' => 'Approved Proposals', 'count' => $developmentAvailable ? $stats['approval_required'] : null, 'detail' => $developmentAvailable ? 'approved proposals' : 'unavailable'],
         ],
     ],
     [
@@ -360,9 +510,9 @@ $dashboardModuleCards = [
         'class' => 'module-implementation',
         'label' => 'Research Implementation & Outputs',
         'pages' => [
-            ['key' => 'ongoing_research', 'label' => 'Ongoing Research', 'count' => $tables['projects'] ? $stats['ongoing'] : null, 'detail' => $tables['projects'] ? 'ongoing projects' : 'unavailable'],
-            ['key' => 'completed_research', 'label' => 'Completed Research', 'count' => $tables['projects'] ? $stats['completed'] : null, 'detail' => $tables['projects'] ? 'completed projects' : 'unavailable'],
-            ['key' => 'research_outputs', 'label' => 'Research Outputs', 'count' => $tables['publications'] ? $stats['published'] : null, 'detail' => $tables['publications'] ? 'published outputs' : 'unavailable'],
+            ['key' => 'ongoing_research', 'label' => 'Ongoing Research', 'count' => $implementationAvailable ? $stats['ongoing'] : null, 'detail' => $implementationAvailable ? 'ongoing projects' : 'unavailable'],
+            ['key' => 'completed_research', 'label' => 'Completed Research', 'count' => $implementationAvailable ? $stats['completed'] : null, 'detail' => $implementationAvailable ? 'completed projects' : 'unavailable'],
+            ['key' => 'research_outputs', 'label' => 'Research Outputs', 'count' => $outputsAvailable ? $stats['research_outputs'] : null, 'detail' => $outputsAvailable ? 'active publications / registered outputs' : 'unavailable'],
         ],
     ],
     [
@@ -372,7 +522,7 @@ $dashboardModuleCards = [
         'pages' => [
             ['key' => 'journal_publications', 'label' => 'Journal Publications', 'count' => $tables['publications'] ? $stats['journal_publications'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
             ['key' => 'conference_presentations', 'label' => 'Conference Presentations', 'count' => $tables['publications'] ? $stats['conference_publications'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
-            ['key' => 'research_repository', 'label' => 'Research Repository', 'count' => $tables['publications'] ? $stats['published_repository'] : null, 'detail' => $tables['publications'] ? 'published records' : 'unavailable'],
+            ['key' => 'research_repository', 'label' => 'Research Repository', 'count' => $tables['publications'] ? $stats['published_repository'] : null, 'detail' => $tables['publications'] ? 'archived / legacy published records' : 'unavailable'],
         ],
     ],
     [
@@ -381,8 +531,8 @@ $dashboardModuleCards = [
         'label' => 'Intellectual Property & Utilization',
         'pages' => [
             ['key' => 'copyrights', 'label' => 'Copyrights', 'count' => $tables['copyrights'] ? $stats['copyright_total'] : null, 'detail' => $tables['copyrights'] ? 'applications and records' : 'unavailable'],
-            ['key' => 'patents_utility_models', 'label' => 'Patents / Utility Models', 'count' => $tables['copyrights'] ? $stats['software_outputs'] : null, 'detail' => $tables['copyrights'] ? 'software outputs recorded' : 'unavailable'],
-            ['key' => 'innovation_technology_transfer', 'label' => 'Innovation & Technology Transfer', 'count' => $tables['copyrights'] ? $stats['module_outputs'] : null, 'detail' => $tables['copyrights'] ? 'module outputs recorded' : 'unavailable'],
+            ['key' => 'patents_utility_models', 'label' => 'Patents / Utility Models', 'count' => $tables['copyrights'] ? $stats['patent_utility_models'] : null, 'detail' => $tables['copyrights'] ? 'patent / utility model outputs recorded' : 'unavailable'],
+            ['key' => 'innovation_technology_transfer', 'label' => 'Innovation & Technology Transfer', 'count' => $tables['copyrights'] ? $stats['innovation_technology_transfer'] : null, 'detail' => $tables['copyrights'] ? 'innovation / technology transfer outputs recorded' : 'unavailable'],
         ],
     ],
 ];
@@ -401,7 +551,9 @@ foreach ($dashboardModuleCards as &$moduleCard) {
         }
     }
 
-    if ($moduleCard['key'] === 'publication_dissemination') {
+    if ($moduleCard['key'] === 'research_development') {
+        $moduleCard['count'] = $stats['development_total'];
+    } elseif ($moduleCard['key'] === 'publication_dissemination') {
         $hasRepository = $dashboardCanViewPage($moduleCard['key'], 'research_repository');
         $hasJournal = $dashboardCanViewPage($moduleCard['key'], 'journal_publications');
         $hasConference = $dashboardCanViewPage($moduleCard['key'], 'conference_presentations');
@@ -418,17 +570,17 @@ foreach ($dashboardModuleCards as &$moduleCard) {
         } else {
             $moduleCard['count'] = 0;
             if ($dashboardCanViewPage($moduleCard['key'], 'patents_utility_models')) {
-                $moduleCard['count'] += $stats['software_outputs'];
+                $moduleCard['count'] += $stats['patent_utility_models'];
             }
             if ($dashboardCanViewPage($moduleCard['key'], 'innovation_technology_transfer')) {
-                $moduleCard['count'] += $stats['module_outputs'];
+                $moduleCard['count'] += $stats['innovation_technology_transfer'];
             }
         }
     }
     $moduleCard['sourceAvailable'] = match ($moduleCard['key']) {
         'research_capacity_building' => $tables['activities'],
-        'research_development' => $tables['projects'],
-        'research_implementation_outputs' => $tables['projects'] || $tables['publications'],
+        'research_development' => $developmentAvailable,
+        'research_implementation_outputs' => $implementationAvailable || $outputsAvailable,
         'publication_dissemination' => $tables['publications'],
         'intellectual_property_utilization' => $tables['copyrights'],
         default => false,
@@ -461,6 +613,89 @@ foreach ($quickPageOrder as $quickPageKey) {
         break;
     }
 }
+
+if (isset($_GET['dashboard_data']) && $_GET['dashboard_data'] === '1') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        http_response_code(405);
+        exit;
+    }
+
+    $liveModules = [];
+    foreach ($dashboardModuleCards as $moduleCard) {
+        $liveModules[$moduleCard['key']] = [
+            'label' => $moduleCard['label'],
+            'count' => (int) $moduleCard['count'],
+            'has_count' => (bool) $moduleCard['hasCount'],
+            'source_available' => (bool) $moduleCard['sourceAvailable'],
+            'upcoming' => (int) $moduleCard['upcoming'],
+            'pages' => array_map(static function (array $page): array {
+                return [
+                    'key' => $page['key'],
+                    'count' => $page['count'] === null ? null : (int) $page['count'],
+                    'detail' => monitoringDashboardPageDetail($page),
+                ];
+            }, $moduleCard['pages']),
+        ];
+    }
+
+    $liveStats = [
+        'review_required' => $tables['projects'] && $dashboardCanViewPage('research_development', 'research_review') ? $stats['review_required'] : null,
+        'approval_required' => $tables['projects'] && $dashboardCanViewPage('research_development', 'research_approval') ? $stats['approval_required'] : null,
+        'pending_publications' => $tables['publications'] && ($dashboardCanViewPage('publication_dissemination', 'journal_publications') || $dashboardCanViewPage('publication_dissemination', 'conference_presentations')) ? $stats['pending_publications'] : null,
+    ];
+
+    $liveChart = null;
+    $liveEvents = null;
+    if ($showAggregateMonitoring) {
+        $liveChart = [
+            'months' => array_map(static function (string $monthKey, array $entry): array {
+                return [
+                    'label' => date('M', strtotime($monthKey . '-01')),
+                    'seminars' => (int) ($entry['seminars'] ?? 0),
+                    'workshops' => (int) ($entry['workshops'] ?? 0),
+                    'publications' => (int) ($entry['publications'] ?? 0),
+                    'copyrights' => (int) ($entry['copyrights'] ?? 0),
+                ];
+            }, array_keys($chartData), array_values($chartData)),
+        ];
+        $liveEvents = array_map(static function (array $event) use ($eventUrl): array {
+            $badge = monitoringDashboardStatusBadge((string) $event['status']);
+            return [
+                'date' => date('M j, Y', strtotime((string) $event['event_at'])),
+                'label' => (string) $event['event_label'],
+                'actor' => (string) $event['actor_name'],
+                'category' => $event['source_type'] === 'publication' ? 'Publication' : ($event['source_type'] === 'copyright' ? 'Copyright' : 'Research'),
+                'status' => $badge['label'],
+                'tone' => $badge['tone'],
+                'url' => $eventUrl($event),
+            ];
+        }, $recentEvents);
+    }
+
+    $livePayload = [
+        'success' => true,
+        'role' => $role,
+        'updated_at' => date(DATE_ATOM),
+        'academic_year' => $activeAcademicYear,
+        'modules' => $liveModules,
+        'stats' => $liveStats,
+        'chart' => $liveChart,
+        'events' => $liveEvents,
+        'researchers' => $role === 'admin' ? [
+            'total' => (int) $researchers['total'],
+            'faculty' => (int) $researchers['faculty'],
+            'student' => (int) $researchers['student'],
+        ] : null,
+    ];
+
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store, private');
+    header('X-Content-Type-Options: nosniff');
+    echo json_encode($livePayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($role === 'admin') renderAdminShell($user, $currentPage, $pageTitle, $pageSubtitle);
 else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 ?>
@@ -840,9 +1075,239 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 
   .admin-body .admin-dashboard .admin-page-content .month-chart {
     width: 100%;
-    height: 160px;
+    height: 190px;
     display: block;
     overflow: visible;
+    margin-top: 14px;
+    border: 1px solid #e7edf2;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #f8fbfc 0%, #ffffff 100%);
+    box-sizing: border-box;
+    padding: 8px 10px 4px;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-chart-panel {
+    position: relative;
+    overflow: hidden;
+    border-color: #dce8e7;
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(15, 63, 66, 0.06);
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-chart-panel::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #0d9488, #7dc5b4 58%, #d6eee8);
+    content: '';
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel {
+    position: relative;
+    overflow: hidden;
+    border-color: #dce8e7;
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(15, 63, 66, 0.06);
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #0d9488, #7dc5b4 58%, #d6eee8);
+    content: '';
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-head {
+    margin: 0 0 12px;
+    padding: 2px 0 13px;
+    border-bottom: 1px solid #e8eff0;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-head h2 {
+    color: #172b35;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-link {
+    padding: 7px 11px;
+    border: 1px solid #cce6df;
+    border-radius: 999px;
+    background: #eff9f6;
+    color: #08776e;
+    font-size: 12px;
+    line-height: 1.35;
+    text-decoration: none;
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-link:hover {
+    border-color: #a8d8cb;
+    background: #e4f5ef;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-link:focus-visible {
+    outline: 3px solid rgba(13, 148, 136, 0.25);
+    outline-offset: 3px;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table th {
+    padding: 10px 9px;
+    background: #f5f9f8;
+    color: #60727a;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table td {
+    padding: 11px 9px;
+    border-bottom: 1px solid #edf2f2;
+    color: #40515b;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table tbody tr {
+    transition: background-color 140ms ease;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table tbody tr:hover {
+    background: #f8fbfa;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-name {
+    color: #173b43;
+    font-weight: 650;
+    line-height: 1.4;
+    text-decoration: none;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-name:hover {
+    color: #08776e;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-name:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid #0d9488;
+    outline-offset: 3px;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .badge {
+    min-height: 23px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .panel-link,
+    .admin-body .admin-dashboard .admin-page-content .dashboard-recent-panel .event-table tbody tr {
+      transition: none;
+    }
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .chart-header-row {
+    align-items: center;
+    margin: 2px 0 14px;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .chart-header-row h2 {
+    color: #172b35;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .dashboard-chart-panel .panel-link {
+    flex: 0 0 auto;
+    padding: 7px 11px;
+    border: 1px solid #cce6df;
+    border-radius: 999px;
+    background: #eff9f6;
+    color: #08776e;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.35;
+    text-align: center;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .chart-legend {
+    gap: 9px;
+    margin: 0;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .chart-legend-item {
+    min-height: 30px;
+    gap: 7px;
+    padding: 5px 9px;
+    border: 1px solid #e8edf0;
+    border-radius: 999px;
+    background: #fff;
+    color: #425466;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .chart-legend-swatch {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.045);
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .month-chart line {
+    stroke: #e2eaee;
+  }
+
+  .admin-body .admin-dashboard .admin-page-content .month-chart text {
+    fill: #647783;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .admin-body .admin-dashboard .admin-page-content .dashboard-chart-panel {
+      padding: 18px 16px 20px;
+    }
+
+    .admin-body .admin-dashboard .admin-page-content .chart-header-row {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .admin-body .admin-dashboard .admin-page-content .dashboard-chart-panel .panel-link {
+      text-align: left;
+    }
+
+    .admin-body .admin-dashboard .admin-page-content .month-chart {
+      height: 174px;
+      padding-inline: 4px;
+    }
   }
 
   .admin-body .admin-dashboard .admin-page-content .event-table {
@@ -1014,9 +1479,26 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 
   .admin-body .admin-dashboard .admin-page-content .faculty-key { background: #2563eb; }
   .admin-body .admin-dashboard .admin-page-content .student-key { background: #7aaaf8; }
+
+  .dashboard-live-status {
+    min-height: 1em;
+    margin: 8px 0 0;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 11px;
+    text-align: right;
+  }
+
+  .dashboard-live-status[data-state="stale"] { color: #fde68a; }
+  .dashboard-live-status[data-state="updating"] { color: #dbeafe; }
+
+  @media (max-width: 700px) {
+    .dashboard-live-status { text-align: left; }
+  }
 </style>
 
-<div class="module-hub<?= $role === 'admin' ? ' admin-monitoring-dashboard' : '' ?>">
+<div class="module-hub<?= $role === 'admin' ? ' admin-monitoring-dashboard rms-admin-dashboard' : '' ?>"
+     data-dashboard-live
+     data-dashboard-data-url="<?= monitoringDashboardEscape(($role === 'admin' ? SITE_URL . 'pages/admin/admin-dashboard.php' : SITE_URL . 'pages/staff/staff-dashboard.php') . '?dashboard_data=1') ?>">
   <header class="module-greeting">
     <div class="greeting-copy">
       <p class="module-kicker">WELCOME BACK, <?= monitoringDashboardEscape(strtoupper($firstName)) ?></p>
@@ -1026,13 +1508,18 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     <div class="greeting-meta">
       <div class="academic-year-date"><?= date('l, M j, Y') ?></div>
       <div class="academic-year-card">
+        <?php if ($role !== 'admin'): ?>
         <span class="academic-year-icon" aria-hidden="true">🗓️</span>
+        <?php endif; ?>
         <div class="academic-year-meta">
           <span class="academic-year-label">Academic Year</span>
-          <strong><?= monitoringDashboardEscape($activeAcademicYear['label']) ?></strong>
-          <span><?= monitoringDashboardEscape($activeAcademicYear['semester']) ?></span>
+          <strong data-dashboard-academic-year><?= monitoringDashboardEscape($activeAcademicYear['label']) ?></strong>
+          <?php if ($role !== 'admin'): ?>
+          <span data-dashboard-semester><?= monitoringDashboardEscape($activeAcademicYear['semester']) ?></span>
+          <?php endif; ?>
         </div>
       </div>
+      <p class="dashboard-live-status" data-dashboard-live-status data-dashboard-initial-updated-at="<?= date(DATE_ATOM) ?>" role="status" aria-live="polite" aria-atomic="true">Updated <?= date('g:i A') ?></p>
     </div>
   </header>
 
@@ -1217,6 +1704,8 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card { font-size: 13px; }
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-label,
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-meta > span:last-child { font-size: 12px; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-label { text-align: center; }
+    body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .academic-year-card .academic-year-meta > strong { text-align: center; }
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card { gap: 13px; }
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card .module-pill { font-size: 10px; }
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .module-summary-card p { font-size: 15px; line-height: 1.4; }
@@ -1241,22 +1730,338 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-legend-row small { font-size: 11px; line-height: 1.45; }
   </style>
 
+  <?php if ($role === 'admin'): ?>
+  <style>
+    body.admin-body .admin-dashboard .admin-page-content:has(.rms-admin-dashboard) {
+      padding: 24px 32px;
+      background: #F1F5F9;
+    }
+
+    .rms-admin-dashboard {
+      max-width: none;
+      margin: 0;
+    }
+
+    .rms-admin-dashboard .module-greeting {
+      margin-bottom: 0;
+    }
+
+    body.admin-body .admin-dashboard .admin-page-content .rms-admin-dashboard > .module-greeting {
+      min-height: 232px;
+    }
+
+    .rms-admin-summary-strip,
+    .rms-admin-section-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-column: 1 / -1;
+    }
+
+    .rms-admin-summary-strip {
+      position: relative;
+      z-index: 2;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin: -24px 24px 20px;
+    }
+
+    .rms-admin-summary-tile {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border: 0;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .08);
+      color: #0F172A;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .rms-admin-summary-tile:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .08);
+    }
+
+    .rms-admin-icon-box {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--rms-admin-tint);
+      color: var(--rms-admin-accent);
+    }
+
+    .rms-admin-icon-box svg {
+      display: block;
+      width: 21px;
+      height: 21px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .rms-admin-summary-copy {
+      display: grid;
+      min-width: 0;
+      gap: 4px;
+    }
+
+    .rms-admin-summary-copy strong {
+      color: var(--rms-admin-accent);
+      font-family: Inter, sans-serif;
+      font-size: 28px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .rms-admin-summary-copy span {
+      color: #475569;
+      font-family: Inter, sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.3;
+    }
+
+    .rms-admin-section-grid {
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .rms-admin-section-card {
+      grid-column: span 2;
+      min-width: 0;
+      padding: 20px;
+      border: 0;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: none;
+      scroll-margin-top: 24px;
+      font-family: Inter, sans-serif;
+    }
+
+    .rms-admin-section-card:nth-child(n + 4) {
+      grid-column: span 3;
+    }
+
+    .rms-admin-section-heading {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .rms-admin-section-title {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      color: #0F172A;
+      font-family: Inter, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .rms-admin-section-total {
+      flex: 0 0 auto;
+      color: var(--rms-admin-accent);
+      font-family: Inter, sans-serif;
+      font-size: 34px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .rms-admin-section-links {
+      display: grid;
+      gap: 2px;
+    }
+
+    .rms-admin-section-link {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: #4338CA;
+      font-family: Inter, sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-decoration: none;
+    }
+
+    .rms-admin-section-link:hover,
+    .rms-admin-section-link:focus-visible {
+      background: #F1F5F9;
+    }
+
+    .rms-admin-section-link:focus-visible,
+    .rms-admin-summary-tile:focus-visible {
+      outline: 3px solid #4338CA;
+      outline-offset: 2px;
+    }
+
+    .rms-admin-section-link span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .rms-admin-section-meta {
+      flex: 0 0 auto;
+      color: #475569;
+      font-family: Inter, sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .rms-admin-summary-tile.module-capacity,
+    .rms-admin-section-card.module-capacity { --rms-admin-accent: #6D28D9; --rms-admin-tint: #EDE9FE; }
+    .rms-admin-summary-tile.module-development,
+    .rms-admin-section-card.module-development { --rms-admin-accent: #1D4ED8; --rms-admin-tint: #DBEAFE; }
+    .rms-admin-summary-tile.module-implementation,
+    .rms-admin-section-card.module-implementation { --rms-admin-accent: #0F766E; --rms-admin-tint: #CCFBF1; }
+    .rms-admin-summary-tile.module-publication,
+    .rms-admin-section-card.module-publication { --rms-admin-accent: #15803D; --rms-admin-tint: #DCFCE7; }
+    .rms-admin-summary-tile.module-ip,
+    .rms-admin-section-card.module-ip { --rms-admin-accent: #C2410C; --rms-admin-tint: #FFEDD5; }
+
+    html:has(.rms-admin-dashboard) {
+      scroll-behavior: smooth;
+    }
+
+    @media (max-width: 1100px) {
+      .rms-admin-summary-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .rms-admin-section-card,
+      .rms-admin-section-card:nth-child(n) {
+        grid-column: span 3;
+      }
+    }
+
+    @media (max-width: 700px) {
+      body.admin-body .admin-dashboard .admin-page-content:has(.rms-admin-dashboard) {
+        padding: 24px 16px;
+      }
+
+      body.admin-body .admin-dashboard .admin-page-content .rms-admin-dashboard > .module-greeting {
+        height: auto;
+        min-height: clamp(400px, 112vw, 460px);
+      }
+
+      .rms-admin-summary-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 8px;
+      }
+
+      .rms-admin-section-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .rms-admin-section-card,
+      .rms-admin-section-card:nth-child(n) {
+        grid-column: 1 / -1;
+      }
+
+      .rms-admin-section-meta {
+        white-space: normal;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html:has(.rms-admin-dashboard) {
+        scroll-behavior: auto;
+      }
+
+      .rms-admin-summary-tile {
+        transition: none;
+      }
+    }
+  </style>
+
+  <section class="rms-admin-summary-strip" aria-label="Research section summary">
+    <?php foreach ($dashboardModuleCards as $moduleCard): ?>
+      <?php if (!$moduleCard['visible']) continue; ?>
+      <?php
+      $sectionLabel = monitoringDashboardSectionLabel($moduleCard['key']);
+      $sectionId = 'rms-admin-section-' . $moduleCard['key'];
+      $hasUnavailablePage = in_array(null, array_column($moduleCard['pages'], 'count'), true);
+      ?>
+      <a class="rms-admin-summary-tile <?= monitoringDashboardEscape($moduleCard['class']) ?>"
+         data-dashboard-module="<?= monitoringDashboardEscape($moduleCard['key']) ?>"
+         href="#<?= monitoringDashboardEscape($sectionId) ?>"
+         aria-label="<?= monitoringDashboardEscape($sectionLabel . ', ' . (int) max(0, $moduleCard['count']) . ' total' . ($hasUnavailablePage ? ', one or more count sources unavailable' : '') . ', jump to section') ?>">
+        <span class="rms-admin-icon-box" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" focusable="false"><?= monitoringDashboardIcon($moduleCard['key']) ?></svg>
+        </span>
+        <span class="rms-admin-summary-copy">
+          <strong data-dashboard-module-total="<?= monitoringDashboardEscape($moduleCard['key']) ?>"><?= (int) max(0, $moduleCard['count']) ?></strong>
+          <span><?= monitoringDashboardEscape($sectionLabel) ?></span>
+        </span>
+      </a>
+    <?php endforeach; ?>
+  </section>
+
+  <section class="rms-admin-section-grid" aria-label="Research sections">
+    <?php foreach ($dashboardModuleCards as $moduleCard): ?>
+      <?php if (!$moduleCard['visible']) continue; ?>
+      <?php
+      $sectionLabel = monitoringDashboardSectionLabel($moduleCard['key']);
+      $sectionId = 'rms-admin-section-' . $moduleCard['key'];
+      $hasUnavailablePage = in_array(null, array_column($moduleCard['pages'], 'count'), true);
+      ?>
+      <article id="<?= monitoringDashboardEscape($sectionId) ?>"
+               class="rms-admin-section-card <?= monitoringDashboardEscape($moduleCard['class']) ?>"
+               data-dashboard-module="<?= monitoringDashboardEscape($moduleCard['key']) ?>"
+               data-count-source-unavailable="<?= $hasUnavailablePage ? 'true' : 'false' ?>">
+        <header class="rms-admin-section-heading">
+          <span class="rms-admin-icon-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" focusable="false"><?= monitoringDashboardIcon($moduleCard['key']) ?></svg>
+          </span>
+          <h2 class="rms-admin-section-title"><?= monitoringDashboardEscape($sectionLabel) ?></h2>
+          <strong class="rms-admin-section-total" data-dashboard-module-total="<?= monitoringDashboardEscape($moduleCard['key']) ?>"><?= (int) max(0, $moduleCard['count']) ?></strong>
+        </header>
+        <nav class="rms-admin-section-links" aria-label="<?= monitoringDashboardEscape($sectionLabel) ?> pages">
+          <?php foreach ($moduleCard['pages'] as $modulePage): ?>
+            <a class="rms-admin-section-link" data-dashboard-page="<?= monitoringDashboardEscape($modulePage['key']) ?>" href="<?= monitoringDashboardEscape($moduleRoute($modulePage['key'])) ?>">
+              <span><?= monitoringDashboardEscape($modulePage['label']) ?></span>
+              <span class="rms-admin-section-meta" data-dashboard-page-count="<?= monitoringDashboardEscape($modulePage['key']) ?>"><?= (int) ($modulePage['count'] ?? 0) ?> <?= monitoringDashboardEscape(monitoringDashboardPageDetail($modulePage)) ?></span>
+            </a>
+          <?php endforeach; ?>
+        </nav>
+      </article>
+    <?php endforeach; ?>
+  </section>
+  <?php else: ?>
   <section class="module-summary-grid" aria-label="Research module overview">
     <?php foreach ($dashboardModuleCards as $moduleCard): ?>
       <?php if (!$moduleCard['visible']) continue; ?>
-      <article class="module-summary-card <?= monitoringDashboardEscape($moduleCard['class']) ?>">
+      <article class="module-summary-card <?= monitoringDashboardEscape($moduleCard['class']) ?>" data-dashboard-module="<?= monitoringDashboardEscape($moduleCard['key']) ?>">
         <span class="module-pill"><?= monitoringDashboardEscape($moduleCard['label']) ?></span>
         <div class="module-summary-metric">
-          <strong><?= $moduleCard['hasCount'] ? (int) max(0, $moduleCard['count']) : '&mdash;' ?></strong>
-          <span><?= $moduleCard['hasCount'] ? 'records across available pages' : ($moduleCard['sourceAvailable'] ? 'no separate count' : 'record source unavailable') ?></span>
+          <strong data-dashboard-module-total="<?= monitoringDashboardEscape($moduleCard['key']) ?>"><?= $moduleCard['hasCount'] ? (int) max(0, $moduleCard['count']) : '&mdash;' ?></strong>
+          <span data-dashboard-module-detail><?= $moduleCard['hasCount'] ? 'records across available pages' : ($moduleCard['sourceAvailable'] ? 'no separate count' : 'record source unavailable') ?></span>
         </div>
         <p><?= monitoringDashboardEscape($moduleCard['label']) ?></p>
         <?php if ($moduleCard['key'] === 'research_capacity_building'): ?>
           <?php if ($tables['activities']): ?>
-            <small><?= (int) $moduleCard['upcoming'] ?> upcoming activities across permitted Capacity Building pages.</small>
+            <small data-dashboard-note="capacity"><?= $role === 'admin' ? 'Upcoming, ongoing, and conducted activities.' : (int) $moduleCard['upcoming'] . ' upcoming activities across permitted Capacity Building pages.' ?></small>
           <?php endif; ?>
         <?php elseif ($moduleCard['key'] === 'research_development'): ?>
-          <small>
+          <small data-dashboard-note="development">
             <?php if ($tables['projects'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_review'))): ?>
               <?= (int) $stats['review_required'] ?> requiring review
             <?php endif; ?>
@@ -1264,12 +2069,12 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
               &middot;
             <?php endif; ?>
             <?php if ($tables['projects'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_approval'))): ?>
-              <?= (int) $stats['approval_required'] ?> awaiting approval
+              <?= (int) $stats['approval_required'] ?> approved proposals
             <?php endif; ?>
           </small>
         <?php elseif ($moduleCard['key'] === 'publication_dissemination'): ?>
           <?php if ($tables['publications'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'journal_publications') || $dashboardCanViewPage($moduleCard['key'], 'conference_presentations'))): ?>
-            <small><?= (int) $stats['pending_publications'] ?> publication records are submitted or under review.</small>
+            <small data-dashboard-note="publications"><?= (int) $stats['pending_publications'] ?> legacy publication records retain their historical status.</small>
           <?php endif; ?>
         <?php elseif ($moduleCard['key'] === 'intellectual_property_utilization'): ?>
           <small>Patent and technology-transfer shortcuts show the matching software and module output records in the existing registry.</small>
@@ -1278,15 +2083,16 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         <?php endif; ?>
         <nav class="module-summary-links" aria-label="<?= monitoringDashboardEscape($moduleCard['label']) ?> pages">
           <?php foreach ($moduleCard['pages'] as $modulePage): ?>
-            <a href="<?= monitoringDashboardEscape($moduleRoute($modulePage['key'])) ?>">
+            <a data-dashboard-page="<?= monitoringDashboardEscape($modulePage['key']) ?>" href="<?= monitoringDashboardEscape($moduleRoute($modulePage['key'])) ?>">
               <span><?= monitoringDashboardEscape($modulePage['label']) ?></span>
-              <span><?= $modulePage['count'] === null ? monitoringDashboardEscape($modulePage['detail']) : (int) $modulePage['count'] . ' ' . monitoringDashboardEscape($modulePage['detail']) ?></span>
+              <span data-dashboard-page-count="<?= monitoringDashboardEscape($modulePage['key']) ?>"><?= $modulePage['count'] === null ? monitoringDashboardEscape($modulePage['detail']) : (int) $modulePage['count'] . ' ' . monitoringDashboardEscape($modulePage['detail']) ?></span>
             </a>
           <?php endforeach; ?>
         </nav>
       </article>
     <?php endforeach; ?>
   </section>
+  <?php endif; ?>
 
   <?php if ($showAggregateMonitoring): ?>
   <div class="dashboard-grid">
@@ -1295,7 +2101,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         <div>
           <h2 id="activity-chart-heading">Research Activities by Month</h2>
         </div>
-        <div class="panel-link">Academic Year: <?= monitoringDashboardEscape($activeAcademicYear['label']) ?></div>
+        <div class="panel-link">Academic Year: <span data-dashboard-chart-academic-year><?= monitoringDashboardEscape($activeAcademicYear['label']) ?></span></div>
       </div>
       <div class="chart-legend" aria-label="Chart legend">
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#4F8DF7"></span>Seminars</span>
@@ -1303,7 +2109,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#19B98A"></span>Publications</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#F5AB18"></span>Copyright Applications</span>
       </div>
-      <svg class="month-chart" viewBox="0 0 540 160" role="img" aria-label="Research activities by month">
+      <svg class="month-chart" data-dashboard-chart viewBox="0 0 540 160" role="img" aria-label="Research activities by month">
         <?php
         $chartPxHeight = 160;
         $chartPaddingTop = 12;
@@ -1356,13 +2162,15 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       </svg>
     </section>
 
-    <section class="hub-panel dashboard-recent-panel" aria-labelledby="recent-events-heading">
+    <section class="hub-panel dashboard-recent-panel" data-dashboard-recent-events aria-labelledby="recent-events-heading">
       <div class="panel-head">
         <div><h2 id="recent-events-heading">Recent Research Activities</h2></div>
         <?php if ($role === 'admin'): ?><a class="panel-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/admin/admin-reports.php#module-portfolio') ?>">View Reports</a><?php endif; ?>
       </div>
-      <?php if (!$recentEvents): ?><div class="empty-state">Module activity will appear here after the first activity, publication, or copyright application is recorded.</div>
-      <?php else: ?><div class="event-wrap"><table class="event-table"><thead><tr><th>Date</th><th>Activity</th><th>Researcher</th><th>Category</th><th>Status</th><th>Action</th></tr></thead><tbody><?php foreach ($recentEvents as $event): $badge = monitoringDashboardStatusBadge((string) $event['status']); ?><tr><td><?= monitoringDashboardEscape(date('M j, Y', strtotime((string) $event['event_at']))) ?></td><td><a class="event-name" href="<?= monitoringDashboardEscape($eventUrl($event)) ?>"><?= monitoringDashboardEscape($event['event_label']) ?></a></td><td><?= monitoringDashboardEscape($event['actor_name']) ?></td><td><?= monitoringDashboardEscape(($event['source_type'] === 'publication' ? 'Publication' : ($event['source_type'] === 'copyright' ? 'Copyright' : 'Research'))) ?></td><td><span class="badge tone-<?= monitoringDashboardEscape($badge['tone']) ?>"><?= monitoringDashboardEscape($badge['label']) ?></span></td><td>⋯</td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+      <div data-dashboard-events-content>
+        <?php if (!$recentEvents): ?><div class="empty-state">Module activity will appear here after the first activity, publication, or copyright application is recorded.</div>
+        <?php else: ?><div class="event-wrap"><table class="event-table"><thead><tr><th>Date</th><th>Activity</th><th>Researcher</th><th>Category</th><th>Status</th></tr></thead><tbody><?php foreach ($recentEvents as $event): $badge = monitoringDashboardStatusBadge((string) $event['status']); ?><tr><td><?= monitoringDashboardEscape(date('M j, Y', strtotime((string) $event['event_at']))) ?></td><td><a class="event-name" href="<?= monitoringDashboardEscape($eventUrl($event)) ?>"><?= monitoringDashboardEscape($event['event_label']) ?></a></td><td><?= monitoringDashboardEscape($event['actor_name']) ?></td><td><?= monitoringDashboardEscape(($event['source_type'] === 'publication' ? 'Publication' : ($event['source_type'] === 'copyright' ? 'Copyright' : 'Research'))) ?></td><td><span class="badge tone-<?= monitoringDashboardEscape($badge['tone']) ?>"><?= monitoringDashboardEscape($badge['label']) ?></span></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+      </div>
     </section>
   </div>
   <?php endif; ?>
@@ -1378,7 +2186,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       </div>
     </section>
     <?php if ($role === 'admin'): ?>
-      <section class="hub-panel dashboard-researcher-panel" aria-labelledby="researcher-classification-heading">
+      <section class="hub-panel dashboard-researcher-panel" data-dashboard-researchers aria-labelledby="researcher-classification-heading">
         <div class="panel-head"><div><h2 id="researcher-classification-heading">Researcher Classification</h2></div><a class="panel-link" href="<?= monitoringDashboardEscape(SITE_URL . 'pages/admin/admin-researchers.php') ?>">View All</a></div>
         <?php if ($researchers['total'] === 0): ?><div class="empty-state">No active faculty or student researchers were found.</div><?php else: ?><div class="researcher-summary"><div class="researcher-donut" style="--faculty-share:<?= monitoringDashboardEscape(number_format($facultyShare, 1, '.', '')) ?>%"><div><strong><?= $researchers['total'] ?></strong><span>Researchers</span></div></div><div class="researcher-legend"><div class="researcher-legend-row"><span class="researcher-key faculty-key"></span><span>Faculty Researchers</span><strong><?= $researchers['faculty'] ?></strong><small><?= monitoringDashboardEscape(number_format($facultyShare, 1)) ?>%</small></div><div class="researcher-legend-row"><span class="researcher-key student-key"></span><span>Student Researchers</span><strong><?= $researchers['student'] ?></strong><small><?= monitoringDashboardEscape(number_format($studentShare, 1)) ?>%</small></div></div></div><?php endif; ?>
       </section>
@@ -1387,6 +2195,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
 </div>
 
 <?php
+?><script src="<?= monitoringDashboardEscape(SITE_URL . 'js/dashboard-live-updates.js?v=' . filemtime(__DIR__ . '/../../js/dashboard-live-updates.js')) ?>" defer></script><?php
 if ($role === 'admin') renderAdminShellClose();
 else renderStaffShellClose();
 ?>

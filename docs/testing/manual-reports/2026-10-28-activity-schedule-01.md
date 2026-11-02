@@ -1,0 +1,74 @@
+# Verification: activity schedule controls
+
+- Date/time: 2026-10-28, Asia/Taipei
+- Assistant: Codex
+- Target and expected behavior: The multi-day checkbox is neatly aligned, the date-choice update action is easy to see, and unchecking multi-day returns the form to one selected date and its single-day fields without saving the activity.
+- Environment URL: Pending user browser check.
+- Roles and disposable records/files: Administrator; no records or files changed by assistant.
+- Session state: In progress; browser observation pending.
+
+## Graphify and source context
+- Question and selected graph vocabulary: How does the activity schedule form switch from multi-day to single-day? The graph has generic `createActivity` and `loadActivity` nodes but no matching schedule-window UI node.
+- Query/lookup and result: Rechecked existing graph labels and fell back to targeted current source because no useful schedule-window vocabulary or graphify CLI was available.
+- Relevant source locations and verified relationships: `pages/shared/activity-form.php` renders the end-date control hidden for single-day mode at L661, date choices with date data at L666, and the no-validation refresh control hidden for single-day mode at L669. The checkbox handler at L1311-L1321 selects the earliest checked date, enables no-validation for the refresh request, and submits the existing refresh action. `rmsActivityScheduleValidatePost()` at `includes/activity-schedule.php` L329-L381 collapses unchecked multi-day schedules to the start date; `activity-form.php` skips persistence when `$refreshingWindow` is true at L411.
+- Missing, inferred, stale, or truncated context: Graphify has no useful schedule-window UI relationship; current source was used to confirm the behavior. Browser behavior remains pending.
+
+## Checks
+| ID | Method / role / page | Action | Expected | Observed / evidence source | Status |
+|---|---|---|---|---|---|
+| 1 | Assistant static check | Run `php -l pages/shared/activity-form.php` | PHP parses without errors | `No syntax errors detected` | Passed |
+| 2 | Assistant source check | Review checkbox and update-control styling | Checkbox has no inherited field padding; update action has a high-contrast admin accent and focus state | Scoped styles added at L610; update button is styled as primary at L669 | Passed |
+| 3 | User browser check / admin activity form | Check “Schedule over multiple days” | Checkbox aligns with its label; date choices and orange “Update date choices” button appear | Pending user observation | Pending |
+| 4 | User browser check / admin activity form | Click “Update date choices” after setting a multi-day window | The selected dates and corresponding session detail fields appear without blocking on blank time fields | Screenshot shows a browser required-field prompt on the blank start time for October 28, 2026 | Failed |
+| 5 | Assistant source check | Review uncheck handler, refresh POST, and single-day schedule parsing | Unchecking keeps the earliest selected date, refreshes to one single-day session form, and does not save the activity | Handler passes the selected date as the start date; server derives one schedule date and skips save for refresh requests | Passed |
+| 6 | User browser check / admin activity form | Uncheck “Schedule over multiple days” on a multi-day form | Form refreshes to a single date (earliest selected date) with start time, end time, venue, speaker, and audience fields; no activity is saved | Screenshot shows the checkbox unchecked, the update button still visible, and session cards for both October 27 and 28; blank October 28 start time triggers browser validation | Failed |
+| 7 | Assistant static check | Run PHP syntax, focused JavaScript syntax, and whitespace checks after the fix | PHP and schedule JavaScript parse; no whitespace errors | `php -l` passed; extracted schedule script passed `node --check`; `git diff --check` passed | Passed |
+| 8 | User browser retest / admin activity form | Reload the existing multi-day activity form | The latest form loads with “Schedule over multiple days” checked and its saved date cards visible | Pending user observation | Pending |
+| 9 | User browser retest / admin activity form | Uncheck “Schedule over multiple days” | It refreshes to one date and one set of session fields without a required-time popup; no activity is saved | Pending user observation | Pending |
+| 10 | Assistant source check | Inspect form error placement, focus, and timeout | Error summary is the first visible item in the form, receives focus, and fades its red emphasis after seven seconds while keeping the message readable | Summary follows the CSRF field; script focuses it and removes the highlight class after 7,000 ms | Passed |
+| 11 | Assistant source check | Map validation messages to corresponding fields | Date-specific time, audience, venue, speaker, activity details, and budget errors are shown beside their related controls; unmapped errors remain in the summary | Summary items are matched to the current form controls; matched messages are inserted beside fields and linked through `aria-describedby` | Passed |
+| 12 | User browser check / admin activity form | Trigger a server-side validation error for a date-specific session field | The message appears next to that date’s related input and is announced with the focused summary | Pending user observation | Pending |
+| 13 | Assistant static check | Run PHP syntax, error-summary JavaScript syntax, and whitespace checks | Changed PHP and JavaScript parse; no whitespace errors | `php -l` passed; extracted error-summary script passed `node --check`; `git diff --check` passed | Passed |
+| 14 | Assistant source check | Inspect error-summary navigation | Clicking a mapped summary error scrolls to and focuses its related control, including opening a collapsed details panel if needed | Summary links target the first mapped input; click handler scrolls and focuses it while respecting reduced motion | Passed |
+| 15 | User browser check / admin activity form | Click a mapped error in the top summary | The form scrolls to and focuses the related field | Pending user observation | Pending |
+| 16 | Assistant static check | Review form button contrast and checkbox alignment styles | Primary and secondary actions are visually distinct; checkboxes have consistent dimensions and align with wrapped text | Added visible button height/shadows, stronger secondary contrast, zero-padding checkbox sizing, and top-aligned long checklist labels | Passed |
+| 17 | User browser check / admin activity form | View the activity form and its checklist on desktop | Buttons are easy to distinguish and checkboxes align with the first line of their text | User screenshots show the multi-day and contribution checkboxes lower than their label text; the recipient disclosure also has low-contrast borders | Failed |
+| 18 | User browser retest / admin activity form | Reload the activity form and review its buttons and checklists | Admin primary buttons are orange, secondary controls are distinct, and checkboxes align with the first line of text | Pending user observation | Pending |
+| 19 | Assistant source check | Review session-detail visibility and refresh behavior | Single-day and multi-day details are hidden on initial GET and shown on POST; the refresh request keeps values and does not save | GET markup hides both detail blocks and omits required time attributes; the update button is available in either mode; the existing refresh POST returns details visible without calling save | Passed |
+| 20 | User browser retest / admin activity form | Reload the single-day activity form shown in the screenshot | Session details are hidden, with the update button and instruction visible | Pending user observation | Pending |
+| 21 | User browser retest / admin activity form | Click “Update date choices” | The single date’s session detail fields appear with their existing values | Pending user observation | Pending |
+| 22 | Assistant static check | Inspect initial GET visibility for activity/session/budget details and update handling | Venue, speaker, organizer, description, session details, and the full budget section are hidden on first load; Update date choices remains visible and its refresh POST reveals the controls without saving | GET markup sets `hidden` on the detail wrappers; the existing refresh POST path is identified by `refresh_schedule_window` and skips persistence | Passed |
+| 23 | User browser retest / admin activity form | Reload the activity form | Venue, speaker, organizer, description, session details, and budget/expense/notice controls are hidden while Activity type, Title, schedule controls, and Update date choices remain visible | Pending user observation | Pending |
+| 24 | User browser retest / admin activity form | Click “Update date choices” | Activity, session, and budget detail controls appear; entered values are retained and the activity is not saved | Pending user observation | Pending |
+| 25 | Assistant source check | Review instruction spacing below the update button | The “Click Update date choices…” instruction has a small top margin | Scoped 4px top margin added to `#schedule-details-update-hint`; CSS blocks are balanced and `git diff --check` passed | Passed |
+| 26 | User browser retest / admin activity form | View the initial schedule section | The instruction sits slightly lower below Update date choices | Pending user observation | Pending |
+| 27 | Assistant source check | Review checkbox row spacing | The “Schedule over multiple days” label and checkbox row are shifted down by 4px while remaining aligned | Added `margin-top: 4px` to the flex label; CSS blocks are balanced and `git diff --check` passed | Passed |
+| 28 | User browser retest / admin activity form | View the schedule section | The checkbox and its label sit slightly lower and remain aligned | Pending user observation | Pending |
+| 29 | Assistant source check | Inspect the multiple-day checkbox change handler | Toggling the checkbox does not submit the form or reveal details; the Update date choices button remains the explicit refresh/reveal action | Removed the checkbox handler’s automatic `requestSubmit`; PHP lint, extracted schedule-script syntax, CSS brace balance, and `git diff --check` passed | Passed |
+| 30 | User browser retest / admin activity form | Toggle Schedule over multiple days without clicking Update date choices | The page does not refresh, and venue, speaker, organizer, description, session details, and budget details remain hidden | Pending user observation | Pending |
+
+### Form error feedback Graphify lookup
+- Selected terms: `activityForm` and `validation`, matched to the graph labels `activity-form.php` and `Validation and limitations`.
+- Query: `graphify query "activityForm validation" --budget 1500`; the graph returned 21 nodes and 24 edges, including the activity form and its escape helper, but no form-error summary or UI behavior.
+- Narrow lookup: `graphify query "activityFormEscape" --budget 1200 --context-filter call`; returned 8 nodes around the activity form and escaping helper, with no error-to-input mapping.
+- Current-source confirmation: `pages/shared/activity-form.php` renders `#activity-form-errors` inside the form at L659. Scoped highlight, inline error and reduced-motion styles are at L643-L650; date-card error labels are at L690 and L770; error-to-control mapping is at L1363-L1457. Summary links and their click handler are created at L1465-L1481; they scroll to and focus the target while respecting reduced motion. Initial summary focus and the 7-second highlight timeout are at L1484-L1485. The graph has no error-banner, error-field, or navigation relationship, so current source is authoritative for this change.
+
+### Button and checklist styling Graphify lookup
+- Selected term: `activityFormEscape()`, which resolves to `pages/shared/activity-form.php` in the graph.
+- Query: `graphify query "activityFormEscape" --budget 1200 --context-filter call`; the 8-node result connects the activity form to its escape helper and recipient picker, with no button or checkbox style nodes.
+- Current-source confirmation: Form button contrast, focus, and dimensions are scoped to `.activity-form` at L650-L653. Checkbox sizing and checklist alignment are scoped at L654-L658. The graph has no visual-style relationships, so current CSS is authoritative.
+- Screenshot follow-up: The user supplied screenshots showing the label layout still overridden on the schedule and contribution checkboxes. Higher-specificity selectors now set the schedule, date-choice, role, and budget-check labels to the intended flex/grid layout at L656-L659. Admin primary buttons use the orange role accent at L654-L655, and the recipient disclosure has a stronger border and surface at L662-L665.
+
+### Session-detail visibility Graphify lookup
+- Selected term: `activityFormEscape()`, matched to the existing `activity-form.php` graph node.
+- Query: `graphify query "activityFormEscape" --budget 1200 --context-filter call`; it returned 8 nearby nodes and no session-detail visibility or refresh behavior.
+- Current-source confirmation: `activity-form.php` sets `hidden` on `#activity-session-details` and `#activity-single-session-details` for initial GETs at L711 and L793, and their time inputs are required only after POST. The update button and hint are at L703-L704; `hideSessionDetails()` and control updates are at L1218-L1236, and the checkbox change handler is at L1358-L1373. The refresh request skips persistence in the existing POST handler.
+
+### Activity and budget detail visibility Graphify lookup
+- Reused the `activityFormEscape` Graphify query above; its nearby nodes contain no activity-form detail visibility or refresh-submit behavior.
+- Current-source confirmation: initial GET markup hides the session panels at L711 and L793, activity fields at L868-L871, and the full Budget and Participation Details fieldset at L873. The visible update button and instruction are at L703-L704. The POST handler identifies refresh requests at L311; source review confirms refresh requests return the form without saving the activity. PHP lint, extracted schedule-script syntax, CSS brace balance, and `git diff --check` passed.
+- Follow-up lookup for checkbox behavior used the same `activityFormEscape` query; its 8-node result has no schedule-toggle or visibility relationships. Current source updates date controls locally on checkbox change; only the visible Update date choices button performs the refresh POST.
+
+## Limits
+- User supplied a screenshot showing the refresh/toggle flow did not reach the expected single-day form; no save or database change is evidenced.
+- The original browser failure remains recorded; the source fix is in place, and the browser retest is pending.

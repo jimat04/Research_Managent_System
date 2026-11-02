@@ -13,27 +13,67 @@ $per_page = 50;
 $offset = ($page - 1) * $per_page;
 
 // Filters
-$user_filter = $_GET['user'] ?? '';
-$module_filter = $_GET['module'] ?? '';
-$search = $_GET['search'] ?? '';
+$user_filter = is_string($_GET['user'] ?? null) ? $_GET['user'] : '';
+$user_filter = ctype_digit($user_filter) && (int) $user_filter > 0 ? $user_filter : '';
+$module_filter = is_string($_GET['module'] ?? null) ? $_GET['module'] : '';
+$search = is_string($_GET['search'] ?? null) ? $_GET['search'] : '';
+
+// These keys match the active logActivity() writers, not legacy manual stages.
+$module_groups = [
+    'Research workflow & outputs' => [
+        'research' => 'Research titles & proposals',
+        'chapters' => 'Chapter submissions',
+        'research_submission_review' => 'Title & chapter decisions',
+        'research_activities' => 'Research capacity building',
+        'publications' => 'Publications & dissemination',
+        'publication_tracking' => 'Repository & archive',
+        'copyrights' => 'Copyright & IP records',
+    ],
+    'Shared services' => [
+        'authentication' => 'Sign-in & authentication',
+        'messages' => 'Internal messages',
+        'notifications' => 'In-app notifications',
+        'profile' => 'User profiles',
+        'defense_schedule' => 'Defense scheduling',
+    ],
+    'Administration' => [
+        'user_management' => 'Users & staff permissions',
+        'program_management' => 'Programs',
+        'contact_management' => 'Contact messages',
+        'system' => 'System & backups',
+    ],
+];
+$module_labels = array_merge(...array_values($module_groups));
+$historical_modules = [
+    'admin_final_approval', 'adviser_assignment', 'crec_review', 'erec_endorse',
+    'erec_review', 'faculty_review', 'faculty-review', 'milestone_verification', 'milestones',
+];
+$historical_filter = '__historical_workflow';
 
 $where_clauses = [];
 $params = [];
 $types = '';
 
-if (!empty($user_filter)) {
+if ($user_filter !== '') {
     $where_clauses[] = "al.user_id = ?";
     $params[] = $user_filter;
     $types .= 'i';
 }
 
-if (!empty($module_filter)) {
-    $where_clauses[] = "al.module = ?";
-    $params[] = $module_filter;
-    $types .= 's';
+if ($module_filter !== '') {
+    if ($module_filter === $historical_filter) {
+        $where_clauses[] = 'al.module IN (' . implode(', ', array_fill(0, count($historical_modules), '?')) . ')';
+        array_push($params, ...$historical_modules);
+        $types .= str_repeat('s', count($historical_modules));
+    } else {
+        // Exact raw keys keep historical and other recorded-module links valid.
+        $where_clauses[] = "al.module = ?";
+        $params[] = $module_filter;
+        $types .= 's';
+    }
 }
 
-if (!empty($search)) {
+if ($search !== '') {
     $where_clauses[] = "al.action LIKE ?";
     $search_term = "%{$search}%";
     $params[] = $search_term;
@@ -71,8 +111,20 @@ $count_stmt->execute();
 $total_logs = $count_stmt->get_result()->fetch_assoc()['count'];
 $total_pages = ceil($total_logs / $per_page);
 
-// Get unique modules for filter
+// Retain unfamiliar recorded keys without promoting legacy stages as v3 tools.
 $modules = $conn->query("SELECT DISTINCT module FROM activity_log WHERE module IS NOT NULL ORDER BY module");
+$other_modules = [];
+while ($mod = $modules->fetch_assoc()) {
+    $key = (string) $mod['module'];
+    if ($key !== '' && !isset($module_labels[$key]) && !in_array($key, $historical_modules, true)) {
+        $other_modules[$key] = ucwords(str_replace(['_', '-'], ' ', $key));
+    }
+}
+if ($module_filter !== '' && $module_filter !== $historical_filter
+    && !isset($module_labels[$module_filter]) && !isset($other_modules[$module_filter])
+    && !in_array($module_filter, $historical_modules, true)) {
+    $other_modules[$module_filter] = ucwords(str_replace(['_', '-'], ' ', $module_filter));
+}
 
 // Get total log count
 $total_log_count = (int) ($conn->query("SELECT COUNT(*) as count FROM activity_log")->fetch_assoc()['count'] ?? 0);
@@ -87,7 +139,7 @@ $active_actors = (int) ($summary_row['actors'] ?? 0);
 $module_count = (int) ($summary_row['modules'] ?? 0);
 $today_count = (int) ($summary_row['today_count'] ?? 0);
 $visible_logs = $logs ? (int) $logs->num_rows : 0;
-$active_filter_count = (int) (!empty($search)) + (int) (!empty($module_filter)) + (int) (!empty($user_filter));
+$active_filter_count = (int) ($search !== '') + (int) ($module_filter !== '') + (int) ($user_filter !== '');
 
 renderAdminShell(
     $user,
@@ -135,17 +187,35 @@ renderAdminShell(
 
   <section class="logs-ledger" id="activity-ledger" aria-labelledby="activity-ledger-title">
     <header class="ledger-header">
-      <div><div class="ledger-eyebrow">Audit ledger</div><h3 class="ledger-title" id="activity-ledger-title">Recorded system activity</h3><p class="ledger-copy">Filter the permanent activity stream by action or module. Newest events appear first.</p></div>
+      <div><div class="ledger-eyebrow">Audit ledger</div><h3 class="ledger-title" id="activity-ledger-title">Recorded system activity</h3><p class="ledger-copy">Filter current research workflow and system activity. All modules includes historical records; use Historical workflow to isolate older review and milestone events. Newest events appear first.</p></div>
       <span class="ledger-count"><?php echo number_format($visible_logs); ?> SHOWN</span>
     </header>
 
     <form method="GET" action="admin-logs.php#activity-ledger" class="filter-bar" role="search">
+      <?php if ($user_filter !== ''): ?><input type="hidden" name="user" value="<?php echo htmlspecialchars($user_filter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
       <input type="text" name="search" class="search-input" aria-label="Search actions" placeholder="Search actions..." value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>">
       <select name="module" class="filter-select" aria-label="Filter by module" onchange="this.form.submit()">
         <option value="">All Modules</option>
-        <?php while ($mod = $modules->fetch_assoc()): ?>
-          <option value="<?php echo htmlspecialchars($mod['module'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo $module_filter === $mod['module'] ? 'selected' : ''; ?>><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $mod['module'])), ENT_QUOTES, 'UTF-8'); ?></option>
-        <?php endwhile; ?>
+        <?php foreach ($module_groups as $group_label => $group_modules): ?>
+          <optgroup label="<?php echo htmlspecialchars($group_label, ENT_QUOTES, 'UTF-8'); ?>">
+            <?php foreach ($group_modules as $key => $label): ?>
+              <option value="<?php echo htmlspecialchars($key, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $module_filter === (string) $key ? 'selected' : ''; ?>><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></option>
+            <?php endforeach; ?>
+          </optgroup>
+        <?php endforeach; ?>
+        <optgroup label="Historical records">
+          <option value="<?php echo $historical_filter; ?>" <?php echo $module_filter === $historical_filter ? 'selected' : ''; ?>>Historical workflow</option>
+          <?php if (in_array($module_filter, $historical_modules, true)): ?>
+            <option value="<?php echo htmlspecialchars($module_filter, ENT_QUOTES, 'UTF-8'); ?>" selected><?php echo htmlspecialchars('Historical: ' . ucwords(str_replace(['_', '-'], ' ', $module_filter)), ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php endif; ?>
+        </optgroup>
+        <?php if ($other_modules): ?>
+          <optgroup label="Other recorded modules">
+            <?php foreach ($other_modules as $key => $label): ?>
+              <option value="<?php echo htmlspecialchars($key, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $module_filter === (string) $key ? 'selected' : ''; ?>><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></option>
+            <?php endforeach; ?>
+          </optgroup>
+        <?php endif; ?>
       </select>
       <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
       <?php if ($active_filter_count > 0): ?><a href="admin-logs.php#activity-ledger" class="btn btn-secondary btn-sm">Clear</a><?php endif; ?>
@@ -163,12 +233,17 @@ renderAdminShell(
               $log_role = (string) ($log['role'] ?? '');
               $badge_class = $role_badges[$log_role] ?? 'badge-student';
               $role_label = $role_labels[$log_role] ?? ($log_role !== '' ? ucwords(str_replace('_', ' ', $log_role)) : 'System');
+              $log_module = (string) ($log['module'] ?? '');
+              $log_module_label = $module_labels[$log_module] ?? ($log_module !== '' ? ucwords(str_replace(['_', '-'], ' ', $log_module)) : 'N/A');
+              if (in_array($log_module, $historical_modules, true)) {
+                  $log_module_label = 'Historical: ' . $log_module_label;
+              }
               ?>
               <tr>
                 <td data-label="Time"><span class="log-time"><?php echo htmlspecialchars(date('M d, Y', strtotime($log['created_at'])), ENT_QUOTES, 'UTF-8'); ?><br><?php echo htmlspecialchars(date('h:i A', strtotime($log['created_at'])), ENT_QUOTES, 'UTF-8'); ?></span></td>
                 <td data-label="Actor"><span class="log-user"><?php echo htmlspecialchars($log['user_name'] ?? 'System', ENT_QUOTES, 'UTF-8'); ?></span><?php if (!empty($log['email'])): ?><span class="log-email"><?php echo htmlspecialchars($log['email'], ENT_QUOTES, 'UTF-8'); ?></span><?php endif; ?></td>
                 <td data-label="Role"><span class="badge <?php echo htmlspecialchars($badge_class, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span></td>
-                <td data-label="Module"><span class="log-module"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $log['module'] ?? 'N/A')), ENT_QUOTES, 'UTF-8'); ?></span></td>
+                <td data-label="Module"><span class="log-module" title="<?php echo htmlspecialchars($log_module, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($log_module_label, ENT_QUOTES, 'UTF-8'); ?></span></td>
                 <td data-label="Action"><span class="log-action"><?php echo htmlspecialchars($log['action'] ?? '', ENT_QUOTES, 'UTF-8'); ?></span></td>
               </tr>
             <?php endwhile; ?>
@@ -181,9 +256,9 @@ renderAdminShell(
 
     <?php if ($total_pages > 1): ?>
       <nav class="pagination" aria-label="Activity log pagination">
-        <?php if ($page > 1): ?><a href="?page=<?php echo $page - 1; ?><?php echo $search ? '&amp;search=' . urlencode($search) : ''; ?><?php echo $module_filter ? '&amp;module=' . urlencode($module_filter) : ''; ?><?php echo $user_filter ? '&amp;user=' . urlencode($user_filter) : ''; ?>#activity-ledger" class="btn btn-sm btn-secondary">&larr; Previous</a><?php endif; ?>
+        <?php if ($page > 1): ?><a href="?page=<?php echo $page - 1; ?><?php echo $search !== '' ? '&amp;search=' . urlencode($search) : ''; ?><?php echo $module_filter !== '' ? '&amp;module=' . urlencode($module_filter) : ''; ?><?php echo $user_filter ? '&amp;user=' . urlencode($user_filter) : ''; ?>#activity-ledger" class="btn btn-sm btn-secondary">&larr; Previous</a><?php endif; ?>
         <span class="page-label">PAGE <?php echo number_format($page); ?> OF <?php echo number_format((int) $total_pages); ?></span>
-        <?php if ($page < $total_pages): ?><a href="?page=<?php echo $page + 1; ?><?php echo $search ? '&amp;search=' . urlencode($search) : ''; ?><?php echo $module_filter ? '&amp;module=' . urlencode($module_filter) : ''; ?><?php echo $user_filter ? '&amp;user=' . urlencode($user_filter) : ''; ?>#activity-ledger" class="btn btn-sm btn-secondary">Next &rarr;</a><?php endif; ?>
+        <?php if ($page < $total_pages): ?><a href="?page=<?php echo $page + 1; ?><?php echo $search !== '' ? '&amp;search=' . urlencode($search) : ''; ?><?php echo $module_filter !== '' ? '&amp;module=' . urlencode($module_filter) : ''; ?><?php echo $user_filter ? '&amp;user=' . urlencode($user_filter) : ''; ?>#activity-ledger" class="btn btn-sm btn-secondary">Next &rarr;</a><?php endif; ?>
       </nav>
     <?php endif; ?>
   </section>

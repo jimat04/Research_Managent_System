@@ -7,7 +7,7 @@
 **Basis:** full 8-phase E2E walkthrough PASSED on live DB (see docs/testing/E2E_WALKTHROUGH.md)
 **Scope:** Reality check of every status claim against the working tree.
 
-> The live-database E2E evidence and v1 page-count / completion estimates below are historical snapshots. The v2 pivot replaced the main workflow scope; this document is not a fresh end-to-end or deployment audit. Current source was spot-checked on October 10, 2026. Use current handlers, role shells, `TODO.md`, and deployment tests for release decisions.
+> This is a historical audit, not a current end-to-end or deployment audit. Its live-database E2E evidence, v1 completion estimates, page counts, and gap list are snapshots; the v2 pivot replaced the main workflow scope. Current source was spot-checked on October 10, 2026. `TODO.md` and a maintained deployment test suite are not present in this repository. For current behavior, inspect the handlers and role shells; use the dated priority plan only as historical planning context.
 
 ---
 
@@ -36,7 +36,7 @@ This estimate referred to the v1 research-workflow scope and the historical E2E 
 - **Stubs:** 0 (former shared stubs are now real pages: `calendar.php` 320 lines, `settings.php` 208 lines, `research-archive.php` 217 lines, `view-research.php` 348 lines; measured with `wc -l`)
 - 🔴 **Genuine feature gaps:**
   - Email verification (migration 003): columns intentionally unapplied - no code reads them; feature unbuilt by design.
-  - ORS consolidation stage (optional - staff inbox covers intake).
+  - ORS consolidation stage is not part of the adviser-approved v3 workflow; the shared staff inbox covers intake.
   - Rate limiting on auth endpoints.
   - P3 polish: chapter attachments in My Documents; cumulative-completions stat in reports.
 
@@ -71,7 +71,7 @@ An independent workflow audit against the Research Manual 2015 identified integr
 | e0cde90 | Committee recommendations now bind endorsement (any completed reject recommendation blocks it); new EREC disapproval action (erec\_reject) with notifications and logging.                                                                       |
 | d93de56 | Milestone slots status-gated per the manual sequence (MOU: approved/ongoing; midway: ongoing; terminal: ongoing/late-stage; bound: completed/archived); under\_review dead end fixed; MOU renamed Memorandum of Research Undertaking per Form 7. |
 
-Remaining audit items (ORS consolidation stage, structured digital forms for Forms 1-2/4-9, incentives and awards Forms 8/10-12, stage-aware resubmission, archive prerequisites) are documented scope decisions - see the gaps list above.
+Remaining audit items (ORS consolidation stage, structured digital forms for Forms 1-2/4-9, incentives and awards Forms 8/10-12, stage-aware resubmission, archive prerequisites) were documented scope decisions for the earlier version - see the gaps list above. The ORS consolidation recommendation is historical and is superseded by the adviser-approved v3 workflow; it is retained here as audit context, not as a current feature request.
 
 ---
 
@@ -130,16 +130,15 @@ A page is **fully built** if it has its own role gating, render logic and ≥ ~2
 | `admin-dashboard.php` | 587 | ✅ Built | KPIs, recent submissions, status distribution. |
 | `admin-users.php` | 1065 | ✅ Built | Full user CRUD with status toggle. |
 | `admin-research.php` | 801 | ✅ Built | Includes admin final-approval gate (writes `approved_by` / `approved_at`). |
-| `admin-archive.php` | 833 | ✅ Built | Publication / colloquium / archive tracking on `research_publication_tracking`. |
 | `admin-reports.php` | 294 | ✅ Built | Aggregate analytics, monthly + departmental + status breakdowns. |
 | `admin-logs.php` | 366 | ✅ Built | `activity_log` filter + paginate. |
 | `admin-backup.php` | 363 | ✅ Built | Database backup list + download. |
 | `admin-contact.php` | 552 | ✅ Built | Contact-message triage. |
-| `admin-departments.php` | 607 | ✅ Built | Department CRUD. |
-| `admin-programs.php` | 669 | ✅ Built | Program CRUD. |
-| `admin-settings.php` | 429 | ✅ Built | Read-only environment, migration-probe, and storage diagnostics. |
+| Department management | - | Removed (2026-10-25) | Outside the BSIT/BSCS scope; page, navigation and program department controls removed. |
+| `admin-programs.php` | - | Built | BSIT/BSCS catalog, name editing and status controls; no department dependency or program creation. |
+| `admin-settings.php` | 476 | ✅ Built | Database-backed site, maintenance, upload, and security settings with read-only runtime, migration-ledger, and storage diagnostics. |
 
-**Summary:** 11/11 admin pages built. No stubs.
+**Summary:** Original baseline: 11/11 admin pages built. Department management was removed on 2026-10-25; Programs is limited to BSIT/BSCS.
 
 ### 1.2 Research Staff portal (`pages/staff/`)
 
@@ -236,7 +235,7 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 |---|---|---|---|---|
 | 1 | Proposal Submission | ✅ | `pages/researcher/submit-research.php`, `pages/researcher/edit-research.php` | Co-researcher team picker included. |
 | 2 | CREC Evaluation | ✅ | `pages/staff/staff-crec.php` | Legacy committee workflow retained only as historical context. |
-| 3 | **ORS Consolidation** | 🔴 | — | No code path, no UI. Gap. |
+| 3 | **ORS Consolidation** | Historical only | — | No code path or UI; this manual stage is not part of the adviser-approved v3 workflow. |
 | 4 | EREC Research Forum | ✅ | Legacy committee workflow | Historical manual stage; current v3 workflow uses authorized title/chapter review. |
 | 5 | Approval / Revision / Disapproval | ✅ | `pages/shared/research-submission-review.php` | Current review decisions and required revision comments. |
 | 6 | **President Approval** | 🟡 | Folded into the admin final-approval gate in `pages/admin/admin-research.php` (writes `approved_by` / `approved_at`) | Manual says "President" but UI records the acting admin as the approver. No separate President role. |
@@ -245,8 +244,8 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 | 9 | Midway Progress Report | ✅ | `pages/student/submit-milestone.php`, `pages/staff/staff-milestones.php` | `research_reports.report_type='midway_progress'`. |
 | 10 | Terminal Report Review | ✅ | Same as step 9, with `report_type='terminal'` | |
 | 11 | **Final Bound Report upload slot** | 🔴 | Only the **label** is rendered in `pages/staff/staff-milestones.php:73` (`'final_bound_report' => 'Final Bound Report'`), but the student has **no upload widget** for it. | Gap. |
-| 12 | Research Colloquium | ✅ | `pages/admin/admin-archive.php` (colloquium_status / colloquium_date), `pages/staff/staff-defense.php` | Uses `research_publication_tracking` (cols detected defensively). |
-| 13 | Archive & Publication Tracking | ✅ | `pages/admin/admin-archive.php` (publication_status, journal_reference, archive_status) | Single-page controller for archive lifecycle. |
+| 12 | Research Colloquium | ✅ | `pages/staff/staff-defense.php` | Archive Management was removed; colloquium workflow remains in staff defense. |
+| 13 | Archive & Publication Tracking | 🟡 | Public/shared archive pages remain available for browsing. | Admin editing of publication and archive tracking fields is no longer available. |
 
 ### 3.1 Five-chapter structure
 - `pages/researcher/submit-chapter.php` enforces chapters 1–5 and a chapter picker (commit `e82c18c` fixed the invalid-chapter dead-end).
@@ -257,16 +256,18 @@ Reference: `docs/research-manual-2015.md` (13 steps, 5 chapters, 10 required doc
 - MOU / NDA: ✅ via `pages/student/submit-milestone.php`.
 - Midway / Terminal: ✅ same.
 - Final bound report: 🔴 upload slot missing on the student side.
-- Publication record: 🟡 admin can write the `publication_status` in `pages/admin/admin-archive.php`; no student upload widget.
+- Publication record: 🟡 publication tracking remains in the database, but the admin editing page was removed; no student upload widget.
 
 ---
 
 ## 4. Remaining v1 workflow gaps at time of audit (historical)
 
+> **Current disposition:** The ORS Consolidation item below was a proposal for the earlier manual-aligned workflow. It is superseded by the adviser-approved v3 title-and-chapter workflow and is retained here only as historical audit context. Do not implement it as part of the current product workflow.
+
 ### 🔴 P0 — recorded before the v2 pivot; not the current product backlog
-1. **ORS Consolidation stage (Manual step 3).** No table, no UI, no status transition. Add an ORS review state (`under_ors_consolidation`) with a staff-side queue page (mirror `pages/staff/staff-crec.php`).
+1. **ORS Consolidation stage (Manual step 3) — superseded proposal.** No table, no UI, no status transition. The historical recommendation was to add an ORS review state (`under_ors_consolidation`) with a staff-side queue page (mirror `pages/staff/staff-crec.php`); that recommendation is out of scope for the current adviser-approved workflow.
 2. **Final Bound Report upload slot (Manual step 11).** `pages/staff/staff-milestones.php:73` already lists `final_bound_report` as a document type, but `pages/student/submit-milestone.php` only renders the MOU/NDA/Midway/Terminal cards. Add a "Final Bound Report" card using the same flow.
-3. **Admin notification on new submission** — `pages/researcher/submit-research.php` notifies co-researchers but not admins. One `createNotification(...)` call inside the existing transaction. (This is also the last unchecked `TODO.md` item from the original list.)
+3. **Admin notification on new submission — historical gap, since implemented.** The old audit said the handler notified co-researchers but not admins; the current `pages/researcher/submit-research.php` also notifies staff review recipients. The referenced `TODO.md` has since been removed.
 
 ### 🟡 P1 — shared-page work recorded before those pages were implemented
 4. `pages/shared/calendar.php` — render the actual schedule from `defense_schedule` + `research_projects.created_by` (the query already exists in `includes/module-pages.php:283-291` for the student calendar).

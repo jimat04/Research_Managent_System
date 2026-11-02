@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
+require_once __DIR__ . '/../../includes/research-workflow.php';
 
 requireRole('student');
 
@@ -74,7 +75,8 @@ $project = null;
 if ($project_id > 0) {
     $stmt = $conn->prepare("
         SELECT
-            rp.project_id, rp.title, rp.research_area, rp.abstract, rp.status,
+            rp.project_id, rp.title, rp.title_option_1, rp.title_option_2, rp.title_option_3,
+            rp.research_area, rp.status,
             rp.created_by, rp.created_at" . $rp_select_updated . ",
             rp.category_id, rp.ay_id,
             rc.category_name,
@@ -97,6 +99,33 @@ if ($project_id > 0) {
         $project = $stmt->get_result()->fetch_assoc() ?: null;
         $stmt->close();
     }
+}
+
+$approved_final_abstract = $project
+    ? rms_approved_final_manuscript_abstract($conn, (int) $project['project_id'])
+    : null;
+
+$project_area_names = [];
+if ($project) {
+    $area_stmt = $conn->prepare(
+        'SELECT ra.area_name
+           FROM research_project_areas rpa
+           JOIN research_areas ra ON ra.area_id = rpa.area_id
+          WHERE rpa.project_id = ?
+          ORDER BY rpa.display_order'
+    );
+    if (!$area_stmt) {
+        throw new RuntimeException('Unable to prepare project research-area lookup: ' . $conn->error);
+    }
+    $area_stmt->bind_param('i', $project_id);
+    if (!$area_stmt->execute()) {
+        throw new RuntimeException('Unable to load project research areas: ' . $area_stmt->error);
+    }
+    $area_result = $area_stmt->get_result();
+    while ($area_row = $area_result->fetch_assoc()) {
+        $project_area_names[] = (string) $area_row['area_name'];
+    }
+    $area_stmt->close();
 }
 
 // Co-members + adviser (optional joins — best-effort, wrapped to survive missing tables)
@@ -148,7 +177,7 @@ if ($project) {
     }
 
     $review_stmt = $conn->prepare("
-      SELECT r.decision, r.comments, r.reviewed_at,
+      SELECT r.decision, r.comments, r.recommendation, r.selected_title, r.reviewed_at,
            v.submission_type, v.version_number, ch.chapter_number,
            u.first_name, u.last_name, u.role AS reviewer_role
         FROM research_submission_reviews r
@@ -328,6 +357,11 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
   .feedback-author { color: #111827; font-size: 14px; font-weight: 700; }
   .feedback-date { color: #94A3B8; font-size: 12px; margin-left: auto; }
   .feedback-text { color: #334155; font-size: 14px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; }
+  .review-feedback-disclosure{margin-top:10px;border:1px solid #E6DEF0;border-radius:10px;background:#FBF9FD}
+  .review-feedback-disclosure summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:8px 12px;color:#5B1EBC;font-size:12px;font-weight:700;cursor:pointer;list-style:none}
+  .review-feedback-disclosure summary::-webkit-details-marker{display:none}.review-feedback-disclosure summary::after{content:'+';font-size:17px}.review-feedback-disclosure[open] summary::after{content:'−'}
+  .review-feedback-disclosure .review-feedback-hide{display:none}.review-feedback-disclosure[open] .review-feedback-open{display:none}.review-feedback-disclosure[open] .review-feedback-hide{display:inline}
+  .review-feedback-disclosure-body{padding:0 12px 10px}.review-feedback-disclosure summary:focus-visible{outline:2px solid #5B1EBC;outline-offset:2px;border-radius:7px}
   .feedback-section + .feedback-section { margin-top: 24px; padding-top: 24px; border-top: 1px solid #E5E7EB; }
 
   .abstract-body {
@@ -473,6 +507,24 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
     <div class="card-header">
       <div>
         <h2 class="card-title"><?php echo rd_escape($project['title']); ?></h2>
+        <?php
+          $project_title_options = array_values(array_filter([
+              (string) ($project['title_option_1'] ?? ''),
+              (string) ($project['title_option_2'] ?? ''),
+              (string) ($project['title_option_3'] ?? ''),
+          ], static function (string $option): bool {
+              return trim($option) !== '';
+          }));
+        ?>
+        <?php if (count($project_title_options) > 1): ?>
+          <div><strong>Submitted title options</strong><ol>
+            <?php foreach ($project_title_options as $option_title): ?>
+              <li><?php echo rd_escape($option_title); ?>
+                <?php if (in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing', 'completed', 'archived'], true) && $option_title === (string) $project['title']): ?> — Approved title<?php endif; ?>
+              </li>
+            <?php endforeach; ?>
+          </ol></div>
+        <?php endif; ?>
         <p class="card-subtitle">Basic information about your research project</p>
       </div>
     </div>
@@ -488,7 +540,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
       </div>
       <div>
         <div class="meta-label">Research Area</div>
-        <div class="meta-value"><?php echo $project['research_area'] ? rd_escape($project['research_area']) : '<span style="color:#94A3B8;">Not specified</span>'; ?></div>
+        <div class="meta-value"><?php echo $project_area_names ? rd_escape(implode(', ', $project_area_names)) : ($project['research_area'] ? rd_escape($project['research_area']) : '<span style="color:#94A3B8;">Not specified</span>'); ?></div>
       </div>
       <div>
         <div class="meta-label">Lead Researcher</div>
@@ -549,7 +601,9 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
                 : ($reviewer_role === 'research_staff' ? 'Authorized research staff' : 'Authorized reviewer');
             $submission_label = $review['submission_type'] === 'title'
                 ? 'Research Title'
-                : 'Chapter ' . (int) $review['chapter_number'];
+                : ($review['submission_type'] === 'final_manuscript'
+                    ? 'Complete Research Manuscript'
+                    : 'Chapter ' . (int) $review['chapter_number']);
           ?>
             <article class="feedback-item">
               <div class="feedback-head">
@@ -559,8 +613,17 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
                 <time class="feedback-date"><?php echo !empty($review['reviewed_at']) ? rd_escape(date('M d, Y g:i A', strtotime($review['reviewed_at']))) : ''; ?></time>
               </div>
               <div class="feedback-text"><?php echo rd_escape($submission_label . ' · Version ' . (int) $review['version_number']); ?></div>
-              <?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?>
-                <div class="feedback-text"><?php echo nl2br(rd_escape($review['comments'])); ?></div>
+              <?php if ($review['submission_type'] === 'title' && trim((string) ($review['selected_title'] ?? '')) !== ''): ?>
+                <div class="feedback-text"><strong>Approved title:</strong><br><?php echo rd_escape($review['selected_title']); ?></div>
+              <?php endif; ?>
+              <?php if (trim((string) ($review['comments'] ?? '')) !== '' || trim((string) ($review['recommendation'] ?? '')) !== ''): ?>
+                <details class="review-feedback-disclosure">
+                  <summary><span class="review-feedback-open">Open review comments and suggestions</span><span class="review-feedback-hide">Hide review comments and suggestions</span></summary>
+                  <div class="review-feedback-disclosure-body">
+                    <?php if (trim((string) ($review['comments'] ?? '')) !== ''): ?><div class="feedback-text"><strong><?php echo $review['submission_type'] === 'title' ? 'Comments / Suggestion' : 'Review comments'; ?>:</strong><br><?php echo nl2br(rd_escape($review['comments'])); ?></div><?php endif; ?>
+                    <?php if (trim((string) ($review['recommendation'] ?? '')) !== ''): ?><div class="feedback-text"><strong>Suggestion:</strong><br><?php echo nl2br(rd_escape($review['recommendation'])); ?></div><?php endif; ?>
+                  </div>
+                </details>
               <?php endif; ?>
             </article>
           <?php endforeach; ?>
@@ -573,12 +636,13 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
     <?php endif; ?>
   </div>
 
-  <!-- ABSTRACT -->
-  <div class="card">
-    <h2 class="card-title">Abstract</h2>
-    <p class="card-subtitle">Purpose, methods, and expected outcomes</p>
-    <div class="abstract-body"><?php echo rd_escape($project['abstract'] ?? ''); ?></div>
-  </div>
+  <?php if ($approved_final_abstract !== null): ?>
+    <!-- APPROVED FINAL MANUSCRIPT ABSTRACT -->
+    <div class="card">
+      <h2 class="card-title">Approved Final Manuscript Abstract</h2>
+      <div class="abstract-body"><?php echo rd_escape($approved_final_abstract); ?></div>
+    </div>
+  <?php endif; ?>
 
   <!-- PROPOSAL DOCUMENT -->
   <div class="card">
@@ -597,7 +661,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
             Uploaded <?php echo date('M d, Y', strtotime($proposal_doc['upload_date'])); ?>
           </div>
         </div>
-        <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $proposal_doc['upload_id']; ?>" class="btn btn-secondary btn-sm">⬇ Download</a>
+        <a href="<?php echo SITE_URL; ?>pages/shared/download-research-document.php?type=research&amp;id=<?php echo (int) $proposal_doc['upload_id']; ?>&amp;mode=viewer" class="btn btn-secondary btn-sm">Preview document</a>
       </div>
     <?php else: ?>
       <div class="empty" style="padding: 20px;">
@@ -617,7 +681,7 @@ renderStudentShell($user, 'research-detail', $project ? rd_escape($project['titl
         2 => 'Review of Related Literature',
         3 => 'Methodology',
         4 => 'Results and Discussion',
-        5 => 'Summary, Conclusions, and Recommendations',
+        5 => 'Summary, Conclusions, and Suggestions',
       ];
     ?>
 

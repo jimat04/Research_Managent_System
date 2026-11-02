@@ -1,0 +1,31 @@
+{
+  "source_sha256": "ae05d5ec6438175ca9290139c50c7aec1bdd5cd5845fdedef2939d4c2387ca31",
+  "revised_file": "rms-chapter_1&2-revised-recent-references.docx",
+  "revised_sha256": "495edb93c653607a63fd2b96382e4d9ede7fe17847425106a0f66bc42d68fe3f",
+  "source_preserved": true,
+  "zip_crc_check": "passed",
+  "all_xml_parts_parse": "passed",
+  "unchanged_package_parts": 31,
+  "paragraph_replacements": 155,
+  "references_in_revised_copy": 12,
+  "reference_window": {
+    "reference_year": 2026,
+    "minimum_year": 2018,
+    "earliest_used": 2019,
+    "latest_used": 2025,
+    "all_references_within_8_and_10_year_limits": true
+  },
+  "tables_revised": 5,
+  "word_layout_review": "not run for current copy; earlier attempt failed on previous revision",
+  "application_runtime_tests": "not run; documentation-only work",
+  "database_changes": "none",
+  "previous_revised_copy_preserved": true,
+  "reference_manifest_years_match_bibliography": true,
+  "out_of_window_citations_removed_from_tables": true,
+  "front_matter_preserved_except_prior_degree_correction": true,
+  "source_baseline_files_checked": 29,
+  "changed_source_files_since_prior_alignment": [],
+  "builder_python_syntax": "passed",
+  "documentation_whitespace": "passed",
+  "evidence_matrix_rows": 28
+}

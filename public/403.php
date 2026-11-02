@@ -205,10 +205,11 @@ if (file_exists(__DIR__ . '/includes/config.php')) {
             <div class="error-details">
                 <p>
                     If you believe this is a mistake, please contact your administrator<br>
-                    or <a href="<?php echo SITE_URL; ?>contact.php">submit a support request</a>.
+                    or <a href="<?php echo SITE_URL; ?>public/about-us.php#contact-us">submit a support request</a>.
                 </p>
             </div>
         </div>
     </div>
+    <script src="<?php echo SITE_URL; ?>js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
 </body>
 </html>

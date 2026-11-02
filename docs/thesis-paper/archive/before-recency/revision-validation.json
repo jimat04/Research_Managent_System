@@ -1,0 +1,20 @@
+{
+  "source_sha256": "ae05d5ec6438175ca9290139c50c7aec1bdd5cd5845fdedef2939d4c2387ca31",
+  "revised_sha256": "87ae2ce55dddc917656daf40dc2d8f1c6632690cbd13c8bda3bad45a1d9a5975",
+  "source_preserved": true,
+  "zip_crc_check": "passed",
+  "all_xml_parts_parse": "passed",
+  "unchanged_package_parts": 31,
+  "paragraph_replacements": 154,
+  "references_in_revised_copy": 16,
+  "tables_revised": 5,
+  "word_layout_review": "incomplete; Word automation unavailable; see word-layout-review.json",
+  "application_runtime_tests": "not run; documentation-only work",
+  "database_changes": "none",
+  "evidence_matrix_rows": 28,
+  "original_bibliography_entries_audited": 26,
+  "source_file_fingerprints_verified": 29,
+  "front_matter_preserved_except_degree": true,
+  "documentation_whitespace": "passed",
+  "builder_python_syntax": "passed"
+}

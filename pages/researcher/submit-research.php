@@ -5,11 +5,33 @@ require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/file-uploader.php';
 require_once __DIR__ . '/../../includes/research-workflow.php';
+require_once __DIR__ . '/../../includes/academic-years.php';
 
-requireRole(['student', 'faculty']);
+requireRole('student');
 
 $user = getCurrentUser();
 $user_id = (int) $user['user_id'];
+$student_research_program_id = ($user['role'] ?? '') === 'student'
+    ? rms_student_research_program_id($conn, $user_id)
+    : 0;
+$student_program_eligible = ($user['role'] ?? '') !== 'student' || $student_research_program_id > 0;
+
+if (rms_student_has_approved_title($conn, $user_id)) {
+    renderStudentShell($user, 'submit-research', 'Research Title Approved', 'Continue with your current research project.');
+    ?>
+    <main class="approved-title-page">
+      <section class="approved-title-card" aria-labelledby="approved-title-heading">
+        <span class="approved-title-mark" aria-hidden="true">✓</span>
+        <p class="approved-title-eyebrow">Research workflow · Title review complete</p>
+        <h2 id="approved-title-heading">Your research title is approved</h2>
+        <p class="approved-title-copy">Continue your current project from My Research. Your next steps and chapter progress are available there.</p>
+        <a class="approved-title-action" href="<?php echo htmlspecialchars(SITE_URL . 'pages/researcher/my-research.php', ENT_QUOTES, 'UTF-8'); ?>">Open My Research <span aria-hidden="true">→</span></a>
+      </section>
+    </main>
+    <?php
+    renderStudentShellClose();
+    exit;
+}
 
 /**
  * Co-researcher helpers
@@ -66,6 +88,16 @@ function crc_validate_candidates($conn, $candidate_ids, $requester_id) {
             WHERE user_id IN ($placeholders)
               AND role = 'student'
               AND status = 'active'
+              AND EXISTS (
+                  SELECT 1
+                    FROM programs p
+                   WHERE p.status = 1
+                     AND p.program_code IN ('BSIT', 'BSCS')
+                     AND (
+                         UPPER(TRIM(p.program_code)) = UPPER(TRIM(users.program))
+                         OR UPPER(TRIM(p.program_name)) = UPPER(TRIM(users.program))
+                     )
+              )
             ORDER BY last_name ASC, first_name ASC";
     $stmt = $conn->prepare($sql);
     if (!$stmt) return [];
@@ -93,6 +125,16 @@ function crc_search_students($conn, $query, $requester_id, $limit = 8) {
             WHERE role = 'student'
               AND status = 'active'
               AND user_id <> ?
+              AND EXISTS (
+                  SELECT 1
+                    FROM programs p
+                   WHERE p.status = 1
+                     AND p.program_code IN ('BSIT', 'BSCS')
+                     AND (
+                         UPPER(TRIM(p.program_code)) = UPPER(TRIM(users.program))
+                         OR UPPER(TRIM(p.program_name)) = UPPER(TRIM(users.program))
+                     )
+              )
               AND (first_name LIKE ?
                    OR last_name LIKE ?
                    OR CONCAT(first_name, ' ', last_name) LIKE ?
@@ -126,10 +168,15 @@ if (!is_string($submission_nonce) || $submission_nonce === '') {
 }
 
 // Form field defaults
+$title_options = ['', '', ''];
 $title = '';
 $category_id = '';
+$category_name = '';
 $ay_id = '';
-$research_area = '';
+$academic_years = rms_academic_year_options($conn);
+$academic_year = rms_current_academic_year();
+$research_area_ids = [];
+$title_classifications = array_fill(0, 3, ['category_id' => 0, 'area_id' => 0]);
 $abstract = '';
 $status = 'draft';
 
@@ -142,7 +189,7 @@ $crc_raw_ids         = [];
 $crc_is_picker_post  = false;
 
 // Picker add/remove/search are POST-driven (crc_do=search|add|remove) so the
-// in-progress form fields (title, abstract, etc.) survive via the normal
+// in-progress project fields survive via the normal
 // POST re-render. We track picks in session so they persist across picker
 // actions and across the eventual real submit.
 if (!isset($_SESSION['crc_picks']) || !is_array($_SESSION['crc_picks'])) {
@@ -161,21 +208,35 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     // Preserve the visible draft even when the token expired; no picker or
     // project action is performed until the user submits a valid token.
-    $title = isset($_POST['title']) ? trim($_POST['title']) : '';
+    if (is_array($_POST['title_options'] ?? null)) {
+        foreach (array_slice(array_values($_POST['title_options']), 0, 3) as $index => $value) {
+            if (is_string($value)) {
+                $title_options[$index] = trim($value);
+            }
+        }
+    }
+    $title = $title_options[0];
     $category_id = isset($_POST['category_id']) ? intval($_POST['category_id']) : '';
-    $ay_id = isset($_POST['ay_id']) ? intval($_POST['ay_id']) : '';
-    $research_area = isset($_POST['research_area']) ? trim($_POST['research_area']) : '';
-    $abstract = isset($_POST['abstract']) ? trim($_POST['abstract']) : '';
+    $academic_year = is_string($_POST['academic_year'] ?? null) ? trim($_POST['academic_year']) : '';
+    $research_area_ids = is_array($_POST['research_area_ids'] ?? null) ? array_values($_POST['research_area_ids']) : [];
+    $title_classifications = is_array($_POST['title_classifications'] ?? null) ? array_slice(array_values($_POST['title_classifications']), 0, 3) : $title_classifications;
     $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'submitted'], true) ? $_POST['status'] : 'draft';
     $crc_raw_ids = crc_normalize_ids($_POST['co_researchers'] ?? []);
     $errors[] = 'Your form has expired. Please try again.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Get form values
-    $title = isset($_POST['title']) ? trim($_POST['title']) : '';
+    if (is_array($_POST['title_options'] ?? null)) {
+        foreach (array_slice(array_values($_POST['title_options']), 0, 3) as $index => $value) {
+            if (is_string($value)) {
+                $title_options[$index] = trim($value);
+            }
+        }
+    }
+    $title = $title_options[0];
     $category_id = isset($_POST['category_id']) ? intval($_POST['category_id']) : '';
-    $ay_id = isset($_POST['ay_id']) ? intval($_POST['ay_id']) : '';
-    $research_area = isset($_POST['research_area']) ? trim($_POST['research_area']) : '';
-    $abstract = isset($_POST['abstract']) ? trim($_POST['abstract']) : '';
+    $academic_year = is_string($_POST['academic_year'] ?? null) ? trim($_POST['academic_year']) : '';
+    $research_area_ids = is_array($_POST['research_area_ids'] ?? null) ? array_values($_POST['research_area_ids']) : [];
+    $title_classifications = is_array($_POST['title_classifications'] ?? null) ? array_slice(array_values($_POST['title_classifications']), 0, 3) : $title_classifications;
     $status = isset($_POST['status']) && in_array($_POST['status'], ['draft', 'submitted'], true) ? $_POST['status'] : 'draft';
     if ($status === 'proposal') $status = 'submitted';
     if (!in_array($status, ['draft', 'submitted'], true)) $status = 'draft';
@@ -237,48 +298,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     }
 
     // Full validation runs only when a real submit button was pressed.
-    if (!$crc_is_picker_post && isset($_POST['status']) && empty($title)) {
-        $errors[] = 'Project Title is required.';
-    } elseif (!$crc_is_picker_post && isset($_POST['status']) && strlen($title) > 255) {
-        $errors[] = 'Project Title must not exceed 255 characters.';
+    if (!$crc_is_picker_post && isset($_POST['status'])) {
+        try {
+            $title_options = rms_validate_title_options($_POST['title_options'] ?? null);
+            $title = $title_options[0];
+        } catch (InvalidArgumentException $exception) {
+            $errors[] = $exception->getMessage();
+        }
     }
 
-    if (!$crc_is_picker_post && isset($_POST['status']) && empty($category_id)) {
+    if (!$crc_is_picker_post && isset($_POST['status']) && ($user['role'] ?? '') !== 'student' && empty($category_id)) {
         $errors[] = 'Research Category is required.';
-    } elseif (!$crc_is_picker_post && isset($_POST['status'])) {
-        // Verify category exists
-        $cat_stmt = $conn->prepare("SELECT category_id FROM research_categories WHERE category_id = ? AND status = 1");
-        $cat_stmt->bind_param("i", $category_id);
-        $cat_stmt->execute();
-        $cat_result = $cat_stmt->get_result();
-        if ($cat_result->num_rows === 0) {
+    } elseif (!$crc_is_picker_post && isset($_POST['status']) && ($user['role'] ?? '') !== 'student') {
+        try {
+            $category_row = rms_validate_research_category(
+                $conn,
+                (int) $category_id,
+                0,
+                $student_research_program_id,
+                ($user['role'] ?? '') === 'student'
+            );
+            $category_name = (string) $category_row['category_name'];
+        } catch (InvalidArgumentException $exception) {
             $errors[] = 'Invalid Research Category selected.';
+        } catch (RuntimeException $exception) {
+            $errors[] = $exception->getMessage();
         }
-        $cat_stmt->close();
     }
 
-    if (!$crc_is_picker_post && isset($_POST['status']) && empty($ay_id)) {
-        $errors[] = 'Academic Year / Semester is required.';
-    } elseif (!$crc_is_picker_post && isset($_POST['status'])) {
-        // Verify AY exists
-        $ay_stmt = $conn->prepare("SELECT ay_id FROM academic_years WHERE ay_id = ? AND is_active = 1");
-        $ay_stmt->bind_param("i", $ay_id);
-        $ay_stmt->execute();
-        $ay_result = $ay_stmt->get_result();
-        if ($ay_result->num_rows === 0) {
-            $errors[] = 'Invalid Academic Year selected.';
+    if (!$crc_is_picker_post && isset($_POST['status']) && ($user['role'] ?? '') === 'student') {
+        try {
+            $title_classifications = rms_validate_title_classifications($conn, $_POST['title_classifications'] ?? null, [], $student_research_program_id);
+            $category_id = (int) $title_classifications[0]['category_id'];
+            $category_name = (string) $title_classifications[0]['category_name'];
+            $research_area_ids = [(int) $title_classifications[0]['area_id']];
+        } catch (InvalidArgumentException | RuntimeException $exception) {
+            $errors[] = $exception->getMessage();
         }
-        $ay_stmt->close();
     }
 
-    if (!$crc_is_picker_post && isset($_POST['status']) && empty($abstract)) {
-        $errors[] = 'Abstract is required.';
-    } elseif (!$crc_is_picker_post && isset($_POST['status']) && strlen($abstract) > 5000) {
-        $errors[] = 'Abstract must not exceed 5000 characters.';
+    if (!$crc_is_picker_post && isset($_POST['status'])) {
+        try {
+            $academic_year = rms_validate_academic_year($_POST['academic_year'] ?? null, $academic_years);
+        } catch (InvalidArgumentException $exception) {
+            $errors[] = $exception->getMessage();
+        }
     }
 
-    if (!$crc_is_picker_post && isset($_POST['status']) && strlen($research_area) > 150) {
-        $errors[] = 'Research Area must not exceed 150 characters.';
+    if (!$crc_is_picker_post && isset($_POST['status'])) {
+        if (!$student_program_eligible) {
+            $errors[] = 'Only active BSIT and BSCS students may submit student research.';
+        }
+        $eligible_candidates = crc_validate_candidates($conn, $crc_raw_ids, $user_id);
+        if (count($eligible_candidates) !== count($crc_raw_ids)) {
+            $errors[] = 'Every student co-researcher must be an active BSIT or BSCS student.';
+        }
+    }
+
+    if (!$crc_is_picker_post && isset($_POST['status']) && ($user['role'] ?? '') !== 'student') {
+        try {
+            $research_area_ids = rms_validate_research_area_ids($_POST['research_area_ids'] ?? null);
+            if ($category_id > 0) {
+                rms_validate_mapped_research_areas(
+                    $conn,
+                    (int) $category_id,
+                    $research_area_ids,
+                    [],
+                    0,
+                    $student_research_program_id,
+                    ($user['role'] ?? '') === 'student'
+                );
+            }
+        } catch (InvalidArgumentException $exception) {
+            $errors[] = $exception->getMessage();
+        } catch (RuntimeException $exception) {
+            $errors[] = $exception->getMessage();
+        }
     }
 
     $proposal_file_selected = isset($_FILES['proposal_file'])
@@ -299,22 +394,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $conn->begin_transaction();
 
         try {
+            if (($user['role'] ?? '') === 'student') {
+                $title_classifications = rms_validate_title_classifications($conn, $_POST['title_classifications'] ?? null, [], $student_research_program_id);
+                $category_id = (int) $title_classifications[0]['category_id'];
+                $category_name = (string) $title_classifications[0]['category_name'];
+                $research_area_ids = [(int) $title_classifications[0]['area_id']];
+            } else {
+                rms_validate_mapped_research_areas($conn, (int) $category_id, $research_area_ids);
+            }
+            $ay_id = rms_resolve_academic_year($conn, $academic_year);
             // Insert research project
-            $insert_query = "INSERT INTO research_projects (title, category_id, ay_id, research_area, abstract, status, created_by, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+            $legacy_research_area = null;
+            $insert_query = "INSERT INTO research_projects
+                (title, title_option_1, title_option_2, title_option_3, category_id, ay_id, research_area, abstract, status, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
             $insert_stmt = $conn->prepare($insert_query);
             if (!$insert_stmt) {
                 throw new Exception("Query error: " . $conn->error);
             }
 
             $initial_project_status = 'draft';
-            $insert_stmt->bind_param("siisssi", $title, $category_id, $ay_id, $research_area, $abstract, $initial_project_status, $user_id);
+            $insert_stmt->bind_param(
+                'ssssiisssi',
+                $title,
+                $title_options[0],
+                $title_options[1],
+                $title_options[2],
+                $category_id,
+                $ay_id,
+                $legacy_research_area,
+                $abstract,
+                $initial_project_status,
+                $user_id
+            );
             if (!$insert_stmt->execute()) {
                 throw new Exception("Insert failed: " . $insert_stmt->error);
             }
 
             $new_project_id = $conn->insert_id;
             $insert_stmt->close();
+            rms_replace_project_areas($conn, (int) $new_project_id, $research_area_ids);
+            if (($user['role'] ?? '') === 'student') {
+                rms_save_title_classifications($conn, (int) $new_project_id, $title_classifications);
+                if (!rms_claim_student_project_slot($conn, $user_id, (int) $new_project_id)) {
+                    throw new DomainException('You are already assigned to another research project. Remove that assignment before creating a new project.');
+                }
+            }
 
             // Insert project member (creator as lead)
             $member_query = "INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'lead')";
@@ -342,6 +467,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             }
             foreach ($crc_valid as $crc_row) {
                 $crc_uid = (int) $crc_row['user_id'];
+                if (!rms_claim_student_project_slot($conn, $crc_uid, (int) $new_project_id)) {
+                    throw new DomainException('A selected student is already assigned to another research project. Remove that assignment before adding them.');
+                }
                 $crc_member_stmt->bind_param("ii", $new_project_id, $crc_uid);
                 if (!$crc_member_stmt->execute()) {
                     // UNIQUE (project_id, user_id) — silently skip dupes that
@@ -360,7 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     'inputName' => 'proposal_file',
                     'folderTarget' => 'proposals',
                     'maxSize' => 10000, // 10MB
-                    'accept' => ['.pdf', '.doc', '.docx'],
+                    'accept' => ['.pdf'],
                     'projectId' => $new_project_id,
                     'type' => 'proposal',
                     'workflowType' => 'title'
@@ -384,6 +512,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     throw new Exception('The research title could not be submitted.');
                 }
                 $submit_project->close();
+                $area_snapshot = rms_research_area_snapshot($conn, $research_area_ids);
                 rms_capture_submission_version(
                     $conn,
                     (int) $new_project_id,
@@ -392,9 +521,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     $user_id,
                     [
                         'title' => $title,
+                        'title_options' => $title_options,
                         'category_id' => (int) $category_id,
+                        'category_name' => $category_name,
                         'ay_id' => (int) $ay_id,
-                        'research_area' => $research_area,
+                        'research_area' => implode(', ', array_column($area_snapshot, 'area_name')),
+                        'research_areas' => $area_snapshot,
+                        'title_classifications' => ($user['role'] ?? '') === 'student' ? $title_classifications : [],
                         'abstract' => $abstract
                     ],
                     $upload_id ? [(int) $upload_id] : []
@@ -462,30 +595,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         } catch (Exception $e) {
             // Rollback on error
             $conn->rollback();
-            $errors[] = 'Database error: ' . $e->getMessage();
+            $errors[] = $e instanceof DomainException
+                ? $e->getMessage()
+                : 'Database error: ' . $e->getMessage();
         }
     }
 }
 
-// Get categories for dropdown
-$categories = [];
-$cat_query = "SELECT category_id, category_name FROM research_categories WHERE status = 1 ORDER BY category_name ASC";
-$cat_result = $conn->query($cat_query);
-if ($cat_result) {
-    while ($row = $cat_result->fetch_assoc()) {
-        $categories[] = $row;
-    }
-}
-
-// Get active academic years for dropdown
-$academic_years = [];
-$ay_query = "SELECT ay_id, label, semester FROM academic_years WHERE is_active = 1 ORDER BY label DESC, semester ASC";
-$ay_result = $conn->query($ay_query);
-if ($ay_result) {
-    while ($row = $ay_result->fetch_assoc()) {
-        $academic_years[] = $row;
-    }
-}
+// Students receive categories mapped to their account program; faculty retain
+// the original shared catalog.
+$categories = rms_research_category_catalog(
+    $conn,
+    ($user['role'] ?? '') === 'student',
+    $student_research_program_id
+);
+$research_areas = rms_research_area_catalog($conn);
 
 // Co-researcher picker state. Picker POSTs and failed submissions re-hydrate
 // from their validated posted/session selection.
@@ -534,6 +658,7 @@ if (($user['role'] ?? '') === 'faculty') {
   .hero-copy,.hero-checklist{position:relative;z-index:1}.hero-eyebrow{margin:0 0 11px;color:#DCCBFF;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.submission-hero h1{max-width:620px;margin:0;font-size:clamp(31px,3.4vw,48px);font-weight:750;letter-spacing:-.045em;line-height:1.06;text-wrap:balance}.hero-description{max-width:60ch;margin:17px 0 0;color:#E8E0F3;font-size:15px;line-height:1.7}
   .hero-checklist{align-content:center;padding-left:34px;border-left:1px solid rgba(255,255,255,.24)}.hero-checklist-label{margin:0 0 14px;color:#D9CDE9;font-size:12px;font-weight:700}.hero-checklist-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0;padding:0;list-style:none}.hero-checklist-list li{display:flex;align-items:center;gap:9px;color:#F4EFFF;font-size:12px;font-weight:650}.hero-checklist-list span{display:grid;width:25px;height:25px;place-items:center;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:rgba(255,255,255,.1);font-size:11px}
   .alert{display:grid;grid-template-columns:auto 1fr;gap:13px;margin:0 0 20px;padding:17px 19px;border-radius:16px;font-size:13px;line-height:1.55}.alert-icon{display:grid;width:31px;height:31px;place-items:center;border-radius:10px;font-weight:800}.alert strong{display:block;margin-bottom:2px;font-size:14px}.alert ul{margin:7px 0 0;padding-left:18px}.alert-success{border:1px solid #A7DDC8;background:#EDFBF5;color:#087A59}.alert-success .alert-icon{background:#D2F4E6}.alert-success a{color:#087A59;font-weight:700}.alert-error{border:1px solid #F1B5B5;background:#FFF1F1;color:#A82323}.alert-error .alert-icon{background:#FFE0E0}
+  .proposal-guidance{display:grid;gap:16px;margin:0 0 20px;padding:22px;border:1px solid #D8C7F0;border-left:5px solid var(--purple);border-radius:16px;background:linear-gradient(135deg,#FBF9FF,#F3EDFC);color:#281B35;font-size:14px;line-height:1.6}.proposal-guidance h3{margin:0;color:#291050;font-size:18px;letter-spacing:-.02em}.proposal-guidance-intro{margin:4px 0 0;color:#655C74}.proposal-requirements{display:grid;gap:10px;margin:0;padding:0;list-style:none}.proposal-requirements li{display:grid;grid-template-columns:30px minmax(0,1fr);align-items:start;gap:11px}.proposal-requirement-number{display:grid;width:28px;height:28px;place-items:center;border:1px solid #D8C7F0;border-radius:9px;background:#EEE6FB;color:#4B168F;font-size:12px;font-weight:800}.proposal-requirement-copy strong{display:block;margin:0;color:#281B35;font-size:14px}.proposal-requirement-copy span{display:block;color:#655C74}  .proposal-template-action{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;padding-top:15px;border-top:1px solid #E4DAF0}.proposal-template-hint{max-width:54ch;margin:0;color:#655C74;font-size:12px;line-height:1.5}.proposal-template-button{flex:0 0 auto;min-height:46px;font-size:13px}
   .success-panel{padding:42px;border:1px solid #B8E5D5;border-radius:20px;background:linear-gradient(135deg,#F7FFFC,#EAF9F3);box-shadow:0 18px 44px rgba(32,105,78,.1);text-align:center}.success-mark{display:grid;width:66px;height:66px;margin:0 auto 19px;place-items:center;border-radius:20px;background:#087A59;color:#fff;font-size:28px;box-shadow:0 12px 24px rgba(8,122,89,.2)}.success-panel h2{margin:0;font-size:27px;letter-spacing:-.035em}.success-panel p{margin:10px 0 24px;color:#4D6E61;font-size:14px}
   .submission-layout{display:grid;grid-template-columns:minmax(0,1fr) 282px;gap:24px;align-items:start}.submission-sections{display:grid;gap:18px}.form-section{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.95);box-shadow:0 12px 32px rgba(45,24,76,.07)}.form-section.accent-purple{border-top:4px solid var(--purple)}.form-section.accent-blue{border-top:4px solid #2563EB}.form-section.accent-green{border-top:4px solid #07855F}.form-section.accent-amber{border-top:4px solid #C55408}
   .section-header{display:flex;align-items:flex-start;gap:14px;padding:25px 28px 19px;border-bottom:1px solid #EEE8F4}.section-number{display:grid;flex:0 0 auto;width:34px;height:34px;place-items:center;border-radius:11px;background:#EEE6FB;color:var(--purple);font-size:12px;font-weight:800}.accent-blue .section-number{background:#E8F0FF;color:#2563EB}.accent-green .section-number{background:#E3F7EF;color:#07855F}.accent-amber .section-number{background:#FFF0E4;color:#C55408}.section-header h2{margin:0 0 4px;font-size:19px;letter-spacing:-.025em}.section-header p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.section-body{padding:25px 28px 28px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.field-full{grid-column:1/-1}.form-label{display:block;margin:0 0 8px;color:#241A31;font-size:12px;font-weight:750}.required{color:#B42318}.optional{color:#8B8198;font-weight:550}.form-control{width:100%;min-height:47px;padding:12px 14px;border:1px solid #D8D0E3;border-radius:11px;background:#FCFBFD;color:#171020;font:500 13px/1.5 'Inter',sans-serif;transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}.form-control::placeholder{color:#9B93A5}.form-control:hover{border-color:#BEB0CE}.form-control:focus{outline:none;border-color:var(--purple);background:#fff;box-shadow:0 0 0 4px rgba(91,30,188,.1)}select.form-control{cursor:pointer}textarea.form-control{min-height:190px;resize:vertical}.field-help{display:block;margin-top:7px;color:#81778D;font-size:11px;line-height:1.45}.character-guide{display:flex;justify-content:space-between;gap:12px}
@@ -555,11 +680,26 @@ if (($user['role'] ?? '') === 'faculty') {
   .submission-page .card-header{margin:0;padding:22px 27px 17px;border-bottom:1px solid #EEE8F4}.submission-page .card-title{display:flex;align-items:center;gap:12px;margin:0;color:#201529;font-size:19px;font-weight:750;letter-spacing:-.025em}
   .submission-page form>.card .card-title::before{display:grid;width:34px;height:34px;place-items:center;border-radius:11px;background:#EEE6FB;color:#5B1EBC;font-size:11px;font-weight:800}.submission-page form>.card:nth-of-type(1) .card-title::before{content:'01'}.submission-page form>.card:nth-of-type(2) .card-title::before{content:'02';background:#E8F0FF;color:#2563EB}.submission-page form>.card:nth-of-type(3) .card-title::before{content:'03';background:#E3F7EF;color:#07855F}.submission-page form>.card:nth-of-type(4) .card-title::before{content:'04';background:#FFF0E4;color:#C55408}
   .submission-page .card-body{padding:25px 27px 27px!important}.submission-page form>.card:first-of-type .card-body{display:grid!important;grid-template-columns:1fr 1fr;gap:20px!important}.submission-page form>.card:first-of-type .card-body>div:first-child,.submission-page form>.card:first-of-type .card-body>div:last-child{grid-column:1/-1}
-  .submission-page .card-body label{display:block!important;margin:0 0 8px!important;color:#241A31!important;font-size:12px;font-weight:750!important}.submission-page .card-body small{font-size:11px!important;line-height:1.45}.submission-page .card-body>div>small{color:#81778D!important}
+  .submission-page .card-body label:not(.research-area-option){display:block!important;margin:0 0 8px!important;color:#241A31!important;font-size:12px;font-weight:750!important}.submission-page .card-body small{font-size:11px!important;line-height:1.45}.submission-page .card-body>div>small{color:#81778D!important}
   .submission-page form>.card:nth-of-type(2) .card-body>div:first-child>div{display:flex;align-items:center;min-height:50px;padding:13px 15px!important;border:1px solid #CFE1FF!important;border-radius:12px!important;background:#F1F6FF!important;color:#14213B!important;font-size:13px;font-weight:700}.submission-page form>.card:nth-of-type(2) .card-body>div+div{padding-top:20px;border-top:1px solid #EEE8F4}
   .submission-page .alert-success{display:block;padding:28px;border:1px solid #A7DDC8;border-radius:18px;background:#EDFBF5;color:#087A59;text-align:center}.submission-page .alert-error{display:block;padding:18px 20px;border:1px solid #F1B5B5;border-radius:16px;background:#FFF1F1;color:#A82323}.submission-page .alert-error strong{margin-bottom:4px}.submission-page .alert-success a{display:inline-block;margin-top:8px;color:#087A59!important;font-weight:750}
   .submission-page form>div:last-child:not(.card){margin:4px 0 0!important;padding:18px 20px;border:1px solid #D8CBE8;border-radius:17px;background:rgba(255,255,255,.96);box-shadow:0 12px 30px rgba(45,24,76,.08)}
   @media(max-width:760px){.submission-page form>.card:first-of-type .card-body{grid-template-columns:1fr}.submission-page form>.card:first-of-type .card-body>div:first-child,.submission-page form>.card:first-of-type .card-body>div:last-child{grid-column:auto}.submission-page .card-header,.submission-page .card-body{padding-right:20px!important;padding-left:20px!important}.submission-page form>div:last-child:not(.card){display:grid!important;grid-template-columns:1fr 1fr;gap:9px!important}.submission-page form>div:last-child:not(.card) .btn-primary,.submission-page form>div:last-child:not(.card) a{grid-column:1/-1}}
+.faculty-role .submission-page{--purple:#1D4ED8;--purple-dark:#102654;--ink:#111827;--muted:#5D6B81;--line:#DCE4EF}
+.faculty-role .submission-hero{background:radial-gradient(circle at 93% 8%,rgba(191,219,254,.24),transparent 28%),radial-gradient(circle at 10% 120%,rgba(29,78,216,.28),transparent 32%),linear-gradient(135deg,#102654 0%,#1D4ED8 58%,#344FC4 100%);box-shadow:0 22px 52px rgba(29,78,216,.2)}
+.faculty-role .submission-hero h1{color:#fff}
+.faculty-role .hero-eyebrow,.faculty-role .hero-checklist-label{color:#DBEAFE}
+.faculty-role .submission-page>div:first-of-type a{color:#1D4ED8!important}
+.faculty-role .submission-back:hover,.faculty-role .submission-page>div:first-of-type a:hover{color:#1E40AF!important}
+.faculty-role .submission-back:focus-visible,.faculty-role .btn:focus-visible,.faculty-role .crc-pill-remove:focus-visible{outline-color:rgba(29,78,216,.42)}
+.faculty-role .form-section.accent-purple{border-top-color:#1D4ED8}
+.faculty-role .section-number,.faculty-role .submission-page form>.card:nth-of-type(1) .card-title::before{background:#E8F0FF;color:#1D4ED8}
+.faculty-role .form-control:focus{border-color:#1D4ED8;box-shadow:0 0 0 4px rgba(29,78,216,.13)}
+.faculty-role .selection-count{color:#1D4ED8}
+.faculty-role .crc-pill{border-color:#BFDBFE;background:#EFF6FF;color:#1E40AF}
+.faculty-role .crc-pill-remove{background:#DBEAFE;color:#1E40AF}
+.faculty-role .submission-page form>div:last-child:not(.card){border-color:#D5E1F2;box-shadow:0 12px 30px rgba(29,78,216,.08)}
+.research-area-picker{border:1px solid #D8D0E3;border-radius:11px;background:#FCFBFD}.research-area-picker summary{padding:13px 14px;cursor:pointer;font-size:13px;font-weight:650}.research-area-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px;border-top:1px solid #E6E0EB;max-height:300px;overflow:auto}.research-area-option{display:flex;align-items:flex-start;gap:9px;padding:9px;border:1px solid #EAE5F0;border-radius:8px;background:#fff;font-size:12px}.research-area-option[hidden]{display:none}.research-area-option input{margin-top:2px;accent-color:#5B1EBC}.research-area-message{margin:8px 0 0;color:#9A3412;font-size:13px}.research-area-message[hidden]{display:none}
 </style>
 
 <main class="submission-page">
@@ -567,15 +707,14 @@ if (($user['role'] ?? '') === 'faculty') {
     <div class="hero-copy">
       <p class="hero-eyebrow">Research proposal workspace</p>
       <h1 id="submission-title">Shape your idea into a clear proposal.</h1>
-      <p class="hero-description">Organize the research title information and prepare it for authorized administrative review.</p>
+      <p class="hero-description">Enter the essential project details, prepare your proposal document, and submit it for authorized review.</p>
     </div>
     <div class="hero-checklist" aria-label="Proposal sections">
-      <p class="hero-checklist-label">Four parts to complete</p>
+      <p class="hero-checklist-label">Three parts to complete</p>
       <ol class="hero-checklist-list">
         <li><span>01</span> Project details</li>
         <li><span>02</span> Research team</li>
-        <li><span>03</span> Abstract</li>
-        <li><span>04</span> Proposal file</li>
+        <li><span>03</span> Proposal document</li>
       </ol>
     </div>
   </section>
@@ -606,7 +745,12 @@ if (($user['role'] ?? '') === 'faculty') {
 <?php endif; ?>
 
 <!-- FORM -->
-<?php if (!$success): ?>
+<?php if (!$success && !$student_program_eligible && ($user['role'] ?? '') === 'student'): ?>
+  <div class="alert alert-error" role="alert" style="margin-bottom: 20px;">
+    <strong>Student researcher eligibility</strong>
+    Only active students whose program is BSIT or BSCS can create research submissions. Update your program with an administrator if it is missing or incorrect.
+  </div>
+<?php elseif (!$success): ?>
 <form method="POST" enctype="multipart/form-data" action="<?php echo SITE_URL; ?>pages/researcher/submit-research.php" class="form-guard">
   <?php echo csrfField(); ?>
   <input type="hidden" name="submission_nonce" value="<?php echo htmlspecialchars($submission_nonce, ENT_QUOTES, 'UTF-8'); ?>">
@@ -619,25 +763,54 @@ if (($user['role'] ?? '') === 'faculty') {
       <div class="card-title">Basic Information</div>
     </div>
     <div class="card-body" style="display: flex; flex-direction: column; gap: 16px;">
-      <!-- Project Title -->
-      <div>
-        <label for="title" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
-          Project Title <span style="color: #ef4444;">*</span>
-        </label>
-        <input
-          type="text"
-          id="title"
-          name="title"
-          class="form-control"
-          placeholder="Enter your research project title"
-          maxlength="255"
-          value="<?php echo htmlspecialchars($title); ?>"
-          required
-        />
-        <small style="color: #64748B; margin-top: 4px; display: block;">Max 255 characters</small>
+      <div class="field-full">
+        <span class="form-label">Research Title Options <span class="required">*</span></span>
+        <p class="form-hint">Enter three distinct options. The authorized reviewer will approve one, or return the proposal for revision.</p>
+        <div class="form-grid">
+          <?php foreach ($title_options as $index => $option): ?>
+            <div>
+              <label class="form-label" for="title-option-<?php echo $index + 1; ?>">Title option <?php echo $index + 1; ?></label>
+              <input
+                type="text"
+                id="title-option-<?php echo $index + 1; ?>"
+                name="title_options[]"
+                class="form-control"
+                maxlength="255"
+                value="<?php echo htmlspecialchars($option, ENT_QUOTES, 'UTF-8'); ?>"
+                required
+              >
+              <small class="form-hint">Maximum 255 characters</small>
+            </div>
+          <?php endforeach; ?>
+        </div>
       </div>
 
-      <!-- Research Category -->
+      <?php if (($user['role'] ?? '') === 'student'): ?>
+      <div class="field-full">
+        <span class="form-label">Research Category and Area for Each Title <span class="required">*</span></span>
+        <p class="form-hint">Your course determines the available categories. Choose one category and one related research area for each title option.</p>
+        <?php for ($title_index = 0; $title_index < 3; $title_index++): ?>
+          <div class="title-classification" data-title-classification style="border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin:10px 0;background:#FCFBFD">
+            <strong>Title option <?php echo $title_index + 1; ?></strong>
+            <label class="form-label" for="title-category-<?php echo $title_index + 1; ?>">Research category</label>
+            <select id="title-category-<?php echo $title_index + 1; ?>" name="title_classifications[<?php echo $title_index; ?>][category_id]" class="form-control title-category" required>
+              <option value="">-- Select Category --</option>
+              <?php foreach ($categories as $cat): ?>
+                <option value="<?php echo (int) $cat['category_id']; ?>" <?php echo (int) ($title_classifications[$title_index]['category_id'] ?? 0) === (int) $cat['category_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['category_name'], ENT_QUOTES, 'UTF-8'); ?></option>
+              <?php endforeach; ?>
+            </select>
+            <label class="form-label" for="title-area-<?php echo $title_index + 1; ?>">Research area</label>
+            <select id="title-area-<?php echo $title_index + 1; ?>" name="title_classifications[<?php echo $title_index; ?>][area_id]" class="form-control title-area" required>
+              <option value="">-- Select a category first --</option>
+              <?php foreach ($research_areas as $area): ?>
+                <option value="<?php echo (int) $area['area_id']; ?>" data-category-ids="<?php echo htmlspecialchars(implode(',', $area['category_ids']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo (int) ($title_classifications[$title_index]['area_id'] ?? 0) === (int) $area['area_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($area['selection_label'], ENT_QUOTES, 'UTF-8'); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        <?php endfor; ?>
+      </div>
+      <?php else: ?>
+      <!-- Faculty retains the existing shared category and areas catalog -->
       <div>
         <label for="category_id" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
           Research Category <span style="color: #ef4444;">*</span>
@@ -656,43 +829,59 @@ if (($user['role'] ?? '') === 'faculty') {
           <?php endforeach; ?>
         </select>
       </div>
+      <?php endif; ?>
 
-      <!-- Academic Year / Semester -->
+      <!-- Academic Year -->
       <div>
-        <label for="ay_id" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
-          Academic Year / Semester <span style="color: #ef4444;">*</span>
+        <label for="academic_year" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
+          Academic Year <span style="color: #ef4444;">*</span>
         </label>
         <select
-          id="ay_id"
-          name="ay_id"
+          id="academic_year"
+          name="academic_year"
           class="form-control"
+          aria-describedby="academic-year-hint"
           required
         >
           <option value="">-- Select Academic Year --</option>
-          <?php foreach ($academic_years as $ay): ?>
-            <option value="<?php echo $ay['ay_id']; ?>" <?php echo $ay_id == $ay['ay_id'] ? 'selected' : ''; ?>>
-              <?php echo htmlspecialchars($ay['label'] . ' — ' . $ay['semester']); ?>
+          <?php foreach (array_keys($academic_years) as $ay_label): ?>
+            <option value="<?php echo htmlspecialchars($ay_label, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $academic_year === $ay_label ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars($ay_label, ENT_QUOTES, 'UTF-8'); ?>
             </option>
           <?php endforeach; ?>
         </select>
+        <p id="academic-year-hint" class="form-hint">The current academic year is selected automatically and advances each January.</p>
       </div>
 
-      <!-- Research Area -->
-      <div>
-        <label for="research_area" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
-          Research Area <span style="color: #999;">(Optional)</span>
-        </label>
-        <input
-          type="text"
-          id="research_area"
-          name="research_area"
-          class="form-control"
-          placeholder="e.g., Computer Science, Social Sciences, etc."
-          maxlength="150"
-          value="<?php echo htmlspecialchars($research_area); ?>"
-        />
-        <small style="color: #64748B; margin-top: 4px; display: block;">Max 150 characters</small>
+      <?php if (($user['role'] ?? '') !== 'student'): ?><div class="field-full">
+        <span class="form-label" id="research-area-label">Research Areas <span class="required">*</span></span>
+        <p class="form-hint">Choose one to five BSIT/BSCS areas mapped to the selected category. Selected areas stay visible when you change category; uncheck any mismatches explicitly.</p>
+        <details class="research-area-picker" id="research-area-picker" aria-labelledby="research-area-label">
+          <summary id="research-area-list">Choose research areas <span id="research-area-count">(<?php echo count($research_area_ids); ?> selected)</span></summary>
+          <div class="research-area-options" role="group" aria-label="Research areas">
+            <?php foreach ($research_areas as $area): ?>
+              <?php
+                $selected_area_ids = array_map('intval', $research_area_ids);
+                $area_category_ids = implode(',', $area['category_ids']);
+              ?>
+              <label class="research-area-option" data-eligible="<?php echo $area['proposal_eligible'] ? '1' : '0'; ?>" data-category-ids="<?php echo htmlspecialchars($area_category_ids, ENT_QUOTES, 'UTF-8'); ?>">
+                <input
+                  type="checkbox"
+                  name="research_area_ids[]"
+                  value="<?php echo (int) $area['area_id']; ?>"
+                  <?php echo in_array((int) $area['area_id'], $selected_area_ids, true) ? 'checked' : ''; ?>
+                >
+                <span><?php echo htmlspecialchars($area['selection_label'], ENT_QUOTES, 'UTF-8'); ?></span>
+              </label>
+            <?php endforeach; ?>
+            <?php if (!$research_areas): ?>
+              <p>No active research areas are available. Ask an administrator to configure the research-area catalog.</p>
+            <?php endif; ?>
+          </div>
+        </details>
+        <p id="research-area-message" class="research-area-message" role="status" aria-live="polite" hidden></p>
       </div>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -807,44 +996,49 @@ if (($user['role'] ?? '') === 'faculty') {
     </div>
   </div>
 
-  <!-- SECTION 3: ABSTRACT -->
-  <div class="card" style="margin-bottom: 20px;">
-    <div class="card-header">
-      <div class="card-title">Abstract</div>
-    </div>
-    <div class="card-body" style="display: flex; flex-direction: column; gap: 16px;">
-      <div>
-        <label for="abstract" style="display: block; margin-bottom: 6px; font-weight: 500; color: #111827;">
-          Research Abstract <span style="color: #ef4444;">*</span>
-        </label>
-        <textarea
-          id="abstract"
-          name="abstract"
-          class="form-control"
-          rows="8"
-          placeholder="Enter your research abstract. Describe the purpose, methods, and expected outcomes of your research."
-          required
-        ><?php echo htmlspecialchars($abstract); ?></textarea>
-        <small style="color: #64748B; margin-top: 4px; display: block;">Max 5000 characters</small>
-      </div>
-    </div>
-  </div>
-
-  <!-- SECTION 4: PROPOSAL DOCUMENT -->
+  <!-- SECTION 3: PROPOSAL DOCUMENT -->
   <div class="card" style="margin-bottom: 20px;">
     <div class="card-header">
       <div class="card-title">Proposal Document</div>
     </div>
     <div class="card-body" style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="proposal-guidance" role="note" aria-labelledby="proposal-guidance-title">
+        <div>
+          <h3 id="proposal-guidance-title">What to include in your title proposal</h3>
+          <p class="proposal-guidance-intro">For this first review, keep your proposal focused. Include these two parts:</p>
+        </div>
+        <ol class="proposal-requirements">
+          <li>
+            <span class="proposal-requirement-number" aria-hidden="true">1</span>
+            <span class="proposal-requirement-copy">
+              <strong>Your research title</strong>
+              <span>A clear working title for the study you want to pursue.</span>
+            </span>
+          </li>
+          <li>
+            <span class="proposal-requirement-number" aria-hidden="true">2</span>
+            <span class="proposal-requirement-copy">
+              <strong>A brief description of your idea</strong>
+              <span>Explain the topic or problem you want to address and what you hope to learn or achieve.</span>
+            </span>
+          </li>
+        </ol>
+        <div class="proposal-template-action">
+          <p class="proposal-template-hint">Use the editable DOCX starter, then save or export your completed proposal as a PDF to upload here (PDF only, max 10 MB).</p>
+          <a class="btn btn-primary proposal-template-button" href="<?php echo SITE_URL; ?>public/assets/research-proposal-template.docx" download>
+            Download DOCX template
+          </a>
+        </div>
+      </div>
       <?php
       echo renderFileUploader([
         'inputName' => 'proposal_file',
-        'accept' => '.pdf,.doc,.docx',
+        'accept' => '.pdf',
         'maxSize' => 10000,  // 10 MB
         'folderTarget' => 'proposals',
         'label' => 'Upload Proposal',
-        'description' => 'Drag & drop your proposal manuscript or click to browse',
-        'allowedFormatsText' => 'PDF, DOC, DOCX • Max 10 MB',
+        'description' => 'Upload your research title and concise research description',
+        'allowedFormatsText' => 'PDF only • Max 10 MB',
         'required' => false
       ]);
       ?>
@@ -870,6 +1064,7 @@ if (($user['role'] ?? '') === 'faculty') {
 
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <script src="../../js/app-forms.js" defer></script>
+<script src="<?php echo SITE_URL; ?>js/research-area-picker.js?v=<?php echo filemtime(__DIR__ . '/../../js/research-area-picker.js'); ?>" defer></script>
 
 <?php
 if (($user['role'] ?? '') === 'faculty') {
