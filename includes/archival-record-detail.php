@@ -93,7 +93,7 @@ $oldNotifications=archiveQuery($conn,'SELECT title,message,created_at FROM notif
 if($oldNotifications->num_rows): ?><details><summary>Historical record notifications</summary><?php while($note=$oldNotifications->fetch_assoc()): ?><p><strong><?= archiveEscape($note['created_at'].' — '.$note['title']) ?></strong><br><?= archiveEscape($note['message']) ?></p><?php endwhile; ?></details><?php endif; ?>
 </section>
 <?php if ($role === 'admin' && $archiveKind === 'publication' && ($record['archival_status'] ?? '') === 'legacy'): ?>
-<form id="record-archive" method="post" class="archive-card" onsubmit="return confirm('Archive this publication record? It may become eligible for repository and public-release review, but this does not publish it publicly.');">
+<form id="record-archive" method="post" class="archive-card archive-admin-publication-archive" onsubmit="return confirm('Archive this publication record? It may become eligible for repository and public-release review, but this does not publish it publicly.');">
 <?= csrfField() ?><input type="hidden" name="record_id" value="<?= $id ?>"><input type="hidden" name="action" value="archive">
 <h2>Archive record</h2><p>Mark this legacy record as archived. It may then appear in the research repository and public-release review queue. This does not publish it publicly.</p>
 <button type="submit" class="archive-button">Archive record</button>
