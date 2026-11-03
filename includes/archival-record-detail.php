@@ -5,15 +5,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Retired approval/rejection actions have no executable branch here.
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) { http_response_code(400); exit('Your request expired.'); }
     $action = (string) ($_POST['action'] ?? '');
-    if (!in_array($action,['deactivate','restore'],true)) { http_response_code(400); exit('This action is not supported for archival records.'); }
+    $supportedActions = $archiveKind === 'publication' ? ['deactivate', 'restore', 'archive'] : ['deactivate', 'restore'];
+    if (!in_array($action, $supportedActions, true)) { http_response_code(400); exit('This action is not supported for archival records.'); }
     if ($role !== 'admin' || (int)($_POST['record_id']??0)!==$id) archiveDeny();
     try {
         $conn->begin_transaction(); $before=archiveLoad($conn,$archiveKind,$id,true);
         if (!$before || !archiveCan($conn,$archiveKind,$before,$user,$action)) throw new RuntimeException('Record unavailable.');
-        if (($action==='deactivate') === !empty($before['deactivated_at'])) throw new RuntimeException('Record availability already changed. Refresh the page.');
-        archiveQuery($conn,"UPDATE {$c['table']} SET deactivated_at = ".($action==='deactivate'?'CURRENT_TIMESTAMP':'NULL').", last_modified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE {$c['id']} = ?",[$userId,$id]);
-        archiveAudit($conn,$archiveKind,$id,$action,$before,archiveLoad($conn,$archiveKind,$id)); $conn->commit();
-        $_SESSION[$c['module'].'_flash']=['type'=>'success','message'=>$action==='deactivate'?'Record deactivated; history and documents retained.':'Record restored.'];
+        if ($action === 'archive') {
+            if (($before['archival_status'] ?? '') !== 'legacy') throw new RuntimeException('Only legacy publication records can be archived. Refresh the page.');
+            $archiveStmt = archiveQuery($conn, "UPDATE {$c['table']} SET archival_status = ?, last_modified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE {$c['id']} = ? AND archival_status = ?", ['archived', $userId, $id, 'legacy']);
+            $archived = $archiveStmt->affected_rows === 1;
+            $archiveStmt->close();
+            if (!$archived) throw new RuntimeException('The publication is no longer a legacy record. Refresh the page.');
+        } else {
+            if (($action==='deactivate') === !empty($before['deactivated_at'])) throw new RuntimeException('Record availability already changed. Refresh the page.');
+            archiveQuery($conn,"UPDATE {$c['table']} SET deactivated_at = ".($action==='deactivate'?'CURRENT_TIMESTAMP':'NULL').", last_modified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE {$c['id']} = ?",[$userId,$id]);
+        }
+        $after = archiveLoad($conn, $archiveKind, $id);
+        if (!$after) throw new RuntimeException('Record is no longer available.');
+        archiveAudit($conn, $archiveKind, $id, $action, $before, $after);
+        $conn->commit();
+        $message = match ($action) {
+            'archive' => 'Publication archived for repository and release review. It has not been published publicly.',
+            'deactivate' => 'Record deactivated; history and documents retained.',
+            default => 'Record restored.',
+        };
+        $_SESSION[$c['module'].'_flash']=['type'=>'success','message'=>$message];
         header('Location: '.$detailUrl.'?id='.$id.$navigationSuffix); exit;
     } catch(Throwable $e) { $conn->rollback(); $errors[]=$e instanceof mysqli_sql_exception?'The change could not be saved.':$e->getMessage(); }
 }
@@ -75,5 +92,12 @@ if ($archiveKind === 'publication') {
 $oldNotifications=archiveQuery($conn,'SELECT title,message,created_at FROM notifications WHERE link IN (' . implode(',', array_fill(0, count($notificationLinks), '?')) . ') ORDER BY created_at DESC',$notificationLinks)->get_result();
 if($oldNotifications->num_rows): ?><details><summary>Historical record notifications</summary><?php while($note=$oldNotifications->fetch_assoc()): ?><p><strong><?= archiveEscape($note['created_at'].' — '.$note['title']) ?></strong><br><?= archiveEscape($note['message']) ?></p><?php endwhile; ?></details><?php endif; ?>
 </section>
+<?php if ($role === 'admin' && $archiveKind === 'publication' && ($record['archival_status'] ?? '') === 'legacy'): ?>
+<form id="record-archive" method="post" class="archive-card" onsubmit="return confirm('Archive this publication record? It may become eligible for repository and public-release review, but this does not publish it publicly.');">
+<?= csrfField() ?><input type="hidden" name="record_id" value="<?= $id ?>"><input type="hidden" name="action" value="archive">
+<h2>Archive record</h2><p>Mark this legacy record as archived. It may then appear in the research repository and public-release review queue. This does not publish it publicly.</p>
+<button type="submit" class="archive-button">Archive record</button>
+</form>
+<?php endif; ?>
 <?php if($role==='admin'): ?><form id="record-availability" method="post" class="archive-card<?= $archiveKind === 'publication' ? ' archive-admin-publication-availability' : '' ?>"><?= csrfField() ?><input type="hidden" name="record_id" value="<?= $id ?>"><input type="hidden" name="action" value="<?= $record['deactivated_at']?'restore':'deactivate' ?>"><h2>Record availability</h2><p>Deactivation removes the record from active lists and keeps its documents and history. Administrators can restore it here.</p><button type="submit" class="archive-button secondary<?= $archiveKind === 'publication' ? ' archive-publication-availability-action' . ($record['deactivated_at'] ? ' is-restore' : '') : '' ?>"><?= $record['deactivated_at']?'Restore record':'Deactivate record' ?></button></form><?php endif; ?>
 <?php archiveShellClose($user); ?>

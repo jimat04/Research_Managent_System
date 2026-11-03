@@ -1496,7 +1496,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
   }
 </style>
 
-<div class="module-hub<?= $role === 'admin' ? ' admin-monitoring-dashboard rms-admin-dashboard' : '' ?>"
+<div class="module-hub admin-monitoring-dashboard rms-admin-dashboard"
      data-dashboard-live
      data-dashboard-data-url="<?= monitoringDashboardEscape(($role === 'admin' ? SITE_URL . 'pages/admin/admin-dashboard.php' : SITE_URL . 'pages/staff/staff-dashboard.php') . '?dashboard_data=1') ?>">
   <header class="module-greeting">
@@ -1514,9 +1514,6 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         <div class="academic-year-meta">
           <span class="academic-year-label">Academic Year</span>
           <strong data-dashboard-academic-year><?= monitoringDashboardEscape($activeAcademicYear['label']) ?></strong>
-          <?php if ($role !== 'admin'): ?>
-          <span data-dashboard-semester><?= monitoringDashboardEscape($activeAcademicYear['semester']) ?></span>
-          <?php endif; ?>
         </div>
       </div>
       <p class="dashboard-live-status" data-dashboard-live-status data-dashboard-initial-updated-at="<?= date(DATE_ATOM) ?>" role="status" aria-live="polite" aria-atomic="true">Updated <?= date('g:i A') ?></p>
@@ -1730,7 +1727,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
     body.admin-body .admin-dashboard .admin-page-content .admin-monitoring-dashboard .researcher-legend-row small { font-size: 11px; line-height: 1.45; }
   </style>
 
-  <?php if ($role === 'admin'): ?>
+  <?php if (in_array($role, ['admin', 'research_staff'], true)): ?>
   <style>
     body.admin-body .admin-dashboard .admin-page-content:has(.rms-admin-dashboard) {
       padding: 24px 32px;

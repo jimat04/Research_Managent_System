@@ -2,5 +2,13 @@
     "require": {
         "vlucas/phpdotenv": "^5.7",
         "phpmailer/phpmailer": "^7.1"
+    },
+    "require-dev": {
+        "pestphp/pest": "^3.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
     }
 }

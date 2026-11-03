@@ -58,6 +58,32 @@ function notif_link_url($link) {
   }
 
   if (preg_match('#^(https?:)?//#i', $link)) {
+    $target = parse_url($link);
+    $site = parse_url(SITE_URL);
+    $target_host = strtolower((string) ($target['host'] ?? ''));
+    $site_host = strtolower((string) ($site['host'] ?? ''));
+
+    // Old local notification links can retain an obsolete port after the
+    // app's SITE_URL changes. Keep their route and query, but use this app's
+    // configured origin when the saved link points to the same host.
+    if ($target_host !== '' && $target_host === $site_host) {
+      $scheme = strtolower((string) ($site['scheme'] ?? 'http'));
+      $origin = $scheme . '://' . $site['host'];
+      if (isset($site['port'])) {
+        $origin .= ':' . (int) $site['port'];
+      }
+
+      $normalized = $origin . (string) ($target['path'] ?? '/');
+      if (isset($target['query'])) {
+        $normalized .= '?' . $target['query'];
+      }
+      if (isset($target['fragment'])) {
+        $normalized .= '#' . $target['fragment'];
+      }
+
+      return $normalized;
+    }
+
     return $link;
   }
 

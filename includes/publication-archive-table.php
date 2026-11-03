@@ -8,6 +8,6 @@
 <td class="archive-no-print"><div class="archive-links<?= $role === 'admin' ? ' archive-publication-admin-actions' : '' ?>"><a href="<?= archiveEscape($url) ?>">View</a><?php if(archiveCan($conn,'publication',$row,$user,'manage')&&empty($row['deactivated_at'])): ?><a href="<?= archiveEscape($formUrl.'?id='.$rid.$navigationSuffix) ?>">Edit</a><?php endif; ?>
 <?php if(!empty($row['file_path'])): ?><a href="<?= archiveEscape($documentDownloadUrl.'?type=publication&id='.$rid.'&mode=viewer') ?>">Published document</a><?php endif; ?>
 <?php $external=(string)($row['publication_url']?:($row['evidence_url']??'')); if(publicationHttpUrl($external)): ?><a href="<?= archiveEscape($external) ?>" target="_blank" rel="noopener noreferrer">Publication URL</a><?php endif; ?>
-<?php if($role==='admin'): ?><a href="<?= archiveEscape($url.'#record-availability') ?>"><?= $row['deactivated_at']?'Restore':'Archive / deactivate' ?></a><?php endif; ?>
-<a href="<?= archiveEscape($url.'#history') ?>">History</a></div></td></tr><?php endforeach; ?>
+<?php if($role==='admin'): ?><a href="<?= archiveEscape($url.'#record-availability') ?>"><?= $row['deactivated_at']?'Restore':'Manage availability' ?></a><?php endif; ?>
+<?php if (!$hidePublicationHistory): ?><a href="<?= archiveEscape($url.'#history') ?>">History</a><?php endif; ?></div></td></tr><?php endforeach; ?>
 </tbody></table></div><p>Page <?= $page ?> of <?= $pages ?> · <?= (int)$totals['total'] ?> records</p><nav class="archive-links archive-no-print" aria-label="Publication pages"><?php if($page>1): ?><a href="<?= archiveEscape($link(['page'=>$page-1])) ?>">Previous</a><?php endif; ?><?php if($page<$pages): ?><a href="<?= archiveEscape($link(['page'=>$page+1])) ?>">Next</a><?php endif; ?></nav><?php endif; ?></section>

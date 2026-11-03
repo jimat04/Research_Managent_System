@@ -1,0 +1,6 @@
+# Manual RMS verification is operator-run; omit automated E2E infrastructure.
+/tests/e2e-browser/
+/database/e2e/
+/docs/testing/E2E_WALKTHROUGH.md
+/includes/e2e-*.php
+/test-results/*e2e*

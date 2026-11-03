@@ -254,11 +254,12 @@ if (!$invalid_chapter && $project) {
 }
 
 $chapter_stage_available = $project
-    && in_array((string) $project['status'], ['title_approved', 'approved', 'ongoing'], true);
+    && rms_project_status_allows_chapter_submission((string) $project['status']);
 $research_eligibility_ok = $project
     && (($user['role'] ?? '') !== 'student' || rms_student_program_is_eligible($conn, (int) $user_id))
     && rms_project_students_are_eligible($conn, $project_id);
 $chapter_stage_available = $chapter_stage_available && $research_eligibility_ok;
+$previous_status = null;
 if ($chapter_stage_available && $chapter_number > 1) {
     $previous_stmt = $conn->prepare(
         "SELECT status FROM chapters WHERE project_id = ? AND chapter_number = ? AND deleted_at IS NULL LIMIT 1"
@@ -267,13 +268,12 @@ if ($chapter_stage_available && $chapter_number > 1) {
         $previous_number = $chapter_number - 1;
         $previous_stmt->bind_param('ii', $project_id, $previous_number);
         $previous_stmt->execute();
-        $previous_status = (string) ($previous_stmt->get_result()->fetch_assoc()['status'] ?? '');
+        $previous_status = $previous_stmt->get_result()->fetch_assoc()['status'] ?? null;
         $previous_stmt->close();
-        $chapter_stage_available = $previous_status === 'approved';
-    } else {
-        $chapter_stage_available = false;
     }
 }
+$chapter_stage_available = $chapter_stage_available
+    && rms_chapter_sequence_allows_submission($chapter_number, $previous_status);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
     $errors[] = 'Your form has expired. Please try again.';
@@ -342,9 +342,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             }
             $locked_project = $project_lock->get_result()->fetch_assoc();
             $project_lock->close();
-            if (!$locked_project || !in_array((string) $locked_project['status'], ['title_approved', 'approved', 'ongoing'], true)) {
+            if (!$locked_project || !rms_project_status_allows_chapter_submission((string) $locked_project['status'])) {
                 throw new Exception('Chapter submission requires an approved research title.');
             }
+            $prior_status = null;
             if ($chapter_number > 1) {
                 $prior_lock = $conn->prepare("SELECT status FROM chapters WHERE project_id = ? AND chapter_number = ? AND deleted_at IS NULL FOR UPDATE");
                 if (!$prior_lock) {
@@ -353,11 +354,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 $previous_number = $chapter_number - 1;
                 $prior_lock->bind_param('ii', $project_id, $previous_number);
                 $prior_lock->execute();
-                $prior_status = (string) ($prior_lock->get_result()->fetch_assoc()['status'] ?? '');
+                $prior_status = $prior_lock->get_result()->fetch_assoc()['status'] ?? null;
                 $prior_lock->close();
-                if ($prior_status !== 'approved') {
-                    throw new Exception('The previous chapter must be approved before proceeding.');
-                }
+            }
+            if (!rms_chapter_sequence_allows_submission($chapter_number, $prior_status)) {
+                throw new Exception('The previous chapter must be approved before proceeding.');
             }
             if (!$chapter) {
                 $insert_stmt = $conn->prepare("INSERT INTO chapters

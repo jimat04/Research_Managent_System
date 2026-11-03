@@ -970,9 +970,9 @@ renderStaffShell(
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    background: rgba(13,148,136,0.10);
-    color: #0d9488;
-    border: 1px solid rgba(13,148,136,0.20);
+    background: rgba(91,30,188,0.10);
+    color: #5b1ebc;
+    border: 1px solid rgba(91,30,188,0.20);
   }
   .badge-kind.rep {
     background: rgba(91,30,188,0.10);
@@ -981,7 +981,7 @@ renderStaffShell(
   }
 
   .file-link {
-    color: #0d9488;
+    color: #5b1ebc;
     text-decoration: none;
     font-weight: 600;
     font-size: 13px;
@@ -1120,6 +1120,11 @@ renderStaffShell(
     td, th { padding: 12px; font-size: 13px; }
   }
 </style>
+
+<header class="staff-page-heading">
+  <h1>Milestone Verification</h1>
+  <p>Review and approve milestone documents (MOU, NDA, Progress, Terminal) submitted by students.</p>
+</header>
 
 <?php if (isset($_SESSION['module_success'])): ?>
   <div class="alert alert-success">✓ <?php echo smil_se($_SESSION['module_success']); unset($_SESSION['module_success']); ?></div>

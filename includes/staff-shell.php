@@ -25,6 +25,77 @@
  */
 require_once __DIR__ . '/logout-transition.php';
 require_once __DIR__ . '/notification-popover.php';
+require_once __DIR__ . '/shell-icons.php';
+
+function staffShellNavigationContainsActive(array $node, callable $isActive): bool
+{
+    foreach ($node['links'] ?? [] as $link) {
+        if ($isActive($link[0])) {
+            return true;
+        }
+    }
+
+    if (isset($node['href']) && $isActive($node['href'])) {
+        return true;
+    }
+
+    foreach ($node['children'] ?? [] as $child) {
+        if (staffShellNavigationContainsActive($child, $isActive)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function renderStaffShellNavigationNode(array $node, callable $isActive, string $parentId = '', int $depth = 0): void
+{
+    $title = (string) ($node['title'] ?? '');
+    $icon = (string) ($node['icon'] ?? 'records');
+    $links = $node['links'] ?? [];
+    $children = $node['children'] ?? [];
+
+    if ($links === [] && $children === []) {
+        $href = (string) ($node['href'] ?? '#');
+        $active = $isActive($href);
+        $classes = 'staff-nav-item' . (!empty($node['dashboard']) ? ' staff-nav-dashboard' : ' staff-nav-subitem') . ($active ? ' active' : '');
+        echo '<a class="' . $classes . '" href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" title="' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '"' . ($active ? ' aria-current="page"' : '') . '>';
+        echo '<span class="staff-nav-icon" aria-hidden="true">' . rmsShellIcon($icon) . '</span>';
+        echo '<span class="staff-nav-label">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+        if ((int) ($node['badge'] ?? 0) > 0) {
+            echo '<span class="staff-nav-badge">' . (int) $node['badge'] . '</span>';
+        }
+        echo '</a>';
+        return;
+    }
+
+    $path = $parentId . '/' . $title;
+    $groupId = 'staff-nav-group-' . substr(sha1($path), 0, 8);
+    $groupActive = staffShellNavigationContainsActive($node, $isActive);
+    $groupClass = 'staff-nav-group' . ($depth > 0 ? ' staff-nav-subgroup' : '');
+    echo '<details class="' . $groupClass . '"' . ($groupActive ? ' open' : '') . '>';
+    echo '<summary class="staff-nav-group-summary" title="' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '" aria-controls="' . $groupId . '">';
+    echo '<span class="staff-nav-icon" aria-hidden="true">' . rmsShellIcon($icon) . '</span>';
+    echo '<span class="staff-nav-label">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+    echo '<span class="staff-nav-chevron" aria-hidden="true"></span>';
+    echo '</summary><div class="staff-nav-subitems" id="' . $groupId . '"><div class="staff-nav-subitems-inner">';
+
+    foreach ($children as $child) {
+        renderStaffShellNavigationNode($child, $isActive, $path, $depth + 1);
+    }
+    foreach ($links as [$href, $label, $linkIcon, $badgeCount]) {
+        $active = $isActive($href);
+        echo '<a class="staff-nav-item staff-nav-subitem' . ($active ? ' active' : '') . '" href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" title="' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '"' . ($active ? ' aria-current="page"' : '') . '>';
+        echo '<span class="staff-nav-icon" aria-hidden="true">' . rmsShellIcon($linkIcon) . '</span>';
+        echo '<span class="staff-nav-label">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span>';
+        if ((int) $badgeCount > 0) {
+            echo '<span class="staff-nav-badge">' . (int) $badgeCount . '</span>';
+        }
+        echo '</a>';
+    }
+
+    echo '</div></div></details>';
+}
 
 function renderStaffShell($user, $current_page, $page_title, $page_subtitle = '') {
     // Normalise the user object
@@ -60,13 +131,20 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
     // Get badge counts for nav items
     global $conn;
+    $user_id = (int) ($user['user_id'] ?? 0);
     $stat_contact   = 0;
-    $stat_defenses  = 0;
-    $stat_revisions = 0;
     $unread_notifications = 0;
+    $unread_messages = 0;
     if (isset($conn)) {
-        $user_id = (int) ($user['user_id'] ?? 0);
         if ($user_id > 0) {
+            $message_stmt = $conn->prepare('SELECT COUNT(*) AS unread_count FROM messages WHERE recipient_id = ? AND is_read = 0');
+            if ($message_stmt) {
+                $message_stmt->bind_param('i', $user_id);
+                $message_stmt->execute();
+                $unread_messages = (int) ($message_stmt->get_result()->fetch_assoc()['unread_count'] ?? 0);
+                $message_stmt->close();
+            }
+
             $notification_stmt = $conn->prepare('SELECT COUNT(*) AS unread_count FROM notifications WHERE user_id = ? AND is_read = 0');
             if (!$notification_stmt) {
                 throw new RuntimeException('Unable to load unread notifications: ' . $conn->error);
@@ -81,44 +159,6 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         if ($count_result) {
             $stat_contact = (int) ($count_result->fetch_assoc()['count'] ?? 0);
         }
-        // Upcoming defenses (status scheduled/rescheduled with date >= now).
-        // defense_schedule is in the main schema, but defend against older
-        // installs that may not have it yet.
-        $has_defense_tbl = false;
-        $def_tbl_check = $conn->query("SHOW TABLES LIKE 'defense_schedule'");
-        if ($def_tbl_check) {
-            $has_defense_tbl = ($def_tbl_check->num_rows > 0);
-            $def_tbl_check->free();
-        }
-        if ($has_defense_tbl) {
-            $def_res = $conn->query("SELECT COUNT(*) AS c FROM defense_schedule WHERE status IN ('scheduled','rescheduled') AND schedule_date >= NOW()");
-            if ($def_res) {
-                $stat_defenses = (int) ($def_res->fetch_assoc()['c'] ?? 0);
-                $def_res->close();
-            }
-        }
-
-        $project_deleted_clause = '';
-        $project_deleted_check = $conn->query("SHOW COLUMNS FROM research_projects LIKE 'deleted_at'");
-        if ($project_deleted_check) {
-            $project_deleted_clause = $project_deleted_check->num_rows > 0 ? ' AND deleted_at IS NULL' : '';
-            $project_deleted_check->close();
-        }
-        $chapter_deleted_clause = '';
-        $chapter_deleted_check = $conn->query("SHOW COLUMNS FROM chapters LIKE 'deleted_at'");
-        if ($chapter_deleted_check) {
-            $chapter_deleted_clause = $chapter_deleted_check->num_rows > 0 ? ' AND deleted_at IS NULL' : '';
-            $chapter_deleted_check->close();
-        }
-        $revision_res = $conn->query("
-            SELECT
-                (SELECT COUNT(*) FROM research_projects WHERE status IN ('for_revision','revision_required')" . $project_deleted_clause . ")
-                + (SELECT COUNT(*) FROM chapters WHERE status = 'revision_required'" . $chapter_deleted_clause . ") AS c
-        ");
-        if ($revision_res) {
-            $stat_revisions = (int) ($revision_res->fetch_assoc()['c'] ?? 0);
-            $revision_res->close();
-        }
     }
 
     // Canonical staff nav. Each row: [href, label, icon, exists, badge_count].
@@ -127,61 +167,106 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     //
     // All hrefs are absolute (SITE_URL-based) so the sidebar works from any
     // directory — e.g. /pages/staff/ and /pages/shared/ both resolve the same.
-    $nav = [
-        'Overview' => [
-            [SITE_URL . 'pages/staff/staff-dashboard.php', 'Dashboard', '📊', true, 0],
-        ],
-    ];
-    $moduleIcons = [
-        'seminars' => '📋', 'trainings' => '🎓', 'workshops' => '🛠️',
-        'research_proposals' => '📝', 'research_review' => '🔎', 'research_approval' => '✅',
-        'ongoing_research' => '🔄', 'completed_research' => '🏁', 'research_outputs' => '📊',
-        'journal_publications' => '📚', 'conference_presentations' => '🎤', 'research_repository' => '🗄️',
-        'copyrights' => '©️', 'patents_utility_models' => '💡', 'innovation_technology_transfer' => '🚀',
-    ];
+    $permissionModules = rmsPermissionModules();
     $permissionMatrix = ($shell_user['role'] ?? '') === 'admin'
         ? []
         : getStaffPermissionMatrix((int) ($user['user_id'] ?? 0));
-    foreach (rmsPermissionModules() as $moduleKey => $module) {
-        $moduleItems = [];
-        foreach ($module['pages'] as $pageKey => $label) {
+    $moduleIcons = [
+        'add_activity' => 'activity', 'add_upcoming_activity' => 'seminar', 'add_conducted_activity' => 'records',
+        'view_activity' => 'monitor', 'upcoming_activities' => 'document', 'ongoing_activities' => 'monitor',
+        'conducted_activities' => 'output', 'seminars' => 'seminar', 'trainings' => 'presentation', 'workshops' => 'activity',
+        'research_proposals' => 'document', 'research_review' => 'monitor', 'research_approval' => 'reports',
+        'ongoing_research' => 'monitor', 'completed_research' => 'records', 'research_outputs' => 'output',
+        'journal_publications' => 'publication', 'conference_presentations' => 'presentation', 'research_repository' => 'repository',
+        'copyrights' => 'copyright', 'patents_utility_models' => 'output', 'innovation_technology_transfer' => 'users',
+    ];
+    $moduleLinks = static function (string $moduleKey, array $pageKeys, array $labelOverrides = []) use ($permissionModules, $permissionMatrix, $moduleIcons, $shell_user): array {
+        $modulePages = $permissionModules[$moduleKey]['pages'] ?? [];
+        $links = [];
+        foreach ($pageKeys as $pageKey) {
+            if (!isset($modulePages[$pageKey])) {
+                continue;
+            }
             $level = ($shell_user['role'] ?? '') === 'admin'
                 ? 'manage'
                 : ($permissionMatrix[$moduleKey]['pages'][$pageKey] ?? 'none');
             if (!in_array($level, ['view', 'manage'], true)) {
                 continue;
             }
-            $moduleItems[] = [
+            $links[] = [
                 SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($pageKey),
-                $label,
-                $moduleIcons[$pageKey] ?? '📄',
-                true,
+                $labelOverrides[$pageKey] ?? $modulePages[$pageKey],
+                $moduleIcons[$pageKey] ?? 'document',
                 0,
             ];
         }
-        if ($moduleItems) {
-            $nav[$module['label']] = $moduleItems;
-        }
+        return $links;
+    };
+
+    $navTree = [
+        ['title' => 'Dashboard', 'href' => SITE_URL . 'pages/staff/staff-dashboard.php', 'icon' => 'dashboard', 'dashboard' => true],
+    ];
+
+    $capacityChildren = [];
+    $capacityAddLinks = $moduleLinks('research_capacity_building',
+        ['add_upcoming_activity', 'add_conducted_activity'],
+        ['add_upcoming_activity' => 'Upcoming', 'add_conducted_activity' => 'Completed']
+    );
+    if ($capacityAddLinks) {
+        $capacityChildren[] = ['title' => 'Add', 'icon' => 'activity', 'links' => $capacityAddLinks];
     }
-    // Keep staff's legacy tools beside the corresponding admin research areas.
-    // Routes retain their existing role and permission checks; this only
-    // changes where they appear in the navigation.
-    $nav['Research Development'] ??= [];
-    $nav['Research Development'][] = [SITE_URL . 'pages/staff/document-verification.php', 'Document Verification', '📄', true, 0];
-    $nav['Research Development'][] = [SITE_URL . 'pages/staff/staff-revisions.php', 'Revision Returns', '↩️', true, $stat_revisions];
+    $capacityViewLinks = $moduleLinks('research_capacity_building',
+        ['upcoming_activities', 'ongoing_activities', 'conducted_activities']
+    );
+    if ($capacityViewLinks) {
+        $capacityChildren[] = ['title' => 'View', 'icon' => 'monitor', 'links' => $capacityViewLinks];
+    }
+    if ($capacityChildren) {
+        $navTree[] = [
+            'title' => 'Research Capacity Building',
+            'icon' => 'seminar',
+            'children' => [
+                ['title' => 'Research Activities', 'icon' => 'activity', 'children' => $capacityChildren],
+            ],
+        ];
+    }
 
-    $nav['Research Implementation & Outputs'] ??= [];
-    $nav['Research Implementation & Outputs'][] = [SITE_URL . 'pages/staff/staff-defense.php', 'Defense Schedule', '🗓️', true, $stat_defenses];
+    $developmentLinks = $moduleLinks('research_development', ['research_proposals', 'research_review', 'research_approval']);
+    $navTree[] = ['title' => 'Research Development', 'icon' => 'records', 'links' => $developmentLinks];
 
-    $nav['Communication'] = [
-        [SITE_URL . 'pages/shared/messages.php', 'Messages', '💬', true, 0],
-        [SITE_URL . 'pages/shared/notifications.php', 'Notifications', '🔔', true, 0],
-        [SITE_URL . 'pages/staff/contact-messages.php', 'Contact messages', '✉️', true, $stat_contact],
-        [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
+    $implementationLinks = $moduleLinks('research_implementation_outputs', ['ongoing_research', 'completed_research', 'research_outputs']);
+    if ($implementationLinks) {
+        $navTree[] = ['title' => 'Research Implementation & Outputs', 'icon' => 'output', 'links' => $implementationLinks];
+    }
+
+    $publicationLinks = $moduleLinks('publication_dissemination',
+        ['journal_publications', 'conference_presentations', 'research_repository'],
+        ['conference_presentations' => 'Conference presentations']
+    );
+    if ($publicationLinks) {
+        $navTree[] = ['title' => 'Publication & Dissemination', 'icon' => 'publication', 'links' => $publicationLinks];
+    }
+
+    $ipLinks = $moduleLinks('intellectual_property_utilization', ['copyrights', 'patents_utility_models', 'innovation_technology_transfer']);
+    if ($ipLinks) {
+        $navTree[] = ['title' => 'Intellectual Property & Utilization', 'icon' => 'copyright', 'links' => $ipLinks];
+    }
+
+    $navTree[] = [
+        'title' => 'Communication',
+        'icon' => 'messages',
+        'links' => [
+            [SITE_URL . 'pages/shared/notifications.php', 'Notifications', 'notifications', 0],
+            [SITE_URL . 'pages/staff/contact-messages.php', 'Contact messages', 'contact', $stat_contact],
+            [SITE_URL . 'pages/shared/profile.php', 'Profile', 'profile', 0],
+        ],
     ];
-    $nav['Account'] = [
-        [SITE_URL . 'pages/shared/settings.php', 'Account settings', '⚙️', true, 0],
+    $navTree[] = [
+        'title' => 'Account',
+        'icon' => 'settings',
+        'links' => [[SITE_URL . 'pages/shared/settings.php', 'Account settings', 'settings', 0]],
     ];
+
     // Active-state matcher. Matches either the full target (e.g.
     // 'http://localhost/rms/pages/shared/profile.php') or the bare basename,
     // so shared pages highlight correctly when visited.
@@ -244,6 +329,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 </head>
 <body>
 <div class="staff-dashboard" data-role-shell="staff">
+  <a class="staff-skip-link" href="#staff-main-content">Skip to main content</a>
   <button type="button" class="staff-sidebar-scrim" aria-label="Close staff navigation" tabindex="-1"></button>
   <!-- SIDEBAR -->
   <aside class="staff-sidebar" id="staff-sidebar" aria-label="Research staff navigation" data-role-shell-sidebar>
@@ -258,64 +344,14 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     </div>
 
     <nav class="staff-sidebar-nav" aria-label="Primary" data-role-shell-nav>
-      <?php foreach ($nav as $group => $items): ?>
-        <?php if ($group === 'Overview'): ?>
-          <?php foreach ($items as $item): ?>
-            <?php [$href, $label, $icon, $exists] = $item; $active = $exists && $is_active($href); ?>
-            <a class="staff-nav-item staff-nav-dashboard<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
-              <span class="staff-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
-              <span class="staff-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
-            </a>
-          <?php endforeach; ?>
-          <?php continue; ?>
-        <?php endif; ?>
-        <?php
-          $groupId = 'staff-nav-group-' . substr(sha1($group), 0, 8);
-          $groupActive = false;
-          foreach ($items as $candidateItem) {
-              if ($is_active($candidateItem[0])) {
-                  $groupActive = true;
-                  break;
-              }
-          }
-          $groupIcon = $items[0][2] ?? '📁';
-        ?>
-        <details class="staff-nav-group"<?php echo $groupActive ? ' open' : ''; ?>>
-          <summary class="staff-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>">
-            <span class="staff-nav-icon" aria-hidden="true"><?php echo $groupIcon; ?></span>
-            <span class="staff-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
-            <span class="staff-nav-chevron" aria-hidden="true"></span>
-          </summary>
-          <div class="staff-nav-subitems" id="<?php echo $groupId; ?>">
-            <?php foreach ($items as $item): ?>
-          <?php
-            [$href, $label, $icon, $exists, $badge_count] = $item;
-            $active   = $exists ? $is_active($href) : false;
-            $classes  = 'staff-nav-item staff-nav-subitem' . ($active ? ' active' : '');
-            $attrs    = $active ? ' aria-current="page"' : '';
-            if (!$exists) {
-                $attrs .= ' data-todo="build"';
-                $href   = '#';
-            }
-          ?>
-          <a class="<?php echo $classes; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $attrs; ?>>
-            <span class="staff-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
-            <span class="staff-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
-            <?php if ($badge_count > 0): ?>
-              <span class="staff-nav-badge"><?php echo $badge_count; ?></span>
-            <?php endif; ?>
-          </a>
-            <?php endforeach; ?>
-          </div>
-        </details>
-      <?php endforeach; ?>
+      <?php foreach ($navTree as $navNode) { renderStaffShellNavigationNode($navNode, $is_active); } ?>
 
       <div class="staff-nav-session">
         <div class="staff-nav-group-title">Session</div>
         <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="staff-nav-logout-form" data-logout-confirm>
           <?php echo csrfField(); ?>
           <button type="submit" class="staff-nav-item staff-nav-logout">
-          <span class="staff-nav-icon" aria-hidden="true">🚪</span>
+          <span class="staff-nav-icon" aria-hidden="true"><?php echo rmsShellIcon('logout'); ?></span>
           <span class="staff-nav-label">Logout</span>
           </button>
         </form>
@@ -334,17 +370,11 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   </aside>
 
   <!-- MAIN CONTENT -->
-  <main class="staff-main">
+  <main class="staff-main" id="staff-main-content" tabindex="-1">
     <header class="staff-topbar" data-role-shell-topbar>
       <div class="staff-topbar-left">
         <button type="button" class="staff-mobile-menu-btn" aria-label="Open staff navigation" aria-controls="staff-sidebar" aria-expanded="false">☰</button>
         <button type="button" class="staff-collapse-btn" aria-label="Collapse sidebar" aria-controls="staff-sidebar" title="Collapse sidebar" data-role-shell-collapse><span aria-hidden="true">‹</span></button>
-        <div class="staff-topbar-heading">
-          <h1 class="staff-topbar-title"><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?></h1>
-          <?php if ($page_subtitle_safe !== ''): ?>
-          <p class="staff-topbar-subtitle"><?php echo htmlspecialchars($page_subtitle_safe, ENT_QUOTES, 'UTF-8'); ?></p>
-          <?php endif; ?>
-        </div>
       </div>
       <div class="staff-topbar-search">
         <span class="staff-topbar-search-icon" aria-hidden="true">⌕</span>
@@ -352,14 +382,27 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         <div class="staff-search-suggestions" id="staff-search-suggestions" role="listbox" aria-label="Matching RMS pages" hidden data-role-shell-suggestions></div>
       </div>
       <div class="staff-topbar-right">
+        <a class="staff-topbar-message" href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/messages.php', ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo htmlspecialchars($unread_messages > 0 ? 'Messages, ' . $unread_messages . ' unread' : 'Messages', ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars($unread_messages > 0 ? $unread_messages . ' unread messages' : 'Messages', ENT_QUOTES, 'UTF-8'); ?>">
+          <?php echo rmsShellIcon('messages'); ?>
+          <?php if ($unread_messages > 0): ?><span class="staff-topbar-message-badge" aria-hidden="true"><?php echo $unread_messages > 99 ? '99+' : $unread_messages; ?></span><?php endif; ?>
+        </a>
         <?php renderNotificationPopover($user_id, $unread_notifications, 'staff'); ?>
-        <div class="staff-topbar-user">
-          <div class="staff-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="staff-topbar-user-text">
-            <div class="staff-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Staff', ENT_QUOTES, 'UTF-8'); ?></div>
-            <div class="staff-topbar-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
+        <div class="staff-topbar-separator" aria-hidden="true"></div>
+        <details class="staff-profile-menu">
+          <summary class="staff-topbar-user" aria-label="Open staff profile menu">
+            <span class="staff-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="staff-topbar-user-text"><span class="staff-topbar-user-name"><?php echo htmlspecialchars($full_name, ENT_QUOTES, 'UTF-8'); ?></span><span class="staff-topbar-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span></span>
+            <span class="staff-profile-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="staff-profile-dropdown">
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/profile.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo rmsShellIcon('profile'); ?><span>Profile</span></a>
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/settings.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo rmsShellIcon('settings'); ?><span>Account settings</span></a>
+            <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" data-logout-confirm>
+              <?php echo csrfField(); ?>
+              <button type="submit" class="staff-profile-action"><?php echo rmsShellIcon('logout'); ?><span>Log out</span></button>
+            </form>
           </div>
-        </div>
+        </details>
       </div>
     </header>
 
@@ -400,7 +443,17 @@ function renderStaffShellClose() {
     button.setAttribute('aria-expanded', String(open));
   });
   if (scrim) scrim.addEventListener('click', closeMenu);
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
+  document.addEventListener('click', (event) => {
+    const targetMenu = event.target instanceof Element ? event.target.closest('.staff-profile-menu') : null;
+    document.querySelectorAll('.staff-profile-menu[open]').forEach((menu) => {
+      if (menu !== targetMenu) menu.removeAttribute('open');
+    });
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    closeMenu();
+    document.querySelectorAll('.staff-profile-menu[open]').forEach((menu) => menu.removeAttribute('open'));
+  });
   window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
 })();
 </script>

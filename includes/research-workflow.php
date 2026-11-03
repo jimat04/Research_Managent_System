@@ -704,6 +704,63 @@ function rms_project_students_are_eligible(mysqli $conn, int $project_id): bool
     return true;
 }
 
+function rms_project_status_allows_chapter_submission(string $status): bool
+{
+    return in_array($status, ['title_approved', 'approved', 'ongoing'], true);
+}
+
+function rms_chapter_sequence_allows_submission(int $chapter_number, ?string $previous_chapter_status): bool
+{
+    if ($chapter_number < 1 || $chapter_number > 5) {
+        return false;
+    }
+
+    return $chapter_number === 1 || $previous_chapter_status === 'approved';
+}
+
+function rms_approved_chapter_numbers_are_complete(array $chapter_numbers): bool
+{
+    $approved_numbers = [];
+    foreach ($chapter_numbers as $chapter_number) {
+        if (!is_int($chapter_number) && !(is_string($chapter_number) && ctype_digit($chapter_number))) {
+            continue;
+        }
+        $chapter_number = (int) $chapter_number;
+        if ($chapter_number >= 1 && $chapter_number <= 5) {
+            $approved_numbers[$chapter_number] = true;
+        }
+    }
+
+    return count($approved_numbers) === 5;
+}
+
+function rms_submission_review_completes_project(string $submission_type, string $decision): bool
+{
+    return $submission_type === 'final_manuscript' && $decision === 'approved';
+}
+
+function rms_submission_review_permission(string $decision): ?string
+{
+    return match ($decision) {
+        'approved' => 'research_approval',
+        'returned' => 'research_review',
+        default => null,
+    };
+}
+
+function rms_review_role_can_decide(string $role, string $decision, ?string $granted_permission): bool
+{
+    $required_permission = rms_submission_review_permission($decision);
+    if ($required_permission === null) {
+        return false;
+    }
+    if ($role === 'admin') {
+        return true;
+    }
+
+    return $role === 'research_staff' && $granted_permission === $required_permission;
+}
+
 function rms_project_has_all_approved_chapters(mysqli $conn, int $project_id): bool
 {
     if ($project_id <= 0) {
@@ -719,7 +776,7 @@ function rms_project_has_all_approved_chapters(mysqli $conn, int $project_id): b
     $deleted_filter = $has_deleted_at ? ' AND deleted_at IS NULL' : '';
 
     $stmt = $conn->prepare(
-        'SELECT COUNT(DISTINCT chapter_number) AS approved_count
+        'SELECT DISTINCT chapter_number
            FROM chapters
           WHERE project_id = ?
             AND chapter_number BETWEEN 1 AND 5
@@ -734,9 +791,13 @@ function rms_project_has_all_approved_chapters(mysqli $conn, int $project_id): b
         $stmt->close();
         throw new RuntimeException('Unable to verify approved chapters: ' . $error);
     }
-    $approved_count = (int) ($stmt->get_result()->fetch_assoc()['approved_count'] ?? 0);
+    $result = $stmt->get_result();
+    $approved_chapter_numbers = [];
+    while ($row = $result->fetch_assoc()) {
+        $approved_chapter_numbers[] = (int) $row['chapter_number'];
+    }
     $stmt->close();
-    return $approved_count === 5;
+    return rms_approved_chapter_numbers_are_complete($approved_chapter_numbers);
 }
 
 function rms_latest_final_manuscript_status(mysqli $conn, int $project_id): ?string
@@ -876,7 +937,11 @@ function rms_capture_submission_version(mysqli $conn, int $project_id, ?int $cha
 
 function rms_submission_can_review(int $user_id, string $decision): bool
 {
-    if ($user_id <= 0 || !in_array($decision, ['approved', 'returned'], true)) {
+    if ($user_id <= 0) {
+        return false;
+    }
+    $permission = rms_submission_review_permission($decision);
+    if ($permission === null) {
         return false;
     }
 
@@ -889,14 +954,16 @@ function rms_submission_can_review(int $user_id, string $decision): bool
     $role = (string) ($user_stmt->get_result()->fetch_assoc()['role'] ?? '');
     $user_stmt->close();
     if ($role === 'admin') {
-        return true;
+        return rms_review_role_can_decide($role, $decision, null);
     }
     if ($role !== 'research_staff') {
-        return false;
+        return rms_review_role_can_decide($role, $decision, null);
     }
 
-    $permission = $decision === 'approved' ? 'research_approval' : 'research_review';
-    return hasModulePermission($user_id, 'research_development', 'manage', $permission);
+    $granted_permission = hasModulePermission($user_id, 'research_development', 'manage', $permission)
+        ? $permission
+        : null;
+    return rms_review_role_can_decide($role, $decision, $granted_permission);
 }
 
 function rms_review_submission(
@@ -1097,7 +1164,7 @@ function rms_review_submission(
             }
         } else {
             $project_update = null;
-            if ($decision === 'approved') {
+            if (rms_submission_review_completes_project((string) $version['submission_type'], $decision)) {
                 $project_status = 'completed';
                 $project_update = $conn->prepare(
                     "UPDATE research_projects SET status = ?, updated_at = NOW()

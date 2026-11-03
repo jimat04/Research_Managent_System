@@ -430,7 +430,9 @@ renderAdminShell(
                       <?php if (!empty($project['can_return_approved'])): ?>
                         <a href="<?php echo SITE_URL; ?>pages/shared/research-detail.php?id=<?php echo (int) $project['project_id']; ?>&amp;revision=1#admin-revision-actions" class="btn btn-secondary btn-sm">Return approved work for revision</a>
                       <?php endif; ?>
-                      <button type="button" class="btn project-delete-button" data-project-id="<?php echo (int) $project['project_id']; ?>" data-project-title="<?php echo htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8'); ?>">Delete</button>
+                      <?php if ($research_view !== 'completed'): ?>
+                        <button type="button" class="btn project-delete-button" data-project-id="<?php echo (int) $project['project_id']; ?>" data-project-title="<?php echo htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8'); ?>">Delete</button>
+                      <?php endif; ?>
                       <?php if ($project['status'] === 'archived' && (int) $project['approved_chapters'] >= 1 && (int) $project['approved_chapters'] <= 4): ?>
                         <form method="POST" action="admin-research-management.php?status=archived">
                           <?php echo csrfField(); ?>

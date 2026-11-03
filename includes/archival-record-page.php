@@ -59,6 +59,7 @@ if ($dedicatedPublication) {
 $archiveNavigationParams = [];
 $publicationSection = '';
 $publicationSectionType = '';
+$hidePublicationHistory = false;
 if ($archiveKind === 'publication' && in_array($role, ['admin', 'research_staff'], true)) {
     $modulePage = is_string($_GET['module_page'] ?? null) ? $_GET['module_page'] : '';
     $validModulePages = $role === 'admin'
@@ -80,6 +81,9 @@ if ($archiveKind === 'publication' && in_array($role, ['admin', 'research_staff'
     elseif ($modulePage === 'book_chapters') $archiveNavigationParams['publication_type'] = 'book_chapter';
     elseif ($modulePage === 'research_repository') $archiveNavigationParams += ['repository' => '1', 'status' => 'published'];
     elseif ($modulePage === 'research_outputs') $archiveNavigationParams['status'] = 'published';
+    $hidePublicationHistory = $role === 'admin'
+        && $modulePage === 'research_outputs'
+        && ($_GET['status'] ?? '') === 'published';
     if (in_array($modulePage, ['journal_publications', 'conference_presentations', 'book_chapters', 'research_repository'], true)) {
         $publicationSection = $modulePage;
         $publicationSectionType = $archiveNavigationParams['publication_type'] ?? '';
