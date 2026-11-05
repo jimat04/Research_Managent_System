@@ -405,8 +405,8 @@ if ($role === 'admin') {
   .review-approval-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(3px)}
   .review-approval-dialog-inner{padding:28px}
   .review-approval-dialog-mark{display:grid;place-items:center;width:44px;height:44px;margin-bottom:18px;border:1px solid var(--review-border);border-radius:13px;background:var(--review-tint);color:var(--review-ink);font-size:21px;font-weight:700}
-  .review-approval-dialog h2{margin:0;color:#111827;font-size:22px;line-height:1.3}
-  .review-approval-dialog p{margin:10px 0 0;color:#475569;font-size:14px;line-height:1.65}
+  .review-approval-dialog h2{margin:0;color:#111827;font-size:22px;line-height:1.3;text-align:center}
+  .review-approval-dialog p{margin:10px 0 0;color:#475569;font-size:14px;line-height:1.65;text-align:center}
   .review-approval-dialog-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px;margin-top:24px}
   .review-approval-dialog-actions button{min-height:44px;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font:inherit;font-size:14px;font-weight:650;cursor:pointer}
   .review-approval-dialog-actions button:hover{background:#f8fafc}

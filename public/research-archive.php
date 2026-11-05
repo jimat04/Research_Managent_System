@@ -259,7 +259,6 @@ if ($selected_program !== '') {
 }
 
 $query .= ' ORDER BY rp.updated_at DESC, rp.title ASC';
-// @rms-ui: Add pagination controls when the public archive grows beyond the current result set.
 
 $archive_stmt = $conn->prepare($query);
 if (!empty($parameters)) {
@@ -429,9 +428,38 @@ if ($includeFacultyRecords && in_array($selected_type, ['all', 'faculty_research
 }
 
 usort($archive_records, static function (array $left, array $right): int {
-    return strtotime((string) $right['updated_at']) <=> strtotime((string) $left['updated_at']);
+    $dateOrder = (strtotime((string) ($right['updated_at'] ?? '')) ?: 0) <=> (strtotime((string) ($left['updated_at'] ?? '')) ?: 0);
+    if ($dateOrder !== 0) return $dateOrder;
+    $titleOrder = strcasecmp((string) $left['title'], (string) $right['title']);
+    if ($titleOrder !== 0) return $titleOrder;
+    $typeOrder = strcmp((string) $left['source_type'], (string) $right['source_type']);
+    return $typeOrder !== 0 ? $typeOrder : ((int) $right['source_id'] <=> (int) $left['source_id']);
 });
-$archived_count = count($archive_records);
+$archive_total_records = count($archive_records);
+$archive_page_size = 10;
+$requested_page = $_GET['page'] ?? '1';
+$validated_page = is_scalar($requested_page)
+    ? filter_var((string) $requested_page, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+    : false;
+$archive_page = $validated_page === false ? 1 : (int) $validated_page;
+$archive_total_pages = max(1, (int) ceil($archive_total_records / $archive_page_size));
+$archive_page = min($archive_page, $archive_total_pages);
+$archive_first_record = $archive_total_records > 0 ? (($archive_page - 1) * $archive_page_size) + 1 : 0;
+$archive_last_record = min($archive_page * $archive_page_size, $archive_total_records);
+$archive_records = array_slice($archive_records, ($archive_page - 1) * $archive_page_size, $archive_page_size);
+$archived_count = $archive_total_records;
+$archive_pagination_url = static function (int $page) use ($search, $selected_category, $selected_ay, $selected_academic_year, $selected_program, $selected_type): string {
+    $query = [
+        'search' => $search,
+        'category_id' => $selected_category,
+        'academic_year' => $selected_academic_year,
+        'program' => $selected_program,
+        'type' => $selected_type,
+        'page' => $page,
+    ];
+    if ($selected_ay > 0 && $selected_academic_year === '') $query['ay_id'] = $selected_ay;
+    return SITE_URL . 'public/research-archive.php?' . http_build_query($query);
+};
 
 $is_logged_in = isLoggedIn();
 ?>
@@ -499,6 +527,14 @@ $is_logged_in = isLoggedIn();
         .archive-access-dialog :focus-visible { outline: 3px solid var(--rms-public-link); outline-offset: 3px; }
         .archive-empty { max-width: 700px; margin: 0 auto; text-align: center; padding: 56px 32px; }
         .archive-empty-icon { display: block; font-size: 2.5rem; margin-bottom: 12px; }
+        .archive-pagination-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; max-width: 1200px; margin: 28px auto 0; }
+        .archive-pagination-summary { margin: 0; color: var(--public-muted); font-size: .9rem; }
+        .archive-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+        .archive-pagination a, .archive-pagination span { display: inline-flex; min-width: 40px; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid var(--public-border); border-radius: 9px; background: var(--public-surface); color: var(--rms-public-link); font-size: .875rem; font-weight: 650; text-decoration: none; }
+        .archive-pagination a:hover { border-color: var(--rms-public-link); background: var(--public-bg); }
+        .archive-pagination [aria-current="page"] { border-color: var(--rms-public-primary); background: var(--rms-public-primary); color: var(--rms-public-primary-contrast); }
+        .archive-pagination a:focus-visible { outline: 3px solid var(--rms-public-link); outline-offset: 3px; }
+        .archive-pagination .is-disabled { color: var(--public-muted); background: var(--public-bg); cursor: not-allowed; }
         @media (max-width: 1000px) {
             .archive-filter .card-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .archive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -625,7 +661,7 @@ $is_logged_in = isLoggedIn();
                     $year_label = $project_type === 'student_project' ? 'Academic year: ' : 'Year: ';
                     ?>
                     <article class="card archive-card">
-                        <a class="card-body" href="<?php echo archive_escape($record_url); ?>" aria-label="Read full record for <?php echo archive_escape($project['title']); ?>">
+                        <a class="card-body" href="<?php echo archive_escape($record_url); ?>"<?php echo $is_logged_in ? '' : ' data-archive-record-link'; ?> aria-label="Read full record for <?php echo archive_escape($project['title']); ?>">
                             <h2 class="archive-card-title"><?php echo archive_escape($project['title']); ?></h2>
                             <div class="archive-meta">
                                 <span class="archive-badge"><?php echo archive_escape($project['category_name'] ?: 'Research'); ?></span>
@@ -647,8 +683,70 @@ $is_logged_in = isLoggedIn();
                     </article>
                 <?php endforeach; ?>
             </div>
+            <?php if ($archive_total_records > 0): ?>
+                <div class="archive-pagination-wrap">
+                    <p class="archive-pagination-summary">Showing <?php echo archive_escape($archive_first_record); ?>–<?php echo archive_escape($archive_last_record); ?> of <?php echo archive_escape($archive_total_records); ?> <?php echo $archive_total_records === 1 ? 'record' : 'records'; ?></p>
+                    <?php if ($archive_total_pages > 1): ?>
+                        <?php
+                        $pagination_start = max(1, min($archive_page - 2, $archive_total_pages - 4));
+                        $pagination_end = min($archive_total_pages, $pagination_start + 4);
+                        ?>
+                        <nav class="archive-pagination" aria-label="Research archive pagination">
+                            <?php if ($archive_page > 1): ?><a href="<?php echo archive_escape($archive_pagination_url(1)); ?>" aria-label="First page">First</a><a href="<?php echo archive_escape($archive_pagination_url($archive_page - 1)); ?>" rel="prev">Previous</a><?php else: ?><span class="is-disabled" aria-disabled="true">First</span><span class="is-disabled" aria-disabled="true">Previous</span><?php endif; ?>
+                            <?php for ($page_number = $pagination_start; $page_number <= $pagination_end; $page_number++): ?>
+                                <?php if ($page_number === $archive_page): ?><span aria-current="page" aria-label="Page <?php echo archive_escape($page_number); ?>"><?php echo archive_escape($page_number); ?></span><?php else: ?><a href="<?php echo archive_escape($archive_pagination_url($page_number)); ?>" aria-label="Page <?php echo archive_escape($page_number); ?>"><?php echo archive_escape($page_number); ?></a><?php endif; ?>
+                            <?php endfor; ?>
+                            <?php if ($archive_page < $archive_total_pages): ?><a href="<?php echo archive_escape($archive_pagination_url($archive_page + 1)); ?>" rel="next">Next</a><a href="<?php echo archive_escape($archive_pagination_url($archive_total_pages)); ?>" aria-label="Last page">Last</a><?php else: ?><span class="is-disabled" aria-disabled="true">Next</span><span class="is-disabled" aria-disabled="true">Last</span><?php endif; ?>
+                        </nav>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </section>
+
+    <?php if (!$is_logged_in): ?>
+        <dialog class="archive-access-dialog" id="archive-access-dialog" aria-labelledby="archive-access-title" aria-describedby="archive-access-description">
+            <button class="archive-dialog-close" type="button" aria-label="Close sign-in prompt" data-archive-dialog-close>&times;</button>
+            <div class="archive-dialog-heading">
+                <span class="archive-dialog-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"></path><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M12 14v3"></path></svg>
+                </span>
+                <div>
+                    <p class="archive-dialog-eyebrow">Research archive</p>
+                    <h2 id="archive-access-title">Sign in to read the full record</h2>
+                </div>
+            </div>
+            <p id="archive-access-description">The public archive shows a preview. Sign in to view the full abstract, record details, and any released research files.</p>
+            <div class="archive-dialog-actions">
+                <a class="btn btn-primary" id="archive-access-login" href="<?php echo archive_escape(SITE_URL . 'public/login.php'); ?>">Log in to continue</a>
+                <button class="btn btn-secondary" type="button" data-archive-dialog-close>Keep browsing</button>
+            </div>
+        </dialog>
+        <script>
+            (() => {
+                const accessDialog = document.getElementById('archive-access-dialog');
+                const loginLink = document.getElementById('archive-access-login');
+
+                if (!accessDialog || !loginLink || typeof accessDialog.showModal !== 'function') return;
+
+                document.querySelectorAll('[data-archive-record-link]').forEach((recordLink) => {
+                    recordLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        loginLink.href = recordLink.href;
+                        accessDialog.showModal();
+                    });
+                });
+
+                accessDialog.querySelectorAll('[data-archive-dialog-close]').forEach((closeButton) => {
+                    closeButton.addEventListener('click', () => accessDialog.close());
+                });
+
+                accessDialog.addEventListener('click', (event) => {
+                    if (event.target === accessDialog) accessDialog.close();
+                });
+            })();
+        </script>
+    <?php endif; ?>
 
     <?php require __DIR__ . '/../includes/public-footer.php'; ?>
     <script src="assets/js/public-pages-v2.js?v=<?php echo filemtime(__DIR__ . '/assets/js/public-pages-v2.js'); ?>" defer></script>

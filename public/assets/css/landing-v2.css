@@ -132,20 +132,67 @@ h2:before{content:"";width:3px;height:24px;background:linear-gradient(var(--p),v
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.js .rv{opacity:1;transform:none}}
 
 /* Homepage art direction */
+main {
+  position: relative;
+  isolation: isolate;
+}
+
+main::before,
+main::after {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: clamp(920px, 115svh, 1120px);
+  pointer-events: none;
+  content: "";
+}
+
+main::before {
+  background:
+    radial-gradient(ellipse at 78% 18%, rgba(91, 30, 188, .10), transparent 36%),
+    radial-gradient(ellipse at 8% 58%, rgba(15, 108, 189, .07), transparent 34%),
+    linear-gradient(180deg, #F4F0FF 0%, var(--bg) 72%, transparent 100%);
+}
+
+main::after {
+  background:
+    radial-gradient(ellipse at 76% 22%, rgba(124, 58, 237, .14), transparent 34%),
+    radial-gradient(ellipse at 48% 50%, rgba(255, 255, 255, .36), transparent 42%),
+    radial-gradient(ellipse at 18% 56%, rgba(14, 165, 233, .08), transparent 38%);
+  filter: blur(34px);
+  transform-origin: center top;
+  animation: homepage-backdrop-drift 30s ease-in-out infinite alternate;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
+}
+
+@keyframes homepage-backdrop-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-1.5%, 1.5%, 0) scale(1.035); }
+}
+
 .hero {
   min-height: min(790px, 100svh);
   display: flex;
   align-items: center;
   padding: 132px 0 112px;
-  background:
-    radial-gradient(ellipse at 78% 24%, rgba(91, 30, 188, .11), transparent 36%),
-    radial-gradient(ellipse at 8% 94%, rgba(15, 108, 189, .08), transparent 34%),
-    linear-gradient(180deg, #F4F0FF 0%, var(--bg) 88%);
+  background: transparent;
+}
+
+.hero .sw {
+  z-index: 1;
+  opacity: .5;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 58%, transparent 100%);
 }
 
 .hg {
+  z-index: 2;
   grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr);
   gap: clamp(32px, 4vw, 64px);
+  transform: translateY(-28px);
 }
 
 .hero .badge {
@@ -275,9 +322,12 @@ h2:before{content:"";width:3px;height:24px;background:linear-gradient(var(--p),v
   box-shadow: 0 12px 24px rgba(58, 46, 112, .08);
 }
 
-#features.sec,
 #archive.sec {
   padding-top: clamp(88px, 10vw, 132px);
+}
+
+#features.sec {
+  padding-top: clamp(52px, 6vw, 84px);
 }
 
 #features .sh,
@@ -553,6 +603,12 @@ h2:before{content:"";width:3px;height:24px;background:linear-gradient(var(--p),v
 
   #archive .bn .btn {
     flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main::after {
+    animation: none;
   }
 }
 

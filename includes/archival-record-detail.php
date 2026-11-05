@@ -36,7 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $historyPage=max(1,(int)($_GET['history_page']??1));
 $historyPattern='(publication|copyright application) #'.$id.'([^0-9]|$)';
-$history=archiveQuery($conn,"SELECT a.*, CONCAT_WS(' ',u.first_name,u.last_name) AS actor FROM activity_log a LEFT JOIN users u ON u.user_id=a.user_id WHERE a.module = ? AND ((JSON_VALID(a.details) AND JSON_UNQUOTE(JSON_EXTRACT(a.details,'$.record_kind')) = ? AND JSON_UNQUOTE(JSON_EXTRACT(a.details,'$.record_id')) = ?) OR (a.details IS NULL AND a.action REGEXP ?)) ORDER BY a.log_id DESC LIMIT 26 OFFSET ".(($historyPage-1)*25),[$c['module'],$archiveKind,$id,$historyPattern])->get_result()->fetch_all(MYSQLI_ASSOC);
+$showPrivateRecordDetails = archiveCan($conn, $archiveKind, $record, $user, 'view');
+$history=$showPrivateRecordDetails
+    ? archiveQuery($conn,"SELECT a.*, CONCAT_WS(' ',u.first_name,u.last_name) AS actor FROM activity_log a LEFT JOIN users u ON u.user_id=a.user_id WHERE a.module = ? AND ((JSON_VALID(a.details) AND JSON_UNQUOTE(JSON_EXTRACT(a.details,'$.record_kind')) = ? AND JSON_UNQUOTE(JSON_EXTRACT(a.details,'$.record_id')) = ?) OR (a.details IS NULL AND a.action REGEXP ?)) ORDER BY a.log_id DESC LIMIT 26 OFFSET ".(($historyPage-1)*25),[$c['module'],$archiveKind,$id,$historyPattern])->get_result()->fetch_all(MYSQLI_ASSOC)
+    : [];
 $moreHistory=count($history)>25; $history=array_slice($history,0,25);
 $contributors=archiveQuery($conn,"SELECT u.first_name,u.last_name,ac.contribution FROM {$archiveKind}_contributors ac JOIN users u ON u.user_id=ac.user_id WHERE ac.{$c['id']} = ? ORDER BY ac.is_primary DESC,u.last_name",[$id])->get_result()->fetch_all(MYSQLI_ASSOC);
 archiveShellOpen($user,$c,$c['label'].' — Details');
@@ -46,24 +49,26 @@ if($archiveKind!=='publication') {
     if ($archiveScope === 'patents_utility_models') $metadata['inventors'] = 'Inventors / researchers';
     if ($archiveScope === 'innovation_technology_transfer') $metadata += ['potential_partners'=>'Potential partners','agreement_reference'=>'Agreement reference','utilization_status'=>'Utilization status','transfer_activities'=>'Technology-transfer activities'];
 }
-$metadata+=['remarks'=>'Remarks','created_at'=>'Originally recorded','updated_at'=>'Last updated'];
+$metadata+=['created_at'=>'Originally recorded','updated_at'=>'Last updated'];
+if ($showPrivateRecordDetails) $metadata['remarks'] = 'Remarks';
 ?>
-<div class="archive-heading"><a href="<?= archiveEscape($listUrl . $navigationQuery) ?>">← All records</a><div class="archive-actions"><?php if(archiveCan($conn,$archiveKind,$record,$user,'manage')&&empty($record['deactivated_at'])): ?><a class="archive-button" href="<?= archiveEscape($formUrl.'?id='.$id.$navigationSuffix) ?>">Edit record</a><?php endif; ?><a class="archive-button secondary" href="#history">History</a></div></div>
+<div class="archive-heading"><a href="<?= archiveEscape($listUrl . $navigationQuery) ?>">← All records</a><div class="archive-actions"><?php if(archiveCan($conn,$archiveKind,$record,$user,'manage')&&empty($record['deactivated_at'])): ?><a class="archive-button" href="<?= archiveEscape($formUrl.'?id='.$id.$navigationSuffix) ?>">Edit record</a><?php endif; ?><?php if($showPrivateRecordDetails): ?><a class="archive-button secondary" href="#history">History</a><?php endif; ?></div></div>
 <?php if($flash): ?><div class="archive-success" role="status"><?= archiveEscape($flash['message']??'') ?></div><?php endif; ?><?php foreach($errors as $error): ?><div class="archive-error" role="alert"><?= archiveEscape($error) ?></div><?php endforeach; ?>
-<article class="archive-card"><span class="archive-badge"><?= archiveEscape(archiveStatus($record)) ?></span><h1><?= archiveEscape($record[$c['title']]) ?></h1>
+<?php if($archiveKind==='publication'): require __DIR__ . '/publication-archive-detail.php'; else: ?><article class="archive-card"><span class="archive-badge"><?= archiveEscape(archiveStatus($record)) ?></span><h1><?= archiveEscape($record[$c['title']]) ?></h1>
 <?php if($archiveKind==='copyright'): ?><p><strong><?= $archiveScope === '' ? 'External copyright status' : 'External registration / IP status' ?>:</strong> <?= archiveEscape(archiveExternalLabel($record)) ?></p><?php endif; ?>
-<dl class="archive-grid archive-detail"><div><dt>Faculty Record Owner</dt><dd><?= archiveEscape(archiveUserName($conn,$record[$c['owner']])) ?></dd></div><div><dt>Encoded by</dt><dd><?= archiveEscape(archiveUserName($conn,$record['encoded_by'])) ?></dd></div><div><dt>Last modified by</dt><dd><?= archiveEscape(archiveUserName($conn,$record['last_modified_by'])) ?></dd></div>
+<dl class="archive-grid archive-detail"><div><dt>Faculty Record Owner</dt><dd><?= archiveEscape(archiveUserName($conn,$record[$c['owner']])) ?></dd></div><?php if($showPrivateRecordDetails): ?><div><dt>Encoded by</dt><dd><?= archiveEscape(archiveUserName($conn,$record['encoded_by'])) ?></dd></div><div><dt>Last modified by</dt><dd><?= archiveEscape(archiveUserName($conn,$record['last_modified_by'])) ?></dd></div><?php endif; ?>
 <?php foreach($metadata as $key=>$label): ?><div><dt><?= archiveEscape($label) ?></dt><dd><?= archiveEscape($key===$c['type']?($c['types'][$record[$key]]??$record[$key]):($record[$key]?:'Not recorded')) ?></dd></div><?php endforeach; ?>
 <?php if($archiveKind==='publication'&&!empty($record['research_area_id'])): $area=archiveQuery($conn,'SELECT area_name FROM research_areas WHERE area_id = ?',[(int)$record['research_area_id']])->get_result()->fetch_assoc(); ?><div><dt>Research Area</dt><dd><?= archiveEscape($area['area_name']??'Historical classification') ?></dd></div><?php endif; ?>
-<div class="archive-field full"><dt>Linked RMS authors / creators</dt><dd><?php if(!$contributors): ?>None linked<?php else: foreach($contributors as $author): ?><?= archiveEscape($author['first_name'].' '.$author['last_name'].' — '.$author['contribution']) ?><br><?php endforeach; endif; ?></dd></div>
-<?php if($record['research_project_id']): $project=archiveQuery($conn,'SELECT title FROM research_projects WHERE project_id = ?',[$record['research_project_id']])->get_result()->fetch_assoc(); ?><div><dt>Originating project</dt><dd><?= archiveEscape($project['title']??'Historical link') ?></dd></div><?php endif; ?>
+<?php if($showPrivateRecordDetails): ?><div class="archive-field full"><dt>Linked RMS authors / creators</dt><dd><?php if(!$contributors): ?>None linked<?php else: foreach($contributors as $author): ?><?= archiveEscape($author['first_name'].' '.$author['last_name'].' — '.$author['contribution']) ?><br><?php endforeach; endif; ?></dd></div><?php endif; ?>
+<?php if($showPrivateRecordDetails && $record['research_project_id']): $project=archiveQuery($conn,'SELECT title FROM research_projects WHERE project_id = ?',[$record['research_project_id']])->get_result()->fetch_assoc(); ?><div><dt>Originating project</dt><dd><?= archiveEscape($project['title']??'Historical link') ?></dd></div><?php endif; ?>
 <?php if($archiveKind==='copyright'&&$record['publication_id']): $linked=archiveQuery($conn,'SELECT research_title FROM publications WHERE publication_id = ?',[$record['publication_id']])->get_result()->fetch_assoc(); ?><div><dt>Related publication</dt><dd><?= archiveEscape($linked['research_title']??'Historical link') ?></dd></div><?php endif; ?>
 </dl></article>
-<?php if($archiveKind==='publication') require __DIR__ . '/publication-archive-detail.php'; ?>
+<?php endif; ?>
 <?php
 $documentSlots=$archiveKind==='publication' ? ['manuscript'=>['file_path','file_name','Published paper'],'evidence'=>['evidence_file_path','evidence_file_name','Publication evidence'],'references'=>['references_file_path','references_file_name','References document']] : ['manuscript'=>['file_path','file_name','Supporting document']];
 $attachedDocumentSlots=array_filter($documentSlots,static fn($slot)=>!empty($record[$slot[0]]));
 ?>
+<?php if ($showPrivateRecordDetails): ?>
 <section id="documents" class="archive-card archive-documents-section" aria-labelledby="archive-documents-title">
 <div class="archive-documents-heading"><div><h2 id="archive-documents-title">Supporting documents</h2><p>Files available with this record</p></div><span class="archive-documents-count"><?= count($attachedDocumentSlots) ?> <?= count($attachedDocumentSlots)===1?'file':'files' ?></span></div>
 <?php if(!$attachedDocumentSlots): ?><div class="archive-document-empty" role="status">No supporting documents are attached to this record.</div><?php else: ?>
@@ -89,9 +94,10 @@ if ($archiveKind === 'publication') {
     $notificationLinks[] = SITE_URL . 'pages/faculty/faculty-publication-detail.php?id=' . $id;
     $notificationLinks[] = SITE_URL . 'pages/admin/admin-publication-detail.php?id=' . $id;
 }
-$oldNotifications=archiveQuery($conn,'SELECT title,message,created_at FROM notifications WHERE link IN (' . implode(',', array_fill(0, count($notificationLinks), '?')) . ') ORDER BY created_at DESC',$notificationLinks)->get_result();
-if($oldNotifications->num_rows): ?><details><summary>Historical record notifications</summary><?php while($note=$oldNotifications->fetch_assoc()): ?><p><strong><?= archiveEscape($note['created_at'].' — '.$note['title']) ?></strong><br><?= archiveEscape($note['message']) ?></p><?php endwhile; ?></details><?php endif; ?>
+$oldNotifications=$showPrivateRecordDetails ? archiveQuery($conn,'SELECT title,message,created_at FROM notifications WHERE link IN (' . implode(',', array_fill(0, count($notificationLinks), '?')) . ') ORDER BY created_at DESC',$notificationLinks)->get_result() : null;
+if($oldNotifications && $oldNotifications->num_rows): ?><details><summary>Historical record notifications</summary><?php while($note=$oldNotifications->fetch_assoc()): ?><p><strong><?= archiveEscape($note['created_at'].' — '.$note['title']) ?></strong><br><?= archiveEscape($note['message']) ?></p><?php endwhile; ?></details><?php endif; ?>
 </section>
+<?php endif; ?>
 <?php if ($role === 'admin' && $archiveKind === 'publication' && ($record['archival_status'] ?? '') === 'legacy'): ?>
 <form id="record-archive" method="post" class="archive-card archive-admin-publication-archive" onsubmit="return confirm('Archive this publication record? It may become eligible for repository and public-release review, but this does not publish it publicly.');">
 <?= csrfField() ?><input type="hidden" name="record_id" value="<?= $id ?>"><input type="hidden" name="action" value="archive">

@@ -226,7 +226,13 @@ function earistDocumentInspectPackage(string $path): array
             if ($name === '_rels/.rels') $source = '';
             elseif (preg_match('#^(.*?/)?_rels/([^/]+)\.rels$#D', $name, $match)) {
                 $source = ($match[1] ?? '') . $match[2];
-                if (!isset($parts[$source])) throw new DomainException('DOCX relationship source is missing.');
+                // ONLYOFFICE may retain this orphan relationship part after removing
+                // the comments part. Keep validating its XML and every target below.
+                $orphanedCommentsRelationships = $name === 'word/_rels/comments.xml.rels'
+                    && !isset($parts['word/comments.xml']);
+                if (!isset($parts[$source]) && !$orphanedCommentsRelationships) {
+                    throw new DomainException('DOCX relationship source is missing: ' . $name);
+                }
             } else throw new DomainException('Invalid DOCX relationship part.');
             $root = $dom->documentElement;
             $ns = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -363,7 +369,59 @@ function earistDocumentStoreOutput(array $output): array
             || ($supplement['filename'] ?? '') !== 'qsf-rds-019-sdg-continuation.docx') throw new DomainException('Invalid QSF companion.');
         $items['sdg_continuation'] = ['bytes' => $supplement['bytes'], 'basename' => 'sdg-continuation.docx', 'filename' => $supplement['filename']];
     }
-    foreach ($items as $item) earistDocumentValidateDocx($item['bytes']);
+    return earistDocumentStoreFileSet($type, $items);
+}
+
+/** Create an edited immutable set while carrying forward its untouched companion. */
+function earistDocumentStoreEditedOutput(array $sourceManifest, string $selector, string $editedBytes): array
+{
+    if (!in_array($selector, ['primary', 'sdg_continuation'], true) || $editedBytes === '') {
+        throw new DomainException('Invalid edited document.');
+    }
+    $type = (string) ($sourceManifest['document_type'] ?? '');
+    $items = [];
+    foreach (['primary', 'sdg_continuation'] as $key) {
+        if (!isset($sourceManifest['files'][$key])) continue;
+        $file = earistDocumentManifestFile($sourceManifest, $key);
+        $handle = earistDocumentOpenFile($file);
+        try {
+            $bytes = stream_get_contents($handle, earistDocumentStorageConfig()['max_docx_bytes'] + 1);
+            if (!is_string($bytes) || strlen($bytes) !== $file['size'] || !hash_equals(hash('sha256', $bytes), $file['sha256'])) {
+                throw new RuntimeException('Source document integrity check failed.');
+            }
+        } finally {
+            fclose($handle);
+        }
+        if ($key === $selector) $bytes = $editedBytes;
+        $items[$key] = [
+            'bytes' => $bytes,
+            'basename' => $key === 'primary' ? 'primary.docx' : 'sdg-continuation.docx',
+            'filename' => $file['filename'],
+        ];
+    }
+    if (!isset($items[$selector])) throw new DomainException('The selected document is not available.');
+    return earistDocumentStoreFileSet($type, $items);
+}
+
+/** Store a complete primary/companion set under a new random private directory. */
+function earistDocumentStoreFileSet(string $type, array $items): array
+{
+    $types = ['annex_a', 'annex_b', 'annex_c', 'annex_d', 'annex_e', 'annex_f', 'qsf_rds_019'];
+    if (!in_array($type, $types, true) || !isset($items['primary'])
+        || array_diff(array_keys($items), ['primary', 'sdg_continuation'])
+        || ($type !== 'qsf_rds_019' && isset($items['sdg_continuation']))
+        || count($items) > ($type === 'qsf_rds_019' ? 2 : 1)) {
+        throw new DomainException('Invalid document file set.');
+    }
+    foreach ($items as $key => $item) {
+        $expectedBase = $key === 'primary' ? 'primary.docx' : 'sdg-continuation.docx';
+        $expectedName = $key === 'primary' ? str_replace('_', '-', $type) . '.docx' : 'qsf-rds-019-sdg-continuation.docx';
+        if (!is_array($item) || !is_string($item['bytes'] ?? null) || $item['bytes'] === ''
+            || ($item['basename'] ?? null) !== $expectedBase || ($item['filename'] ?? null) !== $expectedName) {
+            throw new DomainException('Invalid document file set.');
+        }
+        earistDocumentValidateDocx($item['bytes']);
+    }
     $directories = earistDocumentStorageDirectories();
     $setId = bin2hex(random_bytes(32));
     $directory = $directories['generated'] . '/' . $setId;

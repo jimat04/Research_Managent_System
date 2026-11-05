@@ -248,30 +248,92 @@ function earistDocumentGenerateReviewed(mysqli $conn, int $recordId, string $typ
 }
 
 /** Return only the current faculty owner's history, including deleted sources. */
-function earistDocumentFacultyHistoryList(mysqli $conn, int $page = 1, int $pageSize = 50, ?int $recordId = null): array
+function earistDocumentFacultyHistoryContains(mysqli $conn, int $generatedId): bool
 {
-    return earistDocumentHistoryListForScope($conn, false, $page, $pageSize, $recordId);
+    if ($generatedId < 1 || $generatedId > 4294967295) return false;
+    $actor = earistDocumentCurrentActor('annex_a');
+    $actorId = earistDocumentId($actor['user_id']);
+    $stmt = $conn->prepare("SELECT generated_document_id FROM earist_generated_documents WHERE generated_document_id = ? AND owner_id = ? AND generated_by = ? AND document_type <> 'annex_d' LIMIT 1");
+    $stmt->bind_param('iii', $generatedId, $actorId, $actorId);
+    $stmt->execute();
+    $found = $stmt->get_result()->num_rows === 1;
+    $stmt->close();
+    return $found;
 }
 
-function earistDocumentHistoryListForScope(mysqli $conn, bool $adminScope, int $page = 1, int $pageSize = 50, ?int $recordId = null): array
+function earistDocumentFacultyHistoryList(mysqli $conn, int $page = 1, int $pageSize = 50, ?int $recordId = null, array $filters = []): array
+{
+    return earistDocumentHistoryListForScope($conn, false, $page, $pageSize, $recordId, $filters);
+}
+
+function earistDocumentHistoryListForScope(mysqli $conn, bool $adminScope, int $page = 1, int $pageSize = 50, ?int $recordId = null, array $filters = []): array
 {
     $actor = earistDocumentCurrentActor($adminScope ? 'annex_d' : 'annex_a');
     $actorId = earistDocumentId($actor['user_id']);
     $typeFilter = $adminScope ? "= 'annex_d'" : "<> 'annex_d'";
     if ($page < 1 || $page > 100000 || !in_array($pageSize, [5, 50], true)) throw new DomainException('Invalid history page.', 400);
     if ($recordId !== null && ($recordId < 1 || $recordId > 4294967295)) throw new DomainException('Invalid research record.', 400);
-    $recordFilter = $recordId === null ? '' : ' AND research_record_id = ?';
-    $count = $conn->prepare("SELECT COUNT(*) AS total FROM earist_generated_documents WHERE owner_id = ? AND generated_by = ? AND document_type {$typeFilter}{$recordFilter}");
-    if ($recordId === null) $count->bind_param('ii', $actorId, $actorId);
-    else $count->bind_param('iii', $actorId, $actorId, $recordId);
-    $count->execute();
+    $where = ["gd.owner_id = ?", "gd.generated_by = ?", "gd.document_type {$typeFilter}"];
+    $types = 'ii';
+    $values = [$actorId, $actorId];
+    if ($recordId !== null) {
+        $where[] = 'gd.research_record_id = ?';
+        $types .= 'i';
+        $values[] = $recordId;
+    }
+
+    if (!$adminScope) {
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(gd.snapshot_json, '$.source.record.title')) LIKE ? ESCAPE '!'";
+            $types .= 's';
+            $values[] = '%' . strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        }
+
+        $documentType = (string) ($filters['document_type'] ?? '');
+        if ($documentType !== '' && $documentType !== 'annex_d'
+            && isset(earistMappingDefinitions()['documents'][$documentType])
+            && (earistMappingDefinitions()['documents'][$documentType]['role'] ?? '') === 'faculty') {
+            $where[] = 'gd.document_type = ?';
+            $types .= 's';
+            $values[] = $documentType;
+        }
+
+        $status = (string) ($filters['status'] ?? '');
+        $statusPredicates = [
+            'complete' => 'JSON_LENGTH(gd.missing_fields_json) = 0',
+            'missing' => 'JSON_LENGTH(gd.missing_fields_json) > 0',
+            'warnings' => 'JSON_LENGTH(gd.warnings_json) > 0',
+        ];
+        if (isset($statusPredicates[$status])) $where[] = $statusPredicates[$status];
+
+        $origin = (string) ($filters['origin'] ?? '');
+        if (in_array($origin, ['generated', 'edited'], true)) {
+            $where[] = 'gd.version_origin = ?';
+            $types .= 's';
+            $values[] = $origin;
+        }
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $executeBound = static function (mysqli_stmt $statement, string $bindTypes, array $bindValues): void {
+        $arguments = [$bindTypes];
+        foreach ($bindValues as $key => &$value) $arguments[] = &$value;
+        if (!call_user_func_array([$statement, 'bind_param'], $arguments)) {
+            throw new RuntimeException('Document history filters could not be applied.');
+        }
+        unset($value);
+        $statement->execute();
+    };
+
+    $count = $conn->prepare("SELECT COUNT(*) AS total FROM earist_generated_documents gd WHERE {$whereSql}");
+    $executeBound($count, $types, $values);
     $total = (int) $count->get_result()->fetch_assoc()['total'];
     $count->close();
     $offset = ($page - 1) * $pageSize;
-    $stmt = $conn->prepare("SELECT gd.*, d.draft_id AS joined_draft_id, d.research_record_id AS joined_draft_record_id, d.owner_id AS joined_draft_owner_id, d.document_type AS joined_draft_type, d.created_by AS joined_draft_creator, d.updated_by AS joined_draft_updater, r.research_record_id AS joined_source_id, r.owner_id AS joined_source_owner, r.version AS joined_source_version, r.status AS joined_source_status, r.deleted_at AS joined_source_deleted FROM earist_generated_documents gd JOIN earist_document_drafts d ON d.draft_id = gd.draft_id JOIN faculty_research_records r ON r.research_record_id = gd.research_record_id WHERE gd.owner_id = ? AND gd.generated_by = ? AND gd.document_type {$typeFilter}" . ($recordId === null ? '' : ' AND gd.research_record_id = ?') . ' ORDER BY gd.generated_at DESC, gd.generated_document_id DESC LIMIT ? OFFSET ?');
-    if ($recordId === null) $stmt->bind_param('iiii', $actorId, $actorId, $pageSize, $offset);
-    else $stmt->bind_param('iiiii', $actorId, $actorId, $recordId, $pageSize, $offset);
-    $stmt->execute();
+    $rowValues = [...$values, $pageSize, $offset];
+    $stmt = $conn->prepare("SELECT gd.*, d.draft_id AS joined_draft_id, d.research_record_id AS joined_draft_record_id, d.owner_id AS joined_draft_owner_id, d.document_type AS joined_draft_type, d.created_by AS joined_draft_creator, d.updated_by AS joined_draft_updater, r.research_record_id AS joined_source_id, r.owner_id AS joined_source_owner, r.version AS joined_source_version, r.status AS joined_source_status, r.deleted_at AS joined_source_deleted FROM earist_generated_documents gd JOIN earist_document_drafts d ON d.draft_id = gd.draft_id JOIN faculty_research_records r ON r.research_record_id = gd.research_record_id WHERE {$whereSql} ORDER BY gd.generated_at DESC, gd.generated_document_id DESC LIMIT ? OFFSET ?");
+    $executeBound($stmt, $types . 'ii', $rowValues);
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
     foreach ($rows as &$row) {

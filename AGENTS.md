@@ -12,7 +12,7 @@ Read this guide once per session and follow it for every task. Before affected w
 
 ## Routing and context
 
-Use one primary specialist from `.github/agents/` for implementation; answer simple questions directly. Use `rms-workflow` only across scopes. If invocation is unavailable, read the selected definition and work locally; accurately report that fallback.
+Choose one primary specialist from `.github/agents/` for implementation; answer simple questions directly. The primary specialist or `rms-workflow` may delegate bounded, independent parts to multiple subagents when parallel work or distinct expertise will materially improve speed or quality. Use `rms-workflow` for cross-scope work. If agent invocation is unavailable, read the selected definitions and work locally; accurately report that fallback.
 
 | Task | Specialist |
 |---|---|
@@ -36,7 +36,7 @@ Select relevant skills through the task index; read the selected `SKILL.md` and 
 - Reuse unchanged findings within a session; recheck after relevant edits, changed dependencies or contradictory evidence. Batch independent reads and keep output relevant; expand incomplete/truncated results as needed.
 - For substantial multi-file, workflow, permission or database work, identify current behavior, affected files/data, reusable helpers, risks, steps and acceptance checks first. Keep small fixes proportionate. State one falsifiable hypothesis and cheapest check before edits that diagnose/fix behavior.
 - Preserve unrelated worktree changes. Follow procedural PHP/MySQLi/HTML/CSS/JS conventions, `__DIR__` includes and `SITE_URL` cross-page links. No frameworks, ORMs, UI/icon libraries or incidental dependencies. Read the coding/UI references when applicable.
-- Delegate only bounded tasks adding distinct expertise; sequence dependencies, separate parallel edit ownership, and integrate/review results. Count delegated usage in comparisons; delegation does not inherently save tokens.
+- Use subagents when they add distinct expertise or let independent work proceed in parallel; one primary owner coordinates integration. Delegate bounded tasks with clear goals, paths, constraints, and expected evidence. Sequence dependent work, give parallel editors separate file ownership, avoid duplicated exploration, and review all results. Do not delegate simple or tightly coupled work just to increase agent count. Count all delegated usage in comparisons; delegation does not inherently save tokens.
 - Keep related work in one session, unrelated work in fresh sessions. Before context exhaustion or a handoff, summarize the objective, affected files, decisions, completed checks and pending work; retain failure/security details.
 - Review the final diff for unintended changes, duplication and permission/data implications. Summarize changes, reuse, database effects, actual checks and limitations. Use file/diff references; full code blocks only on request or when necessary for review. Never claim an unrun check passed.
 

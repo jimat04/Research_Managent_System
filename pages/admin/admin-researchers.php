@@ -122,7 +122,7 @@ if ($researcherId) {
             $params[] = $activityStatusFilter;
             $types .= 's';
         }
-        $sql .= ' ORDER BY ra.activity_date DESC, ra.activity_id DESC LIMIT 100';
+        $sql .= ' ORDER BY ra.activity_date DESC, ra.activity_id DESC';
         $stmt = $conn->prepare($sql);
         $result = adminResearchersRun($stmt, $types, $params);
         while ($row = $result->fetch_assoc()) $activities[] = $row;
@@ -218,27 +218,53 @@ renderAdminShell(
 ?>
 <style>
 .researcher-page{max-width:1320px;margin:0 auto;color:#111827}.researcher-intro{margin-bottom:22px;padding:26px 28px;border:1px solid rgba(91,30,188,.18);border-left:4px solid #5b1ebc;border-radius:16px;background:linear-gradient(135deg,rgba(91,30,188,.08),#fff)}.researcher-intro h1{margin:0;font-size:clamp(25px,3vw,36px);letter-spacing:-.035em}.researcher-intro p{margin:8px 0 0;color:#64748b;line-height:1.55}.researcher-panel{overflow:hidden;margin-bottom:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.04)}.researcher-panel h2{margin:0;font-size:18px}.panel-heading{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #edf2f7}.panel-heading-left{display:flex;flex-direction:column;gap:4px;min-width:0}.researcher-muted{color:#64748b}.researcher-summary{display:flex;flex-wrap:wrap;gap:8px}.researcher-summary-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;background:#f8fafc;color:#374151;font-size:11px;font-weight:700}.profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}.profile-field{padding:17px 20px;border-bottom:1px solid #edf2f7}.profile-field span{display:block;margin-bottom:6px;color:#64748b;font-size:11px;font-weight:700}.profile-field strong{font-size:13px;overflow-wrap:anywhere}.researcher-toolbar{display:grid;grid-template-columns:minmax(200px,1.8fr) minmax(160px,.9fr) minmax(160px,.9fr) auto;gap:12px;align-items:end;padding:18px 20px;border-bottom:1px solid #edf2f7}.researcher-toolbar label{display:block;margin-bottom:6px;color:#64748b;font-size:11px;font-weight:700}.researcher-toolbar input,.researcher-toolbar select{width:100%;min-height:42px;box-sizing:border-box;padding:9px 11px;border:1px solid #d1d5db;border-radius:9px;background:white;color:#111827;font:inherit}.researcher-toolbar input:focus,.researcher-toolbar select:focus,.researcher-button:focus-visible,.researcher-tab:focus-visible{outline:3px solid rgba(91,30,188,.16);outline-offset:2px;border-color:#5b1ebc}.researcher-button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:8px 14px;border:1px solid #5b1ebc;border-radius:9px;background:#5b1ebc;color:#fff;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}.researcher-button.secondary{border-color:#d1d5db;background:#fff;color:#374151}.researcher-tabs{display:flex;flex-wrap:wrap;gap:10px;padding:16px 20px 0}.researcher-tab{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border:1px solid #e5e7eb;border-radius:999px;background:#f8fafc;color:#475569;text-decoration:none;font-weight:700;font-size:12px}.researcher-tab.active{background:linear-gradient(135deg,#5b1ebc,#7c3aed);border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(91,30,188,.18)}.researcher-list-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:18px 20px 20px}.researcher-card{display:flex;flex-direction:column;gap:14px;padding:18px;border:1px solid #e5e7eb;border-radius:16px;background:linear-gradient(180deg,#fff,#f8fafc);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}.researcher-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.06);border-color:rgba(91,30,188,.15)}.researcher-card-head{display:flex;align-items:center;gap:12px}.researcher-avatar{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#5b1ebc,#8b5cf6);color:#fff;font-weight:800}.researcher-meta{flex:1;min-width:0}.researcher-meta h3{margin:0;font-size:20px;line-height:1.2;letter-spacing:-.02em}.researcher-meta h3 a{color:#111827;text-decoration:none}.researcher-email{margin-top:4px;color:#64748b;font-size:12px;word-break:break-word}.researcher-role-chip{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.researcher-role-chip.role-faculty{background:rgba(29,78,216,.08);color:#1d4ed8}.researcher-role-chip.role-student{background:rgba(91,30,188,.08);color:#5b1ebc}.researcher-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding-top:4px;border-top:1px solid #edf2f7}.researcher-details div{display:flex;flex-direction:column;gap:4px}.researcher-details span{color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.researcher-details strong{font-size:13px;line-height:1.4;overflow-wrap:anywhere}.researcher-stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.researcher-stat{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#fff;border:1px solid #edf2f7}.researcher-stat span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:700}.researcher-stat strong{font-size:20px;line-height:1}.researcher-card-actions{display:flex;justify-content:flex-end}.researcher-table-wrap{overflow-x:auto}.researcher-table{width:100%;border-collapse:collapse;min-width:940px}.researcher-table th{padding:12px 15px;background:#f8fafc;color:#64748b;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.researcher-table td{padding:13px 15px;border-top:1px solid #edf2f7;font-size:12px;vertical-align:middle}.researcher-link{color:#111827;font-weight:700;text-decoration:none}.researcher-link:hover{color:#5b1ebc}.researcher-badge{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff4e8;color:#9a3f00;font-size:10px;font-weight:700}.researcher-empty{padding:42px 20px;text-align:center;color:#64748b}.researcher-empty strong{display:block;margin-bottom:5px;color:#111827}.activity-status{color:#475569}.back-link{color:#9a3f00;font-size:12px;font-weight:700;text-decoration:none}@media(max-width:980px){.researcher-toolbar{grid-template-columns:1fr 1fr}.researcher-list-grid{grid-template-columns:1fr}}@media(max-width:760px){.panel-heading{align-items:flex-start;gap:8px}.panel-heading > *:not(.panel-heading-left){margin-left:auto}.researcher-toolbar{grid-template-columns:1fr}.researcher-list-grid{grid-template-columns:1fr}.researcher-details{grid-template-columns:1fr}.researcher-stat-row{grid-template-columns:1fr 1fr 1fr}.researcher-card-actions .researcher-button{width:100%}}@media(max-width:560px){.panel-heading{justify-content:flex-start}.panel-heading > *:not(.panel-heading-left){margin-left:0;margin-top:8px}.researcher-summary{width:100%}.researcher-card-head{align-items:flex-start}.researcher-role-chip{margin-top:4px}.researcher-stat-row{grid-template-columns:1fr}.profile-grid{grid-template-columns:1fr}}
+.researcher-intro{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.researcher-print-meta{display:none}
+@media print{
+  @page{margin:16mm}
+  body *{visibility:hidden!important}
+  body .researcher-page,body .researcher-page *{visibility:visible!important}
+  body .researcher-page{position:absolute;inset:0;width:100%;max-width:none;margin:0;padding:0;color:#111827}
+  .researcher-page> *{display:none!important}
+  .researcher-page>.researcher-intro,.researcher-page>[data-print-section="identity"],.researcher-page>[data-print-section="participation"]{display:block!important}
+  .researcher-intro{display:block!important;margin:0 0 16px;padding:0 0 12px;border:0;border-bottom:2px solid #1d4ed8;border-radius:0;background:none}
+  .researcher-intro h1{font-size:24px}
+  .researcher-intro>div>p:not(.researcher-print-meta){display:none!important}
+  .researcher-print-meta{display:block!important;margin:5px 0 0;color:#475569;font-size:11px}
+  .print-button,.researcher-page [data-print-field="screen-only"],.researcher-page .back-link{display:none!important}
+  .researcher-page .researcher-toolbar{display:none!important}
+  .researcher-panel{overflow:visible;margin:0 0 14px;border:1px solid #cbd5e1;border-radius:0;box-shadow:none;break-inside:avoid}
+  .researcher-panel .panel-heading{padding:9px 11px}
+  .researcher-panel .profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .researcher-panel .profile-field{padding:9px 11px}
+  .researcher-panel .researcher-table-wrap{overflow:visible}
+  .researcher-panel .researcher-table{width:100%;min-width:0;table-layout:auto}
+  .researcher-panel .researcher-table th,.researcher-panel .researcher-table td{padding:7px 8px;font-size:10px}
+  .researcher-panel .researcher-table th{background:#f1f5f9!important;color:#334155}
+  .researcher-panel .researcher-link{color:#111827;text-decoration:none}
+  .researcher-panel .researcher-table tr{break-inside:avoid}
+}
 </style>
 
 <main class="researcher-page">
-  <header class="researcher-intro"><h1><?= adminResearchersEscape($profile ? trim($profile['first_name'] . ' ' . $profile['last_name']) : 'Researcher Profiles') ?></h1><p><?= $profile ? 'Research profile and associated participation records.' : 'Faculty and student researchers, their specializations, and their recorded research participation.' ?></p></header>
+  <header class="researcher-intro"><div><h1><?= adminResearchersEscape($profile ? trim($profile['first_name'] . ' ' . $profile['last_name']) : 'Researcher Profiles') ?></h1><p><?= $profile ? 'Research profile and associated participation records.' : 'Faculty and student researchers, their specializations, and their recorded research participation.' ?></p><p class="researcher-print-meta">Faculty participation report · Printed <?= adminResearchersEscape(date('F j, Y')) ?></p></div><?php if ($profile && $profile['role'] === 'faculty'): ?><button class="researcher-button print-button" type="button" onclick="window.print()">Print participation</button><?php endif; ?></header>
 
   <?php if ($researcherId && !$profile): ?>
     <section class="researcher-panel researcher-empty"><strong>Researcher not found</strong>The researcher may have been removed or the profile link is invalid.<p><a class="researcher-button" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php') ?>">Return to researchers</a></p></section>
   <?php elseif ($profile): ?>
     <p><a class="back-link" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php') ?>">&larr; All researchers</a></p>
-    <section class="researcher-panel" aria-labelledby="profile-heading">
+    <section class="researcher-panel" aria-labelledby="profile-heading" data-print-section="identity">
       <div class="panel-heading"><h2 id="profile-heading">Researcher information</h2><span class="researcher-badge"><?= adminResearchersEscape(ucfirst((string) $profile['role'])) ?></span></div>
       <div class="profile-grid">
-        <div class="profile-field"><span>Email</span><strong><?= adminResearchersEscape($profile['email']) ?></strong></div>
+        <div class="profile-field" data-print-field="identity"><span>Email</span><strong><?= adminResearchersEscape($profile['email']) ?></strong></div>
         <?php if ($profile['role'] === 'student'): ?><div class="profile-field"><span>Student ID</span><strong><?= adminResearchersEscape($profile['student_id'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
         <?php if ($profile['role'] === 'faculty'): ?>
-          <div class="profile-field"><span>Research specialization</span><strong><?= adminResearchersEscape($profile['specialization'] ?: 'Not recorded') ?></strong></div>
-          <div class="profile-field"><span>Academic rank</span><strong><?= adminResearchersEscape($profile['academic_rank'] ?: 'Not recorded') ?></strong></div>
+          <div class="profile-field" data-print-field="identity"><span>Research specialization</span><strong><?= adminResearchersEscape($profile['specialization'] ?: 'Not recorded') ?></strong></div>
+          <div class="profile-field" data-print-field="identity"><span>Academic rank</span><strong><?= adminResearchersEscape($profile['academic_rank'] ?: 'Not recorded') ?></strong></div>
         <?php endif; ?>
-        <?php if ($profile['role'] === 'faculty'): ?><div class="profile-field"><span>Department</span><strong><?= adminResearchersEscape($profile['department'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
-        <div class="profile-field"><span>Program</span><strong><?= adminResearchersEscape($profile['program'] ?: 'Not recorded') ?></strong></div>
-        <div class="profile-field"><span>Account status</span><strong><?= adminResearchersEscape(ucfirst((string) $profile['status'])) ?></strong></div>
+        <?php if ($profile['role'] === 'faculty'): ?><div class="profile-field" data-print-field="identity"><span>Department</span><strong><?= adminResearchersEscape($profile['department'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
+        <div class="profile-field" data-print-field="screen-only"><span>Program</span><strong><?= adminResearchersEscape($profile['program'] ?: 'Not recorded') ?></strong></div>
+        <div class="profile-field" data-print-field="screen-only"><span>Account status</span><strong><?= adminResearchersEscape(ucfirst((string) $profile['status'])) ?></strong></div>
         <?php if ($profile['role'] === 'student'): ?><div class="profile-field"><span>Year level</span><strong><?= adminResearchersEscape($profile['year_level'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
       </div>
     </section>
@@ -271,7 +297,7 @@ renderAdminShell(
       <?php else: ?><div class="researcher-table-wrap"><table class="researcher-table"><thead><tr><th>Research project</th><th>Status</th><th>Last updated</th></tr></thead><tbody><?php foreach ($researchProjects as $project): ?><tr><td><a class="researcher-link" href="<?= adminResearchersEscape(SITE_URL . 'pages/shared/research-detail.php?id=' . (int) $project['project_id']) ?>"><?= adminResearchersEscape($project['title']) ?></a></td><td><?= adminResearchersEscape(ucwords(str_replace('_', ' ', (string) $project['status']))) ?></td><td><?= adminResearchersEscape(date('M j, Y', strtotime((string) $project['updated_at']))) ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
     </section>
 
-    <section class="researcher-panel" aria-labelledby="participation-heading">
+      <section class="researcher-panel" aria-labelledby="participation-heading" data-print-section="participation">
       <div class="panel-heading">
         <div><h2 id="participation-heading">Research participation history</h2><span class="researcher-muted">Activities linked to this user account.</span></div>
         <form class="researcher-toolbar" method="get" action="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php?id=' . $researcherId) ?>" style="padding:12px 20px 18px;border-top:1px solid #edf2f7;gap:10px;grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) minmax(160px,1fr) auto;align-items:end">
@@ -301,7 +327,6 @@ renderAdminShell(
             <?php if ($dateFrom !== '' || $dateTo !== '' || $activityStatusFilter !== ''): ?>
               <a class="researcher-button secondary" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php?id=' . $researcherId) ?>" style="min-height:42px">Clear</a>
             <?php endif; ?>
-            <button class="researcher-button secondary" type="button" onclick="window.print()" style="min-height:42px" aria-label="Print participation history">Print</button>
           </div>
         </form>
       </div>

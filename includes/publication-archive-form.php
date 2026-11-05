@@ -21,6 +21,10 @@ $savedProgramId=is_scalar($metadata['program_id']??null)?(filter_var((string)$me
 $programOptions=archiveQuery($conn,'SELECT program_id,program_code,program_name,status FROM programs WHERE status=1 OR program_id=? ORDER BY program_name',[$savedProgramId])->get_result()->fetch_all(MYSQLI_ASSOC);
 $projects=archiveQuery($conn,'SELECT project_id,title FROM research_projects WHERE deleted_at IS NULL'.($role==='faculty'?' AND (created_by=? OR student_id=? OR adviser_id=?)':'').' ORDER BY title',$role==='faculty'?[$userId,$userId,$userId]:[])->get_result()->fetch_all(MYSQLI_ASSOC);
 $input=$record??[];
+// Prepared SELECTs return numeric columns as PHP integers; form value helpers expect strings.
+foreach(['publication_type_id','publication_subtype_id','publication_scope_id'] as $classificationKey) {
+    $input[$classificationKey]=isset($record[$classificationKey])?(string)$record[$classificationKey]:'';
+}
 $input['author_names']=publicationAuthors($record??[])?:[''];
 $input['publication_keywords']=publicationJson($record['keywords_json']??null);
 $input['publication_metadata']=$metadata;

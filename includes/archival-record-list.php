@@ -5,10 +5,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') { http_response_code(405); exit('Archi
 $where = ['1=1']; $params = [];
 if ($archiveKind === 'copyright') { $where[] = 'r.output_type IN (' . implode(',', array_fill(0, count($c['types']), '?')) . ')'; array_push($params, ...array_keys($c['types'])); }
 if ($role === 'faculty') {
-    $where[] = "(r.{$c['owner']} = ? OR EXISTS (SELECT 1 FROM {$archiveKind}_contributors ac WHERE ac.{$c['id']} = r.{$c['id']} AND ac.user_id = ?))";
+    $facultyScope = "(r.{$c['owner']} = ? OR EXISTS (SELECT 1 FROM {$archiveKind}_contributors ac WHERE ac.{$c['id']} = r.{$c['id']} AND ac.user_id = ?))";
+    if ($archiveKind === 'publication') $facultyScope = "({$facultyScope} OR ((r.archival_status = 'archived' OR r.status = 'published') AND r.deactivated_at IS NULL))";
+    $where[] = $facultyScope;
     array_push($params, $userId, $userId);
 } elseif ($role === 'student') {
-    $where[] = "EXISTS (SELECT 1 FROM {$archiveKind}_contributors ac WHERE ac.{$c['id']} = r.{$c['id']} AND ac.user_id = ?)";
+    $studentScope = "EXISTS (SELECT 1 FROM {$archiveKind}_contributors ac WHERE ac.{$c['id']} = r.{$c['id']} AND ac.user_id = ?)";
+    if ($archiveKind === 'publication') $studentScope = "({$studentScope} OR ((r.archival_status = 'archived' OR r.status = 'published') AND r.deactivated_at IS NULL))";
+    $where[] = $studentScope;
     $params[] = $userId;
 } elseif ($role === 'research_staff') {
     $scopes = [];
@@ -110,7 +114,8 @@ if ($role === 'faculty' && ($report || $export)) {
     $params[] = $userId;
     $totals = archiveQuery($conn, "SELECT COUNT(*) AS total, COALESCE(SUM(r.archival_status='archived'),0) AS archived, COALESCE(SUM(r.archival_status='legacy'),0) AS legacy" . $from, $params)->get_result()->fetch_assoc();
 }
-$page = max(1, (int) $get('page')); $pages = max(1,(int) ceil($totals['total']/25)); $page = min($page,$pages);
+$pageSize = $archiveKind === 'publication' ? 10 : 25;
+$page = max(1, (int) $get('page')); $pages = max(1,(int) ceil($totals['total']/$pageSize)); $page = min($page,$pages);
 $select = "SELECT r.*, CONCAT_WS(' ',u.first_name,u.last_name) AS owner_name, u.program AS owner_program, u.role AS owner_role, u.deleted_at AS owner_deleted" . ($archiveKind === 'publication' ? ',pt.label AS classification_type_label,pt.type_code AS classification_type_code,ps.label AS classification_subtype_label,ps.subtype_code AS classification_subtype_code,psc.label AS publication_scope_label,pra.area_name AS research_area_label,COALESCE(pg.program_code,u.program) AS archive_program' : '');
 if ($export) {
     header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename="' . $archiveKind . '-archive.csv"'); header('Cache-Control: no-store');
@@ -124,10 +129,10 @@ if ($export) {
     }
     fclose($out); exit;
 }
-$records = archiveQuery($conn,$select . $from . " ORDER BY r.created_at DESC,r.{$c['id']} DESC LIMIT 25 OFFSET " . (($page-1)*25),$params)->get_result()->fetch_all(MYSQLI_ASSOC);
+$records = archiveQuery($conn,$select . $from . " ORDER BY r.created_at DESC,r.{$c['id']} DESC LIMIT {$pageSize} OFFSET " . (($page-1)*$pageSize),$params)->get_result()->fetch_all(MYSQLI_ASSOC);
 $listDescription = match ($role) {
-    'faculty' => 'Your own and authorized shared records.',
-    'student' => 'Records explicitly linked to you as an author or creator.',
+    'faculty' => $archiveKind === 'publication' ? 'Browse active archived and published publication records across RMS. You can manage records you own.' : 'Your own and authorized shared records.',
+    'student' => $archiveKind === 'publication' ? 'Browse active archived and published publication records across RMS, including records linked to you.' : 'Records explicitly linked to you as an author or creator.',
     'research_staff' => 'Records within your assigned permissions.',
     default => 'Institute records and documented external outcomes.',
 };
@@ -215,7 +220,7 @@ if ($archiveKind === 'publication') {
     <div class="archive-field"><label for="filter-year">Publication Year</label><select id="filter-year" name="year"><option value="">All Years</option><?php foreach($yearOptions as $value=>$label): ?><option value="<?= archiveEscape($value) ?>" <?= $filters['year']===$value || ($value === '' && $filters['year']==='') ? 'selected' : '' ?>><?= archiveEscape($label) ?></option><?php endforeach; ?></select></div>
     <div class="archive-field"><label for="filter-program">Department / Program</label><select id="filter-program" name="program"><option value="">All Programs</option><?php foreach($programOptions as $programItem): ?><option value="<?= archiveEscape((string)($programItem['program_code'] ?? '')) ?>" <?= $filters['program'] === ((string)($programItem['program_code'] ?? '')) ? 'selected' : '' ?>><?= archiveEscape((string)($programItem['program_code'] ?? '') . ' — ' . ($programItem['program_name'] ?? '')) ?></option><?php endforeach; ?></select></div>
     <div class="archive-field"><label for="filter-status">Archival Status</label><select id="filter-status" name="archive_status"><option value="">All Records</option><option value="archived" <?= $filters['archive_status']==='archived'?'selected':'' ?>>Archived</option></select></div>
-    <?php if ($filters['year'] === 'custom' || $filters['year_from'] !== '' || $filters['year_to'] !== ''): ?><div class="archive-field archive-field--full archive-year-range"><label>From Year</label><input type="number" name="year_from" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_from']) ?>" placeholder="From year"><label>To Year</label><input type="number" name="year_to" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_to']) ?>" placeholder="To year"></div><?php else: ?><div class="archive-field archive-field--full archive-year-range" hidden><label>From Year</label><input type="number" name="year_from" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_from']) ?>" placeholder="From year"><label>To Year</label><input type="number" name="year_to" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_to']) ?>" placeholder="To year"></div><?php endif; ?>
+    <?php if ($filters['year'] === 'custom' || $filters['year_from'] !== '' || $filters['year_to'] !== ''): ?><div class="archive-field archive-field--full archive-year-range"><label for="filter-year-from">From Year</label><input id="filter-year-from" type="number" name="year_from" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_from']) ?>" placeholder="From year"><label for="filter-year-to">To Year</label><input id="filter-year-to" type="number" name="year_to" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_to']) ?>" placeholder="To year"></div><?php else: ?><div class="archive-field archive-field--full archive-year-range" hidden><label for="filter-year-from">From Year</label><input id="filter-year-from" type="number" name="year_from" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_from']) ?>" placeholder="From year"><label for="filter-year-to">To Year</label><input id="filter-year-to" type="number" name="year_to" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year_to']) ?>" placeholder="To year"></div><?php endif; ?>
 <?php else: ?>
     <div class="archive-field"><label for="filter-output-type">Output Type</label><select id="filter-output-type" name="output_type"><option value="">All Types</option><?php foreach($c['types'] as $typeCode => $typeLabel): ?><option value="<?= archiveEscape($typeCode) ?>" <?= $filters['record_type'] === $typeCode ? 'selected' : '' ?>><?= archiveEscape($typeLabel) ?></option><?php endforeach; ?></select></div>
     <div class="archive-field"><label for="filter-year">Filing Year</label><input id="filter-year" name="year" type="number" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year']) ?>" placeholder="Any year"></div>

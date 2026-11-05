@@ -535,16 +535,6 @@ $authContinuationQuery = $publicRecordIntent
     .auth-split-form .form-check { color: #4B5563; }
     .auth-split-form .form-check input { accent-color: var(--primary); }
 
-    /* Demo credentials box — soft purple tint to harmonize with the panel */
-    .auth-split-form .demo-creds {
-      background: rgba(91,30,188,0.08) !important;
-      border: 1px solid rgba(91,30,188,0.18) !important;
-      color: #4c3a91 !important;
-    }
-    .auth-split-form .demo-creds strong { color: #4c3a91 !important; font-weight: 700; }
-    .auth-split-form .demo-creds span,
-    .auth-split-form .demo-creds { color: #4c3a91 !important; }
-
     /* Forgot password link — stays purple (already on brand) */
     .auth-split-form a[href="#forgot"] { color: var(--primary) !important; }
 
@@ -772,14 +762,6 @@ $authContinuationQuery = $publicRecordIntent
           </div>
         <?php endif; ?>
 
-        <div class="demo-creds" style="background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.78rem; color: #93c5fd; line-height: 1.6;">
-          <strong style="color: #bfdbfe;">🔑 Demo Credentials</strong><br>
-          Student: jdelacruz@rms.edu.ph / Student@123<br>
-          Faculty: msantos@rms.edu.ph / Faculty@123<br>
-          Staff: staff1@rms.edu.ph / Staff@123<br>
-          Admin: admin@rms.edu.ph / Admin@123
-        </div>
-
         <form method="POST" action="login.php<?php echo $authContinuationQuery; ?>">
           <input type="hidden" name="action" value="login">
           <?php echo csrfField(); ?>
@@ -807,7 +789,7 @@ $authContinuationQuery = $publicRecordIntent
           </div>
 
           <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-            🔑 Sign In
+            Sign In
           </button>
         </form>
 

@@ -49,7 +49,7 @@ No E2E setup, Playwright execution, or `RMS_E2E_*` variables are required for th
 
 ## How work is routed
 
-The root guide maps tasks to all nine specialists: `rms-db`, `rms-security-auth`, `rms-debug`, `rms-page-builder`, `rms-ui`, `rms-testing`, `rms-performance`, `rms-backup`, and `rms-doc`. The coordinator chooses the primary owner, adds help for distinct scopes, integrates results, and runs focused checks. It reads specialist definitions directly if delegation is unavailable.
+The root guide maps tasks to all nine specialists: `rms-db`, `rms-security-auth`, `rms-debug`, `rms-page-builder`, `rms-ui`, `rms-testing`, `rms-performance`, `rms-backup`, and `rms-doc`. The coordinator chooses one primary owner and may assign bounded, independent parts to multiple specialists/subagents when distinct expertise or parallel work materially helps. It gives each delegate a separate objective and edit ownership, integrates and reviews results, and runs focused checks. It reads specialist definitions directly if delegation is unavailable.
 
 Skills provide task-specific guidance. Choose one primary visual direction rather than loading conflicting design systems. Root RMS stack, identity, permissions, workflow history, migration rules, and test isolation remain authoritative. Preserve existing worktree changes. Do not add frameworks or change a database because a generic skill example suggests it.
 

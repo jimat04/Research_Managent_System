@@ -83,20 +83,25 @@ function archiveCan(mysqli $db, string $kind, array $row, array $user, string $a
     if ($kind === 'copyright' && !archiveCopyrightType((string) ($row['output_type'] ?? ''))) return false;
     if ($role === 'admin') return true;
     if ($action === 'deactivate' || $action === 'restore') return false;
+    $catalogPublication = $kind === 'publication'
+        && empty($row['deactivated_at'])
+        && (($row['archival_status'] ?? '') === 'archived' || ($row['status'] ?? '') === 'published');
     if ($role === 'faculty') {
         if ($action === 'manage') return empty($row['deactivated_at']) && (int) $row[$c['owner']] === $uid;
+        if ($action === 'catalog' && $catalogPublication) return true;
         if ((int) $row[$c['owner']] === $uid) return true;
         return (bool) archiveQuery($db, "SELECT 1 FROM {$kind}_contributors WHERE {$c['id']} = ? AND user_id = ?", [$row[$c['id']], $uid])->get_result()->fetch_row();
     }
     if ($role === 'student') {
-        if (!in_array($action, ['view', 'download'], true)) return false;
+        if (!in_array($action, ['view', 'catalog', 'download'], true)) return false;
+        if ($action === 'catalog' && $catalogPublication) return true;
         return (bool) archiveQuery($db, "SELECT 1 FROM {$kind}_contributors WHERE {$c['id']} = ? AND user_id = ?", [$row[$c['id']], $uid])->get_result()->fetch_row();
     }
     if ($role !== 'research_staff') return false;
     if ($action === 'manage' && !empty($row['deactivated_at'])) return false;
     foreach (archiveStaffScopes($kind, $row) as [$module, $page]) {
         if (hasModulePermission($uid, $module, 'view', $page)
-            && ($action === 'view' || ($action === 'download' ? hasDownloadPermission($uid, $module, $page) : hasModulePermission($uid, $module, 'manage', $page)))) return true;
+            && (in_array($action, ['view', 'catalog'], true) || ($action === 'download' ? hasDownloadPermission($uid, $module, $page) : hasModulePermission($uid, $module, 'manage', $page)))) return true;
     }
     return false;
 }

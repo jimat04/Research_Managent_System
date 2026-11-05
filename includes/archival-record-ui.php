@@ -5,7 +5,7 @@ function archiveShellOpen(array $user, array $c, string $title, bool $adminPubli
     if ($user['role'] === 'student') {
         $page = $c['module'] === 'publications' ? 'my-publications.php' : 'my-ip-contributions.php';
         $subtitle = $c['module'] === 'publications'
-            ? 'Publication records explicitly linked to you as an author or creator.'
+            ? 'Browse archived and published publication records across RMS, including records linked to you.'
             : 'Copyright records explicitly linked to you as an author or creator.';
         renderStudentShell($user, $page, $title, $subtitle);
     } elseif ($user['role'] === 'admin') {
@@ -14,7 +14,10 @@ function archiveShellOpen(array $user, array $c, string $title, bool $adminPubli
         if (!in_array($adminPage, $publicationPages, true)) $adminPage = 'admin-publications.php';
         renderAdminShell($user, $c['module'] === 'publications' ? $adminPage : $c['module'] . '.php', $title, $subtitle);
     }
-    elseif ($user['role'] === 'faculty') renderFacultyShell($user, $c['faculty_page'] ?? ($c['module'] === 'publications' ? 'faculty-publications.php' : $c['module'] . '.php'), $title, $subtitle);
+    elseif ($user['role'] === 'faculty') {
+        if ($c['module'] === 'publications') $subtitle = 'Browse archived and published publication records across RMS. You can manage records you own.';
+        renderFacultyShell($user, $c['faculty_page'] ?? ($c['module'] === 'publications' ? 'faculty-publications.php' : $c['module'] . '.php'), $title, $subtitle);
+    }
     else renderStaffShell($user, $c['module'] . '.php', $title, $subtitle);
     $archiveCssPath = dirname(__DIR__) . '/css/archival-records.css';
     $archiveCssVersion = is_file($archiveCssPath) ? (string) filemtime($archiveCssPath) : '1';

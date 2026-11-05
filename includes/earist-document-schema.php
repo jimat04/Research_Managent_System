@@ -166,6 +166,16 @@ function earistDocumentSchemaCompare(array $actual): array
     foreach (earistDocumentSchemaDefinitions() as $table => $expected) {
         $data = $actual[$table] ?? null;
         if (!$data) { $errors[] = $table . ': absent'; continue; }
+        // Migration 067 is an additive extension of the append-only history table.
+        // Keep the 052 verifier strict while recognizing the complete known extension.
+        if ($table === 'earist_generated_documents'
+            && isset($data['columns']['version_origin'], $data['columns']['edited_from_generated_document_id'])) {
+            $expected['columns']['version_origin'] = ["enum('generated','edited')", false, 'generated'];
+            $expected['columns']['edited_from_generated_document_id'] = ['int unsigned', true];
+            $expected['indexes']['idx_earist_generated_edit_parent'] = ['edited_from_generated_document_id', 1];
+            $expected['foreign_keys']['fk_earist_generated_edit_parent'] = [
+                'edited_from_generated_document_id', 'earist_generated_documents', 'generated_document_id'];
+        }
         if ($data['engine'] !== 'InnoDB' || $data['collation'] !== 'utf8mb4_unicode_ci') $errors[] = $table . ': storage differs';
         if (count($data['columns']) !== count($expected['columns'])) $errors[] = $table . ': column count differs';
         foreach ($expected['columns'] as $name => $definition) {

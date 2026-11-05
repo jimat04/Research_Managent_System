@@ -25,6 +25,7 @@ if (PHP_SAPI === 'cli') {
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/faculty-ranks.php';
 require_once __DIR__ . '/../includes/earist-document-schema.php';
+require_once __DIR__ . '/../includes/earist-document-edit-schema.php';
 
 const MIGRATION_TABLE = 'schema_migrations';
 
@@ -876,6 +877,7 @@ function verify_migration(mysqli $conn, string $filename): ?bool
             && strtolower(migration_column_type($conn, 'activity_schedule_participants', 'invitation_responded_at')) === 'datetime'
             && migration_column_nullable($conn, 'activity_schedule_participants', 'invitation_responded_at'),
         '052_earist_document_storage.sql' => earistDocumentSchemaStatus($conn)['valid'],
+        '067_earist_document_editing.sql' => earistDocumentEditSchemaStatus($conn),
         '051_complete_faculty_academic_ranks.sql' => verify_faculty_academic_ranks($conn),
         '050_faculty_research_records.sql' => verify_faculty_research_records($conn),
         '049_faculty_document_profile_fields.sql' =>

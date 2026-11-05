@@ -261,8 +261,20 @@ if (($user['role'] ?? '') === 'faculty') {
       <input type="hidden" name="project_id" value="<?php echo (int) $project_id; ?>">
       <div class="form-group">
         <label for="manuscript-abstract">Abstract <span aria-hidden="true">*</span></label>
-        <textarea id="manuscript-abstract" name="abstract" class="form-control" rows="8" required aria-describedby="abstract-help"><?php echo htmlspecialchars($abstract, ENT_QUOTES, 'UTF-8'); ?></textarea>
+        <textarea id="manuscript-abstract" name="abstract" class="form-control" rows="8" required aria-describedby="abstract-help abstract-word-count"><?php echo htmlspecialchars($abstract, ENT_QUOTES, 'UTF-8'); ?></textarea>
         <p id="abstract-help">Enter the abstract for this manuscript version. It will be preserved with your submission for review.</p>
+        <p id="abstract-word-count" role="status" aria-live="polite">0 words. Recommended length: 200–250 words.</p>
+        <section aria-labelledby="abstract-guidance-title" style="margin-top:16px;padding:16px;border:1px solid #E5E7EB;border-radius:12px;background:#F8FAFC">
+          <h2 id="abstract-guidance-title" style="margin:0 0 8px;font-size:1rem">Recommended abstract checklist</h2>
+          <ul style="margin:0;padding-left:20px">
+            <li>Write one continuous paragraph in formal academic English and third person.</li>
+            <li>Use past tense for completed activities and findings.</li>
+            <li>Summarize the problem, objectives, methodology, respondents, important actual results (including relevant statistics), and conclusions.</li>
+            <li>Avoid citations and references in the abstract. Include 3–5 keywords in the manuscript.</li>
+            <li>For the manuscript, use lowercase Roman page numbers in the upper-right corner, following the guidance provided for your thesis.</li>
+          </ul>
+          <p style="margin:8px 0 0">The word-count range is a recommendation and will not prevent submission. Follow your adviser’s or department’s current instructions if they differ.</p>
+        </section>
       </div>
       <?php echo renderFileUploader([
           'inputName' => 'final_manuscript',
@@ -304,6 +316,29 @@ if (($user['role'] ?? '') === 'faculty') {
     </section>
   <?php endif; ?>
 </main>
+<script>
+(() => {
+  const abstractField = document.getElementById('manuscript-abstract');
+  const wordCount = document.getElementById('abstract-word-count');
+  if (!abstractField || !wordCount) return;
+
+  const updateWordCount = () => {
+    const words = abstractField.value.trim().match(/\S+/g) || [];
+    let guidance = 'Recommended length: 200–250 words.';
+    if (words.length > 0 && words.length < 200) {
+      guidance = 'Below the recommended 200–250-word range.';
+    } else if (words.length > 250) {
+      guidance = 'Above the recommended 200–250-word range.';
+    } else if (words.length >= 200) {
+      guidance = 'Within the recommended 200–250-word range.';
+    }
+    wordCount.textContent = `${words.length} ${words.length === 1 ? 'word' : 'words'}. ${guidance} Submission is not blocked by this recommendation.`;
+  };
+
+  abstractField.addEventListener('input', updateWordCount);
+  updateWordCount();
+})();
+</script>
 <script src="<?php echo SITE_URL; ?>js/file-uploader.js"></script>
 <?php
 if (($user['role'] ?? '') === 'faculty') {

@@ -48,6 +48,7 @@ class FacultyDashboardService
         $recentPublications = $this->getRecentPublications($userId, 3);
         $participationSummary = $this->participationService->getMySummary($userId);
         $researchRecordCount = $this->getActiveResearchRecordCount($userId);
+        $upcomingActivityCount = $this->getUpcomingActivityCount();
 
         return [
             'stats' => $stats,
@@ -57,7 +58,47 @@ class FacultyDashboardService
             'recentPublications' => $recentPublications,
             'participationSummary' => $participationSummary,
             'researchRecordCount' => $researchRecordCount,
+            'upcomingActivityCount' => $upcomingActivityCount,
         ];
+    }
+
+    /**
+     * Count scheduled activities shown in the shared upcoming activities view.
+     * Returns null when the activity module is not installed.
+     */
+    private function getUpcomingActivityCount(): ?int
+    {
+        $tableCheck = $this->conn->prepare(
+            'SELECT COUNT(*) AS table_count
+               FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = ?'
+        );
+        if (!$tableCheck) {
+            throw new RuntimeException('Unable to check upcoming activity availability: ' . $this->conn->error);
+        }
+        $activitiesTable = 'research_activities';
+        $tableCheck->bind_param('s', $activitiesTable);
+        $tableCheck->execute();
+        $tableExists = (int) ($tableCheck->get_result()->fetch_assoc()['table_count'] ?? 0) === 1;
+        $tableCheck->close();
+        if (!$tableExists) {
+            return null;
+        }
+
+        $stmt = $this->conn->prepare(
+            "SELECT COUNT(*) AS total
+               FROM research_activities
+              WHERE status IN ('upcoming', 'scheduled')"
+        );
+        if (!$stmt) {
+            throw new RuntimeException('Unable to count upcoming activities: ' . $this->conn->error);
+        }
+        $stmt->execute();
+        $total = (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+        $stmt->close();
+
+        return $total;
     }
 
     /**

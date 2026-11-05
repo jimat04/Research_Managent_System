@@ -106,7 +106,8 @@ if ($archiveKind === 'copyright' && $record) {
     $c = archiveConfig($archiveKind, $archiveScope);
 }
 if ($archiveKind === 'copyright' && isset($_GET['output_type']) && !isset($c['types'][(string) $_GET['output_type']])) { http_response_code(404); exit('Record type not found.'); }
-if ($record && !archiveCan($conn, $archiveKind, $record, $user)) archiveDeny();
+$recordAccessAction = $archiveKind === 'publication' && $archiveMode === 'detail' ? 'catalog' : 'view';
+if ($record && !archiveCan($conn, $archiveKind, $record, $user, $recordAccessAction)) archiveDeny();
 if ($archiveMode === 'detail' && !$record) { http_response_code(404); exit('Record not found.'); }
 if ($facultyPublication) {
     $c['faculty_page'] = match (true) {

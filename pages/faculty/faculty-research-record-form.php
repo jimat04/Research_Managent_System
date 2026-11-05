@@ -38,7 +38,7 @@ if ($record) {
     $authors = $record['authors'];
     $sdgs = $record['sdgs'];
 } elseif ($profile) {
-    $authors[] = facultyRecordSuggestedAuthor($profile);
+    $authors[] = facultyRecordSuggestedAuthor($profile, 'lead');
 }
 
 $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
@@ -157,7 +157,7 @@ $select = static function (string $key, string $label, array $options, bool $req
       </section>
       <section class="frr-panel" aria-labelledby="frr-authors-heading">
         <div class="frr-section-heading"><span class="frr-section-number" aria-hidden="true">02</span><div><h3 id="frr-authors-heading">Research authors</h3><p>Choose one Lead Author and arrange everyone in the intended author order.</p></div></div>
-        <p class="frr-hint">Your account is suggested without assuming an authorship role. Changes here apply only to this record. <a href="<?= facultyRecordEscape(SITE_URL . 'pages/shared/profile.php') ?>" target="_blank" rel="noopener">Complete your Account Profile (opens a new tab)</a>.</p>
+        <p class="frr-hint">Your account is suggested as Lead Author. Changes here apply only to this record. <a href="<?= facultyRecordEscape(SITE_URL . 'pages/shared/profile.php') ?>" target="_blank" rel="noopener">Complete your Account Profile (opens a new tab)</a>.</p>
         <div data-author-list>
         <?php foreach ($authors as $index => $author): ?>
           <fieldset class="frr-author" data-author-row>

@@ -128,7 +128,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
             [SITE_URL . 'pages/shared/copyrights.php?ip_scope=innovation_technology_transfer&module_page=innovation_technology_transfer', 'Innovation & Technology Transfer', 'activity', true, 0],
         ],
         'Publications' => [
-            [SITE_URL . 'pages/faculty/faculty-publications.php', 'My Publications', 'publication', true, 0],
+            [SITE_URL . 'pages/faculty/faculty-publications.php', 'Publication Archive', 'publication', true, 0],
             [SITE_URL . 'pages/faculty/faculty-publication-form.php', 'Add Publication', 'document', true, 0],
             [SITE_URL . 'pages/faculty/faculty-publication-reports.php', 'Reports', 'monitor', true, 0],
         ],

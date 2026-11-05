@@ -3,6 +3,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require_once __DIR__ . '/../includes/earist-document-prerequisites.php';
 require_once __DIR__ . '/../includes/earist-document-schema.php';
+require_once __DIR__ . '/../includes/earist-document-edit-schema.php';
 
 $arguments = array_slice($argv, 1);
 if (array_diff($arguments, ['--database'])) {
@@ -28,10 +29,11 @@ if (in_array('--database', $arguments, true)) {
         $result['database']['ledger'] = $ledgerExists
             ? $conn->query("SELECT filename, status FROM schema_migrations WHERE filename REGEXP '^05[0-9]_' OR filename = '049_faculty_document_profile_fields.sql' ORDER BY filename")->fetch_all(MYSQLI_ASSOC) : [];
         $result['database']['storage'] = earistDocumentSchemaStatus($conn);
+        $result['database']['editing_schema'] = earistDocumentEditSchemaStatus($conn);
         $result['database']['latest_recorded_numbered_migration'] = $conn->query("SELECT filename FROM schema_migrations WHERE filename REGEXP '^[0-9]{3}_' ORDER BY filename DESC LIMIT 1")->fetch_row()[0] ?? null;
         $conn->rollback();
         $conn->close();
-        $result['database']['note'] = 'Read-only inspection; absent 052 storage is expected before authorized execution. No ledger creation, synchronization or migration performed.';
+        $result['database']['note'] = 'Read-only inspection; no ledger creation, synchronization or migration performed.';
     } catch (Throwable $exception) {
         $success = false;
         $result['database'] = ['error' => 'Local read-only metadata inspection unavailable.', 'exception_class' => get_class($exception), 'code' => (int) $exception->getCode()];

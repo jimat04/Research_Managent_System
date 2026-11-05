@@ -29,6 +29,7 @@
 require_once __DIR__ . '/logout-transition.php';
 require_once __DIR__ . '/notification-popover.php';
 require_once __DIR__ . '/research-workflow.php';
+require_once __DIR__ . '/shell-icons.php';
 
 function renderStudentShell($user, $current_page, $page_title, $page_subtitle = '', $show_navigation = true, $animate_navigation = false, $show_intro_logout = false) {
     // Normalise the user object
@@ -96,22 +97,22 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
     // directory — e.g. /pages/student/ and /pages/shared/ both resolve the same.
     $nav = [
         'Overview' => [
-            [SITE_URL . 'pages/student/student-dashboard.php', "Let's start learning", '📊', true, 0],
+            [SITE_URL . 'pages/student/student-dashboard.php', "Let's start learning", 'dashboard', true, 0],
         ],
         'My Research' => [
-            [SITE_URL . 'pages/researcher/my-research.php',     'My Research',           '📁', true, 0],
-            [SITE_URL . 'pages/researcher/submit-research.php', 'Submit Research Proposal', '📝', true, 0],
-            [SITE_URL . 'pages/researcher/submit-chapter.php',  'Chapter Submission',      '📄', true, 0],
-            [SITE_URL . 'pages/student/my-documents.php',       'My Documents',          '📚', true, 0],
+            [SITE_URL . 'pages/researcher/my-research.php',     'My Research', 'repository', true, 0],
+            [SITE_URL . 'pages/researcher/submit-research.php', 'Submit Research Proposal', 'document', true, 0],
+            [SITE_URL . 'pages/researcher/submit-chapter.php',  'Chapter Submission', 'document', true, 0],
+            [SITE_URL . 'pages/student/my-documents.php',       'My Documents', 'records', true, 0],
         ],
         'Research Modules' => [
-            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', '&#128197;', true, 0],
-            [SITE_URL . 'pages/student/my-publications.php', 'My Publications', '&#128214;', true, 0],
-            [SITE_URL . 'pages/student/my-ip-contributions.php', 'My IP Contributions', '&#169;', true, 0],
-            [SITE_URL . 'pages/shared/research-archive.php', 'Research Archive',   '&#128451;', true, 0],
+            [SITE_URL . 'pages/shared/activities.php',       'Research Activities', 'activity', true, 0],
+            [SITE_URL . 'pages/student/my-publications.php', 'Publication Archive', 'publication', true, 0],
+            [SITE_URL . 'pages/student/my-ip-contributions.php', 'My IP Contributions', 'copyright', true, 0],
+            [SITE_URL . 'pages/shared/research-archive.php', 'Research Archive', 'repository', true, 0],
         ],
         'Account' => [
-            [SITE_URL . 'pages/shared/profile.php', 'Profile', '👤', true, 0],
+            [SITE_URL . 'pages/shared/profile.php', 'Profile', 'profile', true, 0],
         ],
     ];
 
@@ -184,7 +185,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
           <?php foreach ($items as $item): ?>
             <?php [$href, $label, $icon, $exists] = $item; $active = $exists && $is_active($href); ?>
             <a class="student-nav-item student-nav-dashboard<?php echo $active ? ' active' : ''; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?>>
-              <span class="student-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
+              <span class="student-nav-icon"><?php echo rmsShellIcon($icon); ?></span>
               <span class="student-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
             </a>
           <?php endforeach; ?>
@@ -199,11 +200,11 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
                   break;
               }
           }
-          $groupIcon = $items[0][2] ?? '📁';
+          $groupIcon = $items[0][2] ?? 'repository';
         ?>
         <details class="student-nav-group"<?php echo $groupActive ? ' open' : ''; ?>>
           <summary class="student-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>">
-            <span class="student-nav-icon" aria-hidden="true"><?php echo $groupIcon; ?></span>
+            <span class="student-nav-icon"><?php echo rmsShellIcon($groupIcon); ?></span>
             <span class="student-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
             <?php
               $group_notification_count = $group === 'My Research'
@@ -228,7 +229,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
             }
           ?>
           <a class="<?php echo $classes; ?>" href="<?php echo htmlspecialchars($href, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $attrs; ?>>
-            <span class="student-nav-icon" aria-hidden="true"><?php echo $icon; ?></span>
+            <span class="student-nav-icon"><?php echo rmsShellIcon($icon); ?></span>
             <span class="student-nav-label"><?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></span>
             <?php if ($badge_count > 0): ?>
               <span class="student-nav-badge"><?php echo $badge_count; ?></span>
@@ -244,7 +245,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
         <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="student-nav-logout-form" data-logout-confirm>
           <?php echo csrfField(); ?>
           <button type="submit" class="student-nav-item student-nav-logout">
-          <span class="student-nav-icon" aria-hidden="true">🚪</span>
+          <span class="student-nav-icon"><?php echo rmsShellIcon('logout'); ?></span>
           <span class="student-nav-label">Logout</span>
           </button>
         </form>

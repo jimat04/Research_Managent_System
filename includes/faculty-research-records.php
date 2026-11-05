@@ -72,16 +72,16 @@ function facultyRecordProfile(mysqli $conn, int $facultyId): ?array
     if ($profile) {
         $profile['full_name'] = trim(implode(' ', array_filter([$profile['first_name'], $profile['middle_name'], $profile['last_name']], static fn($part) => $part !== null && $part !== '')));
         $profile['position'] = trim((string) ($profile['academic_rank'] ?: $profile['designation']));
-        $profile['affiliation'] = rmsSetting('institutional_affiliation');
+        $profile['affiliation'] = 'EARIST';
     }
     return $profile;
 }
 
-function facultyRecordSuggestedAuthor(array $profile): array
+function facultyRecordSuggestedAuthor(array $profile, string $authorRole = 'coauthor'): array
 {
     return ['record_author_id' => '', 'faculty_user_id' => (string) $profile['user_id'],
         'author_type' => 'internal', 'full_name' => $profile['full_name'], 'position' => $profile['position'],
-        'affiliation' => $profile['affiliation'], 'author_role' => ''];
+        'affiliation' => $profile['affiliation'], 'author_role' => $authorRole];
 }
 
 function facultyRecordSearchFaculty(mysqli $conn, string $query): array

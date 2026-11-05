@@ -58,7 +58,7 @@
                     </a>
                 <?php endif; ?>
             <?php endforeach; ?>
-            <?php if (!$data['participationSummary']['available']): ?>
+            <?php if ($data['upcomingActivityCount'] === null): ?>
                 <a class="faculty-stat-link faculty-stat-link--records" href="<?= htmlspecialchars($urls['researchRecords'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your active research records">
                     <article class="faculty-stat-card <?= $data['researchRecordCount'] === null ? 'faculty-stat-card--neutral' : 'faculty-stat-card--secondary' ?>">
                         <span class="faculty-stat-value"><?= $data['researchRecordCount'] === null ? '—' : (int) $data['researchRecordCount'] ?></span>
@@ -66,11 +66,11 @@
                         <span class="faculty-stat-subtext"><?= $data['researchRecordCount'] === null ? 'Records are unavailable' : 'Ready to reuse in research documents' ?></span>
                     </article>
                 </a>
-                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['engagements'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your engagement history for activities participated">
+                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['activities'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View upcoming activities">
                     <article class="faculty-stat-card faculty-stat-card--neutral">
                         <span class="faculty-stat-value">—</span>
-                        <span class="faculty-stat-label">Activities Participated</span>
-                        <span class="faculty-stat-subtext">Participation records unavailable</span>
+                        <span class="faculty-stat-label">Upcoming Activities</span>
+                        <span class="faculty-stat-subtext"><?= $data['upcomingActivityCount'] === null ? 'Activities are unavailable' : 'Scheduled research activities' ?></span>
                     </article>
                 </a>
             <?php else: ?>
@@ -81,11 +81,11 @@
                         <span class="faculty-stat-subtext"><?= $data['researchRecordCount'] === null ? 'Records are unavailable' : 'Ready to reuse in research documents' ?></span>
                     </article>
                 </a>
-                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['engagements'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your engagement history for activities participated">
+                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['activities'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View upcoming activities">
                     <article class="faculty-stat-card faculty-stat-card--secondary">
-                        <span class="faculty-stat-value"><?= (int) $data['participationSummary']['activity_count'] ?></span>
-                        <span class="faculty-stat-label">Activities Participated</span>
-                        <span class="faculty-stat-subtext">Unique events attended or presented</span>
+                        <span class="faculty-stat-value"><?= (int) $data['upcomingActivityCount'] ?></span>
+                        <span class="faculty-stat-label">Upcoming Activities</span>
+                        <span class="faculty-stat-subtext"><?= $data['upcomingActivityCount'] === null ? 'Activities are unavailable' : 'Scheduled research activities' ?></span>
                     </article>
                 </a>
             <?php endif; ?>

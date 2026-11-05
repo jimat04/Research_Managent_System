@@ -2450,6 +2450,8 @@ CREATE TABLE IF NOT EXISTS earist_generated_documents (
     docx_path VARCHAR(255) NOT NULL,
     docx_sha256 CHAR(64) NOT NULL,
     docx_size BIGINT UNSIGNED NOT NULL,
+    version_origin ENUM('generated','edited') NOT NULL DEFAULT 'generated',
+    edited_from_generated_document_id INT UNSIGNED NULL,
     pdf_path VARCHAR(255) NULL,
     pdf_sha256 CHAR(64) NULL,
     pdf_size BIGINT UNSIGNED NULL,
@@ -2464,11 +2466,13 @@ CREATE TABLE IF NOT EXISTS earist_generated_documents (
     KEY idx_earist_generated_draft (draft_id),
     KEY idx_earist_generated_verifier (verified_by),
     KEY idx_earist_generated_type_date (document_type, generated_at, generated_document_id),
+    KEY idx_earist_generated_edit_parent (edited_from_generated_document_id),
     CONSTRAINT fk_earist_generated_draft FOREIGN KEY (draft_id) REFERENCES earist_document_drafts (draft_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_record FOREIGN KEY (research_record_id) REFERENCES faculty_research_records (research_record_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_owner FOREIGN KEY (owner_id) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_generator FOREIGN KEY (generated_by) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_verifier FOREIGN KEY (verified_by) REFERENCES users (user_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_generated_edit_parent FOREIGN KEY (edited_from_generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
     CONSTRAINT chk_earist_generated_json CHECK (JSON_VALID(snapshot_json) AND JSON_VALID(missing_fields_json) AND JSON_VALID(warnings_json)),
     CONSTRAINT chk_earist_generated_versions CHECK (document_version > 0 AND draft_revision > 0 AND source_record_version > 0 AND input_schema_version > 0 AND mapping_definition_version > 0 AND binding_version > 0),
     CONSTRAINT chk_earist_generated_hashes CHECK (source_fingerprint REGEXP '^[0-9a-f]{64}$' AND template_sha256 REGEXP '^[0-9a-f]{64}$' AND request_token_hash REGEXP '^[0-9a-f]{64}$' AND docx_sha256 REGEXP '^[0-9a-f]{64}$'),
@@ -2482,6 +2486,33 @@ CREATE TABLE IF NOT EXISTS earist_generated_documents (
         (pdf_path IS NULL AND pdf_sha256 IS NULL AND pdf_size IS NULL AND pdf_created_at IS NULL AND pdf_converter_version IS NULL)
         OR (pdf_path IS NOT NULL AND CHAR_LENGTH(TRIM(pdf_path)) > 0 AND pdf_sha256 IS NOT NULL AND pdf_sha256 REGEXP '^[0-9a-f]{64}$' AND pdf_size IS NOT NULL AND pdf_size > 0 AND pdf_created_at IS NOT NULL AND pdf_converter_version IS NOT NULL AND CHAR_LENGTH(TRIM(pdf_converter_version)) > 0)
     )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS earist_document_edit_sessions (
+    session_id CHAR(64) NOT NULL,
+    generated_document_id INT UNSIGNED NOT NULL,
+    owner_id INT UNSIGNED NOT NULL,
+    file_selector ENUM('primary','sdg_continuation') NOT NULL,
+    editor_key CHAR(64) NOT NULL,
+    source_sha256 CHAR(64) NOT NULL,
+    read_token_sha256 CHAR(64) NOT NULL,
+    read_token_expires_at DATETIME NOT NULL,
+    state ENUM('active','saved','closed','expired','failed') NOT NULL,
+    active_lock_generated_document_id INT UNSIGNED NULL,
+    expires_at DATETIME NOT NULL,
+    saved_generated_document_id INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (session_id),
+    UNIQUE KEY uq_earist_edit_active_lock (active_lock_generated_document_id),
+    KEY idx_earist_edit_owner_state (owner_id,state,expires_at),
+    KEY idx_earist_edit_generated (generated_document_id,created_at),
+    CONSTRAINT fk_earist_edit_generated FOREIGN KEY (generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_edit_owner FOREIGN KEY (owner_id) REFERENCES users (user_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_edit_active_lock FOREIGN KEY (active_lock_generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_edit_saved FOREIGN KEY (saved_generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
+    CONSTRAINT chk_earist_edit_ids CHECK (session_id REGEXP '^[0-9a-f]{64}$' AND editor_key REGEXP '^[0-9a-f]{64}$' AND source_sha256 REGEXP '^[0-9a-f]{64}$' AND read_token_sha256 REGEXP '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_earist_edit_state CHECK ((state = 'active' AND active_lock_generated_document_id = generated_document_id AND saved_generated_document_id IS NULL) OR (state <> 'active' AND active_lock_generated_document_id IS NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- No seed data, triggers, grants, automatic cleanup or certificate-issuance state.

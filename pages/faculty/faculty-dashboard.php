@@ -41,6 +41,7 @@ $urls = [
     'analytics' => SITE_URL . 'pages/faculty/faculty-analytics.php',
     'advising' => SITE_URL . 'pages/faculty/faculty-advising.php',
     'engagements' => SITE_URL . 'pages/faculty/faculty-engagement.php?view=history',
+    'activities' => SITE_URL . 'pages/shared/activities.php?view=upcoming',
     'researchRecords' => SITE_URL . 'pages/faculty/faculty-research-records.php',
     'addEngagement' => SITE_URL . 'pages/faculty/faculty-engagement.php',
     'profile' => SITE_URL . 'pages/faculty/faculty-profile.php',

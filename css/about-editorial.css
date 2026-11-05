@@ -236,8 +236,9 @@ body.about-page main :is(p, li) { text-align: left; }
   .about-page .about-record-principle { gap: 16px; padding: 24px 0; }
   .about-page main .about-record-principle p { font-size: 14px; }
 }
-body.public-v2.about-page #about-earist { margin-top: 24px; }
+body.public-v2.about-page #about-earist { margin-top: 56px; }
 .about-purpose { padding-top: 0; }
+.about-section.about-purpose { padding-bottom: 0; }
 .about-purpose .container {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -373,6 +374,7 @@ body.public-v2.about-page .about-manual details[open] .manual-disclosure-label::
   overflow-y: auto;
   margin: auto;
   padding: 32px;
+  text-align: center;
   border: 1px solid var(--bd);
   border-radius: 16px;
   background: var(--surf);

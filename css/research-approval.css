@@ -49,13 +49,21 @@ body.admin-body .admin-page-content .approval-search input {
 .approval-results { margin: 0 0 16px; color: #475569; }
 .approval-projects { display: grid; gap: 24px; }
 .approval-project, .approval-empty { min-width: 0; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background: #fff; }
+.approval-project { position: relative; }
 .approval-project h2, .approval-empty h2 { margin: 0; color: #111827; font-size: 18px; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
+.approval-project-header h2 { padding-right: 260px; }
 .approval-researcher { margin: 8px 0 0; color: #475569; overflow-wrap: anywhere; }
 .approval-progress { margin: 12px 0 0; color: #166534; }
 .approval-documents { margin-top: 24px; }
 .approval-documents > summary {
-    display: inline-block;
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    display: block;
+    width: max-content;
+    max-width: 100%;
     min-height: 48px;
+    margin-left: auto;
     padding: 10px 20px;
     border: 1px solid var(--review-border);
     border-radius: 10px;
@@ -81,7 +89,7 @@ body.admin-body .admin-page-content .approval-search input {
 .approval-note { max-width: 70ch; margin: 8px 0 0; color: #475569; }
 .approval-file { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; margin-top: 16px; }
 .approval-file-name { flex: 1 1 240px; min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.approval-file-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.approval-file-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
 .approval-new-tab { font-weight: 400; }
 .approval-history-note { max-width: 70ch; margin: 24px 0 12px; color: #475569; }
 .approval-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px 24px; margin-top: 32px; }
@@ -94,6 +102,11 @@ body.admin-body .admin-page-content .approval-search input:focus {
     outline-offset: 3px;
 }
 
+@media (max-width: 900px) {
+    .approval-project-header h2 { padding-right: 0; }
+    .approval-documents > summary { position: static; width: 100%; max-width: none; margin-left: 0; text-align: center; }
+}
+
 @media (max-width: 700px) {
     .approval-search-controls { align-items: stretch; }
     .approval-search input,
@@ -101,7 +114,6 @@ body.admin-body .admin-page-content .approval-search input:focus {
     .approval-file { display: block; }
     .approval-file-actions { margin-top: 12px; }
     .approval-file-actions .approval-button { flex: 1 1 160px; }
-    .approval-documents > summary { width: 100%; text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

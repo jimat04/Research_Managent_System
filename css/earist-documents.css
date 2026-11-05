@@ -77,5 +77,29 @@
 .ed-annex-preparation .ed-check-help{max-width:78ch;margin:-10px 0 20px 32px;color:#475569;font-size:14px;line-height:1.5}
 .ed-annex-preparation .ed-action-guidance{max-width:78ch;margin:22px 0 8px;font-size:15px;font-weight:600;line-height:1.6}
 .ed-annex-preparation .ed-actions button{min-height:48px;padding:12px 20px;font-size:16px}
+.ed-docx-actions{display:flex;min-width:145px;flex-direction:column;align-items:stretch;gap:8px}
+.ed-docx-actions__button{display:inline-flex;min-height:40px;align-items:center;justify-content:center;padding:8px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:600;line-height:1.4;text-align:center;text-decoration:none;cursor:pointer}
+.ed-docx-actions__button:hover{border-color:#94a3b8;background:#f8fafc}
+.ed-docx-actions__button:focus-visible,.ed-docx-preview__close:focus-visible,.ed-docx-preview__download:focus-visible,.ed-docx-preview__edit:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
+.ed-docx-actions__preview{border-color:#1d4ed8;background:#eff6ff;color:#1d4ed8}
+.faculty-page-content button.ed-docx-actions__preview{color:#1d4ed8!important}
+.ed-docx-actions__preview:hover{border-color:#1d4ed8;background:#dbeafe}
+.ed-docx-preview{position:fixed;inset:0;place-items:center;margin:0;width:100vw;height:100dvh;max-width:none;max-height:none;padding:20px;border:0;border-radius:0;background:transparent;color:#111827;box-shadow:none}
+.ed-docx-preview[open]{display:grid}
+.ed-docx-preview::backdrop{background:#0f172a99}
+.ed-docx-preview__inner{display:flex;width:min(1080px,calc(100vw - 40px));max-height:min(94dvh,1200px);flex-direction:column;padding:20px;border:1px solid #cbd5e1;border-radius:16px;background:#f1f5f9;box-shadow:0 24px 80px #0f172a47}
+.ed-docx-preview__header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding-bottom:14px}
+.ed-docx-preview__header h2{margin:0;color:#111827;font-size:20px;line-height:1.35}
+.ed-docx-preview__header p{max-width:75ch;margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.5}
+.ed-docx-preview__close,.ed-docx-preview__download{display:inline-flex;min-height:40px;align-items:center;justify-content:center;padding:8px 13px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer}
+.ed-docx-preview__status{margin:0;padding:16px;border:1px solid #d8e0ea;border-radius:10px;background:#fff;color:#475569;font-size:14px;line-height:1.5}
+.ed-docx-preview__scroll{max-height:calc(94dvh - 175px);overflow:auto;border:1px solid #d8e0ea;border-radius:10px;background:#e2e8f0;overscroll-behavior:contain}
+.ed-docx-preview__content,.ed-docx-preview__content .docx-wrapper{min-height:100%;padding:18px 12px;background:#e2e8f0}
+.ed-docx-preview__content .docx-wrapper>section.docx{box-sizing:border-box;width:210mm!important;min-height:297mm!important;margin:0 auto 18px;box-shadow:0 2px 12px #0f172a24}
+.ed-docx-preview__content .docx-wrapper>section.docx.ed-docx-preview__page--landscape{width:297mm!important;min-height:210mm!important}
+.ed-docx-preview__footer{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-top:14px}.ed-docx-preview__edit-form{margin:0}.ed-docx-preview__edit,.ed-docx-preview__edit-note{display:inline-flex;min-height:40px;align-items:center;justify-content:center;padding:8px 13px;border:1px solid #1d4ed8;border-radius:9px;background:#1d4ed8;color:#fff;font:inherit;font-size:13px;font-weight:600}.ed-docx-preview__edit{cursor:pointer}.ed-docx-preview__edit:hover:not(:disabled){background:#1e40af}.ed-docx-preview__edit:disabled{border-color:#cbd5e1;background:#f8fafc;color:#64748b;cursor:not-allowed}.ed-docx-preview__edit-note{border-color:#cbd5e1;background:#f8fafc;color:#64748b;font-size:12px}
+.ed-docx-preview__download{border-color:#1d4ed8;color:#1d4ed8}
+.ed-docx-preview__download:hover{background:#eff6ff}
+@media(max-width:600px){.ed-docx-preview{padding:6px}.ed-docx-preview__inner{width:calc(100vw - 12px);max-height:96dvh;padding:12px;border-radius:12px}.ed-docx-preview__header{gap:10px}.ed-docx-preview__header h2{font-size:17px}.ed-docx-preview__header p{font-size:12px}.ed-docx-preview__scroll{max-height:calc(96dvh - 180px)}.ed-docx-actions{min-width:125px}.ed-docx-actions__button{font-size:12px}}
 @media(max-width:1000px){.ead-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.ed-panel{padding:22px}.ead-steps,.ed-grid,.ed-generation-checks,.ed-annex-preparation .ed-score-guide ul{grid-template-columns:1fr}.ed-search,.ed-actions{align-items:stretch;flex-direction:column}}

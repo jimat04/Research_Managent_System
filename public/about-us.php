@@ -219,7 +219,6 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                         </div>
                     </details>
                 </div>
-                <p>Source: EARIST Research Manual (2015).</p>
             </div>
         </section>
 

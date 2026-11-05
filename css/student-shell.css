@@ -280,10 +280,15 @@
   justify-content: center;
   width: 19px;
   height: 19px;
-  font-size: 16px;
   line-height: 1;
   color: #64748b;
   flex-shrink: 0;
+}
+
+.student-nav-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
 }
 
 .student-nav-item.active .student-nav-icon { color: #fff; }

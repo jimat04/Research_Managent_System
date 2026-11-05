@@ -11,7 +11,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Before affected work, load the matching
 | UI, new pages/components, responsive behavior or visual QA | [UI](ui.md) |
 | Any verification or architecture/relationship trace if necessary | [Graph lookup](graph-lookup.md); verification also requires the [manual guide](../testing/MANUAL_TESTING_GUIDE.md) |
 
-Select the specialist from the root table. For skills, prefer these narrow defaults:
+Select a primary specialist from the root table. For substantial cross-scope work, `rms-workflow` can coordinate multiple bounded subagents when their tasks are independent or need distinct expertise; keep one owner accountable for integration. For skills, prefer these narrow defaults:
 
 - Existing UI redesign: [redesign-existing-projects](../../.github/skills/redesign-existing-projects/SKILL.md). A small local CSS fix can use the UI reference and specialist without loading a broad design workflow.
 - New substantial visual work: [design-taste-frontend](../../.github/skills/design-taste-frontend/SKILL.md), using the RMS identity/stack. Choose one primary visual skill.

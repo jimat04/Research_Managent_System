@@ -26,7 +26,7 @@ This map was prepared before the context cleanup on 2026-10-24. It maps the curr
 | CLAUDE: required EARIST identity, stack exclusions, exact role/brand/status colors, emoji, typography/spacing, shells/nav/cards/tables/buttons/forms, responsive/motion, component reuse and design goal | UI reference (all detailed design sections retained) |
 | CLAUDE: password policy/hashing, soft-delete filters, handleRmsUpload, protected routes, .htaccess | Workflow-security reference |
 | Copilot: supported locations/settings, conditional clients/plugins, no invented tools/agents/results or implicit installation/paid API/publishing/database permissions | Compact Copilot entry; root routing; Copilot workflow setup guide |
-| Workflow coordinator: one primary owner, bounded delegation, sequential dependencies/disjoint edits, integration and fallback | Workflow coordinator; root working method |
+| Workflow coordinator: one accountable primary owner, multiple bounded subagents when useful, sequential dependencies/disjoint edits, integration and fallback | Workflow coordinator; root working method; task reference index |
 | All specialists: shared safety, source discovery, Graphify/manual verification and reporting | Root AGENTS plus mandatory reference index routing; specialist-specific controls retained in each definition |
 | Security specialist: full replaced block in every answer | Replaced by concise file/diff references plus security rationale; full blocks on request or when needed for review (authorized output-format change) |
 | Manual guide: all verification behavior and report status definitions | Guide retained; only Graphify entry link changes to the concise read-only lookup reference |

@@ -49,4 +49,4 @@ The `rms-workflow.agent.md` coordinator routes Copilot/local implementation task
 | Slow query or measured latency | `rms-performance` and `rms-db` |
 | Restore or retention plan | `rms-backup` and `rms-db` |
 
-Keep collaboration narrow: one primary specialist per task, adding another only when the work crosses ownership boundaries.
+Keep one primary specialist responsible for each task. Add multiple subagents when bounded, independent work or distinct expertise materially helps, including parallel work that crosses ownership boundaries. Give delegates separate objectives and edit ownership, then integrate and review their results; do not delegate for its own sake.
