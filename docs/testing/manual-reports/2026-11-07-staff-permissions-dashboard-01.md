@@ -1,0 +1,39 @@
+# Staff permissions and dashboard alignment
+
+Date: 2026-11-07 (Asia/Taipei)
+
+## Scope
+
+Align staff research navigation, dashboard cards, and the permission editor; remove the separate Seminars / Workshops and Trainings grants; and correct status-page authorization for activity list, form, and detail routes.
+
+## Graphify review
+
+- Queried the existing Graphify map for staff activity permissions, routes, dashboard, sidebar, and permission editor.
+- The map returned 83 nodes and was truncated. Its useful hints included `staff-dashboard.php`, `activity-form.php`, `auth.php`, `getStaffPermissionMatrix()`, and `saveStaffPermissionCollection()`.
+- The map did not provide complete activity list/detail route coverage. Current source was checked directly in `pages/shared/activities.php`, `pages/shared/activity-form.php`, `pages/shared/activity-detail.php`, `includes/auth.php`, `includes/staff-shell.php`, `pages/admin/admin-research-module.php`, and `pages/admin/admin-users.php`.
+- Repeated the query after route/dashboard edits. It returned 90 nodes and 95 edges, but included unrelated documentation and defense-scheduling nodes; direct source review remained the authoritative route check.
+
+## Assistant checks
+
+| Check | Status | Result |
+|---|---|---|
+| Source review of permission catalog and staff permission matrix | Passed | Activity permissions now use Add Activity, Add Upcoming Activity, Add Completed Activity, View Activity, Upcoming, Ongoing, and Completed. Deprecated type-specific rows are removed. |
+| Source review of route authorization | Passed | List/detail routes use page grants; form creation uses Add grants; form edits and activity actions require Manage on an allowed page. The four activity types use the same grants. |
+| PHP syntax (`php -l`), first pass | Failed | Found a missing `endif` in the staff dashboard and an unparenthesized nested ternary in the activity list return URL. Both were introduced during this implementation and have been corrected; rerun the lint before marking syntax passed. |
+| PHP syntax (`php -l`), retest | Passed | No syntax errors in `includes/auth.php`, `includes/staff-shell.php`, `pages/admin/admin-research-module.php`, `pages/admin/admin-users.php`, `pages/staff/staff-dashboard.php`, `pages/shared/activities.php`, `pages/shared/activity-form.php`, or `pages/shared/activity-detail.php`. Dashboard and activity routes were linted again after the final PHP edits. |
+| Staff browser flow (granted page, denied page, allowed actions) | Pending user observation | The user must perform the application interaction in the integrated browser. |
+| Desktop/mobile dashboard, sidebar, and permission editor | Pending user observation | The user must inspect the app at both widths. |
+
+## User observations
+
+Pending.
+
+## Migration verifier follow-up (2026-11-07 Asia/Taipei)
+
+- Added postcondition verifiers for migrations 073 and 075 in `scripts/migrate.php`: 073 checks retired publication keys are absent and users with research-review grants have corresponding engagement-record grants; 075 checks retired activity-type permission keys are absent. The checks are limited to postconditions changed by each migration.
+- `php -l scripts/migrate.php` passed. Read-only `php scripts/migrate.php status` reports 073 and 075 as pending. The pre-migration target is local `rms_db`; neither migration was applied, and no database was changed. The verifier postconditions have not been exercised against a migrated state.
+- Staff browser permission checks remain pending as listed above.
+
+## Limitations
+
+Migration `075_staff_activity_status_permissions.sql` removes old type-specific rows when run. It has not been run; no database was changed. Existing legacy type grants will therefore remain in stored data until the migration is applied, but are no longer exposed or honored by the permission catalog.

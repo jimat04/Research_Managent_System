@@ -7,9 +7,6 @@
   const scrollRegion = dialog.querySelector('[data-earist-preview-scroll]');
   const content = dialog.querySelector('[data-earist-preview-content]');
   const downloadLink = dialog.querySelector('[data-earist-preview-download]');
-  const editForm = dialog.querySelector('[data-earist-preview-edit-form]');
-  const editId = dialog.querySelector('[data-earist-edit-id]');
-  const editFile = dialog.querySelector('[data-earist-edit-file]');
   const maxPreviewBytes = 10 * 1024 * 1024;
   let requestSequence = 0;
 
@@ -42,10 +39,6 @@
     downloadLink.hidden = !downloadUrl;
     downloadLink.href = downloadUrl || '#';
     downloadLink.setAttribute('download', '');
-    if (editForm && editId && editFile) {
-      editId.value = button.dataset.generatedId || '';
-      editFile.value = button.dataset.fileSelector || '';
-    }
     title.textContent = requestedTitle;
     status.hidden = false;
     status.textContent = 'Loading saved document preview…';
@@ -80,14 +73,18 @@
       if (documentBlob.size > maxPreviewBytes) throw new Error('This document is larger than the 10 MB preview limit. Download it to view the full file.');
 
       await window.docx.renderAsync(documentBlob, content, null, {
+        breakPages: true,
         renderAltChunks: false,
         renderComments: false,
         useBase64URL: true,
       });
 
       if (requestedTitle.startsWith('Annex E')) {
-        content.querySelectorAll('.docx-wrapper > section.docx header img').forEach((image) => {
-          image.style.translate = '1.25in 0';
+        content.querySelectorAll('.docx-wrapper > section.docx > header div').forEach((drawing) => {
+          if (drawing.style.position === 'relative' && drawing.style.display === 'inline-block'
+            && (drawing.style.left || drawing.style.top)) {
+            drawing.style.transform = 'translateX(1.25in)';
+          }
         });
       }
 

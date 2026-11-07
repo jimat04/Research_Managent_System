@@ -1,225 +1,111 @@
-/** Faculty analytics charts; data tables remain available without Chart.js. */
+/** Faculty portfolio analytics charts. Tabular values remain available without Chart.js. */
 (function() {
     'use strict';
 
-    // ============================================================
-    // Chart.js Lazy Loading
-    // ============================================================
-    let chartJSPromise = null;
+    const chartUrl = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    let chartPromise;
 
-    function loadChartJS() {
-        if (window.Chart) {
-            return Promise.resolve();
-        }
-        if (!chartJSPromise) {
-            chartJSPromise = new Promise((resolve, reject) => {
+    function loadChartJs() {
+        if (window.Chart) return Promise.resolve(window.Chart);
+        if (!chartPromise) {
+            chartPromise = new Promise((resolve, reject) => {
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
-                script.onload = () => {
-                    console.log('[FacultyAnalytics] Chart.js loaded');
-                    resolve();
-                };
-                script.onerror = () => {
-                    console.error('[FacultyAnalytics] Failed to load Chart.js');
-                    chartJSPromise = null;
-                    reject(new Error('Failed to load Chart.js'));
-                };
+                script.src = chartUrl;
+                script.async = true;
+                script.onload = () => window.Chart ? resolve(window.Chart) : reject(new Error('Chart.js did not initialize'));
+                script.onerror = () => reject(new Error('Chart.js could not be loaded'));
                 document.head.appendChild(script);
             });
         }
-        return chartJSPromise;
+        return chartPromise;
     }
 
-    // ============================================================
-    // Color Palette from CSS Variables
-    // ============================================================
-    function getChartColors() {
-        const root = document.documentElement;
+    function colors() {
+        const styles = getComputedStyle(document.documentElement);
         return {
-            primary: getComputedStyle(root).getPropertyValue('--faculty-accent').trim() || '#1d4ed8',
-            primaryHover: getComputedStyle(root).getPropertyValue('--faculty-accent-hover').trim() || '#4338ca',
-            success: getComputedStyle(root).getPropertyValue('--faculty-success').trim() || '#22c55e',
-            successSoft: getComputedStyle(root).getPropertyValue('--faculty-success-soft').trim() || 'rgba(34, 197, 94, 0.08)',
-            warning: getComputedStyle(root).getPropertyValue('--faculty-warning').trim() || '#f59e0b',
-            warningSoft: getComputedStyle(root).getPropertyValue('--faculty-warning-soft').trim() || 'rgba(245, 158, 11, 0.08)',
-            danger: getComputedStyle(root).getPropertyValue('--faculty-danger').trim() || '#ef4444',
-            dangerSoft: getComputedStyle(root).getPropertyValue('--faculty-danger-soft').trim() || 'rgba(239, 68, 68, 0.08)',
+            primary: styles.getPropertyValue('--faculty-accent').trim() || '#1d4ed8',
+            success: styles.getPropertyValue('--faculty-success').trim() || '#15803d',
+            warning: styles.getPropertyValue('--faculty-warning').trim() || '#b45309',
             muted: '#94a3b8',
-            grid: 'rgba(148, 163, 184, 0.2)',
             text: '#475569',
-            textMuted: '#94a3b8',
-            surface: '#ffffff',
-            background: '#f8fafc'
+            grid: 'rgba(148, 163, 184, .18)'
         };
     }
 
-    // ============================================================
-    // Shared Chart Configuration
-    // ============================================================
-    function getSharedChartOptions() {
-        const colors = getChartColors();
-        return {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: '#1e293b',
-                    titleColor: '#f8fafc',
-                    bodyColor: '#f8fafc',
-                    padding: 12,
-                    cornerRadius: 8,
-                    displayColors: false,
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.dataset.label || '';
-                            const value = context.parsed.x;
-                            return value + (label ? ' ' + label : '');
+    function parseData(canvas) {
+        try {
+            const parsed = JSON.parse(canvas.dataset.chartData || '[]');
+            if (!Array.isArray(parsed)) return [];
+            return parsed.filter(item => item && typeof item.label === 'string' && Number.isFinite(Number(item.value)))
+                .map(item => ({ label: item.label, value: Number(item.value) }));
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function initCharts(Chart) {
+        const palette = colors();
+        const paletteRows = [palette.primary, palette.success, palette.warning, palette.muted];
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        document.querySelectorAll('.faculty-analytics canvas[data-chart-data]').forEach(canvas => {
+            const points = parseData(canvas);
+            if (!points.length) return;
+
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: points.map(point => point.label),
+                    datasets: [{
+                        label: 'Records',
+                        data: points.map(point => point.value),
+                        backgroundColor: points.map((point, index) => paletteRows[index % paletteRows.length]),
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        maxBarThickness: 30
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: reduceMotion ? 0 : 400 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#f8fafc',
+                            padding: 10,
+                            callbacks: { label: context => ` ${context.parsed.x} records` }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, color: palette.text },
+                            grid: { color: palette.grid }
+                        },
+                        y: {
+                            ticks: { color: palette.text, font: { size: 11, weight: '500' } },
+                            grid: { display: false }
                         }
                     }
                 }
-            },
-            scales: {
-                x: {
-                    display: false,
-                    grid: { display: false },
-                    ticks: { display: false }
-                },
-                y: {
-                    grid: { display: false },
-                    ticks: {
-                        color: colors.text,
-                        font: { size: 12, weight: '500', family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
-                        padding: 8
-                    }
-                }
-            },
-            animation: {
-                duration: 600,
-                easing: 'easeOutQuart'
-            },
-            interaction: {
-                intersect: false,
-                mode: 'index'
-            }
-        };
+            });
+        });
     }
 
-    async function initCharts() {
-        if (!document.querySelector('[data-faculty-analytics]')) return;
-        const charts = {};
-        try {
-            await loadChartJS();
-        } catch (e) {
-            console.error('[FacultyAnalytics] Chart.js load failed, skipping charts');
-            return;
-        }
-
-        const colors = getChartColors();
-        const sharedOptions = getSharedChartOptions();
-
-        // Projects by Status Chart
-        const projectsCanvas = document.getElementById('chart-projects-status');
-        let projectsData = [];
-        if (projectsCanvas) {
-            try {
-                projectsData = JSON.parse(projectsCanvas.dataset.chartData || '[]');
-            } catch (e) {
-                projectsData = [];
-            }
-        }
-        if (projectsData.length > 0) {
-            charts.projects = new Chart(projectsCanvas, {
-                type: 'bar',
-                data: {
-                    labels: projectsData.map(d => d.label),
-                    datasets: [{
-                        label: 'Projects',
-                        data: projectsData.map(d => d.value),
-                        backgroundColor: [
-                            colors.primary,
-                            colors.success,
-                            colors.warning,
-                            colors.muted
-                        ].slice(0, projectsData.length),
-                        borderRadius: 6,
-                        borderSkipped: false
-                    }]
-                },
-                options: sharedOptions
-            });
-        }
-
-        // Publications by Year Chart
-        const pubsCanvas = document.getElementById('chart-publications-years');
-        let pubsData = [];
-        if (pubsCanvas) {
-            try {
-                pubsData = JSON.parse(pubsCanvas.dataset.chartData || '[]');
-            } catch (e) {
-                pubsData = [];
-            }
-        }
-        if (pubsData.length > 0) {
-            charts.publications = new Chart(pubsCanvas, {
-                type: 'bar',
-                data: {
-                    labels: pubsData.map(d => d.label),
-                    datasets: [{
-                        label: 'Publications',
-                        data: pubsData.map(d => d.value),
-                        backgroundColor: colors.primary,
-                        borderRadius: 6,
-                        borderSkipped: false
-                    }]
-                },
-                options: sharedOptions
-            });
-        }
-
-        // Engagement by Status Chart
-        const engagementCanvas = document.getElementById('chart-engagement-status');
-        let engagementData = [];
-        if (engagementCanvas) {
-            try {
-                engagementData = JSON.parse(engagementCanvas.dataset.chartData || '[]');
-            } catch (e) {
-                engagementData = [];
-            }
-        }
-        if (engagementData.length > 0) {
-            charts.engagement = new Chart(engagementCanvas, {
-                type: 'bar',
-                data: {
-                    labels: engagementData.map(d => d.label),
-                    datasets: [{
-                        label: 'Engagements',
-                        data: engagementData.map(d => d.value),
-                        backgroundColor: [
-                            colors.success,
-                            colors.warning,
-                            colors.danger
-                        ].slice(0, engagementData.length),
-                        borderRadius: 6,
-                        borderSkipped: false
-                    }]
-                },
-                options: sharedOptions
-            });
-        }
-
-        document.querySelectorAll('[data-faculty-analytics] .faculty-chart-wrapper').forEach(wrapper => {
-            const canvas = wrapper.querySelector('canvas');
-            const table = wrapper.querySelector('details');
-            if (canvas && table && Chart.getChart(canvas)) table.open = false;
+    function start() {
+        if (!document.querySelector('.faculty-analytics canvas[data-chart-data]')) return;
+        loadChartJs().then(initCharts).catch(() => {
+            // The accessible data tables are the complete fallback when scripts are unavailable.
         });
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initCharts, { once: true });
+        document.addEventListener('DOMContentLoaded', start, { once: true });
     } else {
-        initCharts();
+        start();
     }
 })();

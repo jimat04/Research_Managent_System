@@ -10,6 +10,10 @@
     # These files may exist locally for recovery/diagnostics but must not be
     # downloadable through the web root.
     RewriteRule ^backups(?:/|$) - [F,L,NC]
+    # Keep repository metadata and agent instructions out of public responses.
+    RewriteRule (^|/)\.(?:git|github)(?:/|$) - [F,L,NC]
+    # Application code uses these directories server-side; visitors must not fetch them directly.
+    RewriteRule ^(?:docs|graphify-out|scripts|templates|vendor)(?:/|$) - [F,L,NC]
     # EARIST preparation scratch and immutable generated files have authenticated routes only.
     RewriteRule ^storage/earist(?:/|$) - [F,L,NC]
     RewriteRule \.(?:sql|sql\.gz|dump|bak|backup|log)$ - [F,L,NC]
@@ -19,7 +23,7 @@
 Options -Indexes
 
 # Protect sensitive files
-<FilesMatch "^(\.|composer\.json|composer\.lock|package\.json|package-lock\.json|README\.md|TODO\.md|\.gitignore)">
+<FilesMatch "^(\.|composer\.json|composer\.lock|package\.json|package-lock\.json|README\.md|TODO\.md|AGENTS\.md|CLAUDE\.md|PROJECT_STRUCTURE\.md|\.gitignore)">
     Order deny,allow
     Deny from all
 </FilesMatch>

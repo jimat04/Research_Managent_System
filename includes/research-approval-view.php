@@ -3,18 +3,46 @@
 if (!isset($approval_list) || !is_array($approval_list)) {
     return;
 }
+$show_year_filter = in_array($active_tab, ['approved_proposal', 'approved_final_manuscript'], true);
 ?>
 <section class="approval-list" aria-label="Approved research projects">
   <form class="approval-search" method="get" action="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php" role="search">
     <input type="hidden" name="module_page" value="research_approval">
     <input type="hidden" name="view" value="<?php echo rms_approval_escape($active_tab); ?>">
-    <input type="hidden" name="course" value="<?php echo rms_approval_escape($course_filter); ?>">
-    <label for="approval-search">Search by research title or researcher</label>
-    <div class="approval-search-controls">
-      <input id="approval-search" type="search" name="q" maxlength="200" value="<?php echo rms_approval_escape($approval_list['search']); ?>">
-      <button class="approval-button approval-button-primary" type="submit">Search</button>
-      <?php if ($approval_list['search'] !== ''): ?>
-        <a class="approval-button" href="<?php echo rms_approval_escape(rms_approval_url('', 1, $active_tab, $course_filter)); ?>">Clear search</a>
+    <div class="approval-filter-heading">
+      <h2><?php echo $active_tab === 'approved_proposal' ? 'Find approved proposals' : 'Find approved research'; ?></h2>
+      <p><?php echo $show_year_filter
+          ? 'Search by title or researcher, then narrow results by course and submission year.'
+          : 'Search by title or researcher, then narrow results by course.'; ?></p>
+    </div>
+    <div class="approval-search-grid<?php echo $show_year_filter ? ' has-year-filter' : ''; ?>">
+      <div class="approval-filter-field approval-filter-search">
+        <label for="approval-search">Title or researcher</label>
+        <input id="approval-search" type="search" name="q" maxlength="200" placeholder="Search approved research" value="<?php echo rms_approval_escape($approval_list['search']); ?>">
+      </div>
+      <div class="approval-filter-field">
+        <label for="approval-course">Course</label>
+        <select id="approval-course" name="course">
+          <option value="">All courses</option>
+          <?php foreach (['BSIT', 'BSCS'] as $course): ?>
+            <option value="<?php echo rms_approval_escape($course); ?>"<?php echo $course_filter === $course ? ' selected' : ''; ?>><?php echo rms_approval_escape($course); ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php if ($show_year_filter): ?>
+        <div class="approval-filter-field">
+          <label for="approval-year">Submission year</label>
+          <select id="approval-year" name="year">
+            <option value="">All years</option>
+            <?php foreach ($approval_list['years'] as $year): ?>
+              <option value="<?php echo rms_approval_escape($year); ?>"<?php echo $approval_list['year'] === $year ? ' selected' : ''; ?>><?php echo rms_approval_escape($year); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      <?php endif; ?>
+      <button class="approval-button approval-button-primary approval-filter-submit" type="submit">Apply filters</button>
+      <?php if ($approval_list['search'] !== '' || $course_filter !== '' || $approval_list['year'] !== ''): ?>
+        <a class="approval-button approval-filter-clear" href="<?php echo rms_approval_escape(rms_approval_url('', 1, $active_tab)); ?>">Clear filters</a>
       <?php endif; ?>
     </div>
   </form>
@@ -25,15 +53,15 @@ if (!isset($approval_list) || !is_array($approval_list)) {
       of <?php echo (int) $approval_list['total']; ?> research <?php echo $approval_list['total'] === 1 ? 'project' : 'projects'; ?>.
       Most recent approvals first.
     <?php else: ?>
-      <?php echo $approval_list['search'] !== '' ? 'No research projects match your search.' : 'No approved research submissions yet.'; ?>
+      <?php echo $approval_list['search'] !== '' || $course_filter !== '' || $approval_list['year'] !== '' ? 'No research projects match the current filters.' : 'No approved research submissions yet.'; ?>
     <?php endif; ?>
   </p>
 
   <?php if (!$approval_list['projects']): ?>
     <div class="approval-empty">
-      <h2><?php echo $approval_list['search'] !== '' ? 'No matching research' : 'No approved submissions yet'; ?></h2>
-      <p><?php echo $approval_list['search'] !== ''
-          ? 'Try a shorter research title or the researcher’s name, or clear the search to see all projects.'
+      <h2><?php echo $approval_list['search'] !== '' || $course_filter !== '' || $approval_list['year'] !== '' ? 'No matching research' : 'No approved submissions yet'; ?></h2>
+      <p><?php echo $approval_list['search'] !== '' || $course_filter !== '' || $approval_list['year'] !== ''
+          ? 'Adjust or clear the search and filters to see more projects.'
           : rms_approval_escape($section['empty_description']); ?></p>
     </div>
   <?php endif; ?>
@@ -124,11 +152,11 @@ if (!isset($approval_list) || !is_array($approval_list)) {
   <?php if ($approval_list['total_pages'] > 1): ?>
     <nav class="approval-pagination" aria-label="Research approval pages">
       <?php if ($approval_list['page'] > 1): ?>
-        <a class="approval-button" rel="prev" href="<?php echo rms_approval_escape(rms_approval_url($approval_list['search'], $approval_list['page'] - 1, $active_tab, $course_filter)); ?>">Previous page</a>
+        <a class="approval-button" rel="prev" href="<?php echo rms_approval_escape(rms_approval_url($approval_list['search'], $approval_list['page'] - 1, $active_tab, $course_filter, $approval_list['year'])); ?>">Previous page</a>
       <?php endif; ?>
       <span>Page <?php echo (int) $approval_list['page']; ?> of <?php echo (int) $approval_list['total_pages']; ?></span>
       <?php if ($approval_list['page'] < $approval_list['total_pages']): ?>
-        <a class="approval-button" rel="next" href="<?php echo rms_approval_escape(rms_approval_url($approval_list['search'], $approval_list['page'] + 1, $active_tab, $course_filter)); ?>">Next page</a>
+        <a class="approval-button" rel="next" href="<?php echo rms_approval_escape(rms_approval_url($approval_list['search'], $approval_list['page'] + 1, $active_tab, $course_filter, $approval_list['year'])); ?>">Next page</a>
       <?php endif; ?>
     </nav>
   <?php endif; ?>

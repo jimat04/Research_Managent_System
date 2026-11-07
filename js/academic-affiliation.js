@@ -29,20 +29,19 @@
           : 'Select an academic unit to see its mapped programs.'));
         return;
       }
-      const select = document.createElement('select');
-      select.className = 'affiliation-program-select';
-      select.name = fieldName;
-      select.multiple = true;
-      select.size = Math.min(Math.max(programs.length, 3), 7);
       programs.forEach((program) => {
         const displayName = program.program_code
           ? program.program_code + ' — ' + program.program_name
           : program.program_name;
-        const option = new Option(displayName + (program.is_specialization ? ' · Specialization' : ''), String(program.affiliation_program_id));
-        option.selected = selectedIds.includes(Number(program.affiliation_program_id));
-        select.append(option);
+        const optionLabel = text('label', 'affiliation-program-option');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.name = fieldName;
+        checkbox.value = String(program.affiliation_program_id);
+        checkbox.checked = selectedIds.includes(Number(program.affiliation_program_id));
+        optionLabel.append(checkbox, text('span', '', displayName + (program.is_specialization ? ' · Specialization' : '')));
+        container.append(optionLabel);
       });
-      container.append(select);
     }
 
     function addRow(data) {
@@ -53,7 +52,7 @@
       const controls = text('div', 'affiliation-row-controls');
       const fieldName = 'academic_affiliations[' + index + '][program_ids][]';
       const groupLabel = text('label', 'affiliation-group-field');
-      groupLabel.append(text('span', 'affiliation-field-label', 'Academic Unit / Program Group'));
+      groupLabel.append(text('span', 'affiliation-field-label', editor.dataset.groupLabel || 'Academic Unit / Program Group'));
       const select = document.createElement('select');
       select.name = 'academic_affiliations[' + index + '][group_id]';
       select.required = true;

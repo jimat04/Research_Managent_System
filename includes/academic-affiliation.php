@@ -329,6 +329,23 @@ function rmsAcademicAffiliationSave(mysqli $conn, int $userId, array $affiliatio
         if (!$ok) {
             return false;
         }
+
+        $syncDepartment = $conn->prepare(
+            'UPDATE users u
+              JOIN user_academic_affiliations a ON a.user_id = u.user_id AND a.is_primary = 1
+              JOIN academic_affiliation_groups g ON g.group_id = a.group_id
+               SET u.department = g.group_name
+             WHERE u.user_id = ?'
+        );
+        if (!$syncDepartment) {
+            return false;
+        }
+        $syncDepartment->bind_param('i', $userId);
+        $ok = $syncDepartment->execute();
+        $syncDepartment->close();
+        if (!$ok) {
+            return false;
+        }
     }
     return true;
 }

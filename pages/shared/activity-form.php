@@ -20,6 +20,17 @@ function activityFormEscape(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function activityFormNormalizeType(string $type): string
+{
+    return match (strtolower($type)) {
+        'seminar', 'forum', 'workshop', 'seminar_workshop' => 'seminar_workshop',
+        'conference', 'congress', 'conference_congress' => 'conference_congress',
+        'training' => 'training',
+        'colloquium' => 'colloquium',
+        default => strtolower($type),
+    };
+}
+
 function activityFormRecipientRoles(mixed $roles): array
 {
     if (!is_array($roles)) {
@@ -52,48 +63,24 @@ function activityFormRecipientIds(mixed $ids): array
 
 $role = (string) ($user['role'] ?? '');
 $userId = (int) ($user['user_id'] ?? 0);
-$capacityPageInput = trim((string) ($_POST['capacity_page'] ?? $_GET['capacity_page'] ?? ''));
-$capacityPage = in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
-    ? $capacityPageInput
-    : '';
-$capacityPageTypes = [
-    'seminars' => 'seminar',
-    'trainings' => 'training',
-    'workshops' => 'workshop',
-];
-$requestedType = trim((string) ($_GET['type'] ?? ''));
-if ($capacityPage === '') {
-    $capacityPage = match ($requestedType) {
-        'seminar' => 'seminars',
-        'training' => 'trainings',
-        'workshop' => 'workshops',
-        'colloquium', 'conference' => '',
-        default => '',
-    };
-}
-$capacityPermissionPages = static function (string $activityType, string $selectedPage): array {
-    if ($activityType === 'seminar') {
-        return ['seminars'];
-    }
-    if ($activityType === 'training') {
-        return ['trainings'];
-    }
-    if ($activityType === 'workshop') {
-        return ['workshops'];
-    }
-    if (in_array($activityType, ['colloquium', 'conference'], true)) {
-        return ['seminars', 'trainings', 'workshops'];
-    }
-    return ['seminars', 'trainings', 'workshops'];
-};
-$canManageActivity = static function (string $activityType, string $selectedPage) use ($role, $userId, $capacityPermissionPages): bool {
+$capacityModulePages = rmsPermissionModules()['research_capacity_building']['pages'];
+$modulePageInput = trim((string) ($_POST['module_page'] ?? $_GET['module_page'] ?? ''));
+$modulePage = array_key_exists($modulePageInput, $capacityModulePages) ? $modulePageInput : '';
+$requestedType = activityFormNormalizeType(trim((string) ($_GET['type'] ?? '')));
+$canManageActivity = static function (string $activityType, string $permissionPage, bool $isEdit) use ($role, $userId): bool {
     if ($role === 'admin') {
         return true;
     }
-    foreach ($capacityPermissionPages($activityType, $selectedPage) as $permissionPage) {
-        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $permissionPage)) {
-            return true;
-        }
+    if (!in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
+        return false;
+    }
+    $addPages = ['add_activity', 'add_upcoming_activity', 'add_conducted_activity'];
+    $managePages = ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities'];
+    if ($isEdit && in_array($permissionPage, $managePages, true)) {
+        return hasModulePermission($userId, 'research_capacity_building', 'manage', $permissionPage);
+    }
+    if (!$isEdit && in_array($permissionPage, $addPages, true)) {
+        return hasModulePermission($userId, 'research_capacity_building', 'manage', $permissionPage);
     }
     return false;
 };
@@ -101,6 +88,16 @@ $canManageActivity = static function (string $activityType, string $selectedPage
 $activitiesAvailable = rmsActivityScheduleTableExists($conn, 'research_activities');
 $activityDocumentsAvailable = $activitiesAvailable
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'document_upload_id');
+$activitySourceLinksAvailable = $activitiesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_project_id')
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_publication_id');
+$canChooseArchivedResearchSource = $role === 'admin'
+    || ($role === 'research_staff'
+        && hasModulePermission($userId, 'research_implementation_outputs', 'view', 'completed_research'));
+$canChooseArchivedPublicationSource = $role === 'admin'
+    || ($role === 'research_staff'
+        && (hasModulePermission($userId, 'research_implementation_outputs', 'view', 'research_outputs')
+            || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records')));
 $participantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_participants');
 $scheduleTablesAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates')
     && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'audience_roles')
@@ -108,15 +105,9 @@ $scheduleTablesAvailable = rmsActivityScheduleTableExists($conn, 'activity_sched
 $budgetSchemaAvailable = rmsActivityBudgetSchemaAvailable($conn);
 
 $typeOptions = $role === 'admin'
-    ? ['seminar' => 'Seminar / Forum', 'training' => 'Training', 'workshop' => 'Workshop', 'colloquium' => 'Colloquium', 'conference' => 'Conference']
-    : [];
-if ($role !== 'admin') {
-    foreach (['seminars' => ['seminar', 'Seminar / Forum'], 'trainings' => ['training', 'Training'], 'workshops' => ['workshop', 'Workshop'], 'colloquium' => ['colloquium', 'Colloquium'], 'conference' => ['conference', 'Conference']] as $pageKey => [$typeKey, $typeLabel]) {
-        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey) || in_array($pageKey, ['seminars', 'trainings', 'workshops'], true)) {
-            $typeOptions[$typeKey] = $typeLabel;
-        }
-    }
-}
+    || hasModulePermission($userId, 'research_capacity_building', 'manage', $modulePage)
+        ? ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress']
+        : [];
 $editRequested = array_key_exists('id', $_GET);
 $requestedScheduleMode = (string) ($_GET['mode'] ?? '') === 'schedule';
 $requestedBudgetMode = (string) ($_GET['mode'] ?? '') === 'budget';
@@ -128,19 +119,24 @@ if ($editRequested && !$activityId) {
 $isEdit = $activityId !== null;
 $requestedInitialStatus = $_GET['status'] ?? null;
 $hasRequestedInitialStatus = is_string($requestedInitialStatus) && in_array($requestedInitialStatus, ['upcoming', 'incoming', 'conducted'], true);
-$initialStatus = $hasRequestedInitialStatus
-    ? ($requestedInitialStatus === 'incoming' ? 'upcoming' : $requestedInitialStatus)
-    : 'upcoming';
+$initialStatus = match ($modulePage) {
+    'add_upcoming_activity' => 'upcoming',
+    'add_conducted_activity' => 'conducted',
+    default => $hasRequestedInitialStatus
+        ? ($requestedInitialStatus === 'incoming' ? 'upcoming' : $requestedInitialStatus)
+        : 'upcoming',
+};
 $values = [
-    'activity_type' => $capacityPage !== '' && isset($capacityPageTypes[$capacityPage])
-        ? $capacityPageTypes[$capacityPage]
-        : (isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions)),
+    'activity_type' => isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions),
     'title' => '', 'activity_date' => '', 'activity_time' => '',
-    'venue' => '', 'speaker' => '', 'organizer' => '', 'description' => '', 'status' => $initialStatus,
+    'venue' => '', 'speaker' => '', 'organizer' => '', 'description' => '',
+    'source_project_id' => '', 'source_publication_id' => '', 'status' => $initialStatus,
 ];
 $errors = [];
 if (!$activitiesAvailable) {
     $errors[] = 'The research activities module is not installed.';
+} elseif (!$activitySourceLinksAvailable) {
+    $errors[] = 'Apply migration 071_activity_source_links.sql before editing or saving activities.';
 }
 $eligibleUsers = [];
 $availableRecipientRoles = [];
@@ -158,9 +154,10 @@ $activityDocument = null;
 $storedSchedule = [];
 if ($isEdit && $activitiesAvailable) {
     $activityDocumentColumn = $activityDocumentsAvailable ? ', document_upload_id' : '';
+    $activitySourceColumns = $activitySourceLinksAvailable ? ', source_project_id, source_publication_id' : '';
     $activitySql = $scheduleTablesAvailable
-        ? 'SELECT activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date, venue, speaker, organizer, description, status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1'
-        : 'SELECT activity_type, title, activity_date, activity_time, venue, speaker, organizer, description, status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1';
+        ? 'SELECT activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1'
+        : 'SELECT activity_type, title, activity_date, activity_time, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1';
     $stmt = $conn->prepare($activitySql);
     if (!$stmt) {
         $errors[] = 'Unable to load the activity.';
@@ -173,7 +170,7 @@ if ($isEdit && $activitiesAvailable) {
     $activity = $stmt->get_result()->fetch_assoc();
     $stmt->close();
     if (!$activity) {
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId);
+        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage));
         exit;
     } else {
         foreach ($values as $key => $_value) {
@@ -198,11 +195,11 @@ if ($isEdit && $activitiesAvailable) {
     }
 }
 
-if ($isEdit && $activity && !$canManageActivity((string) $values['activity_type'], $capacityPage)) {
+if ($isEdit && $activity && !$canManageActivity((string) $values['activity_type'], $modulePage, true)) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-if (!$isEdit && !$canManageActivity((string) $values['activity_type'], $capacityPage)) {
+if (!$isEdit && !$canManageActivity((string) $values['activity_type'], $modulePage, false)) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
@@ -219,6 +216,44 @@ try {
     $errors[] = 'Unable to load eligible activity participants.';
 }
 $activeUsers = array_values($eligibleUsers);
+$sourceResearchProjects = [];
+$sourceFacultyPublications = [];
+if ($activitySourceLinksAvailable && ($canChooseArchivedResearchSource || $canChooseArchivedPublicationSource)) {
+    try {
+        if ($canChooseArchivedResearchSource) {
+            $sourceStmt = $conn->prepare(
+                "SELECT rp.project_id, rp.title
+                   FROM research_projects rp
+                   JOIN users owner ON owner.user_id = rp.created_by AND owner.role = 'student'
+                  WHERE rp.status IN ('completed', 'archived') AND rp.deleted_at IS NULL
+                  ORDER BY rp.updated_at DESC, rp.project_id DESC"
+            );
+            if (!$sourceStmt || !$sourceStmt->execute()) {
+                throw new RuntimeException('Unable to load archived student research.');
+            }
+            $sourceResearchProjects = $sourceStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $sourceStmt->close();
+        }
+
+        if ($canChooseArchivedPublicationSource) {
+            $sourceStmt = $conn->prepare(
+                "SELECT publication_id, research_title, researcher_name, publication_type, publication_date
+                   FROM publications
+                  WHERE researcher_category = 'faculty' AND deactivated_at IS NULL
+                    AND (archival_status = 'archived' OR status = 'published')
+                  ORDER BY publication_date DESC, publication_id DESC"
+            );
+            if (!$sourceStmt || !$sourceStmt->execute()) {
+                throw new RuntimeException('Unable to load archived faculty publications.');
+            }
+            $sourceFacultyPublications = $sourceStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $sourceStmt->close();
+        }
+    } catch (Throwable $exception) {
+        error_log('Activity source record options failed: ' . $exception->getMessage());
+        $errors[] = 'Unable to load the optional archived research and publication choices.';
+    }
+}
 $budgetData = null;
 $budgetValues = [
     'activity_format' => 'on_site',
@@ -327,15 +362,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $errors[] = 'Your form expired. Please try again.';
     }
-    $postedCapacityPage = trim((string) ($_POST['capacity_page'] ?? $_GET['capacity_page'] ?? ''));
-    $capacityPage = in_array($postedCapacityPage, ['seminars', 'trainings', 'workshops'], true)
-        ? $postedCapacityPage
-        : match ($requestedType) {
-            'seminar' => 'seminars',
-            'training' => 'trainings',
-            'workshop' => 'workshops',
-            default => '',
-        };
+    $postedModulePage = trim((string) ($_POST['module_page'] ?? $_GET['module_page'] ?? ''));
+    $modulePage = array_key_exists($postedModulePage, $capacityModulePages) ? $postedModulePage : '';
     $postedId = filter_var($_POST['activity_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
     $isEdit = $postedId !== null;
     $activityId = $postedId;
@@ -351,22 +379,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $values[$field] = trim((string) $postedValue);
     }
+    $values['activity_type'] = activityFormNormalizeType((string) $values['activity_type']);
+    if (!$isEdit || (!$requestedScheduleMode && !$requestedBudgetMode)) {
+        foreach (['source_project_id', 'source_publication_id'] as $sourceField) {
+            $postedSourceId = $_POST[$sourceField] ?? '';
+            if (!is_scalar($postedSourceId)) {
+                $errors[] = 'Choose a valid optional source record.';
+                $values[$sourceField] = '';
+                continue;
+            }
+            $postedSourceId = trim((string) $postedSourceId);
+            if ($postedSourceId !== '' && !filter_var($postedSourceId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])) {
+                $errors[] = 'Choose a valid optional source record.';
+                $postedSourceId = '';
+            } elseif ($postedSourceId !== '') {
+                $postedSourceId = (string) (int) $postedSourceId;
+            }
+            $values[$sourceField] = $postedSourceId;
+        }
+    }
+    if ($values['activity_type'] !== 'colloquium') {
+        $values['source_project_id'] = '';
+    }
+    if ($values['activity_type'] !== 'conference_congress') {
+        $values['source_publication_id'] = '';
+    }
     if ($isEdit && (!$activity || (int) ($_GET['id'] ?? 0) !== $activityId)) {
         $errors[] = 'The activity you tried to edit was not found.';
     }
 
-    if (isset($capacityPageTypes[$capacityPage])) {
-        $lockedActivityType = $capacityPageTypes[$capacityPage];
-        if ($values['activity_type'] !== '' && $values['activity_type'] !== $lockedActivityType) {
-            $errors[] = 'The activity type must match the selected ' . rtrim($capacityPage, 's') . ' page.';
-        }
-        $values['activity_type'] = $lockedActivityType;
-    }
-
-    if (!preg_match('/^(seminar|training|workshop|colloquium|conference)$/D', $values['activity_type'])) {
+    if (!in_array($values['activity_type'], ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
         $errors[] = 'Choose a valid activity type.';
     }
-    if (!$canManageActivity((string) $values['activity_type'], $capacityPage)) {
+    if (!$canManageActivity((string) $values['activity_type'], $modulePage, $isEdit)) {
         header('Location: ' . SITE_URL . 'public/403.php');
         exit;
     }
@@ -462,6 +507,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'speaker' => $speaker,
             'organizer' => $organizer,
             'description' => $description,
+            'source_project_id' => $values['source_project_id'] !== '' ? (int) $values['source_project_id'] : null,
+            'source_publication_id' => $values['source_publication_id'] !== '' ? (int) $values['source_publication_id'] : null,
         ];
         $activityWasSaved = false;
         try {
@@ -534,6 +581,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $savedAsConducted = ($isEdit ? (string) ($activity['status'] ?? '') : $initialStatus) === 'conducted';
             $_SESSION['activities_flash'] = [
                 'type' => $documentUploadFailed ? 'error' : 'success',
+                'popup' => !$isEdit && !$savedAsConducted && !$documentUploadFailed,
                 'message' => $documentUploadFailed
                     ? 'The activity was saved, but its document was not attached: ' . $documentUploadError . ' Edit the activity to try again.'
                     : ($isEdit
@@ -551,13 +599,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'type' => 'error',
                     'message' => 'The activity was saved, but a later schedule or budget operation failed. Review the activity before retrying.',
                 ];
-                header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId);
+                header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage));
                 exit;
             }
             $errors[] = 'The activity, schedule, participant records, and budget could not be saved. Please review and try again.';
         }
         if (!$errors) {
-            header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId);
+            header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage));
             exit;
         }
     }
@@ -624,13 +672,12 @@ $isUpcomingActivity = in_array($effectiveActivityStatus, ['upcoming', 'scheduled
 
 $shell = $role === 'admin' ? 'admin' : 'staff';
 $activityTypeLabels = [
-    'seminar' => 'Seminar',
+    'seminar_workshop' => 'Seminar / Workshop',
     'training' => 'Training',
-    'workshop' => 'Workshop',
     'colloquium' => 'Colloquium',
-    'conference' => 'Conference',
+    'conference_congress' => 'Conference / Congress',
 ];
-$hasSpecificActivityType = $isEdit || $capacityPage !== '' || isset($typeOptions[$requestedType]);
+$hasSpecificActivityType = $isEdit || isset($typeOptions[$requestedType]);
 $selectedActivityLabel = $hasSpecificActivityType
     ? ($activityTypeLabels[$values['activity_type']] ?? 'Activity')
     : 'Activity';
@@ -650,12 +697,18 @@ $pageSubtitle = $isEdit
     : ($initialStatus === 'conducted' && $hasRequestedInitialStatus
         ? 'Record a completed activity, its actual attendees, schedule, and actual budget'
         : 'Schedule ' . $scheduleDescription . ' and set who should be notified');
-$activityListUrl = SITE_URL . 'pages/shared/activities.php';
-if ($hasSpecificActivityType) {
-    $activityListUrl .= '?type=' . rawurlencode((string) $values['activity_type']);
-}
-if ($capacityPage !== '') {
-    $activityListUrl .= ($hasSpecificActivityType ? '&' : '?') . 'capacity_page=' . rawurlencode($capacityPage);
+$activityListUrl = $role === 'admin'
+    ? SITE_URL . 'pages/shared/activities.php'
+    : SITE_URL . 'pages/staff/staff-dashboard.php';
+if (in_array($modulePage, ['upcoming_activities', 'ongoing_activities', 'conducted_activities'], true)) {
+    $activityView = match ($modulePage) {
+        'upcoming_activities' => 'upcoming',
+        'ongoing_activities' => 'ongoing',
+        default => 'conducted',
+    };
+    $activityListUrl = SITE_URL . 'pages/shared/activities.php?view=' . $activityView . '&module_page=' . rawurlencode($modulePage);
+} elseif ($modulePage === 'view_activity') {
+    $activityListUrl = SITE_URL . 'pages/shared/activities.php?view=overview&module_page=view_activity';
 }
 if ($shell === 'admin') renderAdminShell($user, 'activities.php', $pageTitle, $pageSubtitle);
 else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
@@ -817,7 +870,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
 @media(prefers-reduced-motion:reduce){.activity-form .form-errors{transition:none}}
 </style>
 <style>
-.activity-form-page.is-admin .back-link {
+body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link {
   display: inline-flex;
   min-height: 44px;
   box-sizing: border-box;
@@ -835,33 +888,34 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
   box-shadow: 0 2px 6px rgba(124, 61, 2, .12);
   transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
 }
-.activity-form-page.is-admin .back-link:hover {
+body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link:hover {
   border-color: #ea580c;
   background: #ffedd5;
   color: #7c2d12;
   box-shadow: 0 4px 10px rgba(124, 61, 2, .16);
 }
-.activity-form-page.is-admin .back-link:focus-visible {
+body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link:focus-visible {
   border-color: #f57c00;
   outline: 3px solid rgba(245, 124, 0, .32);
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .activity-form-page.is-admin .back-link { transition: none; }
+  body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link { transition: none; }
 }
 </style>
 
+<style>.activity-form [data-activity-source][hidden] { display: none !important; }</style>
 <div class="activity-form-page<?= $shell === 'admin' ? ' is-admin' : '' ?><?= $isEdit ? ($requestedScheduleMode ? ' is-schedule-edit' : ($requestedBudgetMode ? ' is-budget-edit' : ' is-details-edit')) : '' ?>">
-  <header class="form-heading"><div><h1><?= activityFormEscape($pageTitle) ?></h1><p><?= activityFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">← Back</a></header>
+  <header class="form-heading"><div><h1><?= activityFormEscape($pageTitle) ?></h1><p><?= activityFormEscape($pageSubtitle) ?></p></div><a class="back-link" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($modulePage !== '' ? '&module_page=' . rawurlencode($modulePage) : '') : $activityListUrl) ?>">← Back</a></header>
   <section class="form-card">
     <?php if ($isEdit): ?><div class="form-status">Current status: <strong><?= activityFormEscape(ucfirst($values['status'])) ?></strong>. Use the activity detail page to complete or cancel it.</div><?php endif; ?>
     <form class="activity-form" id="activity-form" method="post" enctype="multipart/form-data">
       <?= csrfField() ?>
       <?php if ($errors): ?><div class="form-errors is-highlighted" id="activity-form-errors" role="alert" tabindex="-1"><strong>Review the following and correct the marked fields:</strong><ul><?php foreach ($errors as $error): ?><li><?= activityFormEscape($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
-      <?php if ($capacityPage !== ''): ?><input type="hidden" name="capacity_page" value="<?= activityFormEscape($capacityPage) ?>"><?php endif; ?>
+      <?php if ($modulePage !== ''): ?><input type="hidden" name="module_page" value="<?= activityFormEscape($modulePage) ?>"><?php endif; ?>
       <?php if ($isEdit && $activityId): ?><input type="hidden" name="activity_id" value="<?= (int) $activityId ?>"><?php endif; ?>
       <div class="form-grid">
-        <div class="field" id="activity-type-field"><label for="activity-type">Type <span class="required">*</span></label><?php if ($capacityPage !== '' && isset($capacityPageTypes[$capacityPage])): ?><input id="activity-type" type="text" value="<?= activityFormEscape($selectedActivityLabel) ?>" readonly aria-readonly="true"><input type="hidden" name="activity_type" value="<?= activityFormEscape($values['activity_type']) ?>"><?php else: ?><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select><?php endif; ?></div>
+        <div class="field" id="activity-type-field"><label for="activity-type">Type <span class="required">*</span></label><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select></div>
         <div class="field full" id="activity-title-field"><label for="activity-title">Title <span class="required">*</span></label><input id="activity-title" name="title" type="text" maxlength="255" value="<?= activityFormEscape($values['title']) ?>" required></div>
         <div class="field full" id="activity-schedule-section">
           <label>Schedule <span class="required">*</span></label>
@@ -1047,6 +1101,34 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
         <div class="field" id="activity-speaker-field" <?= $_SERVER['REQUEST_METHOD'] === 'GET' ? 'hidden' : '' ?>><label for="activity-speaker">Speaker</label><input id="activity-speaker" name="speaker" type="text" maxlength="255" value="<?= activityFormEscape($values['speaker']) ?>"></div>
         <div class="field" id="activity-organizer-field" <?= $_SERVER['REQUEST_METHOD'] === 'GET' ? 'hidden' : '' ?>><label for="activity-organizer">Organizer</label><input id="activity-organizer" name="organizer" type="text" maxlength="255" value="<?= activityFormEscape($values['organizer']) ?>"></div>
         <div class="field full" id="activity-description-field" <?= $_SERVER['REQUEST_METHOD'] === 'GET' ? 'hidden' : '' ?>><label for="activity-description">Description</label><textarea id="activity-description" name="description"><?= activityFormEscape($values['description']) ?></textarea><small>Include the purpose, audience, or preparation notes participants should know.</small></div>
+        <?php if (!$requestedScheduleMode && !$requestedBudgetMode && $canChooseArchivedResearchSource): ?>
+          <div class="field full" data-activity-source="colloquium" <?= $values['activity_type'] === 'colloquium' ? '' : 'hidden' ?>>
+            <label for="source-project-id">Archived research <span class="muted">(optional)</span></label>
+            <select id="source-project-id" name="source_project_id">
+              <option value="">No linked research</option>
+              <?php foreach ($sourceResearchProjects as $sourceProject): ?>
+                <option value="<?= (int) $sourceProject['project_id'] ?>" <?= (string) $sourceProject['project_id'] === $values['source_project_id'] ? 'selected' : '' ?>><?= activityFormEscape((string) $sourceProject['title']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <small>Choose a completed or archived student research project related to this colloquium.</small>
+          </div>
+        <?php endif; ?>
+        <?php if (!$requestedScheduleMode && !$requestedBudgetMode && $canChooseArchivedPublicationSource): ?>
+          <div class="field full" data-activity-source="conference_congress" <?= $values['activity_type'] === 'conference_congress' ? '' : 'hidden' ?>>
+            <label for="source-publication-id">Archived publication <span class="muted">(optional)</span></label>
+            <select id="source-publication-id" name="source_publication_id">
+              <option value="">No linked publication</option>
+              <?php foreach ($sourceFacultyPublications as $sourcePublication): ?>
+                <?php $publicationLabel = (string) $sourcePublication['research_title']; ?>
+                <?php if (trim((string) ($sourcePublication['researcher_name'] ?? '')) !== ''): ?>
+                  <?php $publicationLabel .= ' · ' . trim((string) $sourcePublication['researcher_name']); ?>
+                <?php endif; ?>
+                <option value="<?= (int) $sourcePublication['publication_id'] ?>" <?= (string) $sourcePublication['publication_id'] === $values['source_publication_id'] ? 'selected' : '' ?>><?= activityFormEscape($publicationLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <small>Choose a published or archived faculty publication related to this conference.</small>
+          </div>
+        <?php endif; ?>
         <?php if ($role === 'admin' && !$requestedScheduleMode && !$requestedBudgetMode): ?>
           <?php if ($activityDocumentsAvailable): ?>
             <div class="field full" id="activity-document-field" <?= $_SERVER['REQUEST_METHOD'] === 'GET' ? 'hidden' : '' ?>>
@@ -1070,11 +1152,12 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
           <fieldset class="field full budget-section" id="budget-section" <?= $_SERVER['REQUEST_METHOD'] === 'GET' && !$isEdit ? 'hidden' : '' ?>>
             <legend>Budget and Participation Details</legend>
             <p class="budget-intro">Keep institutional funding, participant costs, and schedule-specific expenses distinct. Budget notices are separate from schedule invitations and are sent only when explicitly confirmed.</p>
+            <p class="budget-intro" id="participant-funding-requirement" role="status" hidden>Participant-funded activities must include at least one mandatory participant charge with an amount.</p>
             <div class="budget-grid">
               <div class="field"><label for="activity-format">Activity format</label><select id="activity-format" name="activity_format"><option value="on_site" <?= $budgetValues['activity_format'] === 'on_site' ? 'selected' : '' ?>>On-site</option><option value="online" <?= $budgetValues['activity_format'] === 'online' ? 'selected' : '' ?>>Online</option><option value="hybrid" <?= $budgetValues['activity_format'] === 'hybrid' ? 'selected' : '' ?>>Hybrid</option></select></div>
               <div class="field"><label for="funding-source">Funding arrangement</label><select id="funding-source" name="funding_source"><?php if ($budgetValues['funding_source'] === 'combined'): ?><option value="combined" selected hidden>Institutional and participant funding (existing)</option><?php endif; ?><option value="organizational" <?= $budgetValues['funding_source'] === 'organizational' ? 'selected' : '' ?>>Institutional budget</option><option value="participants" <?= $budgetValues['funding_source'] === 'participants' ? 'selected' : '' ?>>Participant-funded</option><option value="free" <?= $budgetValues['funding_source'] === 'free' ? 'selected' : '' ?>>Free of charge</option></select></div>
-              <div class="field"><label for="budget-status">Budget status</label><select id="budget-status" name="budget_status"><option value="pending" <?= $budgetValues['budget_status'] === 'pending' ? 'selected' : '' ?>>Pending — details may change</option><option value="confirmed" <?= $budgetValues['budget_status'] === 'confirmed' ? 'selected' : '' ?>>Confirmed — details verified</option></select></div>
-              <div class="field"><label for="organizational-allocation">Institutional budget</label><input id="organizational-allocation" name="organizational_allocation" type="number" min="0" step="0.01" value="<?= activityFormEscape((string) ($budgetValues['organizational_allocation'] ?? '')) ?>"><small>Actual organizational expenses are itemized separately below.</small></div>
+              <div class="field" id="budget-status-field" <?= in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><label for="budget-status">Budget status</label><select id="budget-status" name="budget_status"><option value="pending" <?= $budgetValues['budget_status'] === 'pending' ? 'selected' : '' ?>>Pending — details may change</option><option value="confirmed" <?= $budgetValues['budget_status'] === 'confirmed' ? 'selected' : '' ?>>Confirmed — details verified</option></select></div>
+              <div class="field" id="organizational-allocation-field" <?= in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><label for="organizational-allocation">Institutional budget</label><input id="organizational-allocation" name="organizational_allocation" type="number" min="0" step="0.01" value="<?= activityFormEscape((string) ($budgetValues['organizational_allocation'] ?? '')) ?>"><small>Actual organizational expenses are itemized separately below.</small></div>
             </div>
             <div class="field full budget-expenses-wrap">
               <strong>Expense details</strong>
@@ -1101,7 +1184,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
               <div class="budget-tools"><button class="button secondary budget-add" id="add-budget-expense" type="button">Add expense item</button></div>
             </div>
             <?php if ($isUpcomingActivity): ?>
-              <label class="budget-check" id="contribution-prompt-wrap" <?= $budgetValues['budget_status'] !== 'pending' || $budgetValues['funding_source'] === 'free' ? 'hidden' : '' ?>><input id="contribution-prompt" type="checkbox" name="contribution_prompt" value="1" <?= !empty($budgetValues['contribution_prompt']) && $budgetValues['budget_status'] === 'pending' && $budgetValues['funding_source'] !== 'free' ? 'checked' : '' ?> <?= $budgetValues['budget_status'] !== 'pending' || $budgetValues['funding_source'] === 'free' ? 'disabled' : '' ?>><span>Ask invited participants whether they are willing to contribute when costs are optional or still pending. Mandatory fees will be disclosed as required costs.</span></label>
+              <label class="budget-check" id="contribution-prompt-wrap" <?= $budgetValues['budget_status'] !== 'pending' || in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><input id="contribution-prompt" type="checkbox" name="contribution_prompt" value="1" <?= !empty($budgetValues['contribution_prompt']) && $budgetValues['budget_status'] === 'pending' && !in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'checked' : '' ?> <?= $budgetValues['budget_status'] !== 'pending' || in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'disabled' : '' ?>><span>Ask invited participants whether they are willing to contribute when costs are optional or still pending. Mandatory fees will be disclosed as required costs.</span></label>
             <?php else: ?>
               <p class="budget-intro">This completed activity records actual costs and attendance. Contribution willingness and individual payments are not collected.</p>
             <?php endif; ?>
@@ -1113,7 +1196,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
           </fieldset>
         <?php endif; ?>
       </div>
-      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') : $activityListUrl) ?>">Cancel</a><button class="button" id="activity-create-submit" type="submit"><?= $isEdit ? 'Save changes' : 'Create ' . activityFormEscape($selectedActivityLabel) ?></button></div>
+      <div class="form-actions"><a class="button secondary" href="<?= activityFormEscape($isEdit && $activityId ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId . ($modulePage !== '' ? '&module_page=' . rawurlencode($modulePage) : '') : $activityListUrl) ?>">Cancel</a><button class="button" id="activity-create-submit" type="submit"><?= $isEdit ? 'Save changes' : 'Create ' . activityFormEscape($selectedActivityLabel) ?></button></div>
     </form>
   </section>
 </div>
@@ -1195,7 +1278,7 @@ else renderStaffShell($user, 'activities.php', $pageTitle, $pageSubtitle);
   function summarizeControls(controls) {
     const entries = [];
     controls.forEach((control) => {
-      if (control.disabled || control.type === 'hidden' || control.type === 'button' || control.type === 'submit') return;
+      if (control.disabled || control.closest('[hidden]') || control.type === 'hidden' || control.type === 'button' || control.type === 'submit') return;
       if (control.type === 'checkbox' && !control.checked) return;
       const label = fieldLabel(control);
       const value = controlValue(control);
@@ -1348,7 +1431,32 @@ function updateBudgetNoticePreview() {
   const statusSelect = document.getElementById('budget-status');
   const isFreeFunding = sourceSelect?.value === 'free';
   const isOrganizationalFunding = sourceSelect?.value === 'organizational';
-  const canAskForContributions = statusSelect?.value === 'pending' && !isFreeFunding;
+  const isParticipantFunding = sourceSelect?.value === 'participants';
+  const canAskForContributions = statusSelect?.value === 'pending' && !isFreeFunding && !isParticipantFunding;
+  const hasMandatoryParticipantCharge = Array.from(budgetExpenseList?.querySelectorAll('[data-budget-expense-row]') || []).some((row) => {
+    const chargeType = row.querySelector('[name$="[charge_type]"]')?.value;
+    const amountName = useExpenseEstimates ? '[name$="[participant_estimated_charge]"]' : '[name$="[participant_actual_charge]"]';
+    const amount = row.querySelector(amountName)?.value.trim();
+    return chargeType === 'mandatory' && Boolean(amount);
+  });
+  const participantFundingRequirement = document.getElementById('participant-funding-requirement');
+  if (participantFundingRequirement) participantFundingRequirement.hidden = !isParticipantFunding;
+  const participantChargeControls = Array.from(budgetExpenseList?.querySelectorAll('[name$="[charge_type]"]') || []);
+  const participantChargeError = 'Choose Mandatory fee / cost for at least one Participant charge and enter its amount before saving a participant-funded activity.';
+  sourceSelect?.setCustomValidity('');
+  participantChargeControls.forEach((control, index) => {
+    control.required = isParticipantFunding && index === 0;
+    control.setCustomValidity(isParticipantFunding && !hasMandatoryParticipantCharge && index === 0
+      ? participantChargeError
+      : '');
+  });
+  if (isParticipantFunding && !participantChargeControls.length) {
+    sourceSelect?.setCustomValidity(participantChargeError);
+  }
+  const organizationalAllocationField = document.getElementById('organizational-allocation-field');
+  if (organizationalAllocationField) organizationalAllocationField.hidden = isFreeFunding || isParticipantFunding;
+  const budgetStatusField = document.getElementById('budget-status-field');
+  if (budgetStatusField) budgetStatusField.hidden = isFreeFunding || isParticipantFunding;
   const expenseDetails = document.querySelector('.budget-expenses-wrap');
   if (expenseDetails) expenseDetails.hidden = isFreeFunding;
   budgetExpenseList?.querySelectorAll('[data-participant-cost-field]').forEach((field) => {
@@ -2144,6 +2252,28 @@ updateScheduleWindowControls();
   }
 
   timeInputs.forEach(enhanceTimeInput);
+})();
+</script>
+
+<script>
+(() => {
+  const typeInput = document.getElementById('activity-type');
+  const sourceFields = Array.from(document.querySelectorAll('[data-activity-source]'));
+  if (!typeInput || sourceFields.length === 0) return;
+
+  function syncActivitySourceFields() {
+    sourceFields.forEach((field) => {
+      const isRelevant = field.dataset.activitySource === typeInput.value;
+      field.hidden = !isRelevant;
+      if (!isRelevant) {
+        const select = field.querySelector('select');
+        if (select) select.value = '';
+      }
+    });
+  }
+
+  typeInput.addEventListener('change', syncActivitySourceFields);
+  syncActivitySourceFields();
 })();
 </script>
 

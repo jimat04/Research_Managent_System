@@ -59,11 +59,11 @@ docs/             Documentation
 
 ### V3 Architecture
 
-- `rmsPermissionModules()` in `includes/auth.php` defines five staff modules with three sub-pages each:
-  - `research_capacity_building`: `seminars`, `trainings`, `workshops`
-  - `research_development`: `research_proposals`, `research_review`, `research_approval`
+- `rmsPermissionModules()` in `includes/auth.php` defines the staff permission catalog dynamically; module page counts vary by module:
+  - `research_capacity_building`: activity creation/view actions, upcoming/ongoing/completed views, `seminars_workshops`, and `trainings`
+  - `research_development`: `research_proposals`, `research_review` (Chapter Review), `research_approval`, `research_engagement_records`
   - `research_implementation_outputs`: `ongoing_research`, `completed_research`, `research_outputs`
-  - `publication_dissemination`: `journal_publications`, `conference_presentations`, `research_repository`
+  - `publication_dissemination`: `publication_records` (All Records), `publication_add` (Add New), `publication_reports` (Reports). Records and reports cover the full publication archive; Add New is limited to journal and conference publication types. File downloads and CSV exports require separate download grants.
   - `intellectual_property_utilization`: `copyrights`, `patents_utility_models`, `innovation_technology_transfer`
 - `pages/admin/admin-research-module.php` launches destinations through `moduleMap` and enforces staff permissions.
 - `pages/shared/research-submission-review.php` is the typed title/chapter review queue.

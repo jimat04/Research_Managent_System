@@ -48,17 +48,19 @@ function adminReportsRenderMonthlyChart(string $id, string $title, array $series
 {
     $maxCount = max(1, (int) max(array_column($series, 'count')));
     $axisMax = max(4, (int) (ceil($maxCount / 4) * 4));
+    $chartWidth = max(560, (count($series) * 84) + 56);
+    $chartWidthStyle = count($series) > 6 ? ' style="width:' . $chartWidth . 'px; max-width:none"' : '';
     ?>
     <div class="monthly-chart-wrap" role="region" aria-label="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> by month, scroll horizontally on small screens" tabindex="0">
-      <svg class="monthly-chart" viewBox="0 0 560 260" role="img" aria-labelledby="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title <?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description">
-        <title id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> over the last six months</title>
+      <svg class="monthly-chart" viewBox="0 0 <?= $chartWidth ?> 260"<?= $chartWidthStyle ?> role="img" aria-labelledby="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title <?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description">
+        <title id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> by month</title>
         <desc id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description"><?php
           echo htmlspecialchars(implode('; ', array_map(static function ($row) {
               return $row['month'] . ': ' . (int) $row['count'];
           }, $series)), ENT_QUOTES, 'UTF-8');
         ?></desc>
         <?php for ($tick = 0; $tick <= 4; $tick++): $gridY = 220 - ($tick * 48); ?>
-          <line class="chart-grid" x1="44" y1="<?= $gridY ?>" x2="548" y2="<?= $gridY ?>" />
+          <line class="chart-grid" x1="44" y1="<?= $gridY ?>" x2="<?= $chartWidth - 12 ?>" y2="<?= $gridY ?>" />
           <text class="chart-axis" x="34" y="<?= $gridY + 4 ?>" text-anchor="end"><?= (int) ($axisMax * $tick / 4) ?></text>
         <?php endfor; ?>
         <?php foreach ($series as $index => $data):
@@ -79,6 +81,8 @@ function adminReportsRenderMonthlyAreaChart(string $id, string $title, array $se
 {
     $maxCount = max(1, (int) max(array_column($series, 'count')));
     $axisMax = max(4, (int) (ceil($maxCount / 4) * 4));
+    $chartWidth = max(560, (count($series) * 84) + 56);
+    $chartWidthStyle = count($series) > 6 ? ' style="width:' . $chartWidth . 'px; max-width:none"' : '';
     $points = [];
     foreach ($series as $index => $data) {
         $points[] = [
@@ -96,8 +100,8 @@ function adminReportsRenderMonthlyAreaChart(string $id, string $title, array $se
     ?>
     <div class="monthly-chart-wrap" role="region" aria-label="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> by month, scroll horizontally on small screens" tabindex="0">
       <div class="monthly-chart-tooltip" id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-tooltip" role="tooltip" hidden></div>
-      <svg class="monthly-chart monthly-area-chart" viewBox="0 0 560 260" role="img" aria-labelledby="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title <?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description">
-        <title id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> over the last six months</title>
+      <svg class="monthly-chart monthly-area-chart" viewBox="0 0 <?= $chartWidth ?> 260"<?= $chartWidthStyle ?> role="img" aria-labelledby="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title <?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description">
+        <title id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> by month</title>
         <desc id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>-description"><?php
           echo htmlspecialchars(implode('; ', array_map(static function ($row) {
               return $row['month'] . ': ' . (int) $row['count'];
@@ -110,7 +114,7 @@ function adminReportsRenderMonthlyAreaChart(string $id, string $title, array $se
           </linearGradient>
         </defs>
         <?php for ($tick = 0; $tick <= 4; $tick++): $gridY = 220 - ($tick * 45); ?>
-          <line class="chart-grid" x1="44" y1="<?= $gridY ?>" x2="548" y2="<?= $gridY ?>" />
+          <line class="chart-grid" x1="44" y1="<?= $gridY ?>" x2="<?= $chartWidth - 12 ?>" y2="<?= $gridY ?>" />
           <text class="chart-axis" x="34" y="<?= $gridY + 4 ?>" text-anchor="end"><?= (int) ($axisMax * $tick / 4) ?></text>
         <?php endfor; ?>
         <line class="monthly-area-crosshair" x1="0" y1="30" x2="0" y2="220" aria-hidden="true" />
@@ -126,13 +130,50 @@ function adminReportsRenderMonthlyAreaChart(string $id, string $title, array $se
     <?php
 }
 
-$reportMonths = [];
-for ($monthOffset = 5; $monthOffset >= 0; $monthOffset--) {
-    $monthDate = new DateTimeImmutable(date('Y-m-01', strtotime("-{$monthOffset} months")));
-    $reportMonths[] = ['key' => $monthDate->format('Y-m'), 'label' => $monthDate->format('M Y')];
+$today = new DateTimeImmutable('today');
+$defaultPeriodStart = $today->modify('first day of this month')->modify('-5 months');
+$defaultPeriodEnd = $today;
+$periodStartInput = is_string($_GET['period_start'] ?? null) ? trim($_GET['period_start']) : '';
+$periodEndInput = is_string($_GET['period_end'] ?? null) ? trim($_GET['period_end']) : '';
+$periodWasSubmitted = array_key_exists('period_start', $_GET) || array_key_exists('period_end', $_GET);
+$reportPeriodError = '';
+$parseReportDate = static function (string $value): ?DateTimeImmutable {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return null;
+    }
+    $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+    $dateErrors = DateTimeImmutable::getLastErrors();
+    if ($parsedDate === false || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) || $parsedDate->format('Y-m-d') !== $value) {
+        return null;
+    }
+    return $parsedDate;
+};
+$periodStartDate = $periodWasSubmitted ? $parseReportDate($periodStartInput) : $defaultPeriodStart;
+$periodEndDate = $periodWasSubmitted ? $parseReportDate($periodEndInput) : $defaultPeriodEnd;
+$periodMonthCount = 0;
+if ($periodStartDate !== null && $periodEndDate !== null && $periodEndDate >= $periodStartDate && $periodEndDate <= $today) {
+    $periodStartMonth = $periodStartDate->modify('first day of this month');
+    $periodEndMonth = $periodEndDate->modify('first day of this month');
+    $periodMonthDifference = $periodStartMonth->diff($periodEndMonth);
+    $periodMonthCount = ($periodMonthDifference->y * 12) + $periodMonthDifference->m + 1;
 }
-$reportPeriodStart = $reportMonths[0]['key'] . '-01';
-$reportPeriodEnd = (new DateTimeImmutable($reportMonths[count($reportMonths) - 1]['key'] . '-01'))->modify('+1 month')->format('Y-m-d');
+if ($periodStartDate === null || $periodEndDate === null || $periodEndDate < $periodStartDate || $periodEndDate > $today || $periodMonthCount > 12) {
+    if ($periodWasSubmitted) {
+        $reportPeriodError = 'Choose valid dates through today, with a range of no more than 12 calendar months. The last six months are shown.';
+    }
+    $periodStartDate = $defaultPeriodStart;
+    $periodEndDate = $defaultPeriodEnd;
+}
+$reportPeriodStart = $periodStartDate->format('Y-m-d');
+$reportPeriodEnd = $periodEndDate->modify('+1 day')->format('Y-m-d');
+$reportPeriodLabel = $periodStartDate->format('M j, Y') . ' – ' . $periodEndDate->format('M j, Y');
+$reportMonths = [];
+$monthDate = $periodStartDate->modify('first day of this month');
+$lastReportMonth = $periodEndDate->modify('first day of this month');
+while ($monthDate <= $lastReportMonth) {
+    $reportMonths[] = ['key' => $monthDate->format('Y-m'), 'label' => $monthDate->format('M Y')];
+    $monthDate = $monthDate->modify('+1 month');
+}
 
 // Get report statistics
 $total_users_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM users WHERE deleted_at IS NULL AND (? = 'all' OR role = ?)");
@@ -350,37 +391,35 @@ $status_colors = [
     'completed' => '#059669', 'archived' => '#334155',
 ];
 
-$activityReport = ['seminars' => 0, 'workshops' => 0, 'scheduled' => 0, 'completed' => 0, 'participants' => 0, 'attended' => 0];
+$activityReport = ['seminars_workshops' => 0, 'trainings' => 0, 'colloquia' => 0, 'conferences' => 0, 'scheduled' => 0, 'completed' => 0, 'participants' => 0, 'attended' => 0];
 $activityTypeData = [];
 $activityTypeLabels = [
-    'seminar' => 'Seminars',
-    'training' => 'Training',
-    'workshop' => 'Workshops',
+    'seminar_workshop' => 'Seminars / Workshops',
+    'training' => 'Trainings',
     'colloquium' => 'Colloquia',
-    'conference' => 'Conferences',
+    'conference_congress' => 'Conference / Congress',
 ];
 $activityTypeColors = [
-    'seminar' => '#0d9488',
+    'seminar_workshop' => '#0d9488',
     'training' => '#2563eb',
-    'workshop' => '#f57c00',
     'colloquium' => '#7c3aed',
-    'conference' => '#64748b',
+    'conference_congress' => '#64748b',
 ];
 if ($moduleTables['research_activities']) {
     if ($reportRole === 'all') {
-        $activityStmt = $conn->prepare("SELECT SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'workshop' AND status <> 'cancelled') AS workshops, SUM(status = 'scheduled') AS scheduled, SUM(status = 'completed') AS completed FROM research_activities");
+        $activityStmt = $conn->prepare("SELECT SUM(activity_type = 'seminar_workshop' AND status <> 'cancelled') AS seminars_workshops, SUM(activity_type = 'training' AND status <> 'cancelled') AS trainings, SUM(activity_type = 'colloquium' AND status <> 'cancelled') AS colloquia, SUM(activity_type = 'conference_congress' AND status <> 'cancelled') AS conferences, SUM(status = 'scheduled') AS scheduled, SUM(status = 'completed') AS completed FROM research_activities");
         $activityStmt->execute();
         $activityRow = $activityStmt->get_result()->fetch_assoc() ?: [];
-        foreach (['seminars', 'workshops', 'scheduled', 'completed'] as $key) {
+        foreach (['seminars_workshops', 'trainings', 'colloquia', 'conferences', 'scheduled', 'completed'] as $key) {
             $activityReport[$key] = (int) ($activityRow[$key] ?? 0);
         }
         $activityStmt->close();
     } elseif ($moduleTables['activity_participants']) {
-        $activityStmt = $conn->prepare("SELECT SUM(ra.activity_type = 'seminar' AND ra.status <> 'cancelled') AS seminars, SUM(ra.activity_type = 'workshop' AND ra.status <> 'cancelled') AS workshops, SUM(ra.status = 'scheduled') AS scheduled, SUM(ra.status = 'completed') AS completed FROM research_activities ra WHERE EXISTS (SELECT 1 FROM activity_participants ap JOIN users au ON au.user_id = ap.user_id WHERE ap.activity_id = ra.activity_id AND au.role = ? AND au.deleted_at IS NULL)");
+        $activityStmt = $conn->prepare("SELECT SUM(ra.activity_type = 'seminar_workshop' AND ra.status <> 'cancelled') AS seminars_workshops, SUM(ra.activity_type = 'training' AND ra.status <> 'cancelled') AS trainings, SUM(ra.activity_type = 'colloquium' AND ra.status <> 'cancelled') AS colloquia, SUM(ra.activity_type = 'conference_congress' AND ra.status <> 'cancelled') AS conferences, SUM(ra.status = 'scheduled') AS scheduled, SUM(ra.status = 'completed') AS completed FROM research_activities ra WHERE EXISTS (SELECT 1 FROM activity_participants ap JOIN users au ON au.user_id = ap.user_id WHERE ap.activity_id = ra.activity_id AND au.role = ? AND au.deleted_at IS NULL)");
         $activityStmt->bind_param('s', $reportRole);
         $activityStmt->execute();
         $activityRow = $activityStmt->get_result()->fetch_assoc() ?: [];
-        foreach (['seminars', 'workshops', 'scheduled', 'completed'] as $key) {
+        foreach (['seminars_workshops', 'trainings', 'colloquia', 'conferences', 'scheduled', 'completed'] as $key) {
             $activityReport[$key] = (int) ($activityRow[$key] ?? 0);
         }
         $activityStmt->close();
@@ -502,11 +541,10 @@ $facultyParticipationReport = $facultyParticipationService->getAdminReport([
 $facultyIndividualParticipation = $facultyParticipationReport['rows'];
 
 $facultySummaryTypeLabels = [
-    'seminar' => 'Seminars',
-    'workshop' => 'Workshops',
+    'seminar_workshop' => 'Seminars / Workshops',
     'training' => 'Trainings',
     'colloquium' => 'Colloquia',
-    'conference' => 'Conferences',
+    'conference_congress' => 'Conference / Congress',
     'conference_presentation' => 'Verified standalone presentations',
 ];
 $facultySummaryCounts = array_fill_keys(array_values($facultySummaryTypeLabels), 0);
@@ -676,7 +714,7 @@ $selectedReportValue = (string) ($_GET['report'] ?? 'development');
 $selectedReport = in_array($selectedReportValue, $reportPageValues, true)
     ? $selectedReportValue
     : 'development';
-$selectedReports = $selectedReport === 'faculty' ? ['faculty'] : ['development'];
+$selectedReports = [$selectedReport];
 if (isset($_GET['reports_submitted'])) {
     $requestedReports = $_GET['reports'] ?? [];
     $requestedReports = is_array($requestedReports) ? $requestedReports : [];
@@ -721,7 +759,7 @@ renderAdminShell(
     <div class="report-filter-copy">
       <p class="report-section-eyebrow">Report scope</p>
       <h2 id="report-filter-heading">Choose a researcher group</h2>
-      <p>Projects follow the creator, activities follow linked participants, and outputs follow the recorded researcher or applicant. Faculty statistics stay faculty-only.</p>
+      <p>Projects follow the creator, activities follow linked participants, and outputs follow the recorded researcher or applicant. The date range (up to 12 calendar months through today) applies to monthly trends; portfolio totals and status counts are all-time. Faculty participation has its own filters.</p>
     </div>
     <form class="report-filter" id="report-role-filter-form" method="get" aria-label="Filter reports by researcher role">
       <label for="report-role-filter">Researcher group
@@ -731,8 +769,15 @@ renderAdminShell(
           <option value="faculty" <?= $reportRole === 'faculty' ? 'selected' : '' ?>>Faculty</option>
         </select>
       </label>
+      <label for="report-period-start">Trend start date
+        <input id="report-period-start" type="date" name="period_start" value="<?= htmlspecialchars($periodStartDate->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>" max="<?= htmlspecialchars($today->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>">
+      </label>
+      <label for="report-period-end">Trend end date
+        <input id="report-period-end" type="date" name="period_end" value="<?= htmlspecialchars($periodEndDate->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>" max="<?= htmlspecialchars($today->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>">
+      </label>
       <input type="hidden" name="report" value="<?= htmlspecialchars($selectedReport, ENT_QUOTES, 'UTF-8') ?>">
       <button type="submit">Apply filter</button>
+      <?php if ($reportPeriodError !== ''): ?><p class="report-period-error" role="alert"><?= htmlspecialchars($reportPeriodError, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
     </form>
   </section>
 
@@ -742,7 +787,7 @@ renderAdminShell(
         <p class="report-section-eyebrow">Portfolio overview</p>
         <h2 id="report-overview-heading">Research at a glance</h2>
       </div>
-      <p>Totals for the selected researcher group</p>
+      <p>Current account count and all-time project totals for the selected researcher group</p>
     </header>
     <div class="report-metrics" aria-label="Portfolio totals for the selected researcher group">
       <article class="report-metric metric-users"><div class="metric-label">Registered users</div><div class="metric-value"><?php echo (int) $total_users; ?></div></article>
@@ -753,7 +798,7 @@ renderAdminShell(
   </section>
 
   <section class="report-controls" aria-label="Report selection and printing">
-    <div class="report-controls-copy"><p class="report-section-eyebrow">Report builder</p><strong id="selected-report-title" aria-live="polite">1 report selected</strong><span id="selected-report-description">Choose reports to view and print. Each prints separately.</span></div>
+    <div class="report-controls-copy"><p class="report-section-eyebrow">Report builder</p><strong id="selected-report-title" aria-live="polite">1 report selected</strong><span id="selected-report-description">Choose reports to view and print. Use the browser print dialog to save as PDF.</span></div>
     <div class="report-controls-actions">
       <div class="report-selector" role="group" aria-label="Select report pages">
         <label class="report-choice"><input type="checkbox" data-report-choice="development" value="development" <?= in_array('development', $selectedReports, true) ? 'checked' : '' ?>><span class="report-choice-index" aria-hidden="true">01</span><span>Research</span></label>
@@ -763,6 +808,10 @@ renderAdminShell(
         <?php if ($reportRole !== 'student'): ?>
           <label class="report-choice"><input type="checkbox" data-report-choice="faculty" value="faculty" <?= in_array('faculty', $selectedReports, true) ? 'checked' : '' ?>><span class="report-choice-index" aria-hidden="true">05</span><span>Faculty</span></label>
         <?php endif; ?>
+      </div>
+      <div class="report-selection-actions" aria-label="Report selection actions">
+        <button type="button" class="report-selection-action" id="select-all-reports">Select all</button>
+        <button type="button" class="report-selection-action" id="clear-all-reports">Clear all</button>
       </div>
       <button class="report-print" type="button" id="print-report" aria-describedby="selected-report-description report-print-status">
         <span class="report-print-icon" aria-hidden="true">🖨</span>
@@ -776,7 +825,7 @@ renderAdminShell(
     <h2 class="report-page-heading">Research overview</h2>
     <section class="report-panel panel-status" aria-labelledby="status-distribution-title">
       <header class="report-panel-header">
-        <div><h3 class="report-title" id="status-distribution-title">Research status</h3><p class="report-copy">Projects by current status.</p></div>
+        <div><h3 class="report-title" id="status-distribution-title">Research status</h3><p class="report-copy">All-time project counts by current status.</p></div>
       </header>
       <?php if (empty($research_by_status)): ?>
         <div class="report-empty"><strong>No research projects yet</strong><p>Status counts will appear here.</p></div>
@@ -851,11 +900,13 @@ renderAdminShell(
     <div class="module-report-grid">
       <article class="module-report-card report-page" data-report-page="capacity" data-report-title="Activities">
         <h2 class="report-page-heading">Activities</h2>
-        <header><h3>Research activities</h3><p>Seminars, workshops and attendance.</p></header>
+        <header><h3>Research activities</h3><p>Activity categories and attendance.</p></header>
         <?php if ($moduleTables['research_activities']): ?>
           <div class="module-report-list">
-            <div class="module-report-row"><span>Seminars</span><strong><?= $activityReport['seminars'] ?></strong></div>
-            <div class="module-report-row"><span>Workshops</span><strong><?= $activityReport['workshops'] ?></strong></div>
+            <div class="module-report-row"><span>Seminars / Workshops</span><strong><?= $activityReport['seminars_workshops'] ?></strong></div>
+            <div class="module-report-row"><span>Trainings</span><strong><?= $activityReport['trainings'] ?></strong></div>
+            <div class="module-report-row"><span>Colloquia</span><strong><?= $activityReport['colloquia'] ?></strong></div>
+            <div class="module-report-row"><span>Conference / Congress</span><strong><?= $activityReport['conferences'] ?></strong></div>
             <div class="module-report-row"><span>Scheduled / completed</span><strong><?= $activityReport['scheduled'] ?> / <?= $activityReport['completed'] ?></strong></div>
             <div class="module-report-row"><span>Recorded attendance</span><strong><?= $activityReport['attended'] ?> / <?= $activityReport['participants'] ?></strong></div>
           </div>
@@ -864,7 +915,7 @@ renderAdminShell(
           <p class="module-report-empty">Monthly activity counts are unavailable for this filter.</p>
         <?php else: ?>
           <section class="report-trend" aria-labelledby="activities-trend-heading">
-            <header class="report-panel-header"><div><h3 id="activities-trend-heading">Activities by month</h3><p class="report-copy">Records created per month.</p></div><span class="report-tag">Last 6 months</span></header>
+            <header class="report-panel-header"><div><h3 id="activities-trend-heading">Activities by month</h3><p class="report-copy">Records created per month from <?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?>.</p></div><span class="report-tag"><?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?></span></header>
             <?php adminReportsRenderMonthlyAreaChart('activities-monthly', 'Research activities', $monthlyActivities, '#0d9488', 'activities'); ?>
           </section>
         <?php endif; ?>
@@ -888,7 +939,7 @@ renderAdminShell(
           <p class="module-report-empty">Monthly publication counts are unavailable.</p>
         <?php else: ?>
           <section class="report-trend" aria-labelledby="publications-trend-heading">
-            <header class="report-panel-header"><div><h3 id="publications-trend-heading">Publications by month</h3><p class="report-copy">Records created per month.</p></div><span class="report-tag">Last 6 months</span></header>
+            <header class="report-panel-header"><div><h3 id="publications-trend-heading">Publications by month</h3><p class="report-copy">Records created per month from <?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?>.</p></div><span class="report-tag"><?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?></span></header>
             <?php adminReportsRenderMonthlyAreaChart('publications-monthly', 'Publications', $monthlyPublications, '#2563eb', 'publications'); ?>
           </section>
         <?php endif; ?>
@@ -903,7 +954,7 @@ renderAdminShell(
             <?php foreach (['archived' => 'Archived', 'legacy' => 'Legacy records'] as $stage => $label): ?>
               <div class="module-report-row"><span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span><strong><?= $copyrightStages[$stage] ?></strong></div>
             <?php endforeach; ?>
-            <div class="module-report-row"><span>Registered this year</span><strong><?= $registeredCopyrightsThisYear ?></strong></div>
+            <div class="module-report-row"><span>Registered in <?= (int) date('Y') ?></span><strong><?= $registeredCopyrightsThisYear ?></strong></div>
             <?php foreach ($copyrightTypes as $typeRow): ?>
               <div class="module-report-row"><span><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string) $typeRow['output_type'])), ENT_QUOTES, 'UTF-8') ?> outputs</span><strong><?= (int) $typeRow['total'] ?></strong></div>
             <?php endforeach; ?>
@@ -913,7 +964,7 @@ renderAdminShell(
           <p class="module-report-empty">Monthly copyright counts are unavailable.</p>
         <?php else: ?>
           <section class="report-trend" aria-labelledby="copyrights-trend-heading">
-            <header class="report-panel-header"><div><h3 id="copyrights-trend-heading">Copyrights by month</h3><p class="report-copy">Records created per month.</p></div><span class="report-tag">Last 6 months</span></header>
+            <header class="report-panel-header"><div><h3 id="copyrights-trend-heading">Copyrights by month</h3><p class="report-copy">Records created per month from <?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?>.</p></div><span class="report-tag"><?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?></span></header>
             <?php adminReportsRenderMonthlyAreaChart('copyrights-monthly', 'Copyright applications', $monthlyCopyrights, '#7c3aed', 'applications'); ?>
           </section>
         <?php endif; ?>
@@ -925,7 +976,7 @@ renderAdminShell(
         <h2 class="report-page-heading">Faculty Research Analytics</h2>
         <header><h3>Faculty research and engagement</h3><p>Faculty projects, outputs and verified engagement.</p></header>
         <section class="report-trend faculty-monthly-trend" aria-labelledby="faculty-trend-heading">
-          <header class="report-panel-header"><div><h3 id="faculty-trend-heading">Faculty-linked records by month</h3><p class="report-copy">Projects, activities, publications, copyrights, and verified engagements created per month.</p></div><span class="report-tag">Last 6 months</span></header>
+          <header class="report-panel-header"><div><h3 id="faculty-trend-heading">Faculty-linked records by month</h3><p class="report-copy">Projects, activities, publications, copyrights, and verified engagements created per month from <?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?>.</p></div><span class="report-tag"><?= htmlspecialchars($reportPeriodLabel, ENT_QUOTES, 'UTF-8') ?></span></header>
           <?php adminReportsRenderMonthlyAreaChart('faculty-monthly', 'Faculty-linked records', $monthlyFaculty, '#1d4ed8', 'records'); ?>
           <?php if (!$moduleTables['research_activities'] || !$moduleTables['activity_participants'] || !$moduleTables['publications'] || !$moduleTables['copyright_applications'] || !$moduleTables['faculty_engagement_records']): ?>
             <p class="faculty-report-note">This trend includes available linked records; some module data is unavailable.</p>
@@ -935,7 +986,7 @@ renderAdminShell(
           <div class="faculty-report-metric"><span>Active faculty accounts</span><strong><?= $facultyOverview['faculty'] ?></strong></div>
           <div class="faculty-report-metric"><span>Verified engagement records</span><strong><?= $facultyOverview['verified_engagements'] ?></strong></div>
           <div class="faculty-report-metric"><span>Engagement records awaiting review</span><strong><?= $facultyOverview['pending_engagements'] ?></strong></div>
-          <div class="faculty-report-metric"><span>Verified seminar / activity attendance</span><strong><?= $facultyOverview['activity_attendance'] ?></strong></div>
+          <div class="faculty-report-metric"><span>Verified activity attendance</span><strong><?= $facultyOverview['activity_attendance'] ?></strong></div>
           <div class="faculty-report-metric"><span>Faculty research team memberships</span><strong><?= $facultyOverview['team_memberships'] ?></strong></div>
           <div class="faculty-report-metric"><span>Faculty advising assignments</span><strong><?= $facultyOverview['advising_assignments'] ?></strong></div>
           <div class="faculty-report-metric"><span>Published faculty outputs</span><strong><?= $facultyOverview['published'] ?></strong></div>
@@ -976,16 +1027,17 @@ renderAdminShell(
             $facultyOptions = $facultyParticipationReport['options'];
             $facultyActivityTypeLabels = [
                 'all' => 'All activity types',
-                'seminar' => 'Seminars',
+                'seminar_workshop' => 'Seminars / Workshops',
                 'training' => 'Trainings',
-                'workshop' => 'Workshops',
                 'colloquium' => 'Colloquia',
-                'conference' => 'Conferences',
+                'conference_congress' => 'Conference / Congress',
                 'conference_presentation' => 'Standalone verified presentations',
             ];
             $facultyPageQuery = [
                 'role' => $reportRole,
                 'report' => 'faculty',
+                'period_start' => $periodStartDate->format('Y-m-d'),
+                'period_end' => $periodEndDate->format('Y-m-d'),
                 'reports_submitted' => '1',
                 'reports' => $selectedReports,
                 'faculty_search' => $facultyFilters['search'],
@@ -999,6 +1051,8 @@ renderAdminShell(
           <form class="faculty-participation-filters" method="get" aria-label="Filter individual faculty participation">
             <input type="hidden" name="role" value="<?= htmlspecialchars($reportRole, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="report" value="faculty">
+            <input type="hidden" name="period_start" value="<?= htmlspecialchars($periodStartDate->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="period_end" value="<?= htmlspecialchars($periodEndDate->format('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="reports_submitted" value="1">
             <?php foreach ($selectedReports as $selectedPage): ?>
               <input type="hidden" name="reports[]" value="<?= htmlspecialchars((string) $selectedPage, ENT_QUOTES, 'UTF-8') ?>">
@@ -1172,6 +1226,8 @@ renderAdminShell(
   const title = workspace.querySelector('#selected-report-title');
   const description = workspace.querySelector('#selected-report-description');
   const printButton = workspace.querySelector('#print-report');
+  const selectAllButton = workspace.querySelector('#select-all-reports');
+  const clearAllButton = workspace.querySelector('#clear-all-reports');
   const printButtonLabel = workspace.querySelector('.report-print-label');
   const printStatus = workspace.querySelector('#report-print-status');
   const roleFilterForm = workspace.querySelector('#report-role-filter-form');
@@ -1319,10 +1375,12 @@ renderAdminShell(
     const count = selectedChoices.length;
     title.textContent = `${count} ${count === 1 ? 'report' : 'reports'} selected`;
     description.textContent = count > 0
-      ? 'Choose reports to view and print. Each prints separately.'
+      ? 'Choose reports to view and print. Use the browser print dialog to save as PDF.'
       : 'Select at least one report to enable printing.';
     printButtonLabel.textContent = `Print selected ${count === 1 ? 'report' : 'reports'} (${count})`;
     printButton.disabled = count === 0;
+    selectAllButton.disabled = count === choices.length;
+    clearAllButton.disabled = count === 0;
     printButton.setAttribute('aria-label', count > 0
       ? `Print ${count} selected ${count === 1 ? 'report' : 'reports'}`
       : 'Select at least one report to enable printing');
@@ -1338,6 +1396,17 @@ renderAdminShell(
       ? `${count} ${count === 1 ? 'report is' : 'reports are'} ready to print.`
       : 'Select at least one report before printing.');
   }));
+  selectAllButton.addEventListener('click', () => {
+    choices.forEach((choice) => { choice.checked = true; });
+    updateSelection();
+    announcePrintStatus('All available reports are selected.');
+  });
+  clearAllButton.addEventListener('click', () => {
+    choices.forEach((choice) => { choice.checked = false; });
+    updateSelection();
+    choices[0]?.focus();
+    announcePrintStatus('All reports are cleared.');
+  });
   printButton.addEventListener('click', () => {
     const count = choices.filter((choice) => choice.checked).length;
     if (count === 0) {

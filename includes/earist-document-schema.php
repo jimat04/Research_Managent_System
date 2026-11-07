@@ -176,6 +176,17 @@ function earistDocumentSchemaCompare(array $actual): array
             $expected['foreign_keys']['fk_earist_generated_edit_parent'] = [
                 'edited_from_generated_document_id', 'earist_generated_documents', 'generated_document_id'];
         }
+        if ($table === 'earist_generated_documents'
+            && array_intersect(['file_retention_status', 'file_retention_started_at', 'file_retention_completed_at', 'file_retention_actor_id', 'file_retention_bytes'], array_keys($data['columns']))) {
+            $expected['columns']['file_retention_status'] = ["enum('available','pruning','pruned')", false, 'available'];
+            $expected['columns']['file_retention_started_at'] = ['datetime', true];
+            $expected['columns']['file_retention_completed_at'] = ['datetime', true];
+            $expected['columns']['file_retention_actor_id'] = ['int unsigned', true];
+            $expected['columns']['file_retention_bytes'] = ['bigint unsigned', false, '0'];
+            $expected['indexes']['idx_earist_generated_retention'] = ['owner_id,research_record_id,document_type,file_retention_status,document_version', 1];
+            $expected['indexes']['idx_earist_generated_retention_actor'] = ['file_retention_actor_id', 1];
+            $expected['foreign_keys']['fk_earist_generated_retention_actor'] = ['file_retention_actor_id', 'users', 'user_id'];
+        }
         if ($data['engine'] !== 'InnoDB' || $data['collation'] !== 'utf8mb4_unicode_ci') $errors[] = $table . ': storage differs';
         if (count($data['columns']) !== count($expected['columns'])) $errors[] = $table . ': column count differs';
         foreach ($expected['columns'] as $name => $definition) {
@@ -186,6 +197,10 @@ function earistDocumentSchemaCompare(array $actual): array
             $default = $column['COLUMN_DEFAULT'];
             if ($default === 'NULL') $default = null;
             if ($default === 'current_timestamp') $default = 'current_timestamp()';
+            if (str_starts_with($type, 'enum(') && is_string($default)
+                && strlen($default) >= 2 && $default[0] === "'" && $default[strlen($default) - 1] === "'") {
+                $default = str_replace("''", "'", substr($default, 1, -1));
+            }
             if ($actualType !== $type || ($column['IS_NULLABLE'] === 'YES') !== $nullable
                 || $default !== ($definition[2] ?? null)
                 || earistSchemaNormalize($column['EXTRA']) !== earistSchemaNormalize($definition[3] ?? '')

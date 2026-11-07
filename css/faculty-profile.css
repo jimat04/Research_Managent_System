@@ -1176,6 +1176,311 @@
 /* Tab active state */
 .fp-tab.fp-tab--active { background: var(--fp-accent); color: #fff; box-shadow: var(--fp-shadow); }
 
+/* --- ACHIEVEMENTS TAB --- */
+.fp-panel[aria-labelledby="achievements-heading"] {
+  overflow: hidden;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-panel__header {
+  padding: var(--fp-space-6) var(--fp-space-8);
+  background: linear-gradient(105deg, #fff 0%, #f8faff 100%);
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] .fp-panel__label {
+  margin-bottom: var(--fp-space-2);
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] .fp-panel__title {
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--fp-space-4);
+  padding: var(--fp-space-5) var(--fp-space-8) 0;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-stats > .fp-stat {
+  min-height: 118px;
+  justify-content: center;
+  padding: var(--fp-space-5) var(--fp-space-6);
+  border-radius: 14px;
+  border-top: 3px solid var(--fp-accent);
+  box-shadow: var(--fp-shadow-sm);
+  transition: none;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-stats > .fp-stat:hover {
+  border-color: var(--fp-line);
+  border-top-color: var(--fp-accent);
+  box-shadow: var(--fp-shadow-sm);
+  transform: none;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] .fp-stat__value {
+  font-size: clamp(2rem, 3vw, 2.35rem);
+  letter-spacing: -0.04em;
+  color: var(--fp-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] .fp-stat__label {
+  letter-spacing: 0.045em;
+  line-height: 1.45;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-hint {
+  margin: var(--fp-space-4) var(--fp-space-8) 0;
+  padding: var(--fp-space-3) var(--fp-space-4);
+  border-left: 3px solid var(--fp-accent);
+  border-radius: 0 var(--fp-radius-sm) var(--fp-radius-sm) 0;
+  background: var(--fp-accent-soft);
+  line-height: 1.55;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-subheading {
+  margin: var(--fp-space-8) var(--fp-space-8) var(--fp-space-4);
+  padding-top: var(--fp-space-6);
+  border-top: 1px solid var(--fp-line-soft);
+  font-size: 1.1rem;
+  letter-spacing: -0.015em;
+}
+
+.fp-panel[aria-labelledby="achievements-heading"] > .fp-empty {
+  min-height: 136px;
+  justify-content: center;
+  margin: 0 var(--fp-space-8) var(--fp-space-8);
+  padding: var(--fp-space-8);
+  border-color: #cbd8eb;
+  background: linear-gradient(145deg, #fbfdff, #f6f9fe);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-panel__header {
+    padding: var(--fp-space-5) var(--fp-space-6);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: var(--fp-space-6);
+    padding-left: var(--fp-space-6);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-hint {
+    margin-right: var(--fp-space-6);
+    margin-left: var(--fp-space-6);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-subheading {
+    margin-right: var(--fp-space-6);
+    margin-left: var(--fp-space-6);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-empty {
+    margin-right: var(--fp-space-6);
+    margin-left: var(--fp-space-6);
+  }
+}
+
+@media (max-width: 640px) {
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-panel__header {
+    padding: var(--fp-space-5);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-stats {
+    grid-template-columns: 1fr;
+    padding: var(--fp-space-4) var(--fp-space-5) 0;
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-hint {
+    margin-right: var(--fp-space-5);
+    margin-left: var(--fp-space-5);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-subheading {
+    margin-right: var(--fp-space-5);
+    margin-left: var(--fp-space-5);
+  }
+
+  .fp-panel[aria-labelledby="achievements-heading"] > .fp-empty {
+    min-height: 112px;
+    margin-right: var(--fp-space-5);
+    margin-bottom: var(--fp-space-5);
+    margin-left: var(--fp-space-5);
+    padding: var(--fp-space-6) var(--fp-space-4);
+  }
+}
+
+/* --- FACULTY PROFILE OVERVIEW --- */
+.fp-header--overview {
+  gap: var(--fp-space-8);
+  align-items: center;
+  padding: var(--fp-space-8) 0 var(--fp-space-6);
+}
+
+.fp-header--overview .fp-identity {
+  gap: var(--fp-space-6);
+}
+
+.fp-header--overview .fp-name {
+  font-size: clamp(1.8rem, 3vw, 2.25rem);
+  text-wrap: balance;
+}
+
+.fp-header--overview .fp-title {
+  max-width: 68ch;
+  line-height: 1.55;
+}
+
+.fp-header--overview .fp-header__actions {
+  justify-content: flex-end;
+  align-self: center;
+}
+
+.fp-main > .fp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+  align-items: start;
+  gap: var(--fp-space-6);
+}
+
+.fp-main > .fp-grid > .fp-panel {
+  min-width: 0;
+}
+
+.fp-main > .fp-grid > .fp-panel:first-child .fp-panel__header {
+  background: linear-gradient(105deg, #fff 0%, #f8faff 100%);
+}
+
+.fp-main > .fp-grid .fp-meta {
+  gap: 0;
+  padding: var(--fp-space-2) var(--fp-space-6);
+}
+
+.fp-main > .fp-grid .fp-meta__item {
+  padding: var(--fp-space-4) var(--fp-space-2);
+  border: 0;
+  border-bottom: 1px solid var(--fp-line-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.fp-main > .fp-grid .fp-meta__item:last-child {
+  border-bottom: 0;
+}
+
+.fp-main > .fp-grid .fp-meta__item:hover {
+  background: var(--fp-accent-soft);
+}
+
+.fp-main > .fp-grid .fp-panel__footer {
+  margin-top: 0;
+  padding: var(--fp-space-4) var(--fp-space-8) var(--fp-space-6);
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--fp-space-3);
+  padding: var(--fp-space-5);
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] > .fp-stat {
+  min-width: 0;
+  justify-content: center;
+  padding: var(--fp-space-4);
+  border-top: 2px solid var(--fp-accent);
+  border-radius: var(--fp-radius);
+  box-shadow: var(--fp-shadow-sm);
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] > .fp-stat:hover {
+  border-color: var(--fp-accent-border);
+  border-top-color: var(--fp-accent);
+  box-shadow: var(--fp-shadow);
+  transform: translateY(-1px);
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] > .fp-stat:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] .fp-stat__value {
+  font-size: clamp(1.75rem, 2.5vw, 2.1rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-main > .fp-grid [aria-label="Research portfolio statistics"] .fp-stat__label {
+  font-size: var(--fp-text-xs);
+  letter-spacing: 0.035em;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+@media (max-width: 980px) {
+  .fp-header--overview {
+    grid-template-columns: 1fr;
+    gap: var(--fp-space-5);
+    align-items: start;
+  }
+
+  .fp-header--overview .fp-header__actions {
+    justify-content: flex-start;
+    margin-top: 0;
+  }
+
+  .fp-main > .fp-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .fp-header--overview {
+    padding-top: var(--fp-space-5);
+  }
+
+  .fp-header--overview .fp-identity {
+    align-items: flex-start;
+    gap: var(--fp-space-4);
+  }
+
+  .fp-header--overview .fp-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--fp-radius-lg);
+    font-size: var(--fp-text-2xl);
+  }
+
+  .fp-main > .fp-grid {
+    gap: var(--fp-space-5);
+  }
+
+  .fp-main > .fp-grid .fp-panel__header {
+    padding: var(--fp-space-5);
+  }
+
+  .fp-main > .fp-grid .fp-meta {
+    padding-right: var(--fp-space-5);
+    padding-left: var(--fp-space-5);
+  }
+
+  .fp-main > .fp-grid .fp-panel__footer {
+    padding-right: var(--fp-space-5);
+    padding-left: var(--fp-space-5);
+  }
+
+  .fp-main > .fp-grid [aria-label="Research portfolio statistics"] {
+    gap: var(--fp-space-2);
+    padding: var(--fp-space-4);
+  }
+
+  .fp-main > .fp-grid [aria-label="Research portfolio statistics"] > .fp-stat {
+    padding: var(--fp-space-3);
+  }
+}
+
 /* Badge revision variant */
 .fp-badge--revision { background: var(--fp-danger-soft); color: #b91c1c; border: 1px solid var(--fp-danger-border); }
 

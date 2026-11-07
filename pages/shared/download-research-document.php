@@ -28,21 +28,16 @@ if (!in_array($mode, ['download', 'viewer', 'inline'], true)) {
 }
 
 if ($documentType === 'publication') {
-    $stmt = $conn->prepare('SELECT researcher_id, publication_type, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT researcher_id, publication_type, archival_status, deactivated_at, file_path, file_name, status FROM publications WHERE publication_id = ? LIMIT 1');
     $stmt->bind_param('i', $documentId);
     $stmt->execute();
     $document = $stmt->get_result()->fetch_assoc() ?: null;
     $stmt->close();
     $staffScopes = [];
     if ($document) {
-        $staffScopes = match ((string) $document['publication_type']) {
-            'journal' => [['publication_dissemination', 'journal_publications']],
-            'conference' => [['publication_dissemination', 'conference_presentations']],
-            default => [],
-        };
-        if ($document['status'] === 'published') {
+        $staffScopes = [['publication_dissemination', 'publication_records'], ['publication_dissemination', 'publication_reports']];
+        if ($document['status'] === 'published' || $document['archival_status'] === 'archived') {
             $staffScopes[] = ['research_implementation_outputs', 'research_outputs'];
-            $staffScopes[] = ['publication_dissemination', 'research_repository'];
         }
     }
     $staffCanView = false;
@@ -89,11 +84,19 @@ if ($documentType === 'publication') {
     $stmt->execute();
     $document = $stmt->get_result()->fetch_assoc() ?: null;
     $stmt->close();
+    $staffCanViewEngagement = $document
+        && $role === 'research_staff'
+        && hasModulePermission($userId, 'research_development', 'view', 'research_engagement_records');
     $mayPreview = $document && (
         $role === 'admin'
+        || $staffCanViewEngagement
         || ($role === 'faculty' && (int) $document['faculty_id'] === $userId)
     );
-    $mayDownload = $mayPreview;
+    $mayDownload = $document && (
+        $role === 'admin'
+        || ($role === 'faculty' && (int) $document['faculty_id'] === $userId)
+        || ($staffCanViewEngagement && hasDownloadPermission($userId, 'research_development', 'research_engagement_records'))
+    );
     $allowedPathPattern = '#^uploads/engagement/[^/]+$#uD';
     $allowedExtensions = ['pdf', 'doc', 'docx'];
 } else {
@@ -629,8 +632,8 @@ if ($mode === 'viewer') {
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <?php if ($documentType === 'research' && $isPreviewable): ?>
         <link rel="stylesheet" href="<?= htmlspecialchars(SITE_URL . 'public/assets/vendor/pdfjs/web/pdf_viewer.css', ENT_QUOTES, 'UTF-8') ?>">
-        <link rel="stylesheet" href="<?= htmlspecialchars(SITE_URL . 'css/pdf-review-viewer.css', ENT_QUOTES, 'UTF-8') ?>">
-        <script type="module" src="<?= htmlspecialchars(SITE_URL . 'js/pdf-review-annotations.js', ENT_QUOTES, 'UTF-8') ?>"></script>
+        <link rel="stylesheet" href="<?= htmlspecialchars(SITE_URL . 'css/pdf-review-viewer.css?v=' . filemtime(__DIR__ . '/../../css/pdf-review-viewer.css'), ENT_QUOTES, 'UTF-8') ?>">
+        <script type="module" src="<?= htmlspecialchars(SITE_URL . 'js/pdf-review-annotations.js?v=' . filemtime(__DIR__ . '/../../js/pdf-review-annotations.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
       <?php endif; ?>
       <title><?= htmlspecialchars($originalName, ENT_QUOTES, 'UTF-8') ?> — RMS Document</title>
       <style>
@@ -688,17 +691,32 @@ if ($mode === 'viewer') {
                 data-pdfjs-base="<?= htmlspecialchars($pdfjsBaseUrl, ENT_QUOTES, 'UTF-8') ?>"
                 data-csrf-token="<?= htmlspecialchars($reviewCsrfToken, ENT_QUOTES, 'UTF-8') ?>"
                 data-can-edit="<?= $canAnnotateSubmission ? 'true' : 'false' ?>">
-                <div class="pdf-review-toolbar" aria-label="PDF controls">
-                  <div class="pdf-review-page-control">
+                <div class="pdf-review-toolbar" role="group" aria-label="PDF controls">
+                  <div class="pdf-review-page-control" role="group" aria-label="Page navigation">
                     <button type="button" data-page-previous aria-label="Previous page">Previous</button>
                     <label>Page <input type="number" min="1" value="1" data-page-number aria-label="Current page"></label>
                     <span data-page-count>of …</span>
                     <button type="button" data-page-next aria-label="Next page">Next</button>
                   </div>
-                  <div class="pdf-review-zoom-control">
+                  <div class="pdf-review-zoom-control" role="group" aria-label="Zoom and page fit">
                     <button type="button" data-zoom-out aria-label="Zoom out">−</button>
-                    <span data-zoom-level>Fit width</span>
+                    <span data-zoom-level aria-label="Current zoom">—</span>
                     <button type="button" data-zoom-in aria-label="Zoom in">+</button>
+                    <button type="button" data-fit-width aria-pressed="true">Fit width</button>
+                    <button type="button" data-fit-page aria-pressed="false">Fit page</button>
+                    <button type="button" data-zoom-reset title="Return to fit width">Reset zoom</button>
+                  </div>
+                  <div class="pdf-review-document-control" role="group" aria-label="Document actions">
+                    <button type="button" data-rotate aria-label="Rotate clockwise">Rotate</button>
+                    <button type="button" data-fullscreen aria-label="Enter fullscreen">Fullscreen</button>
+                    <button type="button" data-print>Print</button>
+                  </div>
+                  <div class="pdf-review-search-control" role="search" aria-label="Search document text">
+                    <label class="visually-hidden" for="pdf-document-search">Search document</label>
+                    <input type="search" id="pdf-document-search" data-search-input placeholder="Search document" autocomplete="off">
+                    <button type="button" data-search-previous aria-label="Previous match">Previous match</button>
+                    <button type="button" data-search-next aria-label="Next match">Next match</button>
+                    <span data-search-count aria-live="polite">Enter text to search</span>
                   </div>
                   <?php if ($canAnnotateSubmission): ?>
                     <div class="pdf-review-annotation-control">

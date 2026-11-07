@@ -1114,16 +1114,21 @@ html { scroll-behavior: smooth; }
   border-radius: 18px;
 }
 
+.faculty-stat-link .faculty-stat-card {
+  box-sizing: border-box;
+  height: 100%;
+}
+
 .faculty-stat-link:focus-visible {
   outline: 2px solid var(--faculty-accent);
   outline-offset: 3px;
 }
 
-.faculty-stat-link--records {
+.faculty-stat-link--fourth {
   grid-column: 2 / span 2;
 }
 
-.faculty-stat-link--activities {
+.faculty-stat-link--fifth {
   grid-column: 4 / span 2;
 }
 
@@ -2140,13 +2145,11 @@ button.faculty-advisee-cell--not-started:hover {
   .faculty-stat-link {
     grid-column: auto;
   }
-  .faculty-stat-link--records {
+  .faculty-stat-link--fourth {
     grid-column: auto;
   }
-  .faculty-stat-link--activities {
-    grid-column: 1 / -1;
-    width: calc((100% - 16px) / 2);
-    justify-self: center;
+  .faculty-stat-link--fifth {
+    grid-column: auto;
   }
   .faculty-secondary-row {
     grid-template-columns: 1fr;
@@ -2159,11 +2162,6 @@ button.faculty-advisee-cell--not-started:hover {
 @media (max-width: 640px) {
   .faculty-stats-grid {
     grid-template-columns: 1fr;
-  }
-  .faculty-stat-link--activities {
-    grid-column: auto;
-    width: auto;
-    justify-self: stretch;
   }
   .faculty-quick-actions {
     flex-direction: column;

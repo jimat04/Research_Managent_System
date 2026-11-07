@@ -61,6 +61,8 @@ function earistDocumentEditSchemaStatus(mysqli $conn): bool
     $expectedIndexes = [
         'PRIMARY' => ['session_id', 0],
         'uq_earist_edit_active_lock' => ['active_lock_generated_document_id', 0],
+        // InnoDB creates this supporting index from the saved-document foreign key.
+        'fk_earist_edit_saved' => ['saved_generated_document_id', 1],
         'idx_earist_edit_owner_state' => ['owner_id,state,expires_at', 1],
         'idx_earist_edit_generated' => ['generated_document_id,created_at', 1],
     ];

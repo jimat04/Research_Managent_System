@@ -156,10 +156,9 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
     if ($current_module_key === '') {
         $current_module_key = match ($current_basename) {
             'activities.php', 'activity-form.php', 'activity-detail.php' => match (true) {
-                in_array((string) ($_GET['capacity_page'] ?? ''), ['seminars', 'trainings', 'workshops'], true) => (string) $_GET['capacity_page'],
-                (string) ($_GET['type'] ?? '') === 'seminar' => 'seminars',
+                in_array((string) ($_GET['capacity_page'] ?? ''), ['seminars_workshops', 'trainings'], true) => (string) $_GET['capacity_page'],
+                in_array((string) ($_GET['type'] ?? ''), ['seminar_workshop', 'seminar', 'workshop', 'forum'], true) => 'seminars_workshops',
                 (string) ($_GET['type'] ?? '') === 'training' => 'trainings',
-                (string) ($_GET['type'] ?? '') === 'workshop' => 'workshops',
                 default => '',
             },
             'publications.php', 'publication-form.php', 'publication-detail.php',
@@ -382,13 +381,13 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
       <div class="admin-topbar-left">
         <button type="button" class="admin-mobile-menu-btn" aria-label="Open administrator navigation" aria-controls="admin-sidebar" aria-expanded="false"><span aria-hidden="true">&#9776;</span></button>
         <button type="button" class="admin-collapse-btn" aria-label="Collapse sidebar" aria-controls="admin-sidebar" title="Collapse sidebar" data-role-shell-collapse><span aria-hidden="true">&#8249;</span></button>
+      </div>
+      <div class="admin-topbar-right">
         <div class="admin-topbar-search">
           <span class="admin-topbar-search-icon" aria-hidden="true">⌕</span>
           <input type="search" id="admin-page-search" aria-label="Search pages in RMS" placeholder="Search pages..." value="" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="admin-search-suggestions" aria-expanded="false" data-role-shell-search>
           <div class="admin-search-suggestions" id="admin-search-suggestions" role="listbox" aria-label="Matching RMS pages" hidden data-role-shell-suggestions></div>
         </div>
-      </div>
-      <div class="admin-topbar-right">
         <?php renderNotificationPopover($user_id, $unread_notifications, 'admin'); ?>
         <div class="admin-topbar-separator" aria-hidden="true"></div>
         <details class="admin-profile-menu">

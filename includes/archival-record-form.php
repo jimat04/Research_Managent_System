@@ -7,7 +7,9 @@ $fields = [
     $c['authors'] => ['Actual authors / creators', 'text', 255, true],
 ];
     $fields[$c['type']] = ['Record type', 'select', 60, true];
-    $fields += ['co_authors' => ['Additional author / creator names', 'text', 500, false], 'filing_date' => ['Application / filing date', 'date', 10, false], 'application_number' => ['Application / reference number', 'text', 120, false], 'external_status' => [$archiveScope === '' ? 'External copyright status' : 'External registration / IP status', 'external', 60, !$record], 'copyright_ref_no' => ['Issued registration number', 'text', 120, false], 'registered_at' => ['Registration date', 'date', 10, false], 'date_completed' => ['Work completion date', 'date', 10, false]];
+    $ipArchive = in_array($archiveScope, ['patents_utility_models', 'innovation_technology_transfer'], true);
+    $externalStatusLabel = $ipArchive ? 'External IP registration status' : 'External copyright status';
+    $fields += ['co_authors' => ['Additional author / creator names', 'text', 500, false], 'filing_date' => ['Application / filing date', 'date', 10, false], 'application_number' => ['Application / reference number', 'text', 120, false], 'external_status' => [$externalStatusLabel, 'external', 60, !$record && !$ipArchive], 'copyright_ref_no' => ['Issued registration number', 'text', 120, false], 'registered_at' => ['Registration date', 'date', 10, false], 'date_completed' => ['Work completion date', 'date', 10, false]];
     if ($archiveScope === 'patents_utility_models') $fields['inventors'] = ['Inventors / researchers', 'text', 500, false];
     if ($archiveScope === 'innovation_technology_transfer') $fields += ['potential_partners' => ['Potential partners', 'text', 500, false], 'agreement_reference' => ['Agreement reference', 'text', 120, false], 'utilization_status' => ['Utilization status', 'text', 120, false], 'transfer_activities' => ['Technology-transfer activities', 'textarea', 10000, false]];
 $fields['remarks'] = ['Remarks', 'textarea', 10000, false];
@@ -18,6 +20,11 @@ if ($archiveKind === 'copyright') $values['registered_at'] = substr($values['reg
 $ownerId = $record[$c['owner']] ?? ($role === 'faculty' ? $userId : '');
 $contributorsBefore = $record ? archiveContributors($conn, $archiveKind, $id) : [];
 $selectedAuthors = array_map('intval', array_column($contributorsBefore, 'user_id'));
+if (!$record && $role === 'faculty') {
+    $selectedAuthors[] = $userId;
+    $values[$c['authors']] = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+}
+$selectedAuthors = array_values(array_unique($selectedAuthors));
 $version = $record ? hash('sha256', json_encode([$record, $contributorsBefore], JSON_THROW_ON_ERROR)) : '';
 $allContributors = rmsOutputContributorOptions($conn);
 $facultyOwners = archiveQuery($conn, "SELECT user_id, first_name, last_name, program FROM users WHERE role = 'faculty' AND deleted_at IS NULL AND status = 'active' ORDER BY last_name, first_name")->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -68,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$uid) { $errors[] = 'Invalid author selection.'; break; }
         $selectedAuthors[] = $uid;
     }
+    if (!$record && $role === 'faculty') $selectedAuthors[] = $userId;
     $selectedAuthors = array_values(array_unique($selectedAuthors)); sort($selectedAuthors);
     $newAuthors = array_values(array_diff($selectedAuthors, array_map('intval', array_column($contributorsBefore, 'user_id'))));
     if (rmsValidateOutputContributorIds($conn, $newAuthors, 0) === null) $errors[] = 'New author links must refer to active faculty or student accounts.';
@@ -162,9 +170,10 @@ archiveShellOpen($user, $c, $pageHeading);
 <?php if ($type === 'select' || $type === 'external'): ?><select id="field-<?= archiveEscape($key) ?>" name="<?= archiveEscape($key) ?>" <?= $required ? 'required' : '' ?>><?php if ($type === 'external'): ?><option value="">Not recorded</option><?php endif; ?><?php foreach ($type === 'select' ? $c['types'] : archiveExternalOptions() as $value => $text): ?><option value="<?= archiveEscape($value) ?>" <?= $values[$key] === $value ? 'selected' : '' ?>><?= archiveEscape($text) ?></option><?php endforeach; ?></select>
 <?php elseif ($type === 'textarea'): ?><textarea id="field-<?= archiveEscape($key) ?>" name="<?= archiveEscape($key) ?>" maxlength="<?= $max ?>"><?= archiveEscape($values[$key]) ?></textarea>
 <?php else: ?><input id="field-<?= archiveEscape($key) ?>" name="<?= archiveEscape($key) ?>" type="<?= archiveEscape($type) ?>" maxlength="<?= $max ?>" value="<?= archiveEscape($values[$key]) ?>" <?= $required ? 'required' : '' ?>><?php endif; ?>
+<?php if ($key === 'external_status' && $ipArchive): ?><small>Records external filing or registration activity outside RMS. Choose “Not recorded” when the status is unknown.</small><?php endif; ?>
 <?php if ($key === 'journal_publisher'): ?><small>Required for journal, conference and book chapter records; optional for other types. Volume, issue and pages are optional.</small><?php endif; ?>
 </div><?php endforeach; ?>
-<fieldset class="archive-field full"><legend>Linked RMS authors / creators</legend><div class="archive-authors"><?php foreach ($allContributors as $author): ?><label><input type="checkbox" name="contributor_ids[]" value="<?= (int) $author['user_id'] ?>" <?= in_array((int) $author['user_id'],$selectedAuthors,true) ? 'checked' : '' ?>> <?= archiveEscape($author['first_name'] . ' ' . $author['last_name'] . ' (' . $author['role'] . ')') ?></label><?php endforeach; ?></div><small>Link actual contributors to this one record. Linked faculty may view the record; only its owner or authorized administrators/staff may edit it.</small></fieldset>
+<fieldset class="archive-field full"><legend>Linked RMS authors / creators</legend><div class="archive-authors"><?php foreach ($allContributors as $author): if (!$record && $role === 'faculty' && (int) $author['user_id'] === $userId) continue; ?><label><input type="checkbox" name="contributor_ids[]" value="<?= (int) $author['user_id'] ?>" <?= in_array((int) $author['user_id'],$selectedAuthors,true) ? 'checked' : '' ?>> <?= archiveEscape($author['first_name'] . ' ' . $author['last_name'] . ' (' . $author['role'] . ')') ?></label><?php endforeach; ?></div><small><?= !$record && $role === 'faculty' ? 'Your faculty account is automatically linked as an author. Select any additional contributors below.' : 'Link actual contributors to this one record. Linked faculty may view the record; only its owner or authorized administrators/staff may edit it.' ?></small></fieldset>
 <div class="archive-field"><label for="project-id">Originating research project</label><select id="project-id" name="research_project_id"><option value="">Not linked</option><?php if ($record && $record['research_project_id'] && !in_array((int) $record['research_project_id'], array_map('intval',array_column($projects,'project_id')),true)): ?><option value="<?= (int) $record['research_project_id'] ?>" selected>Existing project #<?= (int) $record['research_project_id'] ?></option><?php endif; ?><?php foreach ($projects as $project): ?><option value="<?= (int) $project['project_id'] ?>" <?= (int) $projectId === (int) $project['project_id'] ? 'selected' : '' ?>><?= archiveEscape($project['title']) ?></option><?php endforeach; ?></select></div>
 <?php if ($archiveKind === 'copyright'): ?><div class="archive-field"><label for="publication-link">Related publication</label><select id="publication-link" name="linked_publication_id"><option value="">Not linked</option><?php foreach ($linkedPublications as $linked): ?><option value="<?= (int) $linked['publication_id'] ?>" <?= (int) $publicationLinkId === (int) $linked['publication_id'] ? 'selected' : '' ?>><?= archiveEscape($linked['research_title']) ?></option><?php endforeach; ?></select></div><?php endif; ?>
 <div class="archive-field full"><link rel="stylesheet" href="<?= archiveEscape(SITE_URL . 'css/file-uploader.css') ?>"><?php if (!empty($record['file_name'])): ?><p>Current document: <?= archiveEscape($record['file_name']) ?></p><?php endif; ?><?= renderFileUploader(['inputName'=>'supporting_file','accept'=>'.pdf','maxSize'=>(int)floor(rmsEffectiveUploadLimit()/1024),'folderTarget'=>$c['module'],'label'=>'Supporting PDF','required'=>false]) ?><small>Replacement documents retain the previous file and its reference in record history.</small></div>

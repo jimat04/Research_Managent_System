@@ -379,13 +379,10 @@ function rmsPermissionModules(): array
                 'add_activity' => 'Add Activity',
                 'add_upcoming_activity' => 'Add Upcoming Activity',
                 'add_conducted_activity' => 'Add Completed Activity',
-                'view_activity' => 'View Activity',
+                'view_activity' => 'Research Activities',
                 'upcoming_activities' => 'Upcoming',
                 'ongoing_activities' => 'Ongoing',
                 'conducted_activities' => 'Completed',
-                'seminars' => 'Seminars',
-                'trainings' => 'Trainings',
-                'workshops' => 'Workshops',
             ],
         ],
         'research_development' => [
@@ -394,6 +391,7 @@ function rmsPermissionModules(): array
                 'research_proposals' => 'Research Proposals',
                 'research_review' => 'Chapter Review',
                 'research_approval' => 'Approved Proposals',
+                'research_engagement_records' => 'Research Engagement Records',
             ],
         ],
         'research_implementation_outputs' => [
@@ -407,9 +405,9 @@ function rmsPermissionModules(): array
         'publication_dissemination' => [
             'label' => 'Publication & Dissemination',
             'pages' => [
-                'journal_publications' => 'Journal Publications',
-                'conference_presentations' => 'Conference Papers & Presentations',
-                'research_repository' => 'Research Repository',
+                'publication_records' => 'All Records',
+                'publication_add' => 'Add New',
+                'publication_reports' => 'Reports',
             ],
         ],
         'intellectual_property_utilization' => [
@@ -520,7 +518,7 @@ function rmsDefaultStaffPermissions(): array
             'pages' => [],
         ];
         foreach ($module['pages'] as $subKey => $label) {
-            $matrix[$moduleKey]['pages'][$subKey] = 'view';
+            $matrix[$moduleKey]['pages'][$subKey] = $subKey === 'publication_add' ? 'none' : 'view';
         }
     }
 
@@ -537,18 +535,12 @@ function seedDefaultStaffPermissions(int $user_id, bool $force = false): void
 
     ensureStaffPermissionTable();
 
-    if (!$force) {
-        $exists = $conn->prepare('SELECT permission_id FROM staff_permissions WHERE user_id = ? LIMIT 1');
-        if ($exists) {
-            $exists->bind_param('i', $user_id);
-            $exists->execute();
-            $hasPermission = $exists->get_result()->num_rows > 0;
-            $exists->close();
-            if ($hasPermission) {
-                return;
-            }
-        }
-    }
+    $exists = $conn->prepare('SELECT COUNT(*) AS permission_count FROM staff_permissions WHERE user_id = ?');
+    $exists->bind_param('i', $user_id);
+    $exists->execute();
+    $existingCount = (int) ($exists->get_result()->fetch_assoc()['permission_count'] ?? 0);
+    $exists->close();
+    $isNewMatrix = $existingCount === 0;
 
     $defaults = rmsDefaultStaffPermissions();
     foreach ($defaults as $moduleKey => $moduleData) {
@@ -568,7 +560,7 @@ function seedDefaultStaffPermissions(int $user_id, bool $force = false): void
                     $insert->execute();
                     $insert->close();
                 }
-            } else {
+            } elseif ($force) {
                 $update = $conn->prepare('UPDATE staff_permissions SET access_level = ? WHERE user_id = ? AND module_key = ? AND subpage_key = ?');
                 if ($update) {
                     $update->bind_param('siss', $moduleLevel, $user_id, $moduleKeyValue, $empty);
@@ -587,17 +579,18 @@ function seedDefaultStaffPermissions(int $user_id, bool $force = false): void
             $pageCheck->execute();
             $pageExists = $pageCheck->get_result()->num_rows > 0;
             $pageCheck->close();
-            if ($pageExists) {
+            if ($pageExists && $force) {
                 $update = $conn->prepare('UPDATE staff_permissions SET access_level = ? WHERE user_id = ? AND module_key = ? AND subpage_key = ?');
                 if ($update) {
                     $update->bind_param('siss', $accessLevel, $user_id, $moduleKeyValue, $subpageKey);
                     $update->execute();
                     $update->close();
                 }
-            } else {
+            } elseif (!$pageExists) {
+                $insertLevel = $force || $isNewMatrix ? $accessLevel : 'none';
                 $insert = $conn->prepare('INSERT INTO staff_permissions (user_id, module_key, subpage_key, access_level) VALUES (?, ?, ?, ?)');
                 if ($insert) {
-                    $insert->bind_param('isss', $user_id, $moduleKeyValue, $subpageKey, $accessLevel);
+                    $insert->bind_param('isss', $user_id, $moduleKeyValue, $subpageKey, $insertLevel);
                     $insert->execute();
                     $insert->close();
                 }

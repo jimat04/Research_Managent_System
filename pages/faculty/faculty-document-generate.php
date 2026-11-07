@@ -106,28 +106,37 @@ if ($reviewToken === '') $reviewToken = $enabled && $typeAllowed && $recordId > 
 
 renderFacultyShell($user, 'faculty-document-workspace.php', 'Generate EARIST DOCX', 'Review saved answers and current missing information before generation.');
 facultyRecordAssets();
+earistDocumentStyles();
 ?>
 <div class="frr-wrap">
   <a class="frr-back" href="<?= facultyRecordEscape(SITE_URL . 'pages/faculty/faculty-document-hub.php?' . http_build_query(['id' => $recordId])) ?>">← EARIST Documents</a>
   <p class="frr-hint"><a href="<?= facultyRecordEscape(SITE_URL . 'pages/faculty/faculty-document-mapping.php?' . http_build_query(['id' => $recordId, 'document' => $type])) ?>">Back to review and save answers</a></p>
-  <section class="frr-panel">
+  <section class="frr-panel ed-generation-panel" aria-labelledby="generation-title">
     <p class="frr-eyebrow">Step 4 of 4 · Review and generate</p>
-    <h2>Generate EARIST DOCX</h2>
+    <h2 id="generation-title">Generate EARIST DOCX</h2>
     <?php if (!$typeAllowed): ?>
       <div class="frr-alert frr-alert--error" role="alert"><p><?= facultyRecordEscape($error) ?></p></div>
     <?php elseif (!$enabled): ?>
       <div class="frr-alert" role="status"><p>Live document generation is not enabled yet. Your saved answers remain available, and no document was generated.</p></div>
     <?php elseif ($error !== ''): ?><div class="frr-alert frr-alert--error" role="alert"><p><?= facultyRecordEscape($error) ?></p></div><?php endif; ?>
     <?php if ($enabled && $context): ?>
-      <p><strong><?= facultyRecordEscape($context['mapping']['source']['record']['title']) ?></strong></p>
-      <p><?= facultyRecordEscape(earistMappingDocument($type)['label']) ?> · Saved answer revision <?= (int) $context['draft']['draft_revision'] ?></p>
-      <details><summary>Review exact mapped information and saved answers</summary><dl>
-        <?php foreach ($context['mapping']['fields'] as $field): ?><dt><strong><?= facultyRecordEscape($field['label']) ?></strong></dt><dd><?= nl2br(facultyRecordEscape(earistMappingDisplay($field['value']))) ?></dd><?php endforeach; ?>
+      <div class="ed-generation-record">
+        <p><strong><?= facultyRecordEscape($context['mapping']['source']['record']['title']) ?></strong></p>
+        <p><span><?= facultyRecordEscape(earistMappingDocument($type)['label']) ?></span><span class="ed-revision-number">Saved answer revision <?= (int) $context['draft']['draft_revision'] ?></span></p>
+      </div>
+      <details class="ed-generation-details"><summary>Review exact mapped information and saved answers</summary><dl class="ed-answer-list">
+        <?php foreach ($context['mapping']['fields'] as $field): ?><div class="ed-answer-item"><dt><strong><?= facultyRecordEscape($field['label']) ?></strong></dt><dd><?= nl2br(facultyRecordEscape(earistMappingDisplay($field['value']))) ?></dd></div><?php endforeach; ?>
       </dl></details>
-      <h3>Missing information</h3>
-      <?php if ($context['review']['missing']): ?><ul><?php foreach ($context['review']['missing'] as $field => $status): ?><li><?= facultyRecordEscape(earistDocumentMissingLabel((string) $field, $context['mapping'])) ?> — <?= facultyRecordEscape($status) ?></li><?php endforeach; ?></ul><?php else: ?><p>None identified.</p><?php endif; ?>
-      <h3>Warnings</h3>
-      <?php if ($context['review']['warnings']): ?><ul><?php foreach ($context['review']['warnings'] as $warning): ?><li><?= facultyRecordEscape($warning) ?></li><?php endforeach; ?></ul><?php else: ?><p>None.</p><?php endif; ?>
+      <div class="ed-generation-checks">
+        <section class="ed-generation-status" aria-labelledby="generation-missing-title">
+          <h3 id="generation-missing-title">Missing information</h3>
+          <?php if ($context['review']['missing']): ?><ul><?php foreach ($context['review']['missing'] as $field => $status): ?><li><?= facultyRecordEscape(earistDocumentMissingLabel((string) $field, $context['mapping'])) ?> — <?= facultyRecordEscape($status) ?></li><?php endforeach; ?></ul><?php else: ?><p>None identified.</p><?php endif; ?>
+        </section>
+        <section class="ed-generation-status ed-generation-warnings" aria-labelledby="generation-warnings-title">
+          <h3 id="generation-warnings-title">Warnings</h3>
+          <?php if ($context['review']['warnings']): ?><ul><?php foreach ($context['review']['warnings'] as $warning): ?><li><?= facultyRecordEscape($warning) ?></li><?php endforeach; ?></ul><?php else: ?><p>None.</p><?php endif; ?>
+        </section>
+      </div>
       <?php if ((!$reviewed || !$acknowledged) && ($context['review']['missing'] || $context['review']['warnings'])): ?>
         <label class="frr-check"><input type="checkbox" form="generation-review" name="acknowledge_warnings" value="1" required> I reviewed the missing information and warnings shown above.</label>
       <?php endif; ?>

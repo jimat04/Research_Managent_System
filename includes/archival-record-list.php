@@ -22,20 +22,27 @@ if ($role === 'faculty') {
             if ($recordScopes && hasModulePermission($userId, $recordScopes[0][0], 'view', $recordScopes[0][1])) $scopes[] = "r.{$c['type']} = '" . $type . "'";
         }
     } else {
-        foreach (['journal' => 'journal_publications','conference' => 'conference_presentations'] as $type => $page) if (hasModulePermission($userId,'publication_dissemination','view',$page)) $scopes[] = "r.publication_type = '$type'";
-        if (hasModulePermission($userId,'publication_dissemination','view','research_repository')) $scopes[] = "(r.archival_status = 'archived' OR r.status = 'published')";
+        if (hasModulePermission($userId,'publication_dissemination','view','publication_records')
+            || hasModulePermission($userId,'publication_dissemination','view','publication_reports')) $scopes[] = '1=1';
         if (hasModulePermission($userId,'research_implementation_outputs','view','research_outputs')) $scopes[] = "(r.deactivated_at IS NULL OR r.archival_status = 'archived' OR r.status = 'published')";
     }
     if (!$scopes) archiveDeny();
     $where[] = '(' . implode(' OR ', $scopes) . ')';
 }
 $get = static fn(string $key): string => is_string($_GET[$key] ?? null) ? trim($_GET[$key]) : '';
-$filters = ['q' => mb_substr($get('q'),0,150), 'record_type' => $get('record_type') ?: $get($c['type']), 'application_status' => $get('application_status'), 'classification_type' => $get('classification_type'), 'classification_subtype' => $get('classification_subtype'), 'scope' => $get('scope'), 'research_area' => $get('research_area'), 'year' => $get('year'), 'year_from' => $get('year_from'), 'year_to' => $get('year_to'), 'owner' => $get('owner'), 'program' => mb_substr($get('program'),0,255), 'archive_status' => $get('archive_status'), 'external_status' => $get('external_status'), 'indexing' => $get('indexing'), 'inactive' => $get('inactive'), 'sdg' => $get('sdg')];
+$filters = ['q' => mb_substr($get('q'),0,150), 'record_type' => $get('record_type') ?: $get($c['type']), 'classification_type' => $get('classification_type'), 'classification_subtype' => $get('classification_subtype'), 'scope' => $get('scope'), 'research_area' => $get('research_area'), 'year' => $get('year'), 'year_from' => $get('year_from'), 'year_to' => $get('year_to'), 'owner' => $get('owner'), 'program' => mb_substr($get('program'),0,255), 'archive_status' => $get('archive_status'), 'external_status' => $get('external_status'), 'indexing' => $get('indexing'), 'inactive' => $get('inactive'), 'sdg' => $get('sdg')];
 // Section scope applies to the list, totals, summaries and CSV, even when filters conflict.
 if ($publicationSectionType !== '') $filters['record_type'] = $publicationSectionType;
 if ($publicationSection === 'research_repository') $where[] = "(r.archival_status = 'archived' OR r.status = 'published')";
 $report = $dedicatedPublication ? $archiveReportView : $get('report') === '1';
 $export = $get('export') === 'csv';
+if ($role === 'research_staff' && $archiveKind === 'publication') {
+    $staffPublicationModulePage = (string) ($_GET['module_page'] ?? '');
+    if ($report && !hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_reports')) archiveDeny();
+    if (!$report && $staffPublicationModulePage !== 'publication_add'
+        && !hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records')) archiveDeny();
+    if ($export && !hasDownloadPermission($userId, 'publication_dissemination', 'publication_reports')) archiveDeny();
+}
 if ($role === 'student' && ($report || $export)) archiveDeny();
 if ($filters['inactive'] !== 'all') $where[] = $filters['inactive'] === '1' ? 'r.deactivated_at IS NOT NULL' : 'r.deactivated_at IS NULL';
 if ($archiveKind === 'publication' && $filters['q'] !== '') { $where[] = "(r.research_title LIKE ? OR r.researcher_name LIKE ? OR r.authors_json LIKE ? OR CONCAT_WS(' ',u.first_name,u.last_name) LIKE ? OR r.doi_identifier LIKE ? OR r.journal_publisher LIKE ? OR r.publication_url LIKE ? OR r.indexing_information LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(r.publication_metadata_json) THEN r.publication_metadata_json ELSE '{}' END,'$.source_title')) LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(r.publication_metadata_json) THEN r.publication_metadata_json ELSE '{}' END,'$.conference_name')) LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(r.publication_metadata_json) THEN r.publication_metadata_json ELSE '{}' END,'$.book_title')) LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(r.publication_metadata_json) THEN r.publication_metadata_json ELSE '{}' END,'$.proceedings_title')) LIKE ?)"; array_push($params,...array_fill(0,12,'%'.$filters['q'].'%')); }
@@ -43,10 +50,6 @@ elseif ($filters['q'] !== '' && $archiveKind === 'copyright') { $where[] = "(r.{
 elseif ($filters['q'] !== '') { $where[] = "(r.{$c['title']} LIKE ? OR r.{$c['authors']} LIKE ? OR CONCAT_WS(' ', u.first_name,u.last_name) LIKE ?)"; array_push($params, ...array_fill(0,3,'%' . $filters['q'] . '%')); }
 if (isset($c['types'][$filters['record_type']])) { $where[] = "r.{$c['type']} = ?"; $params[] = $filters['record_type']; }
 if ($archiveKind === 'copyright') {
-    if (in_array($filters['application_status'], ['pending', 'under_review', 'registered', 'rejected'], true)) {
-        $where[] = 'r.status = ?';
-        $params[] = $filters['application_status'];
-    }
     if (preg_match('/^\d{4}$/D', $filters['year']) && (int)$filters['year'] > 0) {
         $where[] = 'YEAR(r.filing_date) = ?';
         $params[] = (int)$filters['year'];
@@ -120,7 +123,7 @@ $select = "SELECT r.*, CONCAT_WS(' ',u.first_name,u.last_name) AS owner_name, u.
 if ($export) {
     header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename="' . $archiveKind . '-archive.csv"'); header('Cache-Control: no-store');
     $out = fopen('php://output','w');
-    fputcsv($out, $archiveKind === 'publication' ? ['Record ID','Title','Authors in order','Faculty owner','Program','Publication type','Subtype','Scope','Publication year','Publication source','Research area','Indexing','DOI','Publication URL','Archive status','Encoded by user ID','Created at','Last editor user ID','Last updated'] : ['Record ID','Title','Actual authors / creators','Faculty owner','Program','Type','Year','Archival status','External copyright status','Indexing','Created at','Last updated']);
+    fputcsv($out, $archiveKind === 'publication' ? ['Record ID','Title','Authors in order','Faculty owner','Program','Publication type','Subtype','Scope','Publication year','Publication source','Research area','Indexing','DOI','Publication URL','Archive status','Encoded by user ID','Created at','Last editor user ID','Last updated'] : ['Record ID','Title','Actual authors / creators','Faculty owner','Program','Type','Year','Archival status',$archiveScope === '' ? 'External copyright status' : 'External IP registration status','Indexing','Created at','Last updated']);
     $rows = archiveQuery($conn, $select . $from . " ORDER BY r.{$c['id']} DESC", $params)->get_result();
     while ($row = $rows->fetch_assoc()) {
         $line = [$row[$c['id']],$row[$c['title']],$row[$c['authors']],$row['owner_name'],$row['owner_program'],$c['types'][$row[$c['type']]] ?? $row[$c['type']],substr((string)($row[$c['date']] ?: $row['created_at']),0,4),archiveStatus($row),$archiveKind === 'copyright' ? archiveExternalLabel($row) : '',$row['indexing_information'] ?? '',$row['created_at'],$row['updated_at']];
@@ -145,6 +148,10 @@ $reportTitle = match ($role) {
 $routeParams = $archiveRouteParams;
 $link = static function(array $changes = []) use ($listUrl,$reportUrl,$dedicatedPublication,$filters,$report,$routeParams): string {
     $query = array_merge($routeParams,$filters,['report' => $report ? '1' : '0'],$changes);
+    if (in_array((string) ($routeParams['module_page'] ?? ''), ['publication_records', 'publication_reports'], true)
+        && array_key_exists('report', $changes)) {
+        $query['module_page'] = (string) $query['report'] === '1' ? 'publication_reports' : 'publication_records';
+    }
     $url = $listUrl;
     if ($dedicatedPublication) {
         $url = (string) $query['report'] === '1' || ($query['export'] ?? '') === 'csv' ? $reportUrl : $listUrl;
@@ -154,6 +161,16 @@ $link = static function(array $changes = []) use ($listUrl,$reportUrl,$dedicated
 };
 $browseUrl = $dedicatedPublication && $report ? $reportUrl : $listUrl;
 $listTitle = $dedicatedPublication ? ($report ? 'Reports' : 'All Records') : $c['label'];
+$staffPublicationModulePage = $archiveKind === 'publication' && $role === 'research_staff'
+    ? (string) ($_GET['module_page'] ?? '')
+    : '';
+if (in_array($staffPublicationModulePage, ['publication_records', 'publication_reports'], true)) {
+    $listTitle = $report ? 'Reports' : 'All Records';
+    $listDescription = $report
+        ? 'Publication summaries and exports across the publication archive.'
+        : 'Browse publication records within your assigned permissions.';
+    if ($report) $reportTitle = 'Authorized publication summary';
+}
 if ($facultyPublication && $report) $listDescription = 'Summaries and exports of publication records you own.';
 if ($adminPublication && $report) $listDescription = 'Institute-wide publication summaries and exports.';
 if ($adminPublication && !$report) $listDescription = 'View and manage scholarly publication records across the Institute.';
@@ -177,16 +194,22 @@ if ($sectionTitle !== '') {
 }
 $showListControls = true;
 $canAdd = in_array($role,['admin','faculty'],true);
-if ($role === 'research_staff') foreach (array_keys($c['types']) as $type) if (archiveCan($conn,$archiveKind,[$c['type']=>$type,'archival_status'=>'archived'],$user,'manage')) $canAdd = true;
+if ($role === 'research_staff' && $staffPublicationModulePage !== '') {
+    $canAdd = hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_add');
+} elseif ($role === 'research_staff') {
+    foreach (array_keys($c['types']) as $type) if (archiveCan($conn,$archiveKind,[$c['type']=>$type,'archival_status'=>'archived'],$user,'manage')) $canAdd = true;
+}
 if ($role === 'research_staff' && $publicationSectionType !== '') {
     $canAdd = archiveCan($conn, $archiveKind, ['publication_type' => $publicationSectionType, 'archival_status' => 'archived'], $user, 'manage');
 }
 archiveShellOpen($user,$c,$listTitle,$adminPublication);
 ?>
-<div class="archive-heading<?= $adminPublication ? ' archive-admin-publication-heading' : '' ?>"><div><h1><?= archiveEscape($listTitle) ?></h1><p class="archive-muted"><?= archiveEscape($listDescription) ?></p></div><div class="archive-actions archive-no-print"><?php if ($canAdd && $showListControls): ?><?php $addParams = array_merge($routeParams, $filters['record_type'] !== '' ? [$c['type'] => $filters['record_type']] : []); ?><a class="archive-button" href="<?= archiveEscape($formUrl . '?' . http_build_query($addParams)) ?>">Add record</a><?php endif; ?><?php if ($role !== 'student'): ?><?php if ($report): ?><a class="archive-button secondary" href="<?= archiveEscape($link(['report'=>0,'page'=>1])) ?>"><?= archiveEscape($sectionTitle !== '' ? 'Back to ' . $sectionTitle : ($archiveKind === 'publication' ? 'All publications' : 'Back to records')) ?></a><?php else: ?><a class="archive-button secondary" href="<?= archiveEscape($link(['report'=>1])) ?>">Reports</a><?php endif; ?><a class="archive-button secondary" href="<?= archiveEscape($link(['export'=>'csv'])) ?>">Download CSV</a><?php endif; ?><?php if ($role === 'admin' && $archiveKind === 'publication'): ?><a class="archive-button secondary" href="<?= archiveEscape(SITE_URL . 'pages/admin/admin-publication-classifications.php') ?>">Manage publication classifications and form rules</a><?php endif; ?></div></div>
+<div class="archive-heading<?= $adminPublication ? ' archive-admin-publication-heading' : '' ?>"><div><h1><?= archiveEscape($listTitle) ?></h1><p class="archive-muted"><?= archiveEscape($listDescription) ?></p></div><div class="archive-actions archive-no-print"><?php if ($canAdd && $showListControls): ?><?php $addParams = array_merge($routeParams, $filters['record_type'] !== '' ? [$c['type'] => $filters['record_type']] : []); if ($staffPublicationModulePage !== '') $addParams['module_page'] = 'publication_add'; ?><a class="archive-button" href="<?= archiveEscape($formUrl . '?' . http_build_query($addParams)) ?>">Add record</a><?php endif; ?><?php if ($role !== 'student'): ?><?php if ($report): ?><?php if ($archiveKind !== 'publication' || $role !== 'research_staff' || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records')): ?><a class="archive-button secondary" href="<?= archiveEscape($link(['report'=>0,'page'=>1])) ?>"><?= archiveEscape($sectionTitle !== '' ? 'Back to ' . $sectionTitle : ($archiveKind === 'publication' ? 'All publications' : 'Back to records')) ?></a><?php endif; ?><?php elseif ($archiveKind !== 'publication' || $role !== 'research_staff' || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_reports')): ?><a class="archive-button secondary" href="<?= archiveEscape($link(['report'=>1])) ?>">Reports</a><?php endif; ?><?php if ($archiveKind !== 'publication' || $role !== 'research_staff' || hasDownloadPermission($userId, 'publication_dissemination', 'publication_reports')): ?><a class="archive-button secondary" href="<?= archiveEscape($link(['export'=>'csv'])) ?>">Download CSV</a><?php endif; ?><?php endif; ?><?php if ($role === 'admin' && $archiveKind === 'publication'): ?><a class="archive-button secondary" href="<?= archiveEscape(SITE_URL . 'pages/admin/admin-publication-classifications.php') ?>">Manage publication classifications and form rules</a><?php endif; ?></div></div>
 <?php if ($flash): ?><div class="archive-success" role="status"><?= archiveEscape($flash['message'] ?? '') ?></div><?php endif; ?>
 <?php if ($showListControls): ?>
-<form method="get" action="<?= archiveEscape($browseUrl) ?>" class="archive-card archive-no-print"><?php if ($archiveScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= archiveEscape($archiveScope) ?>"><?php endif; ?><?php if (!$dedicatedPublication): ?><input type="hidden" name="report" value="<?= $report ? '1' : '0' ?>"><?php endif; ?><div class="archive-filters archive-filters--publication">
+<form method="get" action="<?= archiveEscape($browseUrl) ?>" class="archive-card archive-no-print<?= $archiveKind === 'copyright' ? ' archive-filter-card archive-filter-card--copyright' : '' ?>"><?php if ($archiveScope !== ''): ?><input type="hidden" name="ip_scope" value="<?= archiveEscape($archiveScope) ?>"><?php endif; ?><?php if (!$dedicatedPublication): ?><input type="hidden" name="report" value="<?= $report ? '1' : '0' ?>"><?php endif; ?>
+<?php if ($archiveKind === 'copyright'): ?><div class="archive-filter-intro"><p class="archive-filter-kicker">Institute archive</p><h2>Find records</h2><p>Search by title, creator, or reference, then narrow the list by type, filing year, or external status.</p></div><?php endif; ?>
+<div class="archive-filters <?= $archiveKind === 'publication' ? 'archive-filters--publication' : 'archive-filters--records' ?>">
 <?php foreach ($archiveNavigationParams as $key => $value): ?><input type="hidden" name="<?= archiveEscape($key) ?>" value="<?= archiveEscape($value) ?>"><?php endforeach; ?>
 <?php
 $publicationYears = [];
@@ -210,8 +233,8 @@ if ($archiveKind === 'publication') {
 }
 ?>
 <div class="archive-field archive-field--full">
-    <label for="filter-q"><?= $archiveKind === 'publication' ? 'Search Publications' : 'Search Copyright Applications' ?></label>
-    <input id="filter-q" name="q" type="search" maxlength="150" value="<?= archiveEscape($filters['q']) ?>" placeholder="<?= $archiveKind === 'publication' ? 'Search title, author, DOI, journal, conference...' : 'Search title, applicant, or reference number...' ?>">
+    <label for="filter-q"><?= $archiveKind === 'publication' ? 'Search publications' : 'Title, creator, or reference number' ?></label>
+    <input id="filter-q" name="q" type="search" maxlength="150" value="<?= archiveEscape($filters['q']) ?>" placeholder="<?= $archiveKind === 'publication' ? 'Search title, author, DOI, journal, conference...' : 'Enter a title, creator, or reference number' ?>">
 </div>
 <?php if ($archiveKind === 'publication'): ?>
     <?php $classificationTypes = array_values(array_filter($publicationTypes, static fn(array $typeItem): bool => (int)$typeItem['is_active'] === 1 && (int)$typeItem['is_proposed'] === 1)); ?>
@@ -224,8 +247,7 @@ if ($archiveKind === 'publication') {
 <?php else: ?>
     <div class="archive-field"><label for="filter-output-type">Output Type</label><select id="filter-output-type" name="output_type"><option value="">All Types</option><?php foreach($c['types'] as $typeCode => $typeLabel): ?><option value="<?= archiveEscape($typeCode) ?>" <?= $filters['record_type'] === $typeCode ? 'selected' : '' ?>><?= archiveEscape($typeLabel) ?></option><?php endforeach; ?></select></div>
     <div class="archive-field"><label for="filter-year">Filing Year</label><input id="filter-year" name="year" type="number" min="1900" max="9999" inputmode="numeric" value="<?= archiveEscape($filters['year']) ?>" placeholder="Any year"></div>
-    <div class="archive-field"><label for="filter-application-status">Application Status</label><select id="filter-application-status" name="application_status"><option value="">All Statuses</option><?php foreach(['pending'=>'Pending','under_review'=>'Under review','registered'=>'Registered','rejected'=>'Rejected'] as $statusCode => $statusLabel): ?><option value="<?= $statusCode ?>" <?= $filters['application_status'] === $statusCode ? 'selected' : '' ?>><?= $statusLabel ?></option><?php endforeach; ?></select></div>
-    <div class="archive-field"><label for="filter-external-status">External Registration / IP Status</label><select id="filter-external-status" name="external_status"><option value="">All External Statuses</option><?php foreach(archiveExternalOptions() as $statusCode => $statusLabel): ?><option value="<?= archiveEscape($statusCode) ?>" <?= $filters['external_status'] === $statusCode ? 'selected' : '' ?>><?= archiveEscape($statusLabel) ?></option><?php endforeach; ?></select></div>
+    <div class="archive-field"><label for="filter-external-status"><?= archiveEscape($archiveScope === '' ? 'External copyright status' : 'External IP registration status') ?></label><select id="filter-external-status" name="external_status"><option value="">All External Statuses</option><?php foreach(archiveExternalOptions() as $statusCode => $statusLabel): ?><option value="<?= archiveEscape($statusCode) ?>" <?= $filters['external_status'] === $statusCode ? 'selected' : '' ?>><?= archiveEscape($statusLabel) ?></option><?php endforeach; ?></select></div>
     <?php foreach ($archiveNavigationParams as $key => $value): ?><input type="hidden" name="<?= archiveEscape($key) ?>" value="<?= archiveEscape($value) ?>"><?php endforeach; ?>
 <?php endif; ?>
 </div>
@@ -244,7 +266,7 @@ if ($archiveKind === 'publication') {
     </div>
 </details>
 <?php endif; ?>
-<div class="archive-actions archive-filter-actions"><button class="archive-button" type="submit">Search / Filter</button><a href="<?= archiveEscape($browseUrl . $navigationQuery) ?>">Clear filters</a></div></form>
+<div class="archive-actions archive-filter-actions"><button class="archive-button" type="submit"><?= $archiveKind === 'copyright' ? 'Search records' : 'Search / Filter' ?></button><a class="<?= $archiveKind === 'copyright' ? 'archive-filter-reset' : '' ?>" href="<?= archiveEscape($browseUrl . $navigationQuery) ?>">Clear filters</a></div></form>
 <?php endif; ?>
 <?php if($report): ?>
 <section class="archive-card"><div class="archive-heading"><h2><?= archiveEscape($reportTitle) ?></h2><button type="button" class="archive-button secondary archive-no-print" data-archive-print>Print report</button></div><p>All matching records are included in these summaries. Unique totals count each record once, regardless of linked authors. Legacy records are shown separately from directly archived records.</p>
@@ -259,14 +281,14 @@ if($archiveKind==='publication') {
     $groups['Research area']="COALESCE(pra.area_name,'Not recorded')";
 }
 if($archiveKind==='publication') $groups['Indexing classification']="COALESCE(NULLIF(r.indexing_information,''),'Not recorded')";
-else $groups[$archiveScope === '' ? 'External copyright status' : 'External registration / IP status']="CASE WHEN r.external_status IS NOT NULL THEN r.external_status WHEN r.status='registered' AND NULLIF(r.copyright_ref_no,'') IS NOT NULL THEN 'registered (legacy)' ELSE 'not recorded (legacy)' END";
+else $groups[$archiveScope === '' ? 'External copyright status' : 'External IP registration status']="CASE WHEN r.external_status IS NOT NULL THEN r.external_status WHEN r.status='registered' AND NULLIF(r.copyright_ref_no,'') IS NOT NULL THEN 'registered (legacy)' ELSE 'not recorded (legacy)' END";
 foreach($groups as $label=>$expression):
 $summary=archiveQuery($conn,"SELECT $expression AS label, COUNT(*) AS total, SUM(r.archival_status='archived') AS archived".$from.' GROUP BY label ORDER BY label',$params)->get_result(); ?>
-<h3><?= archiveEscape($label) ?></h3><div class="archive-table-wrap"><table class="archive-table<?= $role === 'admin' ? ' archive-admin-report-summary' : '' ?>"><thead><tr><th><?= archiveEscape($label) ?></th><th>Unique records</th><th>Archived</th></tr></thead><tbody><?php while($group=$summary->fetch_assoc()): ?><tr><td><?= archiveEscape($group['label']) ?></td><td><?= (int)$group['total'] ?></td><td><?= (int)$group['archived'] ?></td></tr><?php endwhile; ?></tbody></table></div><?php endforeach; ?></section>
+<h3><?= archiveEscape($label) ?></h3><div class="archive-table-wrap"><table class="archive-table archive-report-summary<?= $role === 'admin' ? ' archive-admin-report-summary' : '' ?>"><thead><tr><th><?= archiveEscape($label) ?></th><th>Unique records</th><th>Archived</th></tr></thead><tbody><?php while($group=$summary->fetch_assoc()): ?><tr><td><?= archiveEscape($group['label']) ?></td><td><?= (int)$group['total'] ?></td><td><?= (int)$group['archived'] ?></td></tr><?php endwhile; ?></tbody></table></div><?php endforeach; ?></section>
 <?php endif; ?>
 <?php if($archiveKind==='publication'): require __DIR__.'/publication-archive-table.php'; else: ?>
 <section class="archive-card"><h2>Records</h2><?php if(!$records): ?><p><?= $showListControls ? 'No records match these filters. Add a record or adjust the filters.' : 'No publication records match this report.' ?></p><?php else: ?><div class="archive-table-wrap"><table class="archive-table"><thead><tr><th>Title / authors</th><th>Faculty owner</th><th>Type / year</th><th>Record status</th><th class="archive-no-print">Actions</th></tr></thead><tbody>
-<?php foreach($records as $row): $rid=(int)$row[$c['id']]; $url=$detailUrl.'?id='.$rid.$navigationSuffix; ?><tr><td><a href="<?= archiveEscape($url) ?>"><?= archiveEscape($row[$c['title']]) ?></a><p class="archive-muted"><?= archiveEscape($row[$c['authors']]) ?></p></td><td><?= archiveEscape($row['owner_name'] ?: 'Unresolved owner') ?><?php if(!$row['owner_name']||$row['owner_role']!=='faculty'||$row['owner_deleted']): ?><small> — needs administrative correction</small><?php endif; ?></td><td><?= archiveEscape($c['types'][$row[$c['type']]]??$row[$c['type']]) ?><br><?= archiveEscape(substr((string)($row[$c['date']]?:$row['created_at']),0,4)) ?></td><td><span class="archive-badge"><?= archiveEscape(archiveStatus($row)) ?></span><?php if($archiveKind==='copyright'): ?><p><?= archiveEscape(archiveExternalLabel($row)) ?></p><?php endif; ?></td><td class="archive-no-print"><div class="archive-links"><a href="<?= archiveEscape($url) ?>">View</a><?php if(archiveCan($conn,$archiveKind,$row,$user,'manage')&&empty($row['deactivated_at'])): ?><a href="<?= archiveEscape($formUrl.'?id='.$rid.$navigationSuffix) ?>">Edit</a><?php endif; ?><a href="<?= archiveEscape($url.'#documents') ?>">Documents</a><a href="<?= archiveEscape($url.'#history') ?>">History</a></div></td></tr><?php endforeach; ?>
+<?php foreach($records as $row): $rid=(int)$row[$c['id']]; $url=$detailUrl.'?id='.$rid.$navigationSuffix; ?><tr><td><a href="<?= archiveEscape($url) ?>"><?= archiveEscape($row[$c['title']]) ?></a><p class="archive-muted"><?= archiveEscape($row[$c['authors']]) ?></p></td><td><?= archiveEscape($row['owner_name'] ?: 'Unresolved owner') ?><?php if(!$row['owner_name']||$row['owner_role']!=='faculty'||$row['owner_deleted']): ?><small> — needs administrative correction</small><?php endif; ?></td><td><?= archiveEscape($c['types'][$row[$c['type']]]??$row[$c['type']]) ?><br><?= archiveEscape(substr((string)($row[$c['date']]?:$row['created_at']),0,4)) ?></td><td><span class="archive-badge"><?= archiveEscape(archiveStatus($row)) ?></span><?php if($archiveKind==='copyright'): ?><p><small><?= archiveEscape($archiveScope === '' ? 'External copyright status: ' : 'External IP registration status: ') ?></small><?= archiveEscape(archiveExternalLabel($row)) ?></p><?php endif; ?></td><td class="archive-no-print"><div class="archive-links"><a href="<?= archiveEscape($url) ?>">View</a><?php if(archiveCan($conn,$archiveKind,$row,$user,'manage')&&empty($row['deactivated_at'])): ?><a href="<?= archiveEscape($formUrl.'?id='.$rid.$navigationSuffix) ?>">Edit</a><?php endif; ?><a href="<?= archiveEscape($url.'#documents') ?>">Documents</a><a href="<?= archiveEscape($url.'#history') ?>">History</a></div></td></tr><?php endforeach; ?>
 </tbody></table></div><p>Page <?= $page ?> of <?= $pages ?> · <?= (int)$totals['total'] ?> records</p><div class="archive-links archive-no-print"><?php if($page>1): ?><a href="<?= archiveEscape($link(['page'=>$page-1])) ?>">Previous</a><?php endif; ?><?php if($page<$pages): ?><a href="<?= archiveEscape($link(['page'=>$page+1])) ?>">Next</a><?php endif; ?></div><?php endif; ?></section>
 <?php endif; ?>
 <script src="<?= archiveEscape(SITE_URL.'js/archival-records.js') ?>"></script>

@@ -11,6 +11,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/FacultyAdviseeProgressService.php';
 require_once __DIR__ . '/FacultyEngagementService.php';
 require_once __DIR__ . '/FacultyParticipationService.php';
+require_once __DIR__ . '/FacultyAnalyticsService.php';
 require_once __DIR__ . '/FacultyProfileService.php';
 require_once __DIR__ . '/../config.php';
 
@@ -21,6 +22,7 @@ class FacultyDashboardService
     private FacultyEngagementService $engagementService;
     private FacultyParticipationService $participationService;
     private FacultyProfileService $profileService;
+    private FacultyAnalyticsService $analyticsService;
 
     public function __construct(mysqli $connection)
     {
@@ -29,6 +31,7 @@ class FacultyDashboardService
         $this->engagementService = new FacultyEngagementService($connection);
         $this->participationService = new FacultyParticipationService($connection);
         $this->profileService = new FacultyProfileService($connection);
+        $this->analyticsService = new FacultyAnalyticsService($connection, $this->participationService);
     }
 
     /**
@@ -242,94 +245,16 @@ class FacultyDashboardService
     /**
      * Get data for the standalone faculty analytics page.
      */
-    public function getAnalyticsData(int $userId): array
+    public function normalizeAnalyticsFilters(array $query): array
     {
-        $projectStatusStats = $this->getProjectStatusStats($userId);
-        $publishedByYear = $this->getPublishedByYear($userId);
-        $engagementStatusStats = $this->engagementService->getStatusBreakdown($userId);
-
-        // Transform to match template expectations: label/value format
-        return [
-            'projects_by_status' => array_map(function ($item) {
-                return ['label' => $item['label'], 'value' => $item['total']];
-            }, $projectStatusStats),
-            'publications_by_year' => array_map(function ($item) {
-                return ['label' => (string) $item['year'], 'value' => $item['total']];
-            }, $publishedByYear),
-            'engagements_by_status' => array_map(function ($item) {
-                return ['label' => $item['label'], 'value' => $item['total']];
-            }, $engagementStatusStats),
-        ];
+        return $this->analyticsService->normalizeFilters($query);
     }
 
     /**
-     * Get project status distribution
+     * Get faculty-scoped portfolio analytics. Filters must be normalized first.
      */
-    private function getProjectStatusStats(int $userId): array
+    public function getAnalyticsData(int $userId, array $filters): array
     {
-        $stmt = $this->conn->prepare(
-            'SELECT rp.status, COUNT(DISTINCT rp.project_id) AS total
-               FROM research_projects rp
-              WHERE rp.deleted_at IS NULL
-                AND EXISTS (
-                    SELECT 1 FROM project_advisers pa
-                    WHERE pa.project_id = rp.project_id AND pa.adviser_id = ?
-                )
-              GROUP BY rp.status
-              ORDER BY total DESC, rp.status ASC'
-        );
-        if (!$stmt) {
-            throw new RuntimeException('Unable to summarize projects: ' . $this->conn->error);
-        }
-        $stmt->bind_param('i', $userId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $stats = [];
-        while ($row = $result->fetch_assoc()) {
-            $stats[] = [
-                'status' => $row['status'],
-                'total' => (int) $row['total'],
-                'label' => ucwords(str_replace('_', ' ', $row['status'])),
-            ];
-        }
-        $stmt->close();
-        return $stats;
-    }
-
-    /**
-     * Get publications by year (last 5 years)
-     */
-    private function getPublishedByYear(int $userId): array
-    {
-        $currentYear = (int) date('Y');
-        $firstYear = $currentYear - 4;
-        $firstDate = $firstYear . '-01-01';
-        $nextYearDate = ($currentYear + 1) . '-01-01';
-
-        $byYear = [];
-        for ($year = $firstYear; $year <= $currentYear; $year++) {
-            $byYear[$year] = 0;
-        }
-
-        $stmt = $this->conn->prepare(
-            'SELECT YEAR(COALESCE(p.publication_date,p.created_at)) AS pub_year, COUNT(*) AS total
-               FROM publications p
-              WHERE p.deactivated_at IS NULL
-                AND EXISTS (SELECT 1 FROM publication_contributors pc WHERE pc.publication_id=p.publication_id AND pc.user_id=?)
-                AND COALESCE(p.publication_date,p.created_at) >= ? AND COALESCE(p.publication_date,p.created_at) < ?
-              GROUP BY pub_year ORDER BY pub_year'
-        );
-        $stmt->bind_param('iss', $userId, $firstDate, $nextYearDate);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $year = (int) $row['pub_year'];
-            if (isset($byYear[$year])) {
-                $byYear[$year] = (int) $row['total'];
-            }
-        }
-        $stmt->close();
-
-        return array_map(fn($y, $c) => ['year' => $y, 'total' => $c], array_keys($byYear), array_values($byYear));
+        return $this->analyticsService->getAnalyticsData($userId, $filters);
     }
 }

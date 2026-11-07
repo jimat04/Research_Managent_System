@@ -148,10 +148,13 @@
 .reports-workspace .report-filter-copy h2 { margin: 0; color: var(--report-ink); font-size: 19px; font-weight: 650; letter-spacing: -.02em; line-height: 1.3; }
 .reports-workspace .report-filter-copy > p:last-child { max-width: 600px; margin: 7px 0 0; color: var(--report-muted); font-size: 13px; line-height: 1.55; }
 .reports-workspace .report-filter { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; margin: 0; padding: 0; border: 0; background: transparent; }
+.reports-workspace .report-filter { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
 .reports-workspace .report-filter label { display: grid; gap: 7px; color: var(--report-muted); font-size: 12px; font-weight: 600; }
-.reports-workspace .report-filter select { width: 100%; min-height: 44px; padding: 9px 36px 9px 12px; border-color: #cbd5e1; border-radius: 9px; font-size: 13px; }
+.reports-workspace .report-filter :is(select, input[type="date"]) { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: var(--report-ink); font: inherit; font-size: 13px; }
+.reports-workspace .report-filter :is(select, input[type="date"]):focus-visible { outline: 2px solid #f57c00; outline-offset: 2px; }
 .reports-workspace .report-filter button { min-height: 44px; padding: 10px 17px; border-radius: 9px; box-shadow: 0 4px 10px rgba(245, 124, 0, .16); transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease; }
 .reports-workspace .report-filter button:hover { border-color: #ea580c; background: #ea580c; box-shadow: 0 7px 14px rgba(234, 88, 12, .2); transform: translateY(-1px); }
+.reports-workspace .report-period-error { grid-column: 1 / -1; margin: 0; color: #b91c1c; font-size: 12px; line-height: 1.5; }
 .reports-workspace .report-overview { margin-top: 0; }
 .reports-workspace .report-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin: 0 0 14px; }
 .reports-workspace .report-section-heading h2 { margin: 0; color: var(--report-ink); font-size: 20px; font-weight: 650; letter-spacing: -.025em; line-height: 1.3; }
@@ -172,8 +175,13 @@
 .reports-workspace .report-choice:has(input:checked) { border-color: rgba(245, 124, 0, .62); background: #fff8ef; color: #8a4200; box-shadow: inset 0 0 0 1px rgba(245, 124, 0, .08); }
 .reports-workspace .report-choice:has(input:checked) .report-choice-index { background: #ffedd5; color: #9a4700; }
 .reports-workspace .report-choice:hover { border-color: #f57c00; transform: translateY(-1px); }
+.reports-workspace .report-selection-actions { grid-column: 1 / -1; grid-row: 3; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.reports-workspace .report-selection-action { min-height: 36px; padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.reports-workspace .report-selection-action:hover:not(:disabled) { border-color: #f57c00; background: #fff8ef; color: #8a4200; }
+.reports-workspace .report-selection-action:disabled { color: #94a3b8; cursor: not-allowed; }
+.reports-workspace .report-selection-action:focus-visible { outline: 2px solid #f57c00; outline-offset: 2px; }
 .reports-workspace .report-print { min-height: 44px; border-radius: 9px; }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .reports-workspace .report-filter-panel { grid-template-columns: minmax(0, 1fr); gap: 18px; }
 }
 @media (max-width: 680px) {
@@ -185,10 +193,11 @@
   .reports-workspace .report-filter button { width: 100%; }
   .reports-workspace .report-section-heading { align-items: start; flex-direction: column; gap: 6px; }
   .reports-workspace .report-controls { gap: 12px; padding: 20px; }
+  .reports-workspace .report-selection-actions { justify-content: flex-start; }
   .reports-workspace .report-selector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reports-workspace .report-choice { min-width: 0; padding: 8px 10px; }
-  .reports-workspace .report-print { grid-column: 1; grid-row: 3; width: 100%; }
-  .reports-workspace .report-print-status { grid-column: 1; grid-row: 4; text-align: center; }
+  .reports-workspace .report-print { grid-column: 1; grid-row: 4; width: 100%; }
+  .reports-workspace .report-print-status { grid-column: 1; grid-row: 5; text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reports-workspace .report-metric, .reports-workspace .report-choice, .reports-workspace .report-filter button, .reports-workspace .report-donut-slice, .reports-workspace .report-donut-legend-button, .reports-workspace .monthly-area-point { transition: none; }
@@ -206,8 +215,8 @@
   .reports-workspace .report-metric { padding: 24px 16px; }
   .reports-workspace .metric-value { font-size: 28px; }
   .reports-workspace .report-controls { grid-template-columns: minmax(0, 1fr); }
-  .reports-workspace .report-print { grid-column: 1; grid-row: 3; justify-self: stretch; width: 100%; }
-  .reports-workspace .report-print-status { grid-column: 1; grid-row: 4; text-align: left; }
+  .reports-workspace .report-print { grid-column: 1; grid-row: 4; justify-self: stretch; width: 100%; }
+  .reports-workspace .report-print-status { grid-column: 1; grid-row: 5; text-align: left; }
   .reports-workspace .module-report-grid { grid-template-columns: minmax(0, 1fr); }
   .reports-workspace .research-overview-grid { grid-template-columns: minmax(0, 1fr); }
   .reports-workspace .report-donut-layout { grid-template-columns: minmax(0, 1fr); }
@@ -244,6 +253,7 @@
   .reports-workspace .module-reports { margin: 0; }
   .reports-workspace .monthly-chart { max-height: 220px; }
   .reports-workspace .monthly-chart-wrap { overflow: visible; }
+  .reports-workspace .monthly-chart[style] { width: 100% !important; max-width: 100% !important; }
   .reports-workspace .report-donut-layout { grid-template-columns: 160px minmax(0, 1fr); }
   .reports-workspace .faculty-report-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .reports-workspace .faculty-report-table { min-width: 0; }

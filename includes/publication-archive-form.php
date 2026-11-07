@@ -3,12 +3,34 @@
 require_once __DIR__ . '/publication-classification.php';
 require_once __DIR__ . '/archival-record-ui.php';
 if ($record && (!archiveCan($conn,'publication',$record,$user,'manage') || !empty($record['deactivated_at']))) archiveDeny();
-$catalog=publicationCatalog($conn);
+$publicationCatalogForActor = static function (array $catalog) use ($role, $userId, $record): array {
+    if ($role !== 'research_staff' || $record) return $catalog;
+    if (!hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_add')) archiveDeny();
+    $allowedTypeIds = [];
+    foreach ($catalog['types'] as $typeId => $type) {
+        if (in_array((string) ($type['type_code'] ?? ''), ['journal', 'conference'], true)) $allowedTypeIds[] = (int) $typeId;
+    }
+    if (!$allowedTypeIds) archiveDeny();
+    $allowedTypeLookup = array_fill_keys($allowedTypeIds, true);
+    $catalog['types'] = array_intersect_key($catalog['types'], $allowedTypeLookup);
+    $catalog['subtypes'] = array_filter($catalog['subtypes'], static fn(array $subtype): bool => isset($allowedTypeLookup[(int) $subtype['publication_type_id']]));
+    return $catalog;
+};
+$catalog=$publicationCatalogForActor(publicationCatalog($conn));
 $catalogVersion=hash('sha256',json_encode($catalog,JSON_THROW_ON_ERROR));
 $contributorsBefore=$record?archiveContributors($conn,'publication',$id):[];
 $version=$record?hash('sha256',json_encode([$record,$contributorsBefore],JSON_THROW_ON_ERROR)):'';
 $selectedAuthors=array_map('intval',array_column($contributorsBefore,'user_id'));
 $allContributors=rmsOutputContributorOptions($conn);
+$facultyAuthorName='';
+if(!$record&&$role==='faculty') {
+    foreach($allContributors as $contributor) {
+        if((int)$contributor['user_id']!==$userId) continue;
+        $facultyAuthorName=trim($contributor['first_name'].' '.$contributor['last_name']);
+        $selectedAuthors[]=$userId;
+        break;
+    }
+}
 $facultyProgramOptions=archiveQuery($conn,"SELECT p.program_id, p.program_code, p.program_name FROM programs p WHERE p.status = 1 AND EXISTS (SELECT 1 FROM faculty_program_assignments fpa WHERE fpa.program_id = p.program_id) ORDER BY FIELD(p.program_code, 'BSIT', 'BSCS'), p.program_name")->get_result()->fetch_all(MYSQLI_ASSOC);
 foreach(array_diff($selectedAuthors,array_map('intval',array_column($allContributors,'user_id'))) as $uid) {
     $old=archiveQuery($conn,'SELECT user_id,first_name,last_name,role FROM users WHERE user_id=?',[$uid])->get_result()->fetch_assoc();
@@ -25,7 +47,7 @@ $input=$record??[];
 foreach(['publication_type_id','publication_subtype_id','publication_scope_id'] as $classificationKey) {
     $input[$classificationKey]=isset($record[$classificationKey])?(string)$record[$classificationKey]:'';
 }
-$input['author_names']=publicationAuthors($record??[])?:[''];
+$input['author_names']=publicationAuthors($record??[])?:($facultyAuthorName!==''?[$facultyAuthorName]:['']);
 $input['publication_keywords']=publicationJson($record['keywords_json']??null);
 $input['publication_metadata']=$metadata;
 foreach(['volume'=>'volume','issue'=>'issue','pages'=>'page_numbers'] as $key=>$column) if(!isset($input['publication_metadata'][$key])&&!empty($record[$column])) $input['publication_metadata'][$key]=$record[$column];
@@ -67,7 +89,10 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
     if($data['research_area_id']&&!in_array($data['research_area_id'],array_map('intval',array_column($areaOptions,'area_id')),true)) $fieldErrors['research_area_id']='Choose an active research area or retain the saved area.';
     if($validated['metadata']['program_id']&&!in_array($validated['metadata']['program_id'],array_map('intval',array_column($programOptions,'program_id')),true)) $fieldErrors['program_id']='Choose an active program or retain the saved program.';
     $candidate=array_merge($record??[],$data,['researcher_id'=>$ownerId,'archival_status'=>$record['archival_status']??'archived']);
-    if(!archiveCan($conn,'publication',$candidate,$user,'manage')) archiveDeny();
+    if ($role === 'research_staff' && !$record) {
+        if (!hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_add')
+            || !in_array((string) ($candidate['publication_type'] ?? ''), ['journal', 'conference'], true)) archiveDeny();
+    } elseif(!archiveCan($conn,'publication',$candidate,$user,'manage')) archiveDeny();
     if(!$errors&&!$fieldErrors) {
         $duplicates=publicationDuplicates($conn,$data,$user,$id);
         $duplicateToken=hash('sha256',json_encode([$data,array_column($duplicates,'publication_id')],JSON_THROW_ON_ERROR));
@@ -78,7 +103,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         try {
             $conn->begin_transaction();
             publicationLockCatalog($conn);
-            if(!hash_equals($catalogVersion,hash('sha256',json_encode(publicationCatalog($conn),JSON_THROW_ON_ERROR)))) throw new RuntimeException('Publication settings changed. Review this form and save again.');
+            if(!hash_equals($catalogVersion,hash('sha256',json_encode($publicationCatalogForActor(publicationCatalog($conn)),JSON_THROW_ON_ERROR)))) throw new RuntimeException('Publication settings changed. Review this form and save again.');
             $locked=$id?archiveLoad($conn,'publication',$id,true):null;
             if($id&&(!$locked||!archiveCan($conn,'publication',$locked,$user,'manage')||!empty($locked['deactivated_at']))) throw new RuntimeException('This record is no longer editable.');
             if($locked&&!hash_equals(hash('sha256',json_encode([$locked,archiveContributors($conn,'publication',$id)],JSON_THROW_ON_ERROR)),publicationText($input,'record_version'))) throw new RuntimeException('The record changed while you were editing. Reopen it before saving.');
@@ -94,7 +119,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             $maxKb=publicationUploadLimit($rules);
             foreach(['supporting_file'=>['file_path','file_name'],'evidence_file'=>['evidence_file_path','evidence_file_name'],'references_file'=>['references_file_path','references_file_name']] as $slot=>[$pathKey,$nameKey]) {
                 if(!$validated['uploads'][$slot]) continue;
-                $upload=handleRmsUpload(['inputName'=>$slot,'folderTarget'=>'publications','type'=>'other','accept'=>['.pdf'],'maxSize'=>$maxKb,'archiveAuthorized'=>true],$_FILES,$conn);
+                $upload=handleRmsUpload(['inputName'=>$slot,'folderTarget'=>'publications','type'=>'other','accept'=>['.pdf'],'maxSize'=>$maxKb,'archiveAuthorized'=>true,'archiveAction'=>$locked?'edit':'create'],$_FILES,$conn);
                 if(empty($upload['success'])) throw new RuntimeException((string)($upload['error']??'The PDF could not be uploaded.'));
                 $newUploads[]=$upload; $data[$pathKey]=$upload['file_path']; $data[$nameKey]=$upload['original_name'];
             }
@@ -113,7 +138,12 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             archiveAudit($conn,'publication',$savedId,$locked?($role==='admin'?'admin_correction':'edited'):'created',$before,$after);
             $conn->commit();
             $_SESSION['publications_flash']=['type'=>'success','message'=>$locked?'Publication changes saved.':'Publication saved to the archive.'];
-            header('Location: '.$detailUrl.'?id='.$savedId.$navigationSuffix); exit;
+            $canBrowseArchive = $role !== 'research_staff'
+                || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records');
+            $afterSaveUrl = !$locked && !$canBrowseArchive
+                ? $formUrl . '?module_page=publication_add&saved=1'
+                : $detailUrl . '?id=' . $savedId . $navigationSuffix;
+            header('Location: '.$afterSaveUrl); exit;
         } catch(Throwable $e) {
             $conn->rollback();
             foreach($newUploads as $upload) {
@@ -157,7 +187,8 @@ $documentLabel=$selectedRules['document_label']??'Published document';
 archiveShellOpen($user,$c,$record?'Edit Publication Record':'Add Publication Record');
 ?>
 <link rel="stylesheet" href="<?= archiveEscape(SITE_URL.'css/publication-archive.css') ?>">
-<div class="archive-heading"><div><h1><?= $record?'Edit publication':'Add publication' ?></h1><p class="archive-muted">Archive an already-published scholarly work. Required fields are marked *.</p></div><a class="archive-button secondary" href="<?= archiveEscape($record?$detailUrl.'?id='.$id.$navigationSuffix:$listUrl.$navigationQuery) ?>">Back to <?= $record?'record':'publications' ?></a></div>
+<div class="archive-heading"><div><h1><?= $record?'Edit publication':'Add publication' ?></h1><p class="archive-muted">Archive an already-published scholarly work. Required fields are marked *.</p></div><?php $canBrowseArchive = $role !== 'research_staff' || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records'); $backUrl = $record ? $detailUrl.'?id='.$id.$navigationSuffix : ($canBrowseArchive ? $listUrl.$navigationQuery : SITE_URL.'pages/staff/staff-dashboard.php'); ?><a class="archive-button secondary" href="<?= archiveEscape($backUrl) ?>">Back to <?= $record?'record':($canBrowseArchive?'publications':'dashboard') ?></a></div>
+<?php if ($flash && ($flash['type'] ?? '') === 'success'): ?><div class="archive-success" role="status"><?= archiveEscape($flash['message'] ?? '') ?></div><?php endif; ?>
 <?php if($errors||$fieldErrors): ?><div class="archive-error" role="alert"><strong>Review the following before saving.</strong><ul><?php foreach($errors as $error): ?><li><?= archiveEscape($error) ?></li><?php endforeach; ?><?php foreach($fieldErrors as $key=>$error): ?><li><a href="#error-<?= archiveEscape((string)$key) ?>"><?= archiveEscape($error) ?></a></li><?php endforeach; ?></ul><p>Select an error to jump to its field. Text entries are retained. Select any new attachments again before saving.</p></div><?php endif; ?>
 <form method="post" enctype="multipart/form-data" class="publication-form" id="publication-form">
 <?= csrfField() ?><input type="hidden" name="action" value="save_record"><input type="hidden" name="record_id" value="<?= $id ?>"><input type="hidden" name="record_version" value="<?= archiveEscape($version) ?>"><input type="hidden" name="catalog_version" value="<?= archiveEscape($catalogVersion) ?>">

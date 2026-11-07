@@ -26,6 +26,8 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/faculty-ranks.php';
 require_once __DIR__ . '/../includes/earist-document-schema.php';
 require_once __DIR__ . '/../includes/earist-document-edit-schema.php';
+require_once __DIR__ . '/../includes/earist-google-drive-schema.php';
+require_once __DIR__ . '/../includes/earist-document-retention-schema.php';
 
 const MIGRATION_TABLE = 'schema_migrations';
 
@@ -878,6 +880,49 @@ function verify_migration(mysqli $conn, string $filename): ?bool
             && migration_column_nullable($conn, 'activity_schedule_participants', 'invitation_responded_at'),
         '052_earist_document_storage.sql' => earistDocumentSchemaStatus($conn)['valid'],
         '067_earist_document_editing.sql' => earistDocumentEditSchemaStatus($conn),
+        '068_earist_google_drive_editing.sql' => earistGoogleDriveSchemaStatus($conn),
+        '069_earist_document_retention.sql' => earistDocumentRetentionSchemaStatus($conn),
+        '070_research_activity_types_and_permissions.sql' =>
+            strtolower(migration_column_type($conn, 'research_activities', 'activity_type'))
+                === "enum('seminar_workshop','training','colloquium','conference_congress')"
+            && (int) migration_scalar($conn, "SELECT COUNT(*) FROM research_activities WHERE activity_type IN ('seminar', 'workshop', 'conference')") === 0
+            && migration_table_exists($conn, 'staff_permissions')
+            && (int) migration_scalar($conn, "SELECT COUNT(*) FROM staff_permissions WHERE module_key = 'research_capacity_building' AND subpage_key IN ('seminars', 'workshops')") === 0,
+        '071_activity_source_links.sql' =>
+            migration_column_exists($conn, 'research_activities', 'source_project_id')
+            && strtolower(migration_column_type($conn, 'research_activities', 'source_project_id')) === 'int(10) unsigned'
+            && migration_column_nullable($conn, 'research_activities', 'source_project_id')
+            && migration_column_exists($conn, 'research_activities', 'source_publication_id')
+            && strtolower(migration_column_type($conn, 'research_activities', 'source_publication_id')) === 'int(10) unsigned'
+            && migration_column_nullable($conn, 'research_activities', 'source_publication_id')
+            && migration_index_exists($conn, 'research_activities', 'idx_research_activities_source_project')
+            && migration_index_exists($conn, 'research_activities', 'idx_research_activities_source_publication')
+            && migration_constraint_exists($conn, 'research_activities', 'fk_research_activities_source_project')
+            && migration_constraint_exists($conn, 'research_activities', 'fk_research_activities_source_publication'),
+        '072_activity_qr_checkins.sql' =>
+            migration_column_exists($conn, 'activity_schedule_dates', 'checkin_token_hash')
+            && strtolower(migration_column_type($conn, 'activity_schedule_dates', 'checkin_token_hash')) === 'char(64)'
+            && migration_column_nullable($conn, 'activity_schedule_dates', 'checkin_token_hash')
+            && migration_index_exists($conn, 'activity_schedule_dates', 'uq_activity_schedule_checkin_token')
+            && migration_index_exists($conn, 'users', 'idx_users_student_id')
+            && migration_table_exists($conn, 'activity_schedule_checkins')
+            && migration_column_type($conn, 'activity_schedule_checkins', 'identity_hash') === 'char(64)'
+            && migration_column_type($conn, 'activity_schedule_checkins', 'checked_in_at') === 'datetime'
+            && migration_index_exists($conn, 'activity_schedule_checkins', 'uq_activity_schedule_checkin_identity')
+            && migration_constraint_exists($conn, 'activity_schedule_checkins', 'fk_activity_schedule_checkins_date')
+            && migration_constraint_exists($conn, 'activity_schedule_checkins', 'fk_activity_schedule_checkins_participant'),
+        '073_refresh_staff_permissions.sql' =>
+            migration_table_exists($conn, 'staff_permissions')
+            && (int) migration_scalar($conn, "SELECT COUNT(*) FROM staff_permissions WHERE module_key = 'publication_dissemination' AND subpage_key IN ('journal_publications', 'conference_presentations', 'research_repository')") === 0
+            && (int) migration_scalar($conn, "SELECT COUNT(*) FROM staff_permissions source WHERE source.module_key = 'research_development' AND source.subpage_key = 'research_review' AND NOT EXISTS (SELECT 1 FROM staff_permissions destination WHERE destination.user_id = source.user_id AND destination.module_key = 'research_development' AND destination.subpage_key = 'research_engagement_records')") === 0,
+        '074_activity_checkin_attendee_details.sql' =>
+            migration_column_type($conn, 'activity_schedule_participants', 'attendee_affiliation') === "enum('student','faculty','staff','guest')"
+            && migration_column_nullable($conn, 'activity_schedule_participants', 'attendee_affiliation')
+            && strtolower(migration_column_type($conn, 'activity_schedule_participants', 'attendee_program_department')) === 'varchar(150)'
+            && migration_column_nullable($conn, 'activity_schedule_participants', 'attendee_program_department'),
+        '075_staff_activity_status_permissions.sql' =>
+            migration_table_exists($conn, 'staff_permissions')
+            && (int) migration_scalar($conn, "SELECT COUNT(*) FROM staff_permissions WHERE module_key = 'research_capacity_building' AND subpage_key IN ('seminars', 'seminars_workshops', 'trainings', 'workshops')") === 0,
         '051_complete_faculty_academic_ranks.sql' => verify_faculty_academic_ranks($conn),
         '050_faculty_research_records.sql' => verify_faculty_research_records($conn),
         '049_faculty_document_profile_fields.sql' =>
@@ -953,7 +998,8 @@ function verify_migration(mysqli $conn, string $filename): ?bool
             && migration_default_matches(migration_column_default($conn, 'activity_schedule_participants', 'is_notified'), '0'),
         '038_repair_activity_type_status_enums.sql' =>
             migration_enum_contains($conn, 'research_activities', 'activity_type', 'colloquium')
-            && migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference')
+            && (migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference')
+                || migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference_congress'))
             && (migration_default_matches(migration_column_default($conn, 'research_activities', 'status'), 'incoming')
                 || migration_default_matches(migration_column_default($conn, 'research_activities', 'status'), 'upcoming'))
             && (migration_enum_contains($conn, 'research_activities', 'status', 'incoming')
@@ -999,7 +1045,8 @@ function verify_migration(mysqli $conn, string $filename): ?bool
             && migration_column_exists($conn, 'research_activities', 'schedule_start_date')
             && migration_column_exists($conn, 'research_activities', 'schedule_end_date')
             && migration_enum_contains($conn, 'research_activities', 'activity_type', 'colloquium')
-            && migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference')
+            && (migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference')
+                || migration_enum_contains($conn, 'research_activities', 'activity_type', 'conference_congress'))
             && (migration_enum_contains($conn, 'research_activities', 'status', 'incoming')
                 || migration_enum_contains($conn, 'research_activities', 'status', 'upcoming'))
             && migration_enum_contains($conn, 'research_activities', 'status', 'conducted')

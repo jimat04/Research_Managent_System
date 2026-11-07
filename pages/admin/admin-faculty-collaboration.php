@@ -26,14 +26,60 @@ function adminFacultyCollaborationTableExists(mysqli $connection, string $tableN
 
 $error = '';
 $success = '';
-$courseFilter = strtoupper(trim((string) (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-        ? ($_POST['course_filter'] ?? $_GET['course'] ?? '')
-        : ($_GET['course'] ?? '')
-)));
+$filterInput = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+$courseFilter = strtoupper(trim((string) ($filterInput['course'] ?? $filterInput['course_filter'] ?? '')));
 if (!in_array($courseFilter, ['', 'BSIT', 'BSCS'], true)) {
     $courseFilter = '';
 }
+$projectStatuses = [];
+$statusOptionsStmt = $conn->prepare("SELECT DISTINCT status FROM research_projects WHERE deleted_at IS NULL ORDER BY status");
+$statusOptionsStmt->execute();
+$statusOptionsResult = $statusOptionsStmt->get_result();
+while ($statusOption = $statusOptionsResult->fetch_assoc()) {
+    $projectStatuses[] = (string) $statusOption['status'];
+}
+$statusOptionsStmt->close();
+$statusFilter = strtolower(trim((string) ($filterInput['status'] ?? $filterInput['status_filter'] ?? '')));
+if (!in_array($statusFilter, $projectStatuses, true)) {
+    $statusFilter = '';
+}
+$academicYears = [];
+$academicYearsStmt = $conn->prepare(
+    'SELECT DISTINCT academic_year.label
+       FROM academic_years academic_year
+       JOIN research_projects project ON project.ay_id = academic_year.ay_id
+      WHERE project.deleted_at IS NULL
+      ORDER BY academic_year.label DESC'
+);
+$academicYearsStmt->execute();
+$academicYearsResult = $academicYearsStmt->get_result();
+while ($academicYear = $academicYearsResult->fetch_assoc()) {
+    $academicYears[] = (string) $academicYear['label'];
+}
+$academicYearsStmt->close();
+$academicYearFilter = trim((string) ($filterInput['academic_year'] ?? $filterInput['school_year'] ?? ''));
+if (!in_array($academicYearFilter, $academicYears, true)) {
+    $academicYearFilter = '';
+}
+$keywordFilter = trim((string) ($filterInput['keyword'] ?? $filterInput['keyword_filter'] ?? ''));
+if (function_exists('mb_substr')) {
+    $keywordFilter = mb_substr($keywordFilter, 0, 100, 'UTF-8');
+} elseif (function_exists('iconv_substr')) {
+    $keywordFilter = iconv_substr($keywordFilter, 0, 100, 'UTF-8') ?: '';
+} else {
+    preg_match_all('/./us', $keywordFilter, $keywordCharacters);
+    $keywordFilter = implode('', array_slice($keywordCharacters[0] ?? [], 0, 100));
+}
+$keywordLike = $keywordFilter !== '' ? '%' . $keywordFilter . '%' : '';
+$redirectFilters = array_filter([
+    'course' => $courseFilter,
+    'status' => $statusFilter,
+    'academic_year' => $academicYearFilter,
+    'keyword' => $keywordFilter,
+], static fn(string $value): bool => $value !== '');
+$redirectQuery = static function (string $savedState) use ($redirectFilters): string {
+    return http_build_query(['saved' => $savedState] + $redirectFilters);
+};
 if (($_GET['saved'] ?? '') === 'assigned') {
     $success = 'Assignment saved.';
 } elseif (($_GET['saved'] ?? '') === 'removed') {
@@ -117,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         if ($error === '') {
                             logActivity('Updated faculty collaboration assignment for project #' . $projectId, 'faculty_collaboration');
-                            header('Location: ' . SITE_URL . 'pages/admin/admin-faculty-collaboration.php?saved=assigned' . ($courseFilter !== '' ? '&course=' . rawurlencode($courseFilter) : ''));
+                            header('Location: ' . SITE_URL . 'pages/admin/admin-faculty-collaboration.php?' . $redirectQuery('assigned'));
                             exit;
                         }
                     }
@@ -168,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if ($error === '') {
                     logActivity('Removed project team assignment #' . $assignmentId, 'faculty_collaboration');
-                    header('Location: ' . SITE_URL . 'pages/admin/admin-faculty-collaboration.php?saved=removed' . ($courseFilter !== '' ? '&course=' . rawurlencode($courseFilter) : ''));
+                    header('Location: ' . SITE_URL . 'pages/admin/admin-faculty-collaboration.php?' . $redirectQuery('removed'));
                     exit;
                 }
             }
@@ -187,14 +233,36 @@ $projects = [];
                     AND project_program.program_code IN ('BSIT', 'BSCS')
                     AND (UPPER(TRIM(project_program.program_code)) = UPPER(TRIM(project_owner.program))
                       OR UPPER(TRIM(project_program.program_name)) = UPPER(TRIM(project_owner.program)))
-                  WHERE project.deleted_at IS NULL";
+              LEFT JOIN academic_years project_year ON project_year.ay_id = project.ay_id
+";
+$projectSql .= " WHERE project.deleted_at IS NULL";
+$projectTypes = '';
+$projectParams = [];
 if ($courseFilter !== '') {
     $projectSql .= ' AND project_program.program_code = ?';
+    $projectTypes .= 's';
+    $projectParams[] = $courseFilter;
+}
+if ($statusFilter !== '') {
+    $projectSql .= ' AND project.status = ?';
+    $projectTypes .= 's';
+    $projectParams[] = $statusFilter;
+}
+if ($academicYearFilter !== '') {
+    $projectSql .= ' AND project_year.label = ?';
+    $projectTypes .= 's';
+    $projectParams[] = $academicYearFilter;
+}
+if ($keywordFilter !== '') {
+    $projectSql .= " AND (project.title LIKE ? OR CONCAT_WS(' ', project_owner.first_name, project_owner.last_name) LIKE ?)";
+    $projectTypes .= 'ss';
+    $projectParams[] = $keywordLike;
+    $projectParams[] = $keywordLike;
 }
 $projectSql .= ' ORDER BY project.updated_at DESC, project.project_id DESC LIMIT 250';
 $projectStmt = $conn->prepare($projectSql);
-if ($courseFilter !== '') {
-    $projectStmt->bind_param('s', $courseFilter);
+if ($projectTypes !== '') {
+    $projectStmt->bind_param($projectTypes, ...$projectParams);
 }
 $projectStmt->execute();
 $projectResult = $projectStmt->get_result();
@@ -213,11 +281,21 @@ $researcherSql = "SELECT DISTINCT u.user_id, u.first_name, u.last_name, u.role, 
                    WHERE u.role = 'student' AND u.status = 'active' AND u.deleted_at IS NULL";
 if ($courseFilter !== '') {
     $researcherSql .= ' AND p.program_code = ?';
+    $researcherTypes = 's';
+    $researcherParams = [$courseFilter];
+} else {
+    $researcherTypes = '';
+    $researcherParams = [];
+}
+if ($keywordFilter !== '') {
+    $researcherSql .= " AND CONCAT_WS(' ', u.first_name, u.last_name) LIKE ?";
+    $researcherTypes .= 's';
+    $researcherParams[] = $keywordLike;
 }
 $researcherSql .= ' ORDER BY p.program_code, u.last_name, u.first_name LIMIT 500';
 $researcherStmt = $conn->prepare($researcherSql);
-if ($courseFilter !== '') {
-    $researcherStmt->bind_param('s', $courseFilter);
+if ($researcherTypes !== '') {
+    $researcherStmt->bind_param($researcherTypes, ...$researcherParams);
 }
 $researcherStmt->execute();
 $researcherResult = $researcherStmt->get_result();
@@ -236,14 +314,41 @@ $memberSql =
        AND course.program_code IN ('BSIT', 'BSCS')
        AND (UPPER(TRIM(course.program_code)) = UPPER(TRIM(u.program))
          OR UPPER(TRIM(course.program_name)) = UPPER(TRIM(u.program)))
-      WHERE project.status NOT IN ('completed', 'archived')";
+  LEFT JOIN academic_years project_year ON project_year.ay_id = project.ay_id
+";
+$memberSql .= ' WHERE 1 = 1';
+$memberTypes = '';
+$memberParams = [];
+if ($statusFilter === '') {
+    $memberSql .= " AND project.status NOT IN ('completed', 'archived')";
+}
 if ($courseFilter !== '') {
     $memberSql .= ' AND course.program_code = ?';
+    $memberTypes .= 's';
+    $memberParams[] = $courseFilter;
+}
+if ($statusFilter !== '') {
+    $memberSql .= ' AND project.status = ?';
+    $memberTypes .= 's';
+    $memberParams[] = $statusFilter;
+}
+if ($academicYearFilter !== '') {
+    $memberSql .= ' AND project_year.label = ?';
+    $memberTypes .= 's';
+    $memberParams[] = $academicYearFilter;
+}
+if ($keywordFilter !== '') {
+    $memberSql .= " AND (project.title LIKE ? OR CONCAT_WS(' ', u.first_name, u.last_name) LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+    $memberTypes .= 'ssss';
+    $memberParams[] = $keywordLike;
+    $memberParams[] = $keywordLike;
+    $memberParams[] = $keywordLike;
+    $memberParams[] = $keywordLike;
 }
 $memberSql .= ' ORDER BY project.updated_at DESC, project.project_id DESC, pm.role, u.last_name LIMIT 500';
 $memberStmt = $conn->prepare($memberSql);
-if ($courseFilter !== '') {
-    $memberStmt->bind_param('s', $courseFilter);
+if ($memberTypes !== '') {
+    $memberStmt->bind_param($memberTypes, ...$memberParams);
 }
 $memberStmt->execute();
 $memberResult = $memberStmt->get_result();
@@ -296,18 +401,42 @@ if ($hasAdviserHistory) {
     $historyStmt->close();
 }
 
+$activeFilterLabels = [];
+if ($courseFilter !== '') {
+    $activeFilterLabels[] = 'Program: ' . $courseFilter;
+}
+if ($statusFilter !== '') {
+    $activeFilterLabels[] = 'Status: ' . ucwords(str_replace('_', ' ', $statusFilter));
+}
+if ($academicYearFilter !== '') {
+    $activeFilterLabels[] = 'School year: ' . $academicYearFilter;
+}
+if ($keywordFilter !== '') {
+    $activeFilterLabels[] = 'Search: ' . $keywordFilter;
+}
+$shownMemberCount = count($members);
+$memberCountMessage = $shownMemberCount === 500
+    ? 'Showing 500 assignments (display limit).'
+    : sprintf('Showing %d assignments.', $shownMemberCount);
+
 renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Mentorship', 'Manage project teams and review faculty advising assignments.');
 ?>
 <style>
 .faculty-collaboration-admin{max-width:1440px;margin:0 auto;color:var(--admin-ink,#111827)}
-.collaboration-header{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin:0 0 24px}
-.collaboration-header h1{margin:0 0 6px;font-size:clamp(24px,2vw,30px);line-height:1.2;letter-spacing:-.025em}
-.collaboration-header p{max-width:760px;margin:0;color:var(--admin-muted,#64748b);line-height:1.6}
-.collaboration-course-filter{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:0 0 20px;padding:16px;border:1px solid var(--admin-border,#e5e7eb);border-radius:14px;background:var(--admin-surface,#fff)}
-.collaboration-course-filter label{display:grid;gap:6px;min-width:min(260px,100%);color:#475569;font-size:13px;font-weight:600}
-.collaboration-course-filter select{min-height:42px;padding:8px 11px;border:1px solid var(--admin-border,#e5e7eb);border-radius:10px;background:#fff;color:var(--admin-ink,#111827);font:inherit}
-.collaboration-course-filter select:focus-visible,.collaboration-course-filter button:focus-visible,.collaboration-course-filter a:focus-visible{outline:3px solid var(--admin-accent-soft,rgba(91,30,188,.2));outline-offset:2px}
-.collaboration-course-clear{min-height:40px;padding:10px 12px;color:var(--admin-muted,#64748b);font-size:13px;font-weight:600;text-decoration:none}
+.collaboration-header{position:relative;margin:0 0 24px;padding:24px 26px 25px;border:1px solid var(--admin-accent-soft,rgba(245,124,0,.18));border-left:4px solid var(--admin-accent,#f57c00);border-radius:16px;background:linear-gradient(110deg,var(--admin-accent-soft,rgba(245,124,0,.08)),rgba(255,255,255,.96) 56%)}
+.collaboration-header-kicker{margin:0 0 8px;color:var(--admin-accent,#f57c00);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.collaboration-header h1{margin:0 0 8px;font-size:clamp(28px,2.3vw,34px);line-height:1.15;letter-spacing:-.035em}
+.collaboration-header p:last-child{max-width:760px;margin:0;color:var(--admin-muted,#64748b);line-height:1.65}
+.collaboration-course-filter{display:grid;grid-template-columns:minmax(145px,.75fr) minmax(190px,1fr) minmax(240px,1.45fr) auto;align-items:end;gap:12px;margin:0 0 12px;padding:18px;border:1px solid var(--admin-border,#e5e7eb);border-radius:14px;background:var(--admin-surface,#fff);box-shadow:0 4px 18px rgba(124,69,18,.045)}
+.collaboration-course-filter label{display:grid;gap:7px;min-width:0;color:#475569;font-size:13px;font-weight:600}
+.collaboration-course-filter select,.collaboration-course-filter input{width:100%;min-height:44px;padding:9px 12px;border:1px solid var(--admin-border,#e5e7eb);border-radius:10px;background:#fff;color:var(--admin-ink,#111827);font:inherit}
+.collaboration-course-filter select:focus-visible,.collaboration-course-filter input:focus-visible,.collaboration-course-filter button:focus-visible,.collaboration-course-filter a:focus-visible{outline:3px solid var(--admin-accent-soft,rgba(245,124,0,.2));outline-offset:2px}
+.collaboration-filter-actions{display:flex;align-items:center;gap:8px}
+.collaboration-course-clear{display:inline-flex;min-height:40px;align-items:center;justify-content:center;padding:10px 12px;border-radius:9px;color:var(--admin-muted,#64748b);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+.collaboration-course-clear:hover{background:#fff7ed;color:#9a3412}
+.collaboration-filter-context{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 24px;color:var(--admin-muted,#64748b);font-size:12px}
+.collaboration-filter-context p{margin:0 8px 0 0;font-weight:600;color:#475569}
+.collaboration-filter-chip{display:inline-flex;align-items:center;min-height:25px;padding:4px 9px;border:1px solid rgba(245,124,0,.18);border-radius:7px;background:#fff7ed;color:#9a3412;font-weight:600}
 .collaboration-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 24px}
 .collaboration-stat{padding:16px 18px;border:1px solid var(--admin-border,#e5e7eb);border-radius:14px;background:var(--admin-surface,#fff)}
 .collaboration-stat strong{display:block;color:var(--admin-ink,#111827);font-size:24px;line-height:1.15}
@@ -319,10 +448,11 @@ renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Ment
 .collaboration-form{display:grid;gap:14px}
 .collaboration-form label{display:grid;gap:7px;color:#475569;font-size:13px;font-weight:600}
 .collaboration-form select{width:100%;min-height:44px;padding:9px 12px;border:1px solid var(--admin-border,#e5e7eb);border-radius:10px;background:#fff;color:var(--admin-ink,#111827);font:inherit}
-.collaboration-form select:focus-visible,.collaboration-form button:focus-visible,.assignment-remove:focus-visible{outline:3px solid var(--admin-accent-soft,rgba(91,30,188,.2));outline-offset:2px}
+.collaboration-form select:focus-visible,.collaboration-form button:focus-visible,.assignment-remove:focus-visible{outline:3px solid var(--admin-accent-soft,rgba(245,124,0,.2));outline-offset:2px}
 .collaboration-submit,.assignment-remove{display:inline-flex;justify-content:center;align-items:center;min-height:40px;padding:9px 14px;border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;line-height:1.2;cursor:pointer}
-.collaboration-submit{border:1px solid var(--admin-accent,#5b1ebc);background:var(--admin-accent,#5b1ebc);color:#fff}
-.collaboration-submit:hover{filter:brightness(.94)}
+.collaboration-submit{border:1px solid var(--admin-accent,#f57c00);background:var(--admin-accent,#f57c00);color:#fff;transition:filter .18s ease,transform .18s ease}
+.collaboration-submit:hover{filter:brightness(.94);transform:translateY(-1px)}
+.collaboration-submit:active{transform:translateY(1px)}
 .collaboration-table-wrap{overflow-x:auto;border:1px solid var(--admin-border,#e5e7eb);border-radius:12px}
 .collaboration-table{width:100%;border-collapse:collapse;min-width:720px;background:#fff}
 .collaboration-table th,.collaboration-table td{padding:13px 14px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:middle}
@@ -339,18 +469,21 @@ renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Ment
 .collaboration-history-note{margin:0 0 14px;color:var(--admin-muted,#64748b);font-size:12px;line-height:1.5}
 .collaboration-adviser-panel,.collaboration-history-panel{margin-top:20px}
 @media(max-width:900px){.collaboration-grid{grid-template-columns:1fr}}
-@media(max-width:640px){.collaboration-header{align-items:flex-start}.collaboration-stats{grid-template-columns:1fr;gap:10px}.collaboration-stat{padding:14px 16px}.collaboration-panel{padding:18px}.collaboration-course-filter{align-items:stretch}.collaboration-course-filter label{min-width:100%}.collaboration-course-filter button,.collaboration-course-clear{width:100%;text-align:center}.collaboration-table{min-width:780px}}
+@media(max-width:1100px){.collaboration-course-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.collaboration-course-filter label:nth-child(4){grid-column:1/-1}.collaboration-filter-actions{grid-column:1/-1}}
+@media(max-width:640px){.collaboration-header{padding:20px 18px 21px}.collaboration-header h1{font-size:27px}.collaboration-stats{grid-template-columns:1fr;gap:10px}.collaboration-stat{padding:14px 16px}.collaboration-panel{padding:18px}.collaboration-course-filter{grid-template-columns:1fr;padding:15px}.collaboration-course-filter label:nth-child(4),.collaboration-filter-actions{grid-column:auto}.collaboration-filter-actions{display:grid;grid-template-columns:1fr}.collaboration-course-filter .collaboration-submit,.collaboration-course-clear{width:100%;text-align:center}.collaboration-filter-context{align-items:flex-start}.collaboration-table{min-width:780px}}
+@media(prefers-reduced-motion:reduce){.collaboration-submit{transition:none}}
 </style>
 <main class="faculty-collaboration-admin">
   <header class="collaboration-header">
     <div>
+      <p class="collaboration-header-kicker">Research teams and mentorship</p>
       <h1>Collaboration &amp; Mentorship</h1>
-    <p>Manage project teams and review student-selected adviser assignments. Adviser changes are driven by the student request and faculty decision workflow.</p>
+      <p>Manage project teams and review student-selected adviser assignments. Adviser changes are driven by the student request and faculty decision workflow.</p>
     </div>
   </header>
   <?php if ($error !== ''): ?><p class="collaboration-notice is-error" role="alert"><?= adminFacultyCollaborationEscape($error) ?></p><?php endif; ?>
   <?php if ($success !== ''): ?><p class="collaboration-notice is-success" role="status"><?= adminFacultyCollaborationEscape($success) ?></p><?php endif; ?>
-  <form method="get" class="collaboration-course-filter">
+  <form method="get" action="<?= adminFacultyCollaborationEscape(SITE_URL . 'pages/admin/admin-faculty-collaboration.php') ?>" class="collaboration-course-filter">
     <label for="course-filter">Filter student teams by course/program
       <select id="course-filter" name="course">
         <option value="" <?= $courseFilter === '' ? 'selected' : '' ?>>All eligible programs</option>
@@ -358,9 +491,40 @@ renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Ment
         <option value="BSCS" <?= $courseFilter === 'BSCS' ? 'selected' : '' ?>>BSCS</option>
       </select>
     </label>
-    <button class="collaboration-submit" type="submit">Apply filter</button>
-    <?php if ($courseFilter !== ''): ?><a class="collaboration-course-clear" href="<?= adminFacultyCollaborationEscape(SITE_URL . 'pages/admin/admin-faculty-collaboration.php') ?>">Clear filter</a><?php endif; ?>
+    <label for="status-filter">Project status
+      <select id="status-filter" name="status">
+        <option value="" <?= $statusFilter === '' ? 'selected' : '' ?>>All statuses</option>
+        <?php foreach ($projectStatuses as $projectStatus): ?>
+          <option value="<?= adminFacultyCollaborationEscape($projectStatus) ?>" <?= $statusFilter === $projectStatus ? 'selected' : '' ?>><?= adminFacultyCollaborationEscape(match ($projectStatus) {
+              'under_crec_review' => 'CREC Review (legacy)',
+              'under_erec_review' => 'EREC Review (legacy)',
+              default => ucwords(str_replace('_', ' ', $projectStatus)),
+          }) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label for="academic-year-filter">School year
+      <select id="academic-year-filter" name="academic_year">
+        <option value="" <?= $academicYearFilter === '' ? 'selected' : '' ?>>All school years</option>
+        <?php foreach ($academicYears as $academicYear): ?>
+          <option value="<?= adminFacultyCollaborationEscape($academicYear) ?>" <?= $academicYearFilter === $academicYear ? 'selected' : '' ?>><?= adminFacultyCollaborationEscape($academicYear) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label for="keyword-filter">Project or student
+      <input id="keyword-filter" name="keyword" type="search" maxlength="100" value="<?= adminFacultyCollaborationEscape($keywordFilter) ?>" placeholder="Search names or project titles">
+    </label>
+    <div class="collaboration-filter-actions">
+      <button class="collaboration-submit" type="submit">Apply filters</button>
+      <?php if ($courseFilter !== '' || $statusFilter !== '' || $academicYearFilter !== '' || $keywordFilter !== ''): ?><a class="collaboration-course-clear" href="<?= adminFacultyCollaborationEscape(SITE_URL . 'pages/admin/admin-faculty-collaboration.php') ?>">Clear all</a><?php endif; ?>
+    </div>
   </form>
+  <div class="collaboration-filter-context" aria-live="polite">
+    <p><?= adminFacultyCollaborationEscape($memberCountMessage) ?></p>
+    <?php if ($activeFilterLabels): ?>
+      <?php foreach ($activeFilterLabels as $activeFilterLabel): ?><span class="collaboration-filter-chip"><?= adminFacultyCollaborationEscape($activeFilterLabel) ?></span><?php endforeach; ?>
+    <?php else: ?><span>All eligible programs, project statuses, and school years</span><?php endif; ?>
+  </div>
   <section class="collaboration-stats" aria-label="Available assignment options">
     <div class="collaboration-stat"><strong><?= count($projects) ?></strong><span>Recent projects available</span></div>
     <div class="collaboration-stat"><strong><?= count($researchers) ?></strong><span>Active student accounts available</span></div>
@@ -372,7 +536,10 @@ renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Ment
       <p class="collaboration-panel-intro">Add an eligible active BSIT/BSCS student to a project team.</p>
       <form class="collaboration-form" method="post">
         <?= csrfField() ?><input type="hidden" name="action" value="assign_member">
-        <input type="hidden" name="course_filter" value="<?= adminFacultyCollaborationEscape($courseFilter) ?>">
+        <input type="hidden" name="course" value="<?= adminFacultyCollaborationEscape($courseFilter) ?>">
+        <input type="hidden" name="status" value="<?= adminFacultyCollaborationEscape($statusFilter) ?>">
+        <input type="hidden" name="academic_year" value="<?= adminFacultyCollaborationEscape($academicYearFilter) ?>">
+        <input type="hidden" name="keyword" value="<?= adminFacultyCollaborationEscape($keywordFilter) ?>">
         <label>Research project<select name="project_id" required><option value="">Choose a project</option><?php foreach ($projects as $project): ?><option value="<?= (int) $project['project_id'] ?>"><?= adminFacultyCollaborationEscape($project['title'] . ' · ' . ($project['program_code'] ?: 'Unmapped course') . ' · ' . ucfirst(str_replace('_', ' ', (string) $project['status']))) ?></option><?php endforeach; ?></select></label>
         <label>Student researcher<select name="user_id" required><option value="">Choose a student</option><?php foreach ($researchers as $researcher): ?><option value="<?= (int) $researcher['user_id'] ?>"><?= adminFacultyCollaborationEscape(trim($researcher['first_name'] . ' ' . $researcher['last_name']) . ' · ' . $researcher['program_code'] . ($researcher['department'] ? ' · ' . $researcher['department'] : '')) ?></option><?php endforeach; ?></select></label>
         <label>Team role<select name="member_role"><option value="member">Member</option><option value="lead">Lead</option></select></label>
@@ -382,10 +549,10 @@ renderAdminShell($user, 'admin-faculty-collaboration.php', 'Collaboration & Ment
   </div>
   <section class="collaboration-panel">
     <h2>Current research teams</h2>
-    <p class="collaboration-panel-intro">The table shows up to 500 active student project team assignments<?= $courseFilter !== '' ? ' for ' . adminFacultyCollaborationEscape($courseFilter) : '' ?>.</p>
-    <?php if (!$members): ?><div class="collaboration-empty">No project team assignments found.</div><?php else: ?>
+    <p class="collaboration-panel-intro">Team assignments matching the selected program, project status, school year, and search terms.</p>
+    <?php if (!$members): ?><div class="collaboration-empty">No project team assignments match these filters.</div><?php else: ?>
       <div class="collaboration-table-wrap"><table class="collaboration-table"><thead><tr><th>Research project</th><th>Researcher</th><th>Course/program</th><th>Role</th><th>Department</th><th>Action</th></tr></thead><tbody>
-      <?php foreach ($members as $member): ?><tr><td><?= adminFacultyCollaborationEscape($member['project_title']) ?></td><td><?= adminFacultyCollaborationEscape(trim($member['first_name'] . ' ' . $member['last_name'])) ?></td><td><?= adminFacultyCollaborationEscape($member['program_code'] ?: 'Unmapped') ?></td><td><?= adminFacultyCollaborationEscape(ucfirst((string) $member['role']) . ' · ' . ucfirst((string) $member['user_role'])) ?></td><td><?= adminFacultyCollaborationEscape($member['department'] ?: '—') ?></td><td><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="remove_member"><input type="hidden" name="course_filter" value="<?= adminFacultyCollaborationEscape($courseFilter) ?>"><input type="hidden" name="assignment_id" value="<?= (int) $member['project_member_id'] ?>"><button class="assignment-remove" type="submit">Remove</button></form></td></tr><?php endforeach; ?>
+      <?php foreach ($members as $member): ?><tr><td><?= adminFacultyCollaborationEscape($member['project_title']) ?></td><td><?= adminFacultyCollaborationEscape(trim($member['first_name'] . ' ' . $member['last_name'])) ?></td><td><?= adminFacultyCollaborationEscape($member['program_code'] ?: 'Unmapped') ?></td><td><?= adminFacultyCollaborationEscape(ucfirst((string) $member['role']) . ' · ' . ucfirst((string) $member['user_role'])) ?></td><td><?= adminFacultyCollaborationEscape($member['department'] ?: '—') ?></td><td><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="remove_member"><input type="hidden" name="course" value="<?= adminFacultyCollaborationEscape($courseFilter) ?>"><input type="hidden" name="status" value="<?= adminFacultyCollaborationEscape($statusFilter) ?>"><input type="hidden" name="keyword" value="<?= adminFacultyCollaborationEscape($keywordFilter) ?>"><input type="hidden" name="assignment_id" value="<?= (int) $member['project_member_id'] ?>"><button class="assignment-remove" type="submit">Remove</button></form></td></tr><?php endforeach; ?>
       </tbody></table></div>
     <?php endif; ?>
   </section>

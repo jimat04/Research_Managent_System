@@ -17,9 +17,12 @@
   const pageNumberField = app.querySelector('[data-page-number]');
   const pageCountView = app.querySelector('[data-page-count]');
   const zoomView = app.querySelector('[data-zoom-level]');
+  const searchInput = app.querySelector('[data-search-input]');
+  const searchCount = app.querySelector('[data-search-count]');
   const pages = new Map();
   const annotations = new Map();
   const dismissedComments = new Set();
+  const searchMatches = [];
   const annotationColors = ['yellow', 'blue', 'green', 'pink', 'purple'];
   const pending = { anchors: [], selectedText: '' };
   let pdfjsLib = null;
@@ -30,6 +33,10 @@
   let areaMode = false;
   let areaDrag = null;
   let selectionObserver = null;
+  let rotation = 0;
+  let fitMode = 'width';
+  let activeSearchMatch = -1;
+  let searchInputTimer = null;
 
   const assetUrl = (path) => new URL(path, app.dataset.pdfjsBase).href;
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -53,7 +60,15 @@
     const right = clamp((rect.right - pageBounds.left) / pageBounds.width, 0, 1);
     const bottom = clamp((rect.bottom - pageBounds.top) / pageBounds.height, 0, 1);
     if (right <= left || bottom <= top) return null;
-    return [left, top, right - left, bottom - top];
+    return rotateRect([left, top, right - left, bottom - top], (360 - rotation) % 360);
+  }
+
+  function rotateRect(rect, degrees) {
+    const [x, y, width, height] = rect;
+    if (degrees === 90) return [1 - y - height, x, height, width];
+    if (degrees === 180) return [1 - x - width, 1 - y - height, width, height];
+    if (degrees === 270) return [y, 1 - x - width, height, width];
+    return rect;
   }
 
   function currentSelection() {
@@ -147,8 +162,20 @@
 
   function pageScale(pageInfo) {
     if (zoom > 0) return zoom;
-    const availableWidth = Math.max(320, pageHost.clientWidth - 44 - commentGutterWidth());
-    return Math.min(1.5, availableWidth / pageInfo.baseWidth);
+    const pageWidth = rotation % 180 ? pageInfo.baseHeight : pageInfo.baseWidth;
+    const pageHeight = rotation % 180 ? pageInfo.baseWidth : pageInfo.baseHeight;
+    const availableWidth = Math.max(240, pageHost.clientWidth - 44 - commentGutterWidth());
+    if (fitMode === 'page') {
+      const availableHeight = Math.max(240, pageHost.clientHeight - 44);
+      return Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 4);
+    }
+    return Math.min(4, availableWidth / pageWidth);
+  }
+
+  function updateZoomLabel() {
+    const firstPage = pages.values().next().value;
+    if (!firstPage) return;
+    zoomView.textContent = `${Math.round(pageScale(firstPage.pageInfo) * 100)}%`;
   }
 
   function createPageElement(pageNumber, pageInfo) {
@@ -167,7 +194,18 @@
     pageElement.append(canvas, textLayer, annotationLayer);
     pageHost.append(pageElement);
 
-    const pageState = { pageNumber, pageInfo, pageElement, canvas, textLayer, annotationLayer, renderedScale: 0, rendering: false };
+    const pageState = {
+      pageNumber,
+      pageInfo,
+      pageElement,
+      canvas,
+      textLayer,
+      annotationLayer,
+      textItems: pageInfo.textItems || [],
+      renderedScale: 0,
+      renderedRotation: -1,
+      rendering: false,
+    };
     pages.set(pageNumber, pageState);
     resizePageBox(pageState);
     return pageState;
@@ -175,8 +213,8 @@
 
   function resizePageBox(pageState) {
     const scale = pageScale(pageState.pageInfo);
-    const width = pageState.pageInfo.baseWidth * scale;
-    const height = pageState.pageInfo.baseHeight * scale;
+    const width = (rotation % 180 ? pageState.pageInfo.baseHeight : pageState.pageInfo.baseWidth) * scale;
+    const height = (rotation % 180 ? pageState.pageInfo.baseWidth : pageState.pageInfo.baseHeight) * scale;
     pageState.pageElement.style.width = `${width}px`;
     pageState.pageElement.style.height = `${height}px`;
     pageState.pageInfo.width = width;
@@ -185,12 +223,12 @@
 
   async function renderPage(pageState) {
     const scale = pageScale(pageState.pageInfo);
-    if (pageState.rendering || Math.abs(pageState.renderedScale - scale) < 0.01) return;
+    if (pageState.rendering || (Math.abs(pageState.renderedScale - scale) < 0.01 && pageState.renderedRotation === rotation)) return;
     pageState.rendering = true;
     pageState.renderedScale = 0;
     try {
       const page = await pdfDocument.getPage(pageState.pageNumber);
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
       const outputScale = window.devicePixelRatio || 1;
       // Keep transparent PDF areas transparent so the page's white background shows through.
       const context = pageState.canvas.getContext('2d', { alpha: true });
@@ -204,15 +242,19 @@
       pageState.textLayer.style.setProperty('--total-scale-factor', String(scale));
       await page.render({ canvasContext: context, viewport }).promise;
       const textContent = await page.getTextContent();
+      pageState.textItems = textContent.items.map((item) => typeof item.str === 'string' ? item.str : '');
       const textLayer = new pdfjsLib.TextLayer({ textContentSource: textContent, container: pageState.textLayer, viewport });
       await textLayer.render();
       pageState.renderedScale = scale;
+      pageState.renderedRotation = rotation;
+      paintSearchMatches(pageState);
       paintAnnotations(pageState);
     } catch (error) {
       announce('This PDF page could not be rendered. Try downloading the original document.', true);
     } finally {
       pageState.rendering = false;
-      if (pageState.renderedScale && Math.abs(pageState.renderedScale - pageScale(pageState.pageInfo)) >= 0.01) {
+      if (pageState.renderedScale && (Math.abs(pageState.renderedScale - pageScale(pageState.pageInfo)) >= 0.01
+        || pageState.renderedRotation !== rotation)) {
         pageState.renderedScale = 0;
         requestAnimationFrame(() => renderPage(pageState));
       }
@@ -227,8 +269,9 @@
         const rects = [];
         for (const rect of pageAnchor.rects || []) {
           if (!Array.isArray(rect) || rect.length !== 4) continue;
-          const normalized = rect.map((value) => Number(value));
-          if (normalized.some((value) => !Number.isFinite(value))) continue;
+          const canonical = rect.map((value) => Number(value));
+          if (canonical.some((value) => !Number.isFinite(value))) continue;
+          const normalized = rotateRect(canonical, rotation);
           rects.push(normalized);
           const mark = document.createElement('button');
           mark.type = 'button';
@@ -351,6 +394,7 @@
         renderPage(pageState);
       }
     }
+    updateZoomLabel();
   }
 
   function redrawAnnotations() {
@@ -457,14 +501,19 @@
       for (let number = 1; number <= pdfDocument.numPages; number++) {
         const page = await pdfDocument.getPage(number);
         const viewport = page.getViewport({ scale: 1 });
+        const textContent = await page.getTextContent();
         createPageElement(number, {
           baseWidth: viewport.width,
           baseHeight: viewport.height,
           width: 0,
           height: 0,
+          textItems: textContent.items.map((item) => typeof item.str === 'string' ? item.str : ''),
         });
         page.cleanup();
       }
+      app.querySelector('[data-fit-width]').setAttribute('aria-pressed', 'true');
+      app.querySelector('[data-fit-page]').setAttribute('aria-pressed', 'false');
+      updateZoomLabel();
 
       let annotationsAvailable = true;
       try {
@@ -589,24 +638,198 @@
     pages.get(target)?.pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  function changeZoom(delta) {
-    const fitScale = pages.size ? pageScale(pages.values().next().value.pageInfo) : 1;
-    zoom = clamp((zoom || fitScale) + delta, 0.5, 2.5);
-    zoomView.textContent = `${Math.round(zoom * 100)}%`;
+  function rerenderPages() {
     for (const pageState of pages.values()) {
+      const wasRendered = pageState.renderedScale > 0;
       resizePageBox(pageState);
-      if (pageState.renderedScale) {
+      if (wasRendered) {
         pageState.renderedScale = 0;
         renderPage(pageState);
       }
     }
+    updateZoomLabel();
+  }
+
+  function setFitMode(mode) {
+    fitMode = mode;
+    zoom = 0;
+    app.querySelector('[data-fit-width]').setAttribute('aria-pressed', String(mode === 'width'));
+    app.querySelector('[data-fit-page]').setAttribute('aria-pressed', String(mode === 'page'));
+    rerenderPages();
+  }
+
+  function changeZoom(delta) {
+    const fitScale = pages.size ? pageScale(pages.values().next().value.pageInfo) : 1;
+    zoom = clamp((zoom || fitScale) + delta, 0.5, 4);
+    app.querySelector('[data-fit-width]').setAttribute('aria-pressed', 'false');
+    app.querySelector('[data-fit-page]').setAttribute('aria-pressed', 'false');
+    rerenderPages();
   }
   app.querySelector('[data-zoom-in]').addEventListener('click', () => changeZoom(0.15));
   app.querySelector('[data-zoom-out]').addEventListener('click', () => changeZoom(-0.15));
+  app.querySelector('[data-fit-width]').addEventListener('click', () => setFitMode('width'));
+  app.querySelector('[data-fit-page]').addEventListener('click', () => setFitMode('page'));
+  app.querySelector('[data-zoom-reset]').addEventListener('click', () => setFitMode('width'));
+  app.querySelector('[data-rotate]').addEventListener('click', () => {
+    rotation = (rotation + 90) % 360;
+    rerenderPages();
+    announce(`Pages rotated ${rotation} degrees clockwise.`);
+  });
+  const fullscreenButton = app.querySelector('[data-fullscreen]');
+  fullscreenButton.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement === app) {
+        await document.exitFullscreen();
+      } else {
+        await app.requestFullscreen();
+      }
+    } catch (error) {
+      announce('Fullscreen is unavailable in this browser.', true);
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    const isFullscreen = document.fullscreenElement === app;
+    fullscreenButton.textContent = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+    fullscreenButton.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+    requestAnimationFrame(() => rerenderPages());
+  });
+  app.querySelector('[data-print]').addEventListener('click', () => window.print());
+
+  function paintSearchMatches(pageState) {
+    const spans = pageState.textLayer.querySelectorAll('span');
+    const matchedIndices = new Set();
+    searchMatches.forEach((match, matchIndex) => {
+      if (match.page !== pageState.pageNumber) return;
+      match.itemIndices.forEach((index) => matchedIndices.add(index));
+      if (matchIndex === activeSearchMatch) match.itemIndices.forEach((index) => matchedIndices.add(index));
+    });
+    spans.forEach((span, index) => {
+      const matching = matchedIndices.has(index);
+      span.classList.toggle('pdf-search-match', matching);
+      span.classList.toggle('is-current-match', matching && searchMatches[activeSearchMatch]?.page === pageState.pageNumber
+        && searchMatches[activeSearchMatch]?.itemIndices.includes(index));
+    });
+  }
+
+  function runSearch(direction = 1, navigateToMatch = true) {
+    const query = searchInput.value.trim().toLocaleLowerCase();
+    searchMatches.length = 0;
+    activeSearchMatch = -1;
+    for (const pageState of pages.values()) {
+      const items = pageState.textItems || [];
+      const text = items.join(' ').toLocaleLowerCase();
+      let offset = 0;
+      while (query && (offset = text.indexOf(query, offset)) !== -1) {
+        let start = offset;
+        let end = offset + query.length;
+        const indices = [];
+        let cursor = 0;
+        items.forEach((item, index) => {
+          const itemStart = cursor;
+          const itemEnd = itemStart + item.length;
+          if (start < itemEnd && end > itemStart) indices.push(index);
+          cursor = itemEnd + 1;
+        });
+        if (indices.length) searchMatches.push({ page: pageState.pageNumber, itemIndices: [...new Set(indices)] });
+        offset += Math.max(1, query.length);
+      }
+    }
+    if (!searchMatches.length) {
+      searchCount.textContent = query ? 'No matches' : 'Enter text to search';
+      for (const pageState of pages.values()) paintSearchMatches(pageState);
+      if (navigateToMatch) announce(query ? 'No matching text found.' : 'Search cleared.');
+      return;
+    }
+    if (navigateToMatch) {
+      activeSearchMatch = direction > 0 ? 0 : searchMatches.length - 1;
+      showSearchMatch();
+    } else {
+      activeSearchMatch = -1;
+      searchCount.textContent = `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'} found`;
+      for (const pageState of pages.values()) paintSearchMatches(pageState);
+    }
+  }
+
+  function showSearchMatch() {
+    const match = searchMatches[activeSearchMatch];
+    if (!match) return;
+    for (const pageState of pages.values()) paintSearchMatches(pageState);
+    const pageState = pages.get(match.page);
+    pageState?.pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    searchCount.textContent = `${activeSearchMatch + 1} of ${searchMatches.length}`;
+    announce(`Match ${activeSearchMatch + 1} of ${searchMatches.length}, page ${match.page}.`);
+  }
+
+  function flushPendingSearch(direction) {
+    if (!searchInputTimer) return false;
+    clearTimeout(searchInputTimer);
+    searchInputTimer = null;
+    runSearch(direction);
+    return true;
+  }
+
+  searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (flushPendingSearch(event.shiftKey ? -1 : 1)) return;
+      if (searchInput.value.trim().toLocaleLowerCase() !== searchMatches.query) {
+        searchMatches.query = searchInput.value.trim().toLocaleLowerCase();
+        runSearch(event.shiftKey ? -1 : 1);
+      } else if (searchMatches.length) {
+        activeSearchMatch = activeSearchMatch < 0
+          ? (event.shiftKey ? searchMatches.length - 1 : 0)
+          : (activeSearchMatch + (event.shiftKey ? searchMatches.length - 1 : 1)) % searchMatches.length;
+        showSearchMatch();
+      }
+    }
+  });
+  app.querySelector('[data-search-next]').addEventListener('click', () => {
+    if (flushPendingSearch(1)) return;
+    if (searchMatches.query !== searchInput.value.trim().toLocaleLowerCase()) {
+      searchMatches.query = searchInput.value.trim().toLocaleLowerCase();
+      runSearch(1);
+      return;
+    }
+    if (searchMatches.length) {
+      activeSearchMatch = activeSearchMatch < 0 ? 0 : (activeSearchMatch + 1) % searchMatches.length;
+      showSearchMatch();
+    }
+  });
+  app.querySelector('[data-search-previous]').addEventListener('click', () => {
+    if (flushPendingSearch(-1)) return;
+    if (searchMatches.query !== searchInput.value.trim().toLocaleLowerCase()) {
+      searchMatches.query = searchInput.value.trim().toLocaleLowerCase();
+      runSearch(-1);
+      return;
+    }
+    if (searchMatches.length) {
+      activeSearchMatch = activeSearchMatch < 0
+        ? searchMatches.length - 1
+        : (activeSearchMatch - 1 + searchMatches.length) % searchMatches.length;
+      showSearchMatch();
+    }
+  });
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchInputTimer);
+    searchMatches.query = searchInput.value.trim().toLocaleLowerCase();
+    if (!searchInput.value.trim()) {
+      searchMatches.length = 0;
+      activeSearchMatch = -1;
+      searchCount.textContent = 'Enter text to search';
+      for (const pageState of pages.values()) paintSearchMatches(pageState);
+      return;
+    }
+    searchCount.textContent = 'Searching…';
+    searchInputTimer = window.setTimeout(() => {
+      searchInputTimer = null;
+      runSearch(1, false);
+    }, 120);
+  });
 
   const resizeObserver = new ResizeObserver(() => {
     if (zoom > 0) return;
-    syncCommentLayout();
+    if (fitMode === 'page') rerenderPages();
+    else syncCommentLayout();
   });
   resizeObserver.observe(pageHost);
   initialize();

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/faculty-ranks.php';
 require_once __DIR__ . '/../../includes/academic-affiliation.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
+require_once __DIR__ . '/../../includes/services/FacultyParticipationService.php';
 
 requireRole('faculty');
 $user = getCurrentUser();
@@ -23,6 +24,44 @@ if ((string) ($_GET['tab'] ?? '') === 'mentoring') {
 function facultyProfileEscape($value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function fpStatusLabel($value): string
+{
+    $status = trim((string) $value);
+    if ($status === '') {
+        return 'Not recorded';
+    }
+
+    $labels = [
+        'under_crec_review' => 'Under CREC Review',
+        'under_erec_review' => 'Under EREC Review',
+        'under_review' => 'Under Review',
+        'book_chapter' => 'Book Chapter',
+        'conference_presentation' => 'Conference Presentation',
+        'extension_community' => 'Extension / Community',
+        'research_award' => 'Research Award',
+        'seminar_training' => 'Seminar / Training',
+        'title_approved' => 'Title Approved',
+        'for_revision' => 'For Revision',
+        'revision_required' => 'Revision Required',
+        'legacy' => 'Legacy Record',
+    ];
+    $normalizedStatus = strtolower($status);
+
+    return $labels[$normalizedStatus] ?? ucwords(str_replace(['_', '-'], ' ', $status));
+}
+
+function fpStatusBadgeClass($value): string
+{
+    return match (strtolower(trim((string) $value))) {
+        'verified' => 'verified',
+        'approved', 'accepted', 'published', 'registered', 'completed', 'ongoing', 'title_approved' => 'success',
+        'pending', 'submitted', 'under_review', 'under_crec_review', 'under_erec_review', 'proposal', 'progress_report', 'terminal_review' => 'pending',
+        'draft' => 'draft',
+        'returned', 'rejected', 'for_revision', 'revision_required' => 'returned',
+        default => 'neutral',
+    };
 }
 
 function facultyProfileIsHttpsUrl(?string $url): bool
@@ -49,7 +88,7 @@ function facultyProfileTableExists(mysqli $connection, string $table): bool
 
 $userId = (int) $user['user_id'];
 $tab = (string) ($_GET['tab'] ?? 'overview');
-$allowedTabs = ['overview', 'research', 'publications', 'engagement', 'achievements', 'ethics'];
+$allowedTabs = ['overview', 'research', 'publications', 'achievements'];
 if (!in_array($tab, $allowedTabs, true)) {
     $tab = 'overview';
 }
@@ -58,8 +97,6 @@ $hasPublications = facultyProfileTableExists($conn, 'publications');
 $hasPublicationContributors = facultyProfileTableExists($conn, 'publication_contributors');
 $hasCopyrights = facultyProfileTableExists($conn, 'copyright_applications');
 $hasCopyrightContributors = facultyProfileTableExists($conn, 'copyright_contributors');
-$hasActivities = facultyProfileTableExists($conn, 'activity_participants')
-    && facultyProfileTableExists($conn, 'research_activities');
 $hasEngagementRecords = $profileAvailable && facultyProfileTableExists($conn, 'faculty_engagement_records');
 
 $userStmt = $conn->prepare('SELECT first_name, last_name, email, department, program, specialization, academic_rank FROM users WHERE user_id = ? AND role = \'faculty\' AND deleted_at IS NULL LIMIT 1');
@@ -178,48 +215,6 @@ if ($hasPublications && $hasPublicationContributors) {
     $stmt->close();
 }
 
-$engagements = [];
-if ($hasEngagementRecords) {
-    $stmt = $conn->prepare('SELECT engagement_id, engagement_type, title, participation_role, activity_date, review_status, review_comments, evidence_upload_id FROM faculty_engagement_records WHERE faculty_id = ? ORDER BY activity_date DESC, engagement_id DESC LIMIT 100');
-    $stmt->bind_param('i', $userId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
-        $engagements[] = $row;
-    }
-    $stmt->close();
-}
-
-$activities = [];
-$verifiedActivityAttendanceCount = 0;
-if ($hasActivities) {
-    $stmt = $conn->prepare(
-        'SELECT ra.title, ra.activity_type, ra.activity_date, ap.role
-           FROM activity_participants ap
-           JOIN research_activities ra ON ra.activity_id = ap.activity_id
-          WHERE ap.user_id = ? AND ap.attended = 1 AND ra.status = \'completed\'
-          ORDER BY ra.activity_date DESC, ra.activity_id DESC
-          LIMIT 100'
-    );
-    $stmt->bind_param('i', $userId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
-        $activities[] = $row;
-    }
-    $stmt->close();
-    $stmt = $conn->prepare(
-        "SELECT COUNT(*) AS total
-           FROM activity_participants ap
-           JOIN research_activities ra ON ra.activity_id = ap.activity_id
-          WHERE ap.user_id = ? AND ap.attended = 1 AND ra.status = 'completed'"
-    );
-    $stmt->bind_param('i', $userId);
-    $stmt->execute();
-    $verifiedActivityAttendanceCount = (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
-    $stmt->close();
-}
-
 $portfolioProjects = [];
 $registeredIpOutputs = [];
 $stmt = $conn->prepare(
@@ -281,20 +276,20 @@ $projectCountStmt = $conn->prepare(
 $projectCountStmt->execute();
 $projectCount = (int) ($projectCountStmt->get_result()->fetch_assoc()['total'] ?? 0);
 $projectCountStmt->close();
+$facultyParticipationSummary = (new FacultyParticipationService($conn))->getMySummary($userId);
+$verifiedActivityAttendanceCount = (int) $facultyParticipationSummary['attendee_events'];
 
 $tabLinks = [
     ['key' => 'overview', 'label' => 'Profile overview'],
     ['key' => 'research', 'label' => 'Research interests & expertise'],
     ['key' => 'publications', 'label' => 'Publications & outputs'],
     ['key' => 'achievements', 'label' => 'Research achievements'],
-    ['key' => 'ethics', 'label' => 'Ethics & compliance'],
-    ['key' => 'engagement', 'label' => 'Engagement history'],
 ];
 
 renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic identity and linked research portfolio.', ['faculty-profile.css']);
 ?>
 <div class="fp-page" id="fp-page">
-    <header class="fp-header" role="banner">
+    <header class="fp-header<?= $tab === 'overview' ? ' fp-header--overview' : '' ?>" role="banner">
         <div class="fp-identity">
             <div class="fp-avatar" aria-hidden="true"><?= facultyProfileEscape($initials ?: 'F') ?></div>
             <div class="fp-identity__meta">
@@ -534,70 +529,7 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
                 <?php endif; ?>
             </section>
 
-        <?php elseif ($tab === 'engagement'): ?>
-            <!-- ENGAGEMENT TAB -->
-            <section class="fp-panel" aria-labelledby="engagement-heading">
-                <header class="fp-panel__header">
-                    <div>
-                        <p class="fp-panel__label">Participation history</p>
-                        <h2 id="engagement-heading" class="fp-panel__title">Engagement and verified attendance</h2>
-                    </div>
-                    <a class="fp-link fp-link--standalone" href="<?= facultyProfileEscape(SITE_URL . 'pages/faculty/faculty-engagement.php') ?>">
-                        Submit an engagement record
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                    </a>
-                </header>
-
-                <?php if ($hasActivities && $activities): ?>
-                    <h3 class="fp-subheading">Verified activity attendance</h3>
-                    <ul class="fp-list" role="list">
-                        <?php foreach ($activities as $activity): ?>
-                            <li class="fp-list__item">
-                                <div class="fp-list__content">
-                                    <strong><?= facultyProfileEscape($activity['title']) ?></strong>
-                                    <small class="fp-list__meta">
-                                        <?= facultyProfileEscape(ucfirst((string) $activity['activity_type'])) ?>
-                                        · <?= facultyProfileEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?>
-                                        · <?= facultyProfileEscape($activity['role'] ?: 'Participant') ?>
-                                    </small>
-                                </div>
-                                <span class="fp-badge fp-badge--verified">Attended</span>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php elseif (!$hasActivities): ?>
-                    <div class="fp-alert fp-alert--warning">Activity attendance records are unavailable.</div>
-                <?php else: ?>
-                    <p class="fp-empty">No completed activity attendance is linked to your account.</p>
-                <?php endif; ?>
-
-                <?php if ($engagements): ?>
-                    <h3 class="fp-subheading">Submitted engagement records</h3>
-                    <ul class="fp-list" role="list">
-                        <?php foreach ($engagements as $engagement): ?>
-                            <li class="fp-list__item">
-                                <div class="fp-list__content">
-                                    <strong><?= facultyProfileEscape($engagement['title']) ?></strong>
-                                    <small class="fp-list__meta">
-                                        <?= facultyProfileEscape(fpStatusLabel($engagement['engagement_type'])) ?>
-                                        · <?= facultyProfileEscape(date('M j, Y', strtotime((string) $engagement['activity_date']))) ?>
-                                    </small>
-                                    <?php if ($engagement['review_comments']): ?>
-                                        <small class="fp-list__note">Review note: <?= facultyProfileEscape($engagement['review_comments']) ?></small>
-                                    <?php endif; ?>
-                                </div>
-                                <span class="fp-badge fp-badge--<?= fpStatusBadgeClass($engagement['review_status']) ?>">
-                                    <?= facultyProfileEscape(fpStatusLabel($engagement['review_status'])) ?>
-                                </span>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php elseif ($hasEngagementRecords): ?>
-                    <p class="fp-empty">No engagement submissions yet.</p>
-                <?php endif; ?>
-            </section>
-
-        <?php elseif ($tab === 'achievements'): ?>
+        <?php else: ?>
             <!-- ACHIEVEMENTS TAB -->
             <section class="fp-panel" aria-labelledby="achievements-heading">
                 <header class="fp-panel__header">
@@ -614,10 +546,6 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
                     <div class="fp-stat" role="listitem">
                         <span class="fp-stat__value"><?= $verifiedEngagements ?></span>
                         <span class="fp-stat__label">Verified engagements</span>
-                    </div>
-                    <div class="fp-stat" role="listitem">
-                        <span class="fp-stat__value"><?= $verifiedActivityAttendanceCount ?></span>
-                        <span class="fp-stat__label">Verified activity attendance</span>
                     </div>
                     <div class="fp-stat" role="listitem">
                         <span class="fp-stat__value"><?= $registeredOutputs ?></span>
@@ -654,21 +582,6 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
                 <?php endif; ?>
             </section>
 
-        <?php else: ?>
-            <!-- ETHICS TAB -->
-            <section class="fp-panel" aria-labelledby="ethics-heading">
-                <header class="fp-panel__header">
-                    <div>
-                        <p class="fp-panel__label">Compliance</p>
-                        <h2 id="ethics-heading" class="fp-panel__title">Ethics and compliance records</h2>
-                    </div>
-                </header>
-                <div class="fp-empty-state">
-                    <svg class="fp-empty-state__icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    <h3 class="fp-empty-state__title">No records available</h3>
-                    <p class="fp-empty-state__desc">No ethics-training or compliance records are currently connected to your RMS profile.</p>
-                </div>
-            </section>
         <?php endif; ?>
     </main>
 </div>

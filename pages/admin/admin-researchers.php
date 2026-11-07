@@ -50,6 +50,26 @@ $hasFacultyProfiles = adminResearchersTableExists($conn, 'faculty_research_profi
 $researcherId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 $roleInput = trim((string) ($_GET['role'] ?? ''));
 $roleFilter = in_array($roleInput, ['faculty', 'student'], true) ? $roleInput : '';
+$academicYearInput = trim((string) ($_GET['academic_year'] ?? ''));
+$academicYears = [];
+if (!$researcherId) {
+    $stmt = $conn->prepare(
+        'SELECT DISTINCT ay.label
+           FROM academic_years ay
+           INNER JOIN research_projects rp ON rp.ay_id = ay.ay_id
+          WHERE rp.deleted_at IS NULL
+          ORDER BY ay.label DESC'
+    );
+    $result = adminResearchersRun($stmt);
+    while ($row = $result->fetch_assoc()) {
+        $academicYears[] = (string) $row['label'];
+    }
+    $stmt->close();
+}
+$academicYearFilter = in_array($academicYearInput, $academicYears, true) ? $academicYearInput : '';
+if ($academicYearFilter !== '') {
+    $roleFilter = 'student';
+}
 $statusInput = trim((string) ($_GET['status'] ?? ''));
 $statusFilter = in_array($statusInput, ['active', 'pending', 'suspended'], true) ? $statusInput : '';
 $search = trim((string) ($_GET['q'] ?? ''));
@@ -60,7 +80,19 @@ $dateTo = trim((string) ($_GET['date_to'] ?? ''));
 $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) ? $dateFrom : '';
 $dateTo = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) ? $dateTo : '';
 $statusInput = trim((string) ($_GET['activity_status'] ?? ''));
-$activityStatusFilter = in_array($statusInput, ['pending', 'approved', 'rejected', 'completed', 'cancelled', 'ongoing'], true) ? $statusInput : '';
+$activityStatusOptions = [
+    'upcoming' => 'Upcoming',
+    'ongoing' => 'Ongoing',
+    'conducted' => 'Conducted',
+    'cancelled' => 'Cancelled',
+];
+$activityStatusValues = [
+    'upcoming' => ['upcoming', 'incoming', 'scheduled'],
+    'ongoing' => ['ongoing'],
+    'conducted' => ['conducted', 'completed'],
+    'cancelled' => ['cancelled'],
+];
+$activityStatusFilter = array_key_exists($statusInput, $activityStatusOptions) ? $statusInput : '';
 
 $profile = null;
 $activities = [];
@@ -118,9 +150,12 @@ if ($researcherId) {
             $types .= 's';
         }
         if ($activityStatusFilter !== '') {
-            $sql .= ' AND ra.status = ?';
-            $params[] = $activityStatusFilter;
-            $types .= 's';
+            $statusValues = $activityStatusValues[$activityStatusFilter];
+            $sql .= ' AND ra.status IN (' . implode(', ', array_fill(0, count($statusValues), '?')) . ')';
+            foreach ($statusValues as $statusValue) {
+                $params[] = $statusValue;
+                $types .= 's';
+            }
         }
         $sql .= ' ORDER BY ra.activity_date DESC, ra.activity_id DESC';
         $stmt = $conn->prepare($sql);
@@ -177,6 +212,23 @@ if ($researcherId) {
     if ($statusFilter !== '') {
         $sql .= ' AND u.status = ?';
         $params[] = $statusFilter;
+        $types .= 's';
+    }
+    if ($academicYearFilter !== '') {
+        $sql .= ' AND EXISTS (
+            SELECT 1
+              FROM research_projects ay_rp
+              INNER JOIN academic_years ay ON ay.ay_id = ay_rp.ay_id
+             WHERE ay_rp.deleted_at IS NULL
+               AND ay.label = ?
+               AND (ay_rp.created_by = u.user_id
+                 OR ay_rp.student_id = u.user_id
+                 OR EXISTS (
+                     SELECT 1 FROM project_members ay_pm
+                      WHERE ay_pm.project_id = ay_rp.project_id AND ay_pm.user_id = u.user_id
+                 ))
+        )';
+        $params[] = $academicYearFilter;
         $types .= 's';
     }
     if ($search !== '') {
@@ -244,6 +296,7 @@ renderAdminShell(
   .researcher-panel .researcher-link{color:#111827;text-decoration:none}
   .researcher-panel .researcher-table tr{break-inside:avoid}
 }
+@media(min-width:981px){.researcher-toolbar{grid-template-columns:minmax(200px,1.8fr) repeat(3,minmax(140px,.9fr)) auto}}
 </style>
 
 <main class="researcher-page">
@@ -314,12 +367,9 @@ renderAdminShell(
             <label for="activity-status" style="display:block;margin-bottom:6px;color:#64748b;font-size:11px;font-weight:700">Activity status</label>
             <select id="activity-status" name="activity_status" style="width:100%;min-height:42px;box-sizing:border-box;padding:9px 11px;border:1px solid #d1d5db;border-radius:9px;background:white;color:#111827;font:inherit">
               <option value="">All statuses</option>
-              <option value="pending" <?= $activityStatusFilter === 'pending' ? 'selected' : '' ?>>Pending</option>
-              <option value="approved" <?= $activityStatusFilter === 'approved' ? 'selected' : '' ?>>Approved</option>
-              <option value="rejected" <?= $activityStatusFilter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
-              <option value="completed" <?= $activityStatusFilter === 'completed' ? 'selected' : '' ?>>Completed</option>
-              <option value="cancelled" <?= $activityStatusFilter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
-              <option value="ongoing" <?= $activityStatusFilter === 'ongoing' ? 'selected' : '' ?>>Ongoing</option>
+              <?php foreach ($activityStatusOptions as $statusValue => $statusLabel): ?>
+                <option value="<?= adminResearchersEscape($statusValue) ?>" <?= $activityStatusFilter === $statusValue ? 'selected' : '' ?>><?= adminResearchersEscape($statusLabel) ?></option>
+              <?php endforeach; ?>
             </select>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -332,7 +382,7 @@ renderAdminShell(
       </div>
       <?php if (!$hasActivities): ?><div class="researcher-empty"><strong>Activity history unavailable</strong>Install migration 012 to enable activity records.</div>
       <?php elseif (!$activities): ?><div class="researcher-empty"><strong>No linked participation records</strong>Participation appears here when this researcher is linked to an activity.</div>
-      <?php else: ?><div class="researcher-table-wrap"><table class="researcher-table"><thead><tr><th>Date</th><th>Activity</th><th>Role</th><th>Status</th><th>Attendance</th></tr></thead><tbody><?php foreach ($activities as $activity): ?><tr><td><?= adminResearchersEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?></td><td><a class="researcher-link" href="<?= adminResearchersEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id']) ?>"><?= adminResearchersEscape($activity['title']) ?></a><div class="researcher-muted"><?= adminResearchersEscape(ucfirst((string) $activity['activity_type'])) ?></div></td><td><?= adminResearchersEscape(ucfirst((string) $activity['participant_role'])) ?></td><td class="activity-status"><?= adminResearchersEscape(ucwords(str_replace('_', ' ', (string) $activity['status']))) ?></td><td><?= (int) $activity['attended'] === 1 ? 'Attended' : 'Not recorded' ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+      <?php else: ?><div class="researcher-table-wrap"><table class="researcher-table"><thead><tr><th>Date</th><th>Activity</th><th>Role</th><th>Status</th><th>Attendance</th></tr></thead><tbody><?php foreach ($activities as $activity): $activityTypeLabel = match ((string) $activity['activity_type']) { 'seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress', default => 'Research Activity' }; ?><tr><td><?= adminResearchersEscape(date('M j, Y', strtotime((string) $activity['activity_date']))) ?></td><td><a class="researcher-link" href="<?= adminResearchersEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id']) ?>"><?= adminResearchersEscape($activity['title']) ?></a><div class="researcher-muted"><?= adminResearchersEscape($activityTypeLabel) ?></div></td><td><?= adminResearchersEscape(ucfirst((string) $activity['participant_role'])) ?></td><td class="activity-status"><?= adminResearchersEscape(ucwords(str_replace('_', ' ', (string) $activity['status']))) ?></td><td><?= (int) $activity['attended'] === 1 ? 'Attended' : 'Not recorded' ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
     </section>
 
     <section class="researcher-panel" aria-labelledby="publications-heading">
@@ -386,8 +436,17 @@ renderAdminShell(
           </select>
         </div>
         <div>
+          <label for="researcher-academic-year">Academic Year</label>
+          <select id="researcher-academic-year" name="academic_year">
+            <option value="">All academic years</option>
+            <?php foreach ($academicYears as $academicYear): ?>
+              <option value="<?= adminResearchersEscape($academicYear) ?>" <?= $academicYearFilter === $academicYear ? 'selected' : '' ?>><?= adminResearchersEscape($academicYear) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div>
           <button class="researcher-button" type="submit">Apply</button>
-          <?php if ($search !== '' || $roleFilter !== '' || $statusFilter !== ''): ?>
+          <?php if ($search !== '' || $roleFilter !== '' || $statusFilter !== '' || $academicYearFilter !== ''): ?>
             <a class="researcher-button secondary" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php') ?>">Clear</a>
           <?php endif; ?>
         </div>
@@ -397,7 +456,7 @@ renderAdminShell(
         <?php $allTabHref = SITE_URL . 'pages/admin/admin-researchers.php' . ($search !== '' || $statusFilter !== '' ? '?q=' . rawurlencode($search) . '&status=' . rawurlencode($statusFilter) : ''); ?>
         <a class="researcher-tab <?= $roleFilter === '' ? 'active' : '' ?>" href="<?= adminResearchersEscape($allTabHref) ?>">All</a>
         <a class="researcher-tab <?= $roleFilter === 'faculty' ? 'active' : '' ?>" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php?role=faculty' . ($search !== '' ? '&q=' . rawurlencode($search) : '') . ($statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '')) ?>">Faculty</a>
-        <a class="researcher-tab <?= $roleFilter === 'student' ? 'active' : '' ?>" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php?role=student' . ($search !== '' ? '&q=' . rawurlencode($search) : '') . ($statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '')) ?>">Students</a>
+        <a class="researcher-tab <?= $roleFilter === 'student' ? 'active' : '' ?>" href="<?= adminResearchersEscape(SITE_URL . 'pages/admin/admin-researchers.php?role=student' . ($search !== '' ? '&q=' . rawurlencode($search) : '') . ($statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '') . ($academicYearFilter !== '' ? '&academic_year=' . rawurlencode($academicYearFilter) : '')) ?>">Students</a>
       </nav>
       <?php if (!$researchers): ?><div class="researcher-empty"><strong>No researcher profiles found</strong>Try changing the search or filters.</div>
       <?php else: ?>

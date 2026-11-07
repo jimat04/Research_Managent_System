@@ -779,6 +779,8 @@ $visible_users = $users->num_rows;
     display: grid;
     gap: 10px;
   }
+  .permission-page-group + .permission-page-group { margin-top: 16px; }
+  .permission-page-group h4 { margin: 0 0 2px; color: #475467; font-size: 12px; font-weight: 700; }
   .permission-subpage {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto 138px;
@@ -1225,8 +1227,18 @@ renderAdminShell(
       <?php echo csrfField(); ?>
 
       <div class="permission-grid">
-        <p class="permission-guidance">Existing default module access is view-only. Download grants are separate and remain disabled unless explicitly granted for a subpage.</p>
+        <p class="permission-guidance">Access is set per page, and downloads are separate opt-in grants. Capacity Building grants apply across all four activity types. New staff accounts start with view access to All Records, Reports, and Research Engagement Records; Add New starts disabled.</p>
         <?php foreach (rmsPermissionModules() as $module_key => $module_data): ?>
+          <?php
+            if ($module_key === 'research_capacity_building') {
+                $permission_page_groups = [
+                    'Add' => ['add_activity', 'add_upcoming_activity', 'add_conducted_activity'],
+                    'View and manage' => ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities'],
+                ];
+            } else {
+                $permission_page_groups = [$module_data['label'] => array_keys($module_data['pages'])];
+            }
+          ?>
           <section class="permission-block">
             <div class="permission-header">
               <div>
@@ -1244,31 +1256,38 @@ renderAdminShell(
               </div>
             </div>
 
-            <div class="permission-subpages">
-              <?php foreach ($module_data['pages'] as $subpage_key => $page_label): ?>
-                <div class="permission-subpage">
-                  <span><?php echo htmlspecialchars($page_label, ENT_QUOTES, 'UTF-8'); ?></span>
-                  <div class="permission-levels compact">
-                    <label class="permission-option compact">
-                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="none" checked>
-                      <span>None</span>
-                    </label>
-                    <label class="permission-option compact">
-                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="view">
-                      <span>View</span>
-                    </label>
-                    <label class="permission-option compact">
-                      <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="manage">
-                      <span>Manage</span>
-                    </label>
-                  </div>
-                  <label class="permission-option compact">
-                    <input type="checkbox" name="download_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="1">
-                    <span>Allow downloads</span>
-                  </label>
+            <?php foreach ($permission_page_groups as $permission_group_label => $permission_group_keys): ?>
+              <div class="permission-page-group">
+                <?php if ($module_key === 'research_capacity_building'): ?><h4><?php echo htmlspecialchars($permission_group_label, ENT_QUOTES, 'UTF-8'); ?></h4><?php endif; ?>
+                <div class="permission-subpages">
+                  <?php foreach ($permission_group_keys as $subpage_key): ?>
+                    <?php if (!isset($module_data['pages'][$subpage_key])) continue; ?>
+                    <?php $page_label = $module_data['pages'][$subpage_key]; ?>
+                    <div class="permission-subpage">
+                      <span><?php echo htmlspecialchars($page_label, ENT_QUOTES, 'UTF-8'); ?></span>
+                      <div class="permission-levels compact">
+                        <label class="permission-option compact">
+                          <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="none" checked>
+                          <span>None</span>
+                        </label>
+                        <label class="permission-option compact">
+                          <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="view">
+                          <span>View</span>
+                        </label>
+                        <label class="permission-option compact">
+                          <input type="radio" name="module_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="manage">
+                          <span>Manage</span>
+                        </label>
+                      </div>
+                      <label class="permission-option compact">
+                        <input type="checkbox" name="download_access[<?php echo htmlspecialchars($module_key, ENT_QUOTES, 'UTF-8'); ?>][pages][<?php echo htmlspecialchars($subpage_key, ENT_QUOTES, 'UTF-8'); ?>]" value="1">
+                        <span>Allow downloads</span>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
                 </div>
-              <?php endforeach; ?>
-            </div>
+              </div>
+            <?php endforeach; ?>
           </section>
         <?php endforeach; ?>
       </div>

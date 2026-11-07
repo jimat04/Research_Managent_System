@@ -255,6 +255,9 @@ function rmsActivityBudgetValidatePost(array $post, array $eligibleUsers, array 
         ];
     }
     $isUpcoming = in_array($activityStatus, ['upcoming', 'scheduled', 'ongoing'], true);
+    if ($header['funding_source'] === 'participants' && !$hasMandatoryCharge) {
+        $errors[] = 'Participant-funded activities must include at least one mandatory participant charge with an amount.';
+    }
     if ($header['funding_source'] === 'free'
         && array_filter($expenses, static fn (array $expense): bool => $expense['charge_type'] !== 'none')) {
         $errors[] = 'A free activity cannot list mandatory fees or optional participant charges.';
@@ -753,6 +756,7 @@ function rmsActivityBudgetSaveContributionResponse(mysqli $conn, int $activityId
          INNER JOIN activity_budgets b ON b.activity_id = ra.activity_id
          INNER JOIN users u ON u.user_id = sp.user_id AND u.status = 'active' AND u.deleted_at IS NULL
          WHERE sp.participant_id = ? AND sp.user_id = ? AND sp.is_invited = 1
+           AND sp.invitation_response = 'accepted'
            AND d.activity_id = ? AND d.status = 'scheduled'
            AND ra.status IN ('upcoming','scheduled','ongoing') AND b.contribution_prompt = 1
            AND b.budget_status = 'pending' AND b.funding_source <> 'free'

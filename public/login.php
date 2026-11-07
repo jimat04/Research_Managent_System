@@ -527,6 +527,39 @@ $authContinuationQuery = $publicRecordIntent
       background: #ffffff;
       box-shadow: 0 0 0 3px rgba(91,30,188,0.18);
     }
+    .auth-password-field { position: relative; }
+    .auth-password-field .form-control { padding-right: 48px; }
+    .auth-password-toggle {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      transform: translateY(-50%);
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #6b5ca5;
+      cursor: pointer;
+    }
+    .auth-password-toggle:hover { background: rgba(91,30,188,0.08); color: #5B1EBC; }
+    .auth-password-toggle:focus-visible { outline: 2px solid #5B1EBC; outline-offset: 2px; }
+    .auth-password-toggle svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .auth-password-toggle svg[hidden] { display: none; }
+    .auth-password-toggle.is-toggling svg:not([hidden]) { animation: password-eye-toggle 220ms ease-out both; }
+    @keyframes password-eye-toggle {
+      0% { opacity: 0; transform: scale(.72) rotate(-12deg); }
+      70% { opacity: 1; transform: scale(1.12) rotate(3deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .auth-password-toggle.is-toggling svg:not([hidden]) { animation: none; }
+    }
+
     .auth-split-form .form-control option {
       background: #ffffff;
       color: #1e1b3a;
@@ -927,11 +960,23 @@ $authContinuationQuery = $publicRecordIntent
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">Password</label>
-              <input type="password" name="password" class="form-control" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" placeholder="Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters" required>
+              <div class="auth-password-field">
+                <input type="password" name="password" id="registerPassword" class="form-control" minlength="<?php echo (int) rmsSetting('password_min_length'); ?>" maxlength="64" placeholder="Minimum <?php echo (int) rmsSetting('password_min_length'); ?> characters" required autocomplete="new-password">
+                <button type="button" class="auth-password-toggle" id="toggleRegisterPasswordBtn" aria-label="Show password" aria-pressed="false" onclick="togglePassword('registerPassword','toggleRegisterPasswordBtn')">
+                  <svg class="password-eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-eye-closed" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15.8 15.8 0 0 1-3.1 3.9M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Confirm Password</label>
-              <input type="password" name="password_confirm" class="form-control" placeholder="Repeat password" required>
+              <div class="auth-password-field">
+                <input type="password" name="password_confirm" id="registerPasswordConfirm" class="form-control" placeholder="Repeat password" required autocomplete="new-password">
+                <button type="button" class="auth-password-toggle" id="toggleRegisterPasswordConfirmBtn" aria-label="Show password" aria-pressed="false" onclick="togglePassword('registerPasswordConfirm','toggleRegisterPasswordConfirmBtn')">
+                  <svg class="password-eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-eye-closed" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15.8 15.8 0 0 1-3.1 3.9M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -981,7 +1026,23 @@ function togglePassword(inputId, btnId) {
 
   const isHidden = input.type === 'password';
   input.type = isHidden ? 'text' : 'password';
-  btn.textContent = isHidden ? 'Hide' : 'Show';
+  if (btn.hasAttribute('aria-pressed')) {
+    btn.setAttribute('aria-pressed', String(isHidden));
+    btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    const openEye = btn.querySelector('.password-eye-open');
+    const closedEye = btn.querySelector('.password-eye-closed');
+    if (openEye && closedEye) {
+      openEye.hidden = isHidden;
+      closedEye.hidden = !isHidden;
+      btn.classList.remove('is-toggling');
+      void btn.offsetWidth;
+      btn.classList.add('is-toggling');
+      const clearAnimation = () => btn.classList.remove('is-toggling');
+      btn.addEventListener('animationend', clearAnimation, { once: true });
+    }
+  } else {
+    btn.textContent = isHidden ? 'Hide' : 'Show';
+  }
 }
 
 function updateRegistrationFields() {

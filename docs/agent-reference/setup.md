@@ -46,7 +46,10 @@ APP_ENV                               — 'development' or 'production'
 APP_DEBUG                             — Enable PHP error display
 REQUIRE_EMAIL_VERIFICATION             — Default 1; 0 skips the login email gate only with APP_ENV=development and a localhost/loopback SITE_URL
 EARIST_LIVE_GENERATION_ENABLED          — First-run default (0); a saved Admin System Settings value takes precedence
+EARIST_GOOGLE_DRIVE_ENABLED              — Optional Faculty Google Docs editor; defaults to 0 and needs OAuth credentials plus a server-held token-encryption key
 ```
+
+Configure the optional Faculty Google Drive editor using [EARIST Google Docs editing](../EARIST_GOOGLE_DOCS_SETUP.md). It stores working copies in the user's Drive and requires migration 068 before activation.
 
 ## Official EARIST templates
 
@@ -56,4 +59,4 @@ Manage live document generation at **Admin → System Settings → Application s
 
 ## Production transport and sessions
 
-Set `SITE_URL` to the HTTPS application URL and configure the production Apache virtual host with `SetEnvIf Host . RMS_FORCE_HTTPS=1`. The root `.htaccess` uses this server-owned flag to redirect HTTP requests; local development is unaffected. If TLS terminates at a trusted reverse proxy, configure Apache to recognize the trusted proxy's HTTPS state before enabling the redirect. Production session cookies are marked `Secure`, `HttpOnly` and `SameSite=Lax`; development cookies omit `Secure` when served over HTTP.
+Set `SITE_URL` to the HTTPS application URL and configure the production Apache virtual host with `SetEnvIf Host . RMS_FORCE_HTTPS=1`. Set `ACTIVITY_CHECKIN_HASH_KEY` to 64 hexadecimal characters generated from 32 random bytes. The root `.htaccess` uses this server-owned flag to redirect HTTP requests; local development is unaffected. The current rewrite base and custom error paths assume the app is mounted at `/rms/`; update them together if the virtual host maps it at the domain root or a different path prefix. If TLS terminates at a trusted reverse proxy, configure Apache to recognize the trusted proxy's HTTPS state before enabling the redirect. Production session cookies are marked `Secure`, `HttpOnly` and `SameSite=Lax`; development cookies omit `Secure` when served over HTTP.

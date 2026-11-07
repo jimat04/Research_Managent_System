@@ -15,44 +15,75 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px 14px;
-  padding: 10px 12px;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
   border-bottom: 1px solid #dbe3ee;
-  background: #fff;
+  background: #f1f5f9;
 }
 
 .pdf-review-page-control,
 .pdf-review-zoom-control,
+.pdf-review-document-control,
 .pdf-review-annotation-control {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 7%);
+}
+
+.pdf-review-page-control,
+.pdf-review-zoom-control,
+.pdf-review-document-control,
+.pdf-review-annotation-control,
+.pdf-review-search-control {
+  justify-content: center;
 }
 
 .pdf-review-toolbar button,
 .pdf-review-toolbar input {
-  min-height: 36px;
-  border: 1px solid #cbd5e1;
+  min-height: 42px;
+  border: 1px solid #94a3b8;
   border-radius: 8px;
   background: #fff;
-  color: #1f2937;
+  color: #0f172a;
   font: inherit;
 }
 
 .pdf-review-toolbar button {
-  padding: 6px 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
 
 .pdf-review-toolbar button:hover:not(:disabled) {
-  background: #f1f5f9;
+  border-color: #0f766e;
+  background: #ecfdf5;
+  box-shadow: 0 2px 5px rgb(15 118 110 / 14%);
+}
+
+.pdf-review-toolbar button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pdf-review-toolbar button[data-fit-width][aria-pressed="true"],
+.pdf-review-toolbar button[data-fit-page][aria-pressed="true"] {
+  border-color: #0f766e;
+  background: #0d9488;
+  color: #fff;
+  box-shadow: 0 1px 3px rgb(15 118 110 / 24%);
 }
 
 .pdf-review-toolbar button:disabled {
   cursor: not-allowed;
-  opacity: .55;
+  opacity: .68;
 }
 
 .pdf-review-toolbar button[data-add-annotation] {
@@ -60,6 +91,19 @@
   background: #fff7ed;
   color: #9a3412;
   font-weight: 700;
+}
+
+.pdf-review-annotation-control {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.pdf-review-toolbar button[data-add-annotation]:disabled {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+  box-shadow: none;
+  opacity: 1;
 }
 
 .pdf-review-toolbar button[data-area-annotation].is-active {
@@ -71,7 +115,7 @@
 .pdf-review-toolbar :focus-visible,
 .pdf-annotation-dialog :focus-visible,
 .pdf-review-scroll:focus-visible {
-  outline: 2px solid #f57c00;
+  outline: 3px solid #0d9488;
   outline-offset: 2px;
 }
 
@@ -90,10 +134,25 @@
   text-align: center;
 }
 
-.pdf-review-page-control span,
-.pdf-review-zoom-control span {
+.pdf-review-page-control span {
   color: #475569;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-review-zoom-control span {
+  display: inline-flex;
+  min-width: 58px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -146,6 +205,80 @@
   z-index: 1;
   overflow: hidden;
   opacity: 1;
+}
+
+.pdf-review-page .textLayer span.pdf-search-match {
+  border-radius: 2px;
+  background: rgb(253 224 71 / 58%);
+}
+
+.pdf-review-page .textLayer span.pdf-search-match.is-current-match {
+  background: rgb(249 115 22 / 62%);
+  outline: 2px solid #ea580c;
+}
+
+.pdf-review-search-control {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 7%);
+}
+
+.pdf-review-search-control input {
+  flex: 1 1 180px;
+  min-width: 180px;
+  padding: 8px 11px;
+  border-color: #64748b;
+  font-size: 14px;
+}
+
+.pdf-review-search-control input::placeholder {
+  color: #475569;
+  opacity: 1;
+}
+
+.pdf-review-search-control span {
+  display: inline-flex;
+  min-width: 136px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 7px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-review-app:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.pdf-review-app:fullscreen .pdf-review-scroll {
+  padding: 24px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 .pdf-review-page .textLayer span {
@@ -466,12 +599,25 @@
   }
 
   .pdf-review-toolbar {
-    justify-content: flex-start;
-    padding: 8px;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .pdf-review-page-control,
+  .pdf-review-zoom-control,
+  .pdf-review-document-control,
+  .pdf-review-annotation-control,
+  .pdf-review-search-control {
+    width: 100%;
+  }
+
+  .pdf-review-search-control input {
+    flex-basis: 100%;
   }
 
   .pdf-review-toolbar button {
-    min-height: 40px;
+    min-height: 44px;
   }
 
   .pdf-review-scroll {
@@ -480,6 +626,45 @@
 
   .pdf-annotation-dialog-inner {
     padding: 18px;
+  }
+}
+
+@media print {
+  body,
+  .viewer,
+  .stage,
+  .pdf-review-app,
+  .pdf-review-scroll {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
+  }
+
+  .toolbar,
+  .pdf-review-toolbar,
+  .pdf-review-status,
+  .review-panel,
+  .pdf-annotation-comment,
+  .pdf-area-selection-preview {
+    display: none !important;
+  }
+
+  .pdf-review-page {
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .pdf-review-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 }
 

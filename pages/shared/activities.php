@@ -16,43 +16,39 @@ if (!$user) {
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
+$isInvitationRestricted = in_array($role, ['student', 'faculty'], true);
 $requestedView = trim((string) ($_GET['view'] ?? ''));
 $requestedView = $requestedView === 'incoming' ? 'upcoming' : $requestedView;
 $statusInput = trim((string) ($_GET['status'] ?? ''));
-$status = preg_match('/^(upcoming|incoming|ongoing|conducted|cancelled|scheduled|completed)$/D', $statusInput) ? normalizeActivityStatus($statusInput) : '';
-$isStatusView = in_array($requestedView, ['upcoming', 'ongoing', 'conducted'], true);
+$statusFilter = preg_match('/^(upcoming|incoming|ongoing|conducted|cancelled|scheduled|completed)$/D', $statusInput) ? normalizeActivityStatus($statusInput) : '';
+$status = $statusFilter;
+$isStatusView = in_array($requestedView, ['upcoming', 'ongoing', 'conducted', 'past'], true);
 $hasCrossTypeFilter = $isStatusView || $status !== '';
-$capacityPageInput = trim((string) ($_GET['capacity_page'] ?? ''));
-$capacityPage = !$hasCrossTypeFilter && in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
-    ? $capacityPageInput
-    : '';
-$requestedActivityType = trim((string) ($_GET['type'] ?? ''));
-$permissionPages = match ($requestedActivityType) {
-    'seminar' => ['seminars'],
-    'training' => ['trainings'],
-    'workshop' => ['workshops'],
-    'colloquium', 'conference' => ['seminars', 'trainings', 'workshops'],
-    default => ['seminars', 'trainings', 'workshops'],
-};
-if ($capacityPage !== '' && (
-    ($capacityPage === 'seminars' && !in_array($requestedActivityType, ['seminar', 'colloquium', 'conference'], true))
-    || ($capacityPage === 'trainings' && !in_array($requestedActivityType, ['training', 'colloquium', 'conference'], true))
-    || ($capacityPage === 'workshops' && !in_array($requestedActivityType, ['workshop', 'colloquium', 'conference'], true))
-)) {
+$requestedActivityType = normalizeActivityType(trim((string) ($_GET['type'] ?? '')));
+$capacityModulePages = rmsPermissionModules()['research_capacity_building']['pages'];
+$modulePageInput = trim((string) ($_GET['module_page'] ?? ''));
+$modulePage = array_key_exists($modulePageInput, $capacityModulePages) ? $modulePageInput : '';
+$statusPermissionPages = ['upcoming_activities', 'ongoing_activities', 'conducted_activities'];
+if ($role === 'research_staff' && $modulePage !== ''
+    && !in_array($modulePage, array_merge(['view_activity'], $statusPermissionPages), true)) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-if ($capacityPage === '' && !$hasCrossTypeFilter) {
-    $capacityPage = match ($requestedActivityType) {
-        'seminar' => 'seminars',
-        'training' => 'trainings',
-        'workshop' => 'workshops',
-        'colloquium', 'conference' => '',
-        default => '',
-    };
+$statusPermissionPage = match (true) {
+    in_array($requestedView, ['upcoming'], true), in_array($statusFilter, ['upcoming', 'scheduled'], true) => 'upcoming_activities',
+    in_array($requestedView, ['ongoing'], true), $statusFilter === 'ongoing' => 'ongoing_activities',
+    in_array($requestedView, ['conducted', 'past'], true), in_array($statusFilter, ['conducted', 'completed'], true) => 'conducted_activities',
+    default => '',
+};
+if ($role === 'research_staff' && $statusPermissionPage !== '' && $modulePage !== ''
+    && !in_array($modulePage, [$statusPermissionPage, 'view_activity'], true)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
 }
-if ($role === 'research_staff' && $capacityPage === '' && $requestedActivityType === '') {
-    foreach (['seminars', 'trainings', 'workshops'] as $pageKey) {
+$permissionPages = [$statusPermissionPage !== '' && $modulePage !== 'view_activity' ? $statusPermissionPage : 'view_activity'];
+if ($role === 'research_staff' && $requestedActivityType === ''
+    && $statusPermissionPage === '' && $modulePage !== 'view_activity') {
+    foreach ($statusPermissionPages as $pageKey) {
         if (hasModulePermission($userId, 'research_capacity_building', 'view', $pageKey)) {
             header('Location: ' . SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($pageKey));
             exit;
@@ -61,14 +57,16 @@ if ($role === 'research_staff' && $capacityPage === '' && $requestedActivityType
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-if ($role === 'research_staff' && !in_array($requestedActivityType, ['', 'seminar', 'training', 'workshop', 'colloquium', 'conference'], true)) {
+if ($role === 'research_staff' && !in_array($requestedActivityType, ['', 'seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-$capacityReturnUrl = $capacityPage !== ''
-    ? SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($capacityPage)
-    : SITE_URL . 'pages/shared/activities.php';
-$canViewActivities = hasRole('admin');
+$capacityReturnUrl = in_array($role, ['admin', 'student', 'faculty'], true)
+    ? SITE_URL . 'pages/shared/activities.php'
+    : ($statusPermissionPage !== ''
+        ? SITE_URL . 'pages/shared/activities.php?view=' . rawurlencode($requestedView !== '' ? $requestedView : ($statusPermissionPage === 'upcoming_activities' ? 'upcoming' : ($statusPermissionPage === 'ongoing_activities' ? 'ongoing' : 'conducted'))) . '&module_page=' . rawurlencode($modulePage !== '' ? $modulePage : $statusPermissionPage)
+        : SITE_URL . 'pages/staff/staff-dashboard.php');
+$canViewActivities = hasRole('admin') || $isInvitationRestricted;
 foreach ($permissionPages as $permissionPage) {
     if (hasModulePermission($userId, 'research_capacity_building', 'view', $permissionPage)) {
         $canViewActivities = true;
@@ -79,28 +77,28 @@ if (!$canViewActivities) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-$canManagePage = static function (string $activityType, string $selectedPage) use ($role, $userId): bool {
+$canManagePage = static function (string $activityType, string $selectedPage) use ($role, $userId, $statusPermissionPages): bool {
     if ($role === 'admin') {
         return true;
     }
-    $pages = match ($activityType) {
-        'seminar' => ['seminars'],
-        'training' => ['trainings'],
-        'workshop' => ['workshops'],
-        'colloquium', 'conference' => ['seminars', 'trainings', 'workshops'],
-        default => ['seminars', 'trainings', 'workshops'],
-    };
-    foreach ($pages as $pageKey) {
-        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey)) {
-            return true;
+    $pageKey = $selectedPage !== '' ? $selectedPage : 'view_activity';
+    if (!in_array($pageKey, array_merge(['view_activity'], $statusPermissionPages), true)) {
+        return false;
+    }
+    return hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey);
+};
+$canManage = $canManagePage($requestedActivityType, $modulePage !== '' ? $modulePage : $statusPermissionPage);
+$canAddActivity = hasRole('admin');
+$addPermissionPages = ['add_activity', 'add_upcoming_activity', 'add_conducted_activity'];
+if (!$canAddActivity) {
+    foreach ($addPermissionPages as $addPage) {
+        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $addPage)) {
+            $canAddActivity = true;
+            break;
         }
     }
-    return false;
-};
-$canManage = hasRole('admin');
-if (!$canManage) {
-    $canManage = $canManagePage($requestedActivityType, $capacityPage);
 }
+$clearFiltersUrl = $role === 'admin' ? SITE_URL . 'pages/shared/activities.php' : $capacityReturnUrl;
 
 function activitiesEscape(?string $value): string
 {
@@ -152,10 +150,9 @@ function normalizeActivityType(string $type): string
 {
     return match (strtolower($type)) {
         'colloquium' => 'colloquium',
-        'conference' => 'conference',
-        'seminar', 'forum' => 'seminar',
+        'conference', 'congress', 'conference_congress' => 'conference_congress',
+        'seminar', 'forum', 'workshop', 'seminar_workshop' => 'seminar_workshop',
         'training' => 'training',
-        'workshop' => 'workshop',
         default => strtolower($type),
     };
 }
@@ -176,6 +173,14 @@ $activitiesAvailable = rmsActivityScheduleTableExists($conn, 'research_activitie
 $participantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_participants');
 $scheduleTablesAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates');
 $scheduleParticipantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_participants');
+$invitedActivityIds = $isInvitationRestricted ? rmsActivityScheduleInvitedActivityIds($conn, $userId) : [];
+$activityVisibilityCondition = '';
+if ($isInvitationRestricted) {
+    $safeInvitedActivityIds = array_map('intval', $invitedActivityIds);
+    $activityVisibilityCondition = ' AND ra.activity_id IN ('
+        . ($safeInvitedActivityIds ? implode(',', $safeInvitedActivityIds) : '0')
+        . ')';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $activityId = filter_var($_POST['activity_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -188,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $activityTypeRow = $activityTypeStmt->get_result()->fetch_assoc();
             $activityTypeStmt->close();
             $postCanManage = $activityTypeRow
-                ? $canManagePage((string) $activityTypeRow['activity_type'], $capacityPage)
+                ? $canManagePage((string) $activityTypeRow['activity_type'], $modulePage !== '' ? $modulePage : $statusPermissionPage)
                 : false;
         }
     }
@@ -243,30 +248,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $flash = $_SESSION['activities_flash'] ?? null;
 unset($_SESSION['activities_flash']);
 
-$typeOptions = ['seminar' => 'Seminar / Forum', 'training' => 'Training', 'workshop' => 'Workshop', 'colloquium' => 'Colloquium', 'conference' => 'Conference'];
+$typeOptions = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress'];
+$filterTypeOptions = $typeOptions;
 $statusOptions = ['upcoming' => 'Upcoming', 'ongoing' => 'Ongoing', 'conducted' => 'Conducted', 'cancelled' => 'Cancelled'];
 $query = trim((string) ($_GET['q'] ?? ''));
 $query = strlen($query) > 150 ? substr($query, 0, 150) : $query;
-$typeInput = trim((string) ($_GET['type'] ?? ''));
-$type = preg_match('/^(seminar|training|workshop|colloquium|conference)$/D', $typeInput) ? $typeInput : '';
-if ($role === 'research_staff' && isset($typeOptions[$type])) {
-    $typeOptions = [$type => $typeOptions[$type]];
+$typeInput = normalizeActivityType(trim((string) ($_GET['type'] ?? '')));
+$type = in_array($typeInput, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true) ? $typeInput : '';
+$createPermissionPage = 'add_activity';
+if (!hasRole('admin') && !hasModulePermission($userId, 'research_capacity_building', 'manage', 'add_activity')) {
+    $preferredAddPage = match ($statusPermissionPage) {
+        'upcoming_activities' => 'add_upcoming_activity',
+        'conducted_activities' => 'add_conducted_activity',
+        default => '',
+    };
+    $createPermissionPage = $preferredAddPage !== ''
+        && hasModulePermission($userId, 'research_capacity_building', 'manage', $preferredAddPage)
+        ? $preferredAddPage
+        : (hasModulePermission($userId, 'research_capacity_building', 'manage', 'add_upcoming_activity')
+            ? 'add_upcoming_activity'
+            : 'add_conducted_activity');
 }
-$createActivityUrl = SITE_URL . 'pages/shared/activity-form.php';
-if ($type !== '') {
-    $createActivityUrl .= '?type=' . rawurlencode($type);
-    if ($capacityPage !== '') {
-        $createActivityUrl .= '&capacity_page=' . rawurlencode($capacityPage);
-    }
-}
+$createActivityUrl = SITE_URL . 'pages/admin/admin-research-module.php?module=' . rawurlencode($createPermissionPage);
 if (in_array($requestedView, ['upcoming', 'ongoing', 'conducted'], true)) {
     $view = $requestedView;
-    $status = normalizeActivityStatus($requestedView);
+    if ($statusFilter === '') {
+        $status = normalizeActivityStatus($requestedView);
+    }
+} elseif ($requestedView === 'past') {
+    $view = 'past';
+    $status = '';
 } elseif (in_array($status, ['upcoming', 'ongoing', 'conducted'], true)) {
     $view = $status;
 } else {
     $view = 'overview';
-    if ($type !== '' && $type !== 'conference') {
+    if ($type !== '') {
         $view = $type;
     }
 }
@@ -277,18 +293,16 @@ $filtersActive = $query !== '' || $type !== '' || $status !== '';
 
 
 $typeLabels = [
-    'seminar' => 'Seminars / Forums',
+    'seminar_workshop' => 'Seminars / Workshops',
     'training' => 'Trainings',
-    'workshop' => 'Workshops',
     'colloquium' => 'Colloquia',
-    'conference' => 'Conferences',
+    'conference_congress' => 'Conference / Congress',
 ];
 $typeSingularLabels = [
-    'seminar' => 'Seminar / Forum',
+    'seminar_workshop' => 'Seminar / Workshop',
     'training' => 'Training',
-    'workshop' => 'Workshop',
     'colloquium' => 'Colloquium',
-    'conference' => 'Conference',
+    'conference_congress' => 'Conference / Congress',
 ];
 $createActivityLabel = $view !== 'overview' && isset($typeSingularLabels[$view])
     ? '+ Add ' . $typeSingularLabels[$view]
@@ -302,21 +316,38 @@ $activityTotal = 0;
 $activityPage = 1;
 $activityPageCount = 1;
 $activityOffset = 0;
+$currentSessionCondition = "EXISTS (
+    SELECT 1 FROM activity_schedule_dates clock_date
+    WHERE clock_date.activity_id = ra.activity_id AND clock_date.status = 'scheduled'
+      AND TIMESTAMP(clock_date.schedule_date, COALESCE(clock_date.start_time, '00:00:00')) <= CURRENT_TIMESTAMP
+      AND TIMESTAMP(clock_date.schedule_date, COALESCE(clock_date.end_time, '23:59:59')) >= CURRENT_TIMESTAMP
+)";
+$pastActivityCondition = $scheduleTablesAvailable
+    ? "ra.status NOT IN ('conducted', 'completed', 'cancelled')
+       AND EXISTS (
+           SELECT 1 FROM activity_schedule_dates past_date
+           WHERE past_date.activity_id = ra.activity_id AND past_date.status = 'scheduled'
+       )
+       AND NOT EXISTS (
+           SELECT 1 FROM activity_schedule_dates pending_date
+           WHERE pending_date.activity_id = ra.activity_id AND pending_date.status = 'scheduled'
+             AND TIMESTAMP(pending_date.schedule_date, COALESCE(pending_date.end_time, '23:59:59')) >= CURRENT_TIMESTAMP
+       )"
+    : "ra.status NOT IN ('conducted', 'completed', 'cancelled') AND ra.activity_date < CURDATE()";
 if ($activitiesAvailable) {
     if ($view === 'overview') {
-        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar' THEN 1 END) AS seminar,
+        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar_workshop' THEN 1 END) AS seminar_workshop,
                                        COUNT(CASE WHEN activity_type = 'training' THEN 1 END) AS training,
-                                       COUNT(CASE WHEN activity_type = 'workshop' THEN 1 END) AS workshop,
                                        COUNT(CASE WHEN activity_type = 'colloquium' THEN 1 END) AS colloquium,
-                                       COUNT(CASE WHEN activity_type = 'conference' THEN 1 END) AS conference
-                                FROM research_activities");
+                                       COUNT(CASE WHEN activity_type = 'conference_congress' THEN 1 END) AS conference_congress
+                                FROM research_activities ra WHERE 1 = 1{$activityVisibilityCondition}");
         $row = activitiesRun($stmt)->fetch_assoc() ?: [];
         foreach ($typeLabels as $activityType => $label) {
             $stats[$activityType] = (int) ($row[$activityType] ?? 0);
         }
         $stmt->close();
         if ($participantsAvailable) {
-            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id');
+            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id WHERE 1 = 1' . $activityVisibilityCondition);
             $stats['participants'] = (int) (activitiesRun($stmt)->fetch_assoc()['participants'] ?? 0);
             $stmt->close();
         }
@@ -327,8 +358,9 @@ if ($activitiesAvailable) {
                INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
                WHERE ra.status IN ('scheduled', 'upcoming', 'ongoing')
                  AND (d.schedule_date > CURDATE() OR (d.schedule_date = CURDATE() AND (d.start_time IS NULL OR d.start_time >= CURTIME())))
+                 {$activityVisibilityCondition}
                ORDER BY d.schedule_date ASC, d.start_time ASC, ra.activity_id ASC LIMIT 5"
-            : "SELECT activity_id, activity_date, activity_time, title, venue FROM research_activities WHERE status IN ('scheduled', 'upcoming', 'ongoing') AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5";
+            : "SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.venue FROM research_activities ra WHERE ra.status IN ('scheduled', 'upcoming', 'ongoing') AND ra.activity_date >= CURDATE(){$activityVisibilityCondition} ORDER BY ra.activity_date ASC, ra.activity_time ASC, ra.activity_id ASC LIMIT 5";
         $stmt = $conn->prepare($upcomingSql);
         $result = activitiesRun($stmt);
         while ($row = $result->fetch_assoc()) $upcoming[] = $row;
@@ -338,14 +370,27 @@ if ($activitiesAvailable) {
             ? "IN ('scheduled', 'upcoming')"
             : "= 'ongoing'";
         $activityTypeCondition = $type !== '' ? ' AND ra.activity_type = ?' : '';
-        $upcomingSql = $scheduleTablesAvailable
-            ? "SELECT ra.activity_id, d.schedule_date AS activity_date, d.start_time AS activity_time, ra.title,
-                      COALESCE(d.venue_override, ra.venue) AS venue
-               FROM research_activities ra
-               INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
-               WHERE ra.status {$statusCondition}{$activityTypeCondition}
-               ORDER BY d.schedule_date ASC, d.start_time ASC, ra.activity_id ASC LIMIT 5"
-            : "SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.venue FROM research_activities ra WHERE ra.status {$statusCondition}{$activityTypeCondition} ORDER BY ra.activity_date ASC, ra.activity_time ASC, ra.activity_id ASC LIMIT 5";
+        if ($scheduleTablesAvailable && $view === 'ongoing') {
+            $upcomingSql = "SELECT ra.activity_id, d.schedule_date AS activity_date, d.start_time AS activity_time, ra.title,
+                                   COALESCE(d.venue_override, ra.venue) AS venue
+                            FROM research_activities ra
+                            INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
+                            WHERE ra.status NOT IN ('conducted', 'completed', 'cancelled')
+                              AND {$currentSessionCondition}{$activityTypeCondition}{$activityVisibilityCondition}
+                            ORDER BY d.schedule_date ASC, d.start_time ASC, ra.activity_id ASC LIMIT 5";
+        } elseif ($scheduleTablesAvailable) {
+            $upcomingSql = "SELECT ra.activity_id, d.schedule_date AS activity_date, d.start_time AS activity_time, ra.title,
+                                   COALESCE(d.venue_override, ra.venue) AS venue
+                            FROM research_activities ra
+                            INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
+                            WHERE ra.status {$statusCondition}{$activityTypeCondition}{$activityVisibilityCondition}
+                            ORDER BY d.schedule_date ASC, d.start_time ASC, ra.activity_id ASC LIMIT 5";
+        } else {
+            $upcomingSql = "SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.venue
+                            FROM research_activities ra
+                            WHERE ra.status {$statusCondition}{$activityTypeCondition}{$activityVisibilityCondition}
+                            ORDER BY ra.activity_date ASC, ra.activity_time ASC, ra.activity_id ASC LIMIT 5";
+        }
         $stmt = $conn->prepare($upcomingSql);
         $typeParams = $type !== '' ? [$type] : [];
         $typeParamsType = $type !== '' ? 's' : '';
@@ -353,7 +398,12 @@ if ($activitiesAvailable) {
         while ($row = $result->fetch_assoc()) $upcoming[] = $row;
         $stmt->close();
 
-        $activityCountStmt = $conn->prepare("SELECT COUNT(*) AS activity_count FROM research_activities ra WHERE ra.status {$statusCondition}{$activityTypeCondition}");
+        $activityCountSql = $view === 'ongoing' && $scheduleTablesAvailable
+            ? "SELECT COUNT(*) AS activity_count FROM research_activities ra
+               WHERE ra.status NOT IN ('conducted', 'completed', 'cancelled')
+                 AND {$currentSessionCondition}{$activityTypeCondition}{$activityVisibilityCondition}"
+            : "SELECT COUNT(*) AS activity_count FROM research_activities ra WHERE ra.status {$statusCondition}{$activityTypeCondition}{$activityVisibilityCondition}";
+        $activityCountStmt = $conn->prepare($activityCountSql);
         $activityCountRow = activitiesRun($activityCountStmt, $typeParamsType, $typeParams)->fetch_assoc() ?: [];
         $activityCountStmt->close();
         $stats[$view === 'upcoming' ? 'scheduled' : 'ongoing'] = (int) ($activityCountRow['activity_count'] ?? 0);
@@ -368,7 +418,7 @@ if ($activitiesAvailable) {
                  FROM research_activities ra
                  INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
                  INNER JOIN activity_schedule_participants sp ON sp.schedule_id = d.schedule_id AND sp.is_invited = 1
-                 WHERE ra.status {$statusCondition}{$activityTypeCondition}"
+                 WHERE ra.status {$statusCondition}{$activityTypeCondition}{$activityVisibilityCondition}"
             );
             $participantRow = activitiesRun($participantCountStmt, $typeParamsType, $typeParams)->fetch_assoc() ?: [];
             $participantCountStmt->close();
@@ -382,7 +432,7 @@ if ($activitiesAvailable) {
                 ))) AS participants
                  FROM research_activities ra
                  INNER JOIN activity_participants ap ON ap.activity_id = ra.activity_id
-                 WHERE ra.status {$statusCondition}{$activityTypeCondition}"
+                 WHERE ra.status {$statusCondition}{$activityTypeCondition}{$activityVisibilityCondition}"
             );
             $participantRow = activitiesRun($participantCountStmt, $typeParamsType, $typeParams)->fetch_assoc() ?: [];
             $participantCountStmt->close();
@@ -390,14 +440,14 @@ if ($activitiesAvailable) {
         }
     } elseif (isset($typeOptions[$view])) {
         $viewType = $view;
-        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN status IN ('completed', 'conducted') THEN 1 END) AS held, COUNT(CASE WHEN status IN ('scheduled', 'upcoming') THEN 1 END) AS scheduled FROM research_activities WHERE activity_type = ?");
+        $stmt = $conn->prepare("SELECT COUNT(CASE WHEN ra.status IN ('completed', 'conducted') THEN 1 END) AS held, COUNT(CASE WHEN ra.status IN ('scheduled', 'upcoming') THEN 1 END) AS scheduled FROM research_activities ra WHERE ra.activity_type = ?{$activityVisibilityCondition}");
         $stmt->bind_param('s', $viewType);
         $row = activitiesRun($stmt)->fetch_assoc() ?: [];
         $stats['held'] = (int) ($row['held'] ?? 0);
         $stats['scheduled'] = (int) ($row['scheduled'] ?? 0);
         $stmt->close();
         if ($participantsAvailable) {
-            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id WHERE ra.activity_type = ?');
+            $stmt = $conn->prepare('SELECT COUNT(*) AS participants FROM activity_participants ap INNER JOIN research_activities ra ON ra.activity_id = ap.activity_id WHERE ra.activity_type = ?' . $activityVisibilityCondition);
             $stmt->bind_param('s', $viewType);
             $stats['participants'] = (int) (activitiesRun($stmt)->fetch_assoc()['participants'] ?? 0);
             $stmt->close();
@@ -407,26 +457,33 @@ if ($activitiesAvailable) {
                       COALESCE(d.venue_override, ra.venue) AS venue
                FROM research_activities ra
                INNER JOIN activity_schedule_dates d ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
-               WHERE ra.activity_type = ? AND ra.status IN ('scheduled', 'upcoming', 'ongoing')
+               WHERE ra.activity_type = ? AND ra.status IN ('scheduled', 'upcoming', 'ongoing'){$activityVisibilityCondition}
                  AND (d.schedule_date > CURDATE() OR (d.schedule_date = CURDATE() AND (d.start_time IS NULL OR d.start_time >= CURTIME())))
                ORDER BY d.schedule_date ASC, d.start_time ASC, ra.activity_id ASC LIMIT 5"
-            : "SELECT activity_id, activity_date, activity_time, title, venue FROM research_activities WHERE activity_type = ? AND status IN ('scheduled', 'upcoming', 'ongoing') AND activity_date >= CURDATE() ORDER BY activity_date ASC, activity_time ASC, activity_id ASC LIMIT 5";
+            : "SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.venue FROM research_activities ra WHERE ra.activity_type = ? AND ra.status IN ('scheduled', 'upcoming', 'ongoing') AND ra.activity_date >= CURDATE(){$activityVisibilityCondition} ORDER BY ra.activity_date ASC, ra.activity_time ASC, ra.activity_id ASC LIMIT 5";
         $stmt = $conn->prepare($upcomingSql);
         $stmt->bind_param('s', $viewType);
         $result = activitiesRun($stmt);
         while ($row = $result->fetch_assoc()) $upcoming[] = $row;
         $stmt->close();
+    } elseif ($view === 'past') {
+        $activityTypeCondition = $type !== '' ? ' AND ra.activity_type = ?' : '';
+        $typeParams = $type !== '' ? [$type] : [];
+        $typeParamsType = $type !== '' ? 's' : '';
+        $pastCountStmt = $conn->prepare("SELECT COUNT(*) AS past_count FROM research_activities ra WHERE {$pastActivityCondition}{$activityTypeCondition}{$activityVisibilityCondition}");
+        $stats['past'] = (int) (activitiesRun($pastCountStmt, $typeParamsType, $typeParams)->fetch_assoc()['past_count'] ?? 0);
+        $pastCountStmt->close();
     } elseif ($view === 'conducted') {
         $activityTypeCondition = $type !== '' ? ' AND ra.activity_type = ?' : '';
         $typeParams = $type !== '' ? [$type] : [];
         $typeParamsType = $type !== '' ? 's' : '';
-        $stmt = $conn->prepare("SELECT COUNT(*) AS completed FROM research_activities ra WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}");
+        $stmt = $conn->prepare("SELECT COUNT(*) AS completed FROM research_activities ra WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}{$activityVisibilityCondition}");
         $stats['completed'] = (int) (activitiesRun($stmt, $typeParamsType, $typeParams)->fetch_assoc()['completed'] ?? 0);
         $stmt->close();
         $stats['attendance_rate'] = 0.0;
         $stats['unique_participants'] = 0;
         if ($participantsAvailable) {
-            $stmt = $conn->prepare("SELECT COUNT(ap.participant_id) AS participant_count, COALESCE(SUM(ap.attended = 1), 0) AS attended_count, COUNT(DISTINCT COALESCE(CONCAT('user:', ap.user_id), CONCAT('name:', LOWER(NULLIF(TRIM(ap.participant_name), ''))))) AS unique_participants FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}");
+            $stmt = $conn->prepare("SELECT COUNT(ap.participant_id) AS participant_count, COALESCE(SUM(ap.attended = 1), 0) AS attended_count, COUNT(DISTINCT COALESCE(CONCAT('user:', ap.user_id), CONCAT('name:', LOWER(NULLIF(TRIM(ap.participant_name), ''))))) AS unique_participants FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}{$activityVisibilityCondition}");
             $row = activitiesRun($stmt, $typeParamsType, $typeParams)->fetch_assoc() ?: [];
             $participantCount = (int) ($row['participant_count'] ?? 0);
             $attendedCount = (int) ($row['attended_count'] ?? 0);
@@ -434,9 +491,9 @@ if ($activitiesAvailable) {
             $stats['unique_participants'] = (int) ($row['unique_participants'] ?? 0);
             $stmt->close();
 
-            $stmt = $conn->prepare("SELECT ra.activity_id, ra.activity_date, ra.title, COUNT(ap.participant_id) AS participants, COALESCE(SUM(ap.attended = 1), 0) AS attended FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition} GROUP BY ra.activity_id, ra.activity_date, ra.title ORDER BY ra.activity_date DESC, ra.activity_id DESC");
+            $stmt = $conn->prepare("SELECT ra.activity_id, ra.activity_date, ra.title, COUNT(ap.participant_id) AS participants, COALESCE(SUM(ap.attended = 1), 0) AS attended FROM research_activities ra LEFT JOIN activity_participants ap ON ap.activity_id = ra.activity_id WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}{$activityVisibilityCondition} GROUP BY ra.activity_id, ra.activity_date, ra.title ORDER BY ra.activity_date DESC, ra.activity_id DESC");
         } else {
-            $stmt = $conn->prepare("SELECT ra.activity_id, ra.activity_date, ra.title, 0 AS participants, 0 AS attended FROM research_activities ra WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition} ORDER BY ra.activity_date DESC, ra.activity_id DESC");
+            $stmt = $conn->prepare("SELECT ra.activity_id, ra.activity_date, ra.title, 0 AS participants, 0 AS attended FROM research_activities ra WHERE ra.status IN ('completed', 'conducted'){$activityTypeCondition}{$activityVisibilityCondition} ORDER BY ra.activity_date DESC, ra.activity_id DESC");
         }
         $result = activitiesRun($stmt, $typeParamsType, $typeParams);
         while ($row = $result->fetch_assoc()) $attendanceSummary[] = $row;
@@ -453,10 +510,11 @@ if ($activitiesAvailable) {
                 ";
         $activityPrefix = 'ra.';
     } else {
-        $sql = 'SELECT activity_id, activity_date, activity_time, title, activity_type, venue, organizer, status FROM research_activities';
-        $activityPrefix = '';
+        $sql = 'SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.activity_type, ra.venue, ra.organizer, ra.status FROM research_activities ra';
+        $activityPrefix = 'ra.';
     }
     $whereSql = ' WHERE 1 = 1';
+    $whereSql .= $activityVisibilityCondition;
     $params = [];
     $types = '';
     if ($query !== '') {
@@ -471,14 +529,10 @@ if ($activitiesAvailable) {
         $params[] = $type;
         $types .= 's';
     }
-    if ($status !== '') {
+    if ($view === 'past') {
+        $whereSql .= ' AND ' . $pastActivityCondition;
+    } elseif ($status !== '') {
         if ($scheduleTablesAvailable && in_array($status, ['upcoming', 'ongoing'], true)) {
-            $currentSessionCondition = "EXISTS (
-                SELECT 1 FROM activity_schedule_dates clock_date
-                WHERE clock_date.activity_id = ra.activity_id AND clock_date.status = 'scheduled'
-                  AND TIMESTAMP(clock_date.schedule_date, COALESCE(clock_date.start_time, '00:00:00')) <= CURRENT_TIMESTAMP
-                  AND TIMESTAMP(clock_date.schedule_date, COALESCE(clock_date.end_time, '23:59:59')) >= CURRENT_TIMESTAMP
-            )";
             $whereSql .= " AND ra.status NOT IN ('conducted', 'completed', 'cancelled')";
             if ($status === 'ongoing') {
                 $whereSql .= ' AND ' . $currentSessionCondition;
@@ -499,7 +553,7 @@ if ($activitiesAvailable) {
             };
         }
     }
-    $countFrom = $scheduleTablesAvailable ? 'research_activities ra' : 'research_activities';
+    $countFrom = 'research_activities ra';
     $countStmt = $conn->prepare('SELECT COUNT(*) AS total FROM ' . $countFrom . $whereSql);
     if (!$countStmt) {
         throw new RuntimeException('Unable to prepare the activity count query.');
@@ -586,11 +640,7 @@ $paginationParams = [];
 if ($view !== 'overview') {
     $paginationParams['view'] = $view;
 }
-if ($capacityPage !== '') {
-    $paginationParams['capacity_page'] = $capacityPage;
-}
-$modulePage = (string) ($_GET['module_page'] ?? '');
-if (in_array($modulePage, ['upcoming_activities', 'ongoing_activities', 'conducted_activities'], true)) {
+if (in_array($modulePage, ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities'], true)) {
     $paginationParams['module_page'] = $modulePage;
 }
 if ($query !== '') {
@@ -599,8 +649,8 @@ if ($query !== '') {
 if ($type !== '') {
     $paginationParams['type'] = $type;
 }
-if ($status !== '' && !in_array($view, ['upcoming', 'ongoing', 'conducted'], true)) {
-    $paginationParams['status'] = $status;
+if ($statusFilter !== '') {
+    $paginationParams['status'] = $statusFilter;
 }
 $activityPaginationUrl = static fn (int $page): string => SITE_URL . 'pages/shared/activities.php?' . http_build_query($paginationParams + ['page' => $page]);
 $activityRangeStart = $activityTotal > 0 ? $activityOffset + 1 : 0;
@@ -663,11 +713,20 @@ $viewConfig = [
         'shell_page' => SITE_URL . 'pages/shared/activities.php?view=conducted',
         'directory_title' => 'Conducted activity records',
     ],
+    'past' => [
+        'title' => 'Past Activities',
+        'kicker' => 'Ended sessions',
+        'subtitle' => 'Activities whose scheduled sessions have ended',
+        'description' => 'Review ended activities that have not yet been marked conducted.',
+        'stats' => [
+            ['value' => $activitiesAvailable ? ($stats['past'] ?? 0) : '—', 'label' => 'Past activities'],
+        ],
+        'panel' => 'none',
+        'shell_page' => SITE_URL . 'pages/shared/activities.php?view=past&module_page=conducted_activities',
+        'directory_title' => 'Past activities not yet marked conducted',
+    ],
 ];
 foreach ($typeOptions as $activityType => $singularLabel) {
-    if ($activityType === 'conference') {
-        continue;
-    }
     $pluralLabel = $typeLabels[$activityType];
     $viewConfig[$activityType] = [
         'title' => 'Research ' . $pluralLabel,
@@ -690,19 +749,23 @@ $activityLabel = match ($view) {
     'overview' => 'activities',
     'upcoming' => 'upcoming activities',
     'ongoing' => 'ongoing activities',
+    'past' => 'past activities',
     default => strtolower($typeLabels[$view] ?? 'activities'),
 };
 $activityPanelDescription = match ($view) {
     'upcoming' => 'The next five upcoming activities.',
     'ongoing' => 'Ongoing activities currently in progress.',
+    'past' => 'Sessions have ended; records may still need to be marked conducted.',
     default => 'The next five scheduled ' . $activityLabel . '.',
 };
-$emptyActivityHeading = in_array($view, ['upcoming', 'ongoing'], true)
+$emptyActivityHeading = in_array($view, ['upcoming', 'ongoing', 'past'], true)
     ? 'No ' . $activityLabel
     : 'No upcoming ' . $activityLabel;
-$emptyActivityDescription = $view === 'ongoing'
-    ? 'Activities in progress will appear here when recorded.'
-    : 'Scheduled events will appear here when dates are added.';
+$emptyActivityDescription = match ($view) {
+    'ongoing' => 'Activities in progress will appear here when recorded.',
+    'past' => 'Ended activities that still need a conducted record will appear here.',
+    default => 'Scheduled events will appear here when dates are added.',
+};
 
 $shell = match ($role) {
     'admin' => 'admin',
@@ -1053,7 +1116,7 @@ body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
   outline: 3px solid rgba(13, 148, 136, .22);
   outline-offset: 2px;
 }
-.admin-activities-back {
+.hub-button.secondary.admin-activities-back {
   border: 2px solid #f57c00;
   background: #fff7ed;
   color: #8a3c00;
@@ -1061,13 +1124,13 @@ body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
   font-weight: 800;
   box-shadow: 0 2px 6px rgba(124, 61, 2, .12);
 }
-.admin-activities-back:hover {
+.hub-button.secondary.admin-activities-back:hover {
   border-color: #ea580c;
   background: #ffedd5;
   color: #7c2d12;
   box-shadow: 0 4px 10px rgba(124, 61, 2, .16);
 }
-.admin-activities-back:focus-visible { outline-color: rgba(245, 124, 0, .38); }
+.hub-button.secondary.admin-activities-back:focus-visible { outline-color: rgba(245, 124, 0, .38); }
 .table-wrap { max-width: 100%; overflow-x: auto; }
 .activity-pagination {
   display: grid;
@@ -1189,6 +1252,17 @@ body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
   .module-hub.centered-stats-view .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - 4px); justify-self: center; }
   .module-hub.centered-stats-view.five-stats-view .stat-card { grid-column: auto; }
   .module-hub.centered-stats-view.five-stats-view .stat-card:last-child { grid-column: 1 / -1; width: calc(50% - 4px); justify-self: center; }
+  body.admin-body .admin-page-content .module-hub.centered-stats-view.five-stats-view .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  body.admin-body .admin-page-content .module-hub.centered-stats-view.five-stats-view .stat-card { grid-column: auto; }
+  body.admin-body .admin-page-content .module-hub.centered-stats-view.five-stats-view .stat-card:last-child {
+    grid-column: 1 / -1;
+    width: min(100%, 260px);
+    box-sizing: border-box;
+    justify-self: center;
+  }
   .stat-card { padding: 15px 14px; }
   .stat-card strong { font-size: 25px; }
   .panel-head { padding: 16px; }
@@ -1239,7 +1313,13 @@ body.faculty-role .hub-table tbody tr:hover { background: #f5f8ff; }
     <div><p class="module-kicker"><?= activitiesEscape($pageConfig['kicker']) ?></p><h1><?= activitiesEscape($pageConfig['title']) ?></h1><p><?= activitiesEscape($pageConfig['description']) ?></p></div>
     <div class="module-intro-actions">
       <?php if ($shell === 'admin'): ?><a class="hub-button secondary admin-activities-back" href="<?= activitiesEscape(SITE_URL . 'pages/admin/admin-dashboard.php') ?>"><span aria-hidden="true">←</span> Back to dashboard</a><?php endif; ?>
-      <?php if ($canManage): ?><a class="hub-button" href="<?= activitiesEscape($createActivityUrl) ?>"><?= activitiesEscape($createActivityLabel) ?></a><?php endif; ?>
+      <?php if ($role === 'admin' && $view === 'conducted'): ?>
+        <a class="hub-button secondary" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activities.php?view=past&module_page=conducted_activities') ?>">Past Activities</a>
+      <?php elseif ($role === 'admin' && $view === 'past'): ?>
+        <a class="hub-button secondary" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activities.php?view=conducted&module_page=conducted_activities') ?>">Conducted Records</a>
+      <?php elseif ($canAddActivity): ?>
+        <a class="hub-button" href="<?= activitiesEscape($createActivityUrl) ?>"><?= activitiesEscape($createActivityLabel) ?></a>
+      <?php endif; ?>
     </div>
   </header>
   <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= activitiesEscape($flash['message'] ?? '') ?></div><?php endif; ?>
@@ -1257,7 +1337,7 @@ body.faculty-role .hub-table tbody tr:hover { background: #f5f8ff; }
         <?php else: ?>
         <div class="upcoming-list">
           <?php foreach ($upcoming as $item): ?>
-            <article class="upcoming-item"><div class="upcoming-date"><time datetime="<?= activitiesEscape(date('Y-m-d', strtotime((string) $item['activity_date'])) . (!empty($item['activity_time']) ? 'T' . date('H:i:s', strtotime((string) $item['activity_time'])) : '')) ?>"><span class="upcoming-date-label"><?= activitiesEscape(date('M j, Y', strtotime((string) $item['activity_date']))) ?></span><?php if (!empty($item['activity_time'])): ?><span class="upcoming-time-label"><?= activitiesEscape(date('g:i A', strtotime((string) $item['activity_time']))) ?></span><?php endif; ?></time></div><a class="upcoming-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $item['activity_id']) ?>"><strong><?= activitiesEscape($item['title']) ?></strong><span><?= activitiesEscape($item['venue'] ?: 'Venue to be announced') ?></span></a></article>
+            <article class="upcoming-item"><div class="upcoming-date"><time datetime="<?= activitiesEscape(date('Y-m-d', strtotime((string) $item['activity_date'])) . (!empty($item['activity_time']) ? 'T' . date('H:i:s', strtotime((string) $item['activity_time'])) : '')) ?>"><span class="upcoming-date-label"><?= activitiesEscape(date('M j, Y', strtotime((string) $item['activity_date']))) ?></span><?php if (!empty($item['activity_time'])): ?><span class="upcoming-time-label"><?= activitiesEscape(date('g:i A', strtotime((string) $item['activity_time']))) ?></span><?php endif; ?></time></div><a class="upcoming-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $item['activity_id'] . ($role === 'research_staff' ? '&module_page=' . rawurlencode($modulePage !== '' ? $modulePage : ($statusPermissionPage !== '' ? $statusPermissionPage : 'view_activity')) : '')) ?>"><strong><?= activitiesEscape($item['title']) ?></strong><span><?= activitiesEscape($item['venue'] ?: 'Venue to be announced') ?></span></a></article>
           <?php endforeach; ?>
         </div>
         <?php endif; ?>
@@ -1269,7 +1349,7 @@ body.faculty-role .hub-table tbody tr:hover { background: #f5f8ff; }
         <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#10003;</div><h2><?= $activitiesAvailable ? 'No completed activities yet' : 'Activities are unavailable' ?></h2><p><?= $activitiesAvailable ? 'Attendance summaries will appear when an activity is marked completed.' : 'The research activities module is not installed on this database.' ?></p></div>
       <?php else: ?>
         <div class="table-wrap"><table class="hub-table"><thead><tr><th>Date</th><th>Activity</th><th>Participants</th><th>Attended</th></tr></thead><tbody>
-          <?php foreach ($attendanceSummary as $record): ?><tr><td><?= activitiesEscape(date('M j, Y', strtotime((string) $record['activity_date']))) ?></td><td class="title-cell"><a href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $record['activity_id']) ?>"><?= activitiesEscape($record['title']) ?></a></td><td><?= (int) $record['participants'] ?></td><td><?= (int) $record['attended'] ?></td></tr><?php endforeach; ?>
+          <?php foreach ($attendanceSummary as $record): ?><tr><td><?= activitiesEscape(date('M j, Y', strtotime((string) $record['activity_date']))) ?></td><td class="title-cell"><a href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $record['activity_id'] . ($role === 'research_staff' ? '&module_page=' . rawurlencode($modulePage !== '' ? $modulePage : ($statusPermissionPage !== '' ? $statusPermissionPage : 'view_activity')) : '')) ?>"><?= activitiesEscape($record['title']) ?></a></td><td><?= (int) $record['participants'] ?></td><td><?= (int) $record['attended'] ?></td></tr><?php endforeach; ?>
         </tbody></table></div>
       <?php endif; ?>
     </section>
@@ -1278,19 +1358,18 @@ body.faculty-role .hub-table tbody tr:hover { background: #f5f8ff; }
   <section class="hub-panel" aria-labelledby="activity-directory-heading">
     <div class="panel-head"><div><h2 id="activity-directory-heading"><?= activitiesEscape($pageConfig['directory_title']) ?></h2><p><?= $activityTotal ?> <?= $activityTotal === 1 ? 'record' : 'records' ?> found</p></div></div>
     <form class="filter-form" method="get" action="<?= activitiesEscape(SITE_URL . 'pages/shared/activities.php') ?>">
-      <?php if (in_array($view, ['upcoming', 'ongoing', 'conducted'], true)): ?><input type="hidden" name="view" value="<?= activitiesEscape($view) ?>"><?php endif; ?>
-      <?php if (in_array($capacityPage, ['seminars', 'trainings', 'workshops'], true)): ?><input type="hidden" name="capacity_page" value="<?= activitiesEscape($capacityPage) ?>"><?php endif; ?>
-      <?php if (in_array((string) ($_GET['module_page'] ?? ''), ['upcoming_activities', 'ongoing_activities', 'conducted_activities'], true)): ?><input type="hidden" name="module_page" value="<?= activitiesEscape((string) $_GET['module_page']) ?>"><?php endif; ?>
+      <?php if (in_array($view, ['upcoming', 'ongoing', 'conducted', 'past'], true)): ?><input type="hidden" name="view" value="<?= activitiesEscape($view) ?>"><?php endif; ?>
+      <?php if (in_array($modulePage, ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities'], true)): ?><input type="hidden" name="module_page" value="<?= activitiesEscape($modulePage) ?>"><?php endif; ?>
       <div class="field"><label for="activity-q">Title, venue, or speaker</label><input id="activity-q" name="q" type="search" maxlength="150" value="<?= activitiesEscape($query) ?>" placeholder="Search activities"></div>
-      <div class="field"><label for="activity-type">Type</label><select id="activity-type" name="type"><option value="">All types</option><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activitiesEscape($value) ?>" <?= $type === $value ? 'selected' : '' ?>><?= activitiesEscape($label) ?></option><?php endforeach; ?></select></div>
-      <?php if (!in_array($view, ['upcoming', 'ongoing', 'conducted'], true)): ?><div class="field"><label for="activity-status">Status</label><select id="activity-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= activitiesEscape($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= activitiesEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?>
-      <div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activities.php') ?>">Clear</a><?php endif; ?></div>
+      <div class="field"><label for="activity-type">Type</label><select id="activity-type" name="type"><option value="">All types</option><?php foreach ($filterTypeOptions as $value => $label): ?><option value="<?= activitiesEscape($value) ?>" <?= $type === $value ? 'selected' : '' ?>><?= activitiesEscape($label) ?></option><?php endforeach; ?></select></div>
+      <?php if ($view !== 'past'): ?><div class="field"><label for="activity-status">Status</label><select id="activity-status" name="status"><option value="">All statuses</option><?php foreach ($statusOptions as $value => $label): ?><option value="<?= activitiesEscape($value) ?>" <?= $statusFilter === $value ? 'selected' : '' ?>><?= activitiesEscape($label) ?></option><?php endforeach; ?></select></div><?php endif; ?>
+      <div class="filter-actions"><button class="hub-button" type="submit">Apply</button><?php if ($filtersActive): ?><a class="hub-button secondary" href="<?= activitiesEscape($clearFiltersUrl) ?>">Clear</a><?php endif; ?></div>
     </form>
     <?php if (!$activitiesAvailable || !$activities): ?>
-      <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#8635;</div><h2><?= $activitiesAvailable ? 'No activities found' : 'Activities are unavailable' ?></h2><p><?= $activitiesAvailable ? 'Adjust the search or filters to see more activity records.' : 'Apply database migration 012 to enable this module.' ?></p></div>
+      <div class="empty-state"><div class="empty-mark" aria-hidden="true">&#8635;</div><h2><?= !$activitiesAvailable ? 'Activities are unavailable' : ($view === 'past' ? 'No past activities' : 'No activities found') ?></h2><p><?= !$activitiesAvailable ? 'Apply database migration 012 to enable this module.' : ($view === 'past' ? 'Ended activities awaiting completion will appear here.' : 'Adjust the search or filters to see more activity records.') ?></p></div>
     <?php else: ?>
       <div class="table-wrap"><table class="hub-table"><thead><tr><th>Scheduled dates</th><th>Title</th><th>Type</th><th>Venue</th><th>Organizer</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-      <?php foreach ($activities as $activity): $badge = activitiesStatusBadge((string) $activity['clock_status']); $capacitySuffix = $capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : ''; $detailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id'] . $capacitySuffix; ?><tr><td><?= activitiesEscape(activitiesDateSummary($activity)) ?></td><td class="title-cell"><a href="<?= activitiesEscape($detailUrl) ?>"><?= activitiesEscape($activity['title']) ?></a></td><td><?= activitiesEscape($typeOptions[$activity['activity_type']] ?? ucwords(str_replace('_', ' ', (string) $activity['activity_type']))) ?></td><td class="muted"><?= activitiesEscape($activity['venue'] ?: '—') ?></td><td class="muted"><?= activitiesEscape($activity['organizer'] ?: '—') ?></td><td><span class="badge tone-<?= activitiesEscape($badge['tone']) ?>" data-live-activity-status data-stored-status="<?= activitiesEscape((string) $activity['status']) ?>" data-clock-sessions="<?= activitiesEscape((string) json_encode($activity['clock_sessions'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>"><?= activitiesEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= activitiesEscape($detailUrl) ?>">View</a><?php if ($canManage): ?><a class="row-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activity['activity_id'] . $capacitySuffix) ?>">Edit</a><?php if ($activity['status'] === 'ongoing'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action" type="submit">Complete</button></form><?php endif; ?><?php if (in_array((string) $activity['status'], ['scheduled', 'upcoming', 'ongoing'], true)): ?><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action danger" type="submit">Cancel</button></form><?php endif; ?><?php endif; ?></div></td></tr><?php endforeach; ?>
+      <?php foreach ($activities as $activity): $badge = activitiesStatusBadge((string) $activity['clock_status']); $activityPage = $modulePage !== '' ? $modulePage : ($statusPermissionPage !== '' ? $statusPermissionPage : 'view_activity'); $moduleSuffix = '&module_page=' . rawurlencode($activityPage); $detailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activity['activity_id'] . $moduleSuffix; ?><tr><td><?= activitiesEscape(activitiesDateSummary($activity)) ?></td><td class="title-cell"><a href="<?= activitiesEscape($detailUrl) ?>"><?= activitiesEscape($activity['title']) ?></a></td><td><?= activitiesEscape($typeOptions[$activity['activity_type']] ?? ucwords(str_replace('_', ' ', (string) $activity['activity_type']))) ?></td><td class="muted"><?= activitiesEscape($activity['venue'] ?: '—') ?></td><td class="muted"><?= activitiesEscape($activity['organizer'] ?: '—') ?></td><td><span class="badge tone-<?= activitiesEscape($badge['tone']) ?>" data-live-activity-status data-stored-status="<?= activitiesEscape((string) $activity['status']) ?>" data-clock-sessions="<?= activitiesEscape((string) json_encode($activity['clock_sessions'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>"><?= activitiesEscape($badge['label']) ?></span></td><td><div class="row-actions"><a class="row-link" href="<?= activitiesEscape($detailUrl) ?>">View</a><?php if ($canManage): ?><a class="row-link" href="<?= activitiesEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activity['activity_id'] . $moduleSuffix) ?>">Edit</a><?php if ($activity['status'] === 'ongoing'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action" type="submit">Complete</button></form><?php endif; ?><?php if (in_array((string) $activity['status'], ['scheduled', 'upcoming', 'ongoing'], true)): ?><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><input type="hidden" name="activity_id" value="<?= (int) $activity['activity_id'] ?>"><button class="row-action danger" type="submit">Cancel</button></form><?php endif; ?><?php endif; ?></div></td></tr><?php endforeach; ?>
       </tbody></table></div>
       <?php if ($activityPageCount > 1): ?>
         <nav class="activity-pagination" aria-label="Activity pages">

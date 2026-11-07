@@ -64,10 +64,11 @@ if ($archiveKind === 'publication' && in_array($role, ['admin', 'research_staff'
     $modulePage = is_string($_GET['module_page'] ?? null) ? $_GET['module_page'] : '';
     $validModulePages = $role === 'admin'
         ? ['journal_publications', 'conference_presentations', 'book_chapters', 'research_outputs']
-        : ['journal_publications', 'conference_presentations', 'research_repository', 'research_outputs'];
+        : ['publication_records', 'publication_add', 'publication_reports', 'research_outputs'];
     if (!in_array($modulePage, $validModulePages, true)) {
         $modulePage = match (true) {
-            $role === 'research_staff' && ($_GET['repository'] ?? '') === '1' => 'research_repository',
+            $role === 'research_staff' && $archiveMode === 'form' && !isset($_GET['id']) => 'publication_add',
+            $role === 'research_staff' => 'publication_records',
             ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'journal' => 'journal_publications',
             ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'conference' => 'conference_presentations',
             $role === 'admin' && ($_GET['record_type'] ?? $_GET['publication_type'] ?? '') === 'book_chapter' => 'book_chapters',
@@ -89,6 +90,19 @@ if ($archiveKind === 'publication' && in_array($role, ['admin', 'research_staff'
         $publicationSectionType = $archiveNavigationParams['publication_type'] ?? '';
         if ($archiveMode === 'list' && $role === 'research_staff') {
             requireModulePermission('publication_dissemination', 'view', $publicationSection);
+        }
+    }
+    if ($role === 'research_staff' && in_array($modulePage, ['publication_records', 'publication_add', 'publication_reports'], true)) {
+        if ($modulePage === 'publication_add') {
+            if ($archiveMode !== 'form'
+                || !hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_add')) {
+                archiveDeny();
+            }
+            // The form's return/detail links should land in the staff-wide authorized list.
+            $archiveNavigationParams['module_page'] = 'publication_records';
+        } elseif (!hasModulePermission($userId, 'publication_dissemination', 'view', $modulePage)
+            || ($modulePage === 'publication_reports' && !in_array($archiveMode, ['list', 'detail'], true))) {
+            archiveDeny();
         }
     }
 }

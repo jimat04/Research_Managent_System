@@ -29,14 +29,16 @@ $dashboardCanViewPage = static function (string $moduleKey, string $pageKey) use
     return in_array($level, ['view', 'manage'], true);
 };
 $permittedPageCount = 0;
+$totalPermissionPageCount = 0;
 foreach (rmsPermissionModules() as $permissionModuleKey => $permissionModule) {
     foreach ($permissionModule['pages'] as $permissionPageKey => $permissionPageLabel) {
+        $totalPermissionPageCount++;
         if ($dashboardCanViewPage($permissionModuleKey, $permissionPageKey)) {
             $permittedPageCount++;
         }
     }
 }
-$showAggregateMonitoring = $role === 'admin' || $permittedPageCount === 15;
+$showAggregateMonitoring = $role === 'admin' || $permittedPageCount === $totalPermissionPageCount;
 
 function monitoringDashboardEscape(?string $value): string
 {
@@ -61,7 +63,7 @@ function monitoringDashboardPageDetail(array $modulePage): string
     $count = (int) ($modulePage['count'] ?? 0);
 
     return match ($modulePage['key']) {
-        'seminars', 'trainings', 'workshops' => 'recorded',
+        'seminars_workshops', 'trainings' => 'recorded',
         'upcoming_activities', 'ongoing_activities', 'conducted_activities' => $count === 1 ? 'activity' : 'activities',
         'research_proposals' => 'proposals',
         'research_review' => 'requiring review',
@@ -69,8 +71,7 @@ function monitoringDashboardPageDetail(array $modulePage): string
         'ongoing_research' => 'ongoing',
         'completed_research' => 'completed',
         'research_outputs' => 'outputs',
-        'research_repository' => 'archived / legacy published',
-        'journal_publications', 'conference_presentations', 'copyrights' => $count === 1 ? 'record' : 'records',
+        'publication_records', 'publication_reports', 'publication_add', 'research_engagement_records', 'copyrights' => $count === 1 ? 'record' : 'records',
         'patents_utility_models', 'innovation_technology_transfer' => $count === 1 ? 'output' : 'outputs',
         default => (string) ($modulePage['detail'] ?? ''),
     };
@@ -167,9 +168,10 @@ $stmt->close();
 foreach (array_keys($researchers) as $key) $researchers[$key] = (int) ($researcherRow[$key] ?? 0);
 
 $stats = [
-    'seminars' => 0,
+    'seminars_workshops' => 0,
     'trainings' => 0,
-    'workshops' => 0,
+    'colloquia' => 0,
+    'conferences' => 0,
     'upcoming_activities' => 0,
     'capacity_ongoing_activities' => 0,
     'conducted_activities' => 0,
@@ -196,24 +198,27 @@ $stats = [
     'archived' => 0,
 ];
 if ($tables['activities']) {
-    $seminarType = 'seminar';
+    $seminarWorkshopType = 'seminar_workshop';
     $trainingType = 'training';
-    $workshopType = 'workshop';
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS workshops, COALESCE(SUM(status IN ('upcoming', 'scheduled')), 0) AS upcoming_activities, COALESCE(SUM(status = 'ongoing'), 0) AS capacity_ongoing_activities, COALESCE(SUM(status IN ('conducted', 'completed')), 0) AS conducted_activities, COALESCE(SUM(activity_type = 'seminar' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_workshops FROM research_activities");
-    $stmt->bind_param('sss', $seminarType, $trainingType, $workshopType);
+    $colloquiumType = 'colloquium';
+    $conferenceType = 'conference_congress';
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(activity_type = ?), 0) AS seminars_workshops, COALESCE(SUM(activity_type = ?), 0) AS trainings, COALESCE(SUM(activity_type = ?), 0) AS colloquia, COALESCE(SUM(activity_type = ?), 0) AS conferences, COALESCE(SUM(status IN ('upcoming', 'scheduled')), 0) AS upcoming_activities, COALESCE(SUM(status = 'ongoing'), 0) AS capacity_ongoing_activities, COALESCE(SUM(status IN ('conducted', 'completed')), 0) AS conducted_activities, COALESCE(SUM(activity_type = 'seminar_workshop' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_seminars_workshops, COALESCE(SUM(activity_type = 'training' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_trainings, COALESCE(SUM(activity_type = 'colloquium' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_colloquia, COALESCE(SUM(activity_type = 'conference_congress' AND status = 'scheduled' AND activity_date >= CURDATE()), 0) AS upcoming_conferences FROM research_activities");
+    $stmt->bind_param('ssss', $seminarWorkshopType, $trainingType, $colloquiumType, $conferenceType);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
     $stmt->close();
-    $stats['seminars'] = (int) ($row['seminars'] ?? 0);
+    $stats['seminars_workshops'] = (int) ($row['seminars_workshops'] ?? 0);
     $stats['trainings'] = (int) ($row['trainings'] ?? 0);
-    $stats['workshops'] = (int) ($row['workshops'] ?? 0);
+    $stats['colloquia'] = (int) ($row['colloquia'] ?? 0);
+    $stats['conferences'] = (int) ($row['conferences'] ?? 0);
     $stats['upcoming_activities'] = (int) ($row['upcoming_activities'] ?? 0);
     $stats['capacity_ongoing_activities'] = (int) ($row['capacity_ongoing_activities'] ?? 0);
     $stats['conducted_activities'] = (int) ($row['conducted_activities'] ?? 0);
-    $stats['capacity_total'] = $stats['seminars'] + $stats['trainings'] + $stats['workshops'];
-    $stats['upcoming_seminars'] = (int) ($row['upcoming_seminars'] ?? 0);
+    $stats['capacity_total'] = $stats['seminars_workshops'] + $stats['trainings'] + $stats['colloquia'] + $stats['conferences'];
+    $stats['upcoming_seminars_workshops'] = (int) ($row['upcoming_seminars_workshops'] ?? 0);
     $stats['upcoming_trainings'] = (int) ($row['upcoming_trainings'] ?? 0);
-    $stats['upcoming_workshops'] = (int) ($row['upcoming_workshops'] ?? 0);
+    $stats['upcoming_colloquia'] = (int) ($row['upcoming_colloquia'] ?? 0);
+    $stats['upcoming_conferences'] = (int) ($row['upcoming_conferences'] ?? 0);
 }
 if ($tables['publications']) {
     $stmt = $conn->prepare("SELECT COUNT(*) AS publication_total, COALESCE(SUM(archival_status = 'archived' OR status = 'published'),0) AS published, COALESCE(SUM(archival_status = 'legacy'),0) AS pending_publications, COALESCE(SUM(publication_type = 'journal'),0) AS journal_publications, COALESCE(SUM(publication_type = 'conference'),0) AS conference_publications, COALESCE(SUM(publication_type = 'journal' AND archival_status = 'legacy' AND status <> 'published'),0) AS journal_unpublished, COALESCE(SUM(publication_type = 'conference' AND archival_status = 'legacy' AND status <> 'published'),0) AS conference_unpublished FROM publications WHERE deactivated_at IS NULL");
@@ -373,18 +378,20 @@ for ($chartIndex = 0; $chartIndex < 12; $chartIndex++) {
 }
 $chartData = [];
 foreach ($chartMonthKeys as $monthKey) {
-    $chartData[$monthKey] = ['seminars' => 0, 'workshops' => 0, 'publications' => 0, 'copyrights' => 0];
+    $chartData[$monthKey] = ['seminars_workshops' => 0, 'trainings' => 0, 'colloquia' => 0, 'conferences' => 0, 'publications' => 0, 'copyrights' => 0];
 }
 if ($tables['activities']) {
-    $stmt = $conn->prepare("SELECT DATE_FORMAT(activity_date, '%Y-%m') AS month_key, SUM(activity_type = 'seminar' AND status <> 'cancelled') AS seminars, SUM(activity_type = 'workshop' AND status <> 'cancelled') AS workshops FROM research_activities WHERE activity_date >= ? AND activity_date < ? GROUP BY DATE_FORMAT(activity_date, '%Y-%m')");
+    $stmt = $conn->prepare("SELECT DATE_FORMAT(activity_date, '%Y-%m') AS month_key, SUM(activity_type = 'seminar_workshop' AND status <> 'cancelled') AS seminars_workshops, SUM(activity_type = 'training' AND status <> 'cancelled') AS trainings, SUM(activity_type = 'colloquium' AND status <> 'cancelled') AS colloquia, SUM(activity_type = 'conference_congress' AND status <> 'cancelled') AS conferences FROM research_activities WHERE activity_date >= ? AND activity_date < ? GROUP BY DATE_FORMAT(activity_date, '%Y-%m')");
     $stmt->bind_param('ss', $chartStartDate, $chartNextMonthDate);
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
         $monthKey = (string) ($row['month_key'] ?? '');
         if (isset($chartData[$monthKey])) {
-            $chartData[$monthKey]['seminars'] = (int) ($row['seminars'] ?? 0);
-            $chartData[$monthKey]['workshops'] = (int) ($row['workshops'] ?? 0);
+            $chartData[$monthKey]['seminars_workshops'] = (int) ($row['seminars_workshops'] ?? 0);
+            $chartData[$monthKey]['trainings'] = (int) ($row['trainings'] ?? 0);
+            $chartData[$monthKey]['colloquia'] = (int) ($row['colloquia'] ?? 0);
+            $chartData[$monthKey]['conferences'] = (int) ($row['conferences'] ?? 0);
         }
     }
     $stmt->close();
@@ -417,7 +424,7 @@ if ($tables['copyrights']) {
 }
 $chartMaxValue = 0;
 foreach ($chartData as $entry) {
-    $chartMaxValue = max($chartMaxValue, max($entry['seminars'], $entry['workshops'], $entry['publications'], $entry['copyrights']));
+    $chartMaxValue = max($chartMaxValue, max($entry['seminars_workshops'], $entry['trainings'], $entry['colloquia'], $entry['conferences'], $entry['publications'], $entry['copyrights']));
 }
 $chartMaxValue = max(1, $chartMaxValue);
 $chartMonthLabels = [];
@@ -427,7 +434,7 @@ foreach ($chartMonthKeys as $monthKey) {
 
 $eventParts = [];
 if ($tables['activities']) {
-    $eventParts[] = "SELECT ra.created_at AS event_at, CONCAT(UCASE(LEFT(ra.activity_type, 1)), SUBSTRING(ra.activity_type, 2), ' created') AS event_label, COALESCE(NULLIF(ra.organizer, ''), NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), 'Institutional activity') AS actor_name, ra.status, 'activity' AS source_type, ra.activity_id AS source_id FROM research_activities ra LEFT JOIN users u ON u.user_id = ra.created_by";
+    $eventParts[] = "SELECT ra.created_at AS event_at, CONCAT(CASE ra.activity_type WHEN 'seminar_workshop' THEN 'Seminars / Workshops' WHEN 'training' THEN 'Trainings' WHEN 'colloquium' THEN 'Colloquia' WHEN 'conference_congress' THEN 'Conference / Congress' ELSE 'Research activity' END, ' created') AS event_label, COALESCE(NULLIF(ra.organizer, ''), NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), 'Institutional activity') AS actor_name, ra.status, 'activity' AS source_type, ra.activity_id AS source_id FROM research_activities ra LEFT JOIN users u ON u.user_id = ra.created_by";
 }
 if ($tables['publications']) {
     $eventParts[] = "SELECT p.created_at AS event_at, 'Publication recorded' AS event_label, COALESCE(NULLIF(p.researcher_name, ''), 'Unnamed researcher') AS actor_name, p.archival_status AS status, 'publication' AS source_type, p.publication_id AS source_id FROM publications p WHERE p.deactivated_at IS NULL";
@@ -485,14 +492,11 @@ $dashboardModuleCards = [
         'key' => 'research_capacity_building',
         'class' => 'module-capacity',
         'label' => 'Research Capacity Building',
-        'pages' => $role === 'admin' ? [
+        'pages' => [
+            ['key' => 'view_activity', 'label' => 'Research Activities', 'count' => $tables['activities'] ? $stats['capacity_total'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
             ['key' => 'upcoming_activities', 'label' => 'Upcoming', 'count' => $tables['activities'] ? $stats['upcoming_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
             ['key' => 'ongoing_activities', 'label' => 'Ongoing', 'count' => $tables['activities'] ? $stats['capacity_ongoing_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
-            ['key' => 'conducted_activities', 'label' => 'Conducted', 'count' => $tables['activities'] ? $stats['conducted_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
-        ] : [
-            ['key' => 'seminars', 'label' => 'Seminars', 'count' => $tables['activities'] ? $stats['seminars'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
-            ['key' => 'trainings', 'label' => 'Trainings', 'count' => $tables['activities'] ? $stats['trainings'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
-            ['key' => 'workshops', 'label' => 'Workshops', 'count' => $tables['activities'] ? $stats['workshops'] : null, 'detail' => $tables['activities'] ? 'recorded' : 'unavailable'],
+            ['key' => 'conducted_activities', 'label' => 'Completed', 'count' => $tables['activities'] ? $stats['conducted_activities'] : null, 'detail' => $tables['activities'] ? 'activities' : 'unavailable'],
         ],
     ],
     [
@@ -503,6 +507,7 @@ $dashboardModuleCards = [
             ['key' => 'research_proposals', 'label' => 'Research Proposals', 'count' => $developmentAvailable ? $stats['proposals'] : null, 'detail' => $developmentAvailable ? 'proposals' : 'unavailable'],
             ['key' => 'research_review', 'label' => 'Chapter Review', 'count' => $developmentAvailable ? $stats['review_required'] : null, 'detail' => $developmentAvailable ? 'requiring review' : 'unavailable'],
             ['key' => 'research_approval', 'label' => 'Approved Proposals', 'count' => $developmentAvailable ? $stats['approval_required'] : null, 'detail' => $developmentAvailable ? 'approved proposals' : 'unavailable'],
+            ['key' => 'research_engagement_records', 'label' => 'Research Engagement Records', 'count' => null, 'detail' => 'faculty records'],
         ],
     ],
     [
@@ -520,9 +525,9 @@ $dashboardModuleCards = [
         'class' => 'module-publication',
         'label' => 'Publication & Dissemination',
         'pages' => [
-            ['key' => 'journal_publications', 'label' => 'Journal Publications', 'count' => $tables['publications'] ? $stats['journal_publications'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
-            ['key' => 'conference_presentations', 'label' => 'Conference Presentations', 'count' => $tables['publications'] ? $stats['conference_publications'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
-            ['key' => 'research_repository', 'label' => 'Research Repository', 'count' => $tables['publications'] ? $stats['published_repository'] : null, 'detail' => $tables['publications'] ? 'archived / legacy published records' : 'unavailable'],
+            ['key' => 'publication_records', 'label' => 'All Records', 'count' => $tables['publications'] ? $stats['publication_total'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
+            ['key' => 'publication_add', 'label' => 'Add New', 'count' => null, 'detail' => 'journal and conference records'],
+            ['key' => 'publication_reports', 'label' => 'Reports', 'count' => $tables['publications'] ? $stats['publication_total'] : null, 'detail' => $tables['publications'] ? 'records' : 'unavailable'],
         ],
     ],
     [
@@ -542,6 +547,7 @@ foreach ($dashboardModuleCards as &$moduleCard) {
         static fn (array $page): bool => $dashboardCanViewPage($moduleCard['key'], $page['key'])
     ));
     $moduleCard['visible'] = $moduleCard['pages'] !== [];
+    $moduleCard['upcoming'] = 0;
     $moduleCard['count'] = 0;
     $moduleCard['hasCount'] = false;
     foreach ($moduleCard['pages'] as $page) {
@@ -551,19 +557,17 @@ foreach ($dashboardModuleCards as &$moduleCard) {
         }
     }
 
-    if ($moduleCard['key'] === 'research_development') {
-        $moduleCard['count'] = $stats['development_total'];
-    } elseif ($moduleCard['key'] === 'publication_dissemination') {
-        $hasRepository = $dashboardCanViewPage($moduleCard['key'], 'research_repository');
-        $hasJournal = $dashboardCanViewPage($moduleCard['key'], 'journal_publications');
-        $hasConference = $dashboardCanViewPage($moduleCard['key'], 'conference_presentations');
-        $moduleCard['count'] = $hasRepository ? $stats['published_repository'] : 0;
-        $moduleCard['count'] += $hasJournal
-            ? ($hasRepository ? $stats['journal_unpublished'] : $stats['journal_publications'])
-            : 0;
-        $moduleCard['count'] += $hasConference
-            ? ($hasRepository ? $stats['conference_unpublished'] : $stats['conference_publications'])
-            : 0;
+    if ($moduleCard['key'] === 'research_capacity_building'
+        && $dashboardCanViewPage($moduleCard['key'], 'view_activity')) {
+        $moduleCard['count'] = (int) $stats['capacity_total'];
+        $moduleCard['hasCount'] = $tables['activities'];
+    }
+
+    if ($moduleCard['key'] === 'publication_dissemination') {
+        $canSeeArchive = $dashboardCanViewPage($moduleCard['key'], 'publication_records')
+            || $dashboardCanViewPage($moduleCard['key'], 'publication_reports');
+        $moduleCard['count'] = $canSeeArchive ? $stats['publication_total'] : 0;
+        $moduleCard['hasCount'] = $canSeeArchive && $tables['publications'];
     } elseif ($moduleCard['key'] === 'intellectual_property_utilization') {
         if ($dashboardCanViewPage($moduleCard['key'], 'copyrights')) {
             $moduleCard['count'] = $stats['copyright_total'];
@@ -585,21 +589,15 @@ foreach ($dashboardModuleCards as &$moduleCard) {
         'intellectual_property_utilization' => $tables['copyrights'],
         default => false,
     };
-    $moduleCard['upcoming'] = 0;
-    if ($moduleCard['key'] === 'research_capacity_building') {
-        $upcomingCountsByPage = [
-            'seminars' => $stats['upcoming_seminars'] ?? 0,
-            'trainings' => $stats['upcoming_trainings'] ?? 0,
-            'workshops' => $stats['upcoming_workshops'] ?? 0,
-        ];
-        foreach ($moduleCard['pages'] as $modulePage) {
-            $moduleCard['upcoming'] += (int) ($upcomingCountsByPage[$modulePage['key']] ?? 0);
-        }
+    if ($moduleCard['key'] === 'research_capacity_building'
+        && ($dashboardCanViewPage($moduleCard['key'], 'view_activity')
+            || $dashboardCanViewPage($moduleCard['key'], 'upcoming_activities'))) {
+        $moduleCard['upcoming'] = (int) $stats['upcoming_activities'];
     }
 }
 unset($moduleCard);
 $dashboardQuickPages = [];
-$quickPageOrder = ['seminars', 'research_proposals', 'research_review', 'ongoing_research', 'journal_publications', 'copyrights', 'workshops', 'research_outputs'];
+$quickPageOrder = ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities', 'research_proposals', 'research_review', 'ongoing_research', 'publication_records', 'copyrights', 'research_outputs'];
 foreach ($quickPageOrder as $quickPageKey) {
     foreach ($dashboardModuleCards as $moduleCard) {
         foreach ($moduleCard['pages'] as $modulePage) {
@@ -642,7 +640,7 @@ if (isset($_GET['dashboard_data']) && $_GET['dashboard_data'] === '1') {
     $liveStats = [
         'review_required' => $tables['projects'] && $dashboardCanViewPage('research_development', 'research_review') ? $stats['review_required'] : null,
         'approval_required' => $tables['projects'] && $dashboardCanViewPage('research_development', 'research_approval') ? $stats['approval_required'] : null,
-        'pending_publications' => $tables['publications'] && ($dashboardCanViewPage('publication_dissemination', 'journal_publications') || $dashboardCanViewPage('publication_dissemination', 'conference_presentations')) ? $stats['pending_publications'] : null,
+        'pending_publications' => $tables['publications'] && ($dashboardCanViewPage('publication_dissemination', 'publication_records') || $dashboardCanViewPage('publication_dissemination', 'publication_reports')) ? $stats['pending_publications'] : null,
     ];
 
     $liveChart = null;
@@ -652,8 +650,10 @@ if (isset($_GET['dashboard_data']) && $_GET['dashboard_data'] === '1') {
             'months' => array_map(static function (string $monthKey, array $entry): array {
                 return [
                     'label' => date('M', strtotime($monthKey . '-01')),
-                    'seminars' => (int) ($entry['seminars'] ?? 0),
-                    'workshops' => (int) ($entry['workshops'] ?? 0),
+                    'seminars_workshops' => (int) ($entry['seminars_workshops'] ?? 0),
+                    'trainings' => (int) ($entry['trainings'] ?? 0),
+                    'colloquia' => (int) ($entry['colloquia'] ?? 0),
+                    'conferences' => (int) ($entry['conferences'] ?? 0),
                     'publications' => (int) ($entry['publications'] ?? 0),
                     'copyrights' => (int) ($entry['copyrights'] ?? 0),
                 ];
@@ -1964,6 +1964,13 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         margin-top: 8px;
       }
 
+      .rms-admin-summary-strip > .rms-admin-summary-tile:nth-child(5) {
+        grid-column: 1 / -1;
+        width: min(100%, 260px);
+        box-sizing: border-box;
+        justify-self: center;
+      }
+
       .rms-admin-section-grid {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -1988,6 +1995,7 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       }
     }
   </style>
+  <?php endif; ?>
 
   <section class="rms-admin-summary-strip" aria-label="Research section summary">
     <?php foreach ($dashboardModuleCards as $moduleCard): ?>
@@ -2011,6 +2019,9 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       </a>
     <?php endforeach; ?>
   </section>
+  <?php if ($role === 'research_staff' && $permittedPageCount === 0): ?>
+    <p class="empty-state">No research pages are assigned to your account yet. Contact an administrator to request access.</p>
+  <?php endif; ?>
 
   <section class="rms-admin-section-grid" aria-label="Research sections">
     <?php foreach ($dashboardModuleCards as $moduleCard): ?>
@@ -2042,55 +2053,6 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
       </article>
     <?php endforeach; ?>
   </section>
-  <?php else: ?>
-  <section class="module-summary-grid" aria-label="Research module overview">
-    <?php foreach ($dashboardModuleCards as $moduleCard): ?>
-      <?php if (!$moduleCard['visible']) continue; ?>
-      <article class="module-summary-card <?= monitoringDashboardEscape($moduleCard['class']) ?>" data-dashboard-module="<?= monitoringDashboardEscape($moduleCard['key']) ?>">
-        <span class="module-pill"><?= monitoringDashboardEscape($moduleCard['label']) ?></span>
-        <div class="module-summary-metric">
-          <strong data-dashboard-module-total="<?= monitoringDashboardEscape($moduleCard['key']) ?>"><?= $moduleCard['hasCount'] ? (int) max(0, $moduleCard['count']) : '&mdash;' ?></strong>
-          <span data-dashboard-module-detail><?= $moduleCard['hasCount'] ? 'records across available pages' : ($moduleCard['sourceAvailable'] ? 'no separate count' : 'record source unavailable') ?></span>
-        </div>
-        <p><?= monitoringDashboardEscape($moduleCard['label']) ?></p>
-        <?php if ($moduleCard['key'] === 'research_capacity_building'): ?>
-          <?php if ($tables['activities']): ?>
-            <small data-dashboard-note="capacity"><?= $role === 'admin' ? 'Upcoming, ongoing, and conducted activities.' : (int) $moduleCard['upcoming'] . ' upcoming activities across permitted Capacity Building pages.' ?></small>
-          <?php endif; ?>
-        <?php elseif ($moduleCard['key'] === 'research_development'): ?>
-          <small data-dashboard-note="development">
-            <?php if ($tables['projects'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_review'))): ?>
-              <?= (int) $stats['review_required'] ?> requiring review
-            <?php endif; ?>
-            <?php if ($tables['projects'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_review')) && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_approval'))): ?>
-              &middot;
-            <?php endif; ?>
-            <?php if ($tables['projects'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'research_approval'))): ?>
-              <?= (int) $stats['approval_required'] ?> approved proposals
-            <?php endif; ?>
-          </small>
-        <?php elseif ($moduleCard['key'] === 'publication_dissemination'): ?>
-          <?php if ($tables['publications'] && ($role === 'admin' || $dashboardCanViewPage($moduleCard['key'], 'journal_publications') || $dashboardCanViewPage($moduleCard['key'], 'conference_presentations'))): ?>
-            <small data-dashboard-note="publications"><?= (int) $stats['pending_publications'] ?> legacy publication records retain their historical status.</small>
-          <?php endif; ?>
-        <?php elseif ($moduleCard['key'] === 'intellectual_property_utilization'): ?>
-          <small>Patent and technology-transfer shortcuts show the matching software and module output records in the existing registry.</small>
-        <?php else: ?>
-          <small>Counts are based on current research project and publication records.</small>
-        <?php endif; ?>
-        <nav class="module-summary-links" aria-label="<?= monitoringDashboardEscape($moduleCard['label']) ?> pages">
-          <?php foreach ($moduleCard['pages'] as $modulePage): ?>
-            <a data-dashboard-page="<?= monitoringDashboardEscape($modulePage['key']) ?>" href="<?= monitoringDashboardEscape($moduleRoute($modulePage['key'])) ?>">
-              <span><?= monitoringDashboardEscape($modulePage['label']) ?></span>
-              <span data-dashboard-page-count="<?= monitoringDashboardEscape($modulePage['key']) ?>"><?= $modulePage['count'] === null ? monitoringDashboardEscape($modulePage['detail']) : (int) $modulePage['count'] . ' ' . monitoringDashboardEscape($modulePage['detail']) ?></span>
-            </a>
-          <?php endforeach; ?>
-        </nav>
-      </article>
-    <?php endforeach; ?>
-  </section>
-  <?php endif; ?>
-
   <?php if ($showAggregateMonitoring): ?>
   <div class="dashboard-grid">
     <section class="hub-panel dashboard-chart-panel" aria-labelledby="activity-chart-heading">
@@ -2101,8 +2063,10 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         <div class="panel-link">Academic Year: <span data-dashboard-chart-academic-year><?= monitoringDashboardEscape($activeAcademicYear['label']) ?></span></div>
       </div>
       <div class="chart-legend" aria-label="Chart legend">
-        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#4F8DF7"></span>Seminars</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#7C4DFF"></span>Workshops</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#4F8DF7"></span>Seminars / Workshops</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#2D72C4"></span>Trainings</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#7C4DFF"></span>Colloquia</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#64748B"></span>Conference / Congress</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#19B98A"></span>Publications</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch" style="background:#F5AB18"></span>Copyright Applications</span>
       </div>
@@ -2116,24 +2080,30 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
         $chartInnerWidth = 540 - $chartPaddingLeft - $chartPaddingRight;
         $chartInnerHeight = $chartPxHeight - $chartPaddingTop - $chartPaddingBottom;
         $groupWidth = $chartInnerWidth / count($chartMonthLabels);
-        $barWidth = min(8, max(4, $groupWidth / 7));
+        $barWidth = min(6, max(2, $groupWidth / 10));
         $series = [
-            'seminars' => ['color' => '#4F8DF7', 'values' => []],
-            'workshops' => ['color' => '#7C4DFF', 'values' => []],
+            'seminars_workshops' => ['color' => '#4F8DF7', 'values' => []],
+            'trainings' => ['color' => '#2D72C4', 'values' => []],
+            'colloquia' => ['color' => '#7C4DFF', 'values' => []],
+            'conferences' => ['color' => '#64748B', 'values' => []],
             'publications' => ['color' => '#19B98A', 'values' => []],
             'copyrights' => ['color' => '#F5AB18', 'values' => []],
         ];
         foreach ($chartMonthLabels as $label) {
-            $series['seminars']['values'][] = 0;
-            $series['workshops']['values'][] = 0;
+            $series['seminars_workshops']['values'][] = 0;
+            $series['trainings']['values'][] = 0;
+            $series['colloquia']['values'][] = 0;
+            $series['conferences']['values'][] = 0;
             $series['publications']['values'][] = 0;
             $series['copyrights']['values'][] = 0;
         }
         foreach ($chartData as $monthKey => $monthEntry) {
             $monthIndex = array_search($monthKey, $chartMonthKeys, true);
             if ($monthIndex === false) continue;
-            $series['seminars']['values'][$monthIndex] = (int) $monthEntry['seminars'];
-            $series['workshops']['values'][$monthIndex] = (int) $monthEntry['workshops'];
+            $series['seminars_workshops']['values'][$monthIndex] = (int) $monthEntry['seminars_workshops'];
+            $series['trainings']['values'][$monthIndex] = (int) $monthEntry['trainings'];
+            $series['colloquia']['values'][$monthIndex] = (int) $monthEntry['colloquia'];
+            $series['conferences']['values'][$monthIndex] = (int) $monthEntry['conferences'];
             $series['publications']['values'][$monthIndex] = (int) $monthEntry['publications'];
             $series['copyrights']['values'][$monthIndex] = (int) $monthEntry['copyrights'];
         }
@@ -2149,7 +2119,8 @@ else renderStaffShell($user, $currentPage, $pageTitle, $pageSubtitle);
             foreach ($series as $datasetKey => $dataset) {
                 $value = (int) $dataset['values'][$index];
                 $barHeight = $chartInnerHeight * ($value / $chartMaxValue);
-                $x = $monthX - ($barWidth * 2) + ($columnOffset * ($barWidth + 4));
+                $groupedSeriesWidth = (count($series) * $barWidth) + ((count($series) - 1) * 2);
+                $x = $monthX - ($groupedSeriesWidth / 2) + ($columnOffset * ($barWidth + 2));
                 $y = $chartPxHeight - $chartPaddingBottom - $barHeight;
                 echo '<rect x="' . $x . '" y="' . $y . '" width="' . $barWidth . '" height="' . $barHeight . '" rx="2" fill="' . $dataset['color'] . '" opacity="0.92" />';
                 $columnOffset++;

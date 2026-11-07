@@ -1,7 +1,7 @@
 <?php
 /** Internal file primitives. No request handler, authentication, DB or history writes.
- * The caller must authorize before storing/opening any document. A file is not a
- * successful generated version until its complete manifest is committed to history.
+ * The caller must authorize before storing/opening any document. Retention code is
+ * the only supported removal path for complete older generated-document sets.
  */
 require_once __DIR__ . '/earist-docx-xml.php';
 
@@ -226,8 +226,8 @@ function earistDocumentInspectPackage(string $path): array
             if ($name === '_rels/.rels') $source = '';
             elseif (preg_match('#^(.*?/)?_rels/([^/]+)\.rels$#D', $name, $match)) {
                 $source = ($match[1] ?? '') . $match[2];
-                // ONLYOFFICE may retain this orphan relationship part after removing
-                // the comments part. Keep validating its XML and every target below.
+                // Office-compatible editors may retain this orphan relationship part
+                // after removing comments. Keep validating its XML and targets below.
                 $orphanedCommentsRelationships = $name === 'word/_rels/comments.xml.rels'
                     && !isset($parts['word/comments.xml']);
                 if (!isset($parts[$source]) && !$orphanedCommentsRelationships) {

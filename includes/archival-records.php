@@ -64,13 +64,9 @@ function archiveStaffScopes(string $kind, array $row): array
         };
         return archiveCopyrightType($type) ? [['intellectual_property_utilization', $page]] : [];
     }
-    $scopes = match ($row['publication_type'] ?? '') {
-        'journal' => [['publication_dissemination', 'journal_publications']],
-        'conference' => [['publication_dissemination', 'conference_presentations']], default => [],
-    };
-    // Repository access covers published/archived records; research outputs access also covers all active publication records.
+    $scopes = [['publication_dissemination', 'publication_records'], ['publication_dissemination', 'publication_reports']];
+    // Research outputs remains an independent staff scope for implementation output records.
     if (($row['archival_status'] ?? '') === 'archived' || ($row['status'] ?? '') === 'published') {
-        $scopes[] = ['publication_dissemination', 'research_repository'];
         $scopes[] = ['research_implementation_outputs', 'research_outputs'];
     } elseif (empty($row['deactivated_at'])) {
         $scopes[] = ['research_implementation_outputs', 'research_outputs'];
@@ -100,6 +96,7 @@ function archiveCan(mysqli $db, string $kind, array $row, array $user, string $a
     if ($role !== 'research_staff') return false;
     if ($action === 'manage' && !empty($row['deactivated_at'])) return false;
     foreach (archiveStaffScopes($kind, $row) as [$module, $page]) {
+        if ($kind === 'publication' && $action === 'manage' && $page === 'publication_reports') continue;
         if (hasModulePermission($uid, $module, 'view', $page)
             && (in_array($action, ['view', 'catalog'], true) || ($action === 'download' ? hasDownloadPermission($uid, $module, $page) : hasModulePermission($uid, $module, 'manage', $page)))) return true;
     }

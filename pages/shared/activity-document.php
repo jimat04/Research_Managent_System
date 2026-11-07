@@ -45,10 +45,10 @@ if (!$activity || (int) ($activity['document_upload_id'] ?? 0) <= 0) {
 $canManage = $role === 'admin';
 if ($role === 'research_staff') {
     $pages = match ((string) $activity['activity_type']) {
-        'seminar' => ['seminars'],
+        'seminar_workshop' => ['seminars_workshops'],
         'training' => ['trainings'],
-        'workshop' => ['workshops'],
-        default => ['seminars', 'trainings', 'workshops'],
+        'colloquium', 'conference_congress' => ['seminars_workshops', 'trainings'],
+        default => ['seminars_workshops', 'trainings'],
     };
     foreach ($pages as $page) {
         if (hasModulePermission($userId, 'research_capacity_building', 'manage', $page)) {

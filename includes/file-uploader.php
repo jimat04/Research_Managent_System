@@ -359,6 +359,16 @@ function handleRmsUpload($options, $files, $conn) {
             || $opts['projectId'] !== null || $opts['chapterId'] !== null || $opts['type'] !== 'other')) {
         return ['success' => false, 'error' => 'Archive record authorization required'];
     }
+    if ($opts['folderTarget'] === 'publications' && (string) ($_SESSION['role'] ?? '') === 'research_staff') {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        $archiveAction = (string) ($opts['archiveAction'] ?? '');
+        $authorized = $archiveAction === 'create'
+            ? hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_add')
+            : ($archiveAction === 'edit'
+                && (hasModulePermission($userId, 'publication_dissemination', 'manage', 'publication_records')
+                    || hasModulePermission($userId, 'research_implementation_outputs', 'manage', 'research_outputs')));
+        if (!$authorized) return ['success' => false, 'error' => 'Publication archive permission required'];
+    }
     $allowedFolders = ['proposals', 'chapters', 'defense', 'manuscripts', 'engagement', 'activities', 'publications', 'copyrights', 'adviser_requests'];
     if (!in_array($opts['folderTarget'], $allowedFolders, true)) {
         return ['success' => false, 'error' => 'Invalid upload destination'];

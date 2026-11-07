@@ -1,4 +1,21 @@
 (() => {
+  const sidebarStates = new WeakMap();
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+
+    const collapseButton = event.target.closest('[data-role-shell-collapse]');
+    if (!collapseButton) return;
+
+    const shell = collapseButton.closest('[data-role-shell]');
+    const sidebarState = shell ? sidebarStates.get(shell) : null;
+    if (!sidebarState) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    sidebarState.toggle();
+  }, true);
+
   document.querySelectorAll('[data-role-shell]').forEach((shell) => {
     const role = shell.dataset.roleShell;
     const sidebar = shell.querySelector('[data-role-shell-sidebar]');
@@ -18,6 +35,7 @@
         desktopCollapsed = collapsed;
         shell.classList.toggle('is-collapsed', collapsed && !isMobile());
         collapseButton.setAttribute('aria-label', desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        collapseButton.setAttribute('aria-expanded', desktopCollapsed ? 'false' : 'true');
         collapseButton.title = desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
         collapseButton.querySelector('span').textContent = desktopCollapsed ? '›' : '‹';
 
@@ -36,8 +54,10 @@
         setCollapsed(false, false);
       }
 
-      collapseButton.addEventListener('click', () => {
-        if (!isMobile()) setCollapsed(!desktopCollapsed);
+      sidebarStates.set(shell, {
+        toggle() {
+          if (!isMobile()) setCollapsed(!desktopCollapsed);
+        }
       });
       window.addEventListener('resize', () => setCollapsed(desktopCollapsed, false));
       sidebar.querySelectorAll('details').forEach((group) => {

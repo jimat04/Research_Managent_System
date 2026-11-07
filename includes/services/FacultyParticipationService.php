@@ -74,6 +74,98 @@ class FacultyParticipationService
         ];
     }
 
+    /**
+     * Get the same deduplicated participation summary used by faculty profiles,
+     * constrained to an optional date range for analytics.
+     */
+    public function getAnalyticsSummary(int $facultyId, ?string $fromDate = null, ?string $toDate = null): array
+    {
+        if ($facultyId < 1) {
+            throw new InvalidArgumentException('A valid faculty account is required.');
+        }
+
+        if (!$this->hasParticipationSource()) {
+            return [
+                'available' => false,
+                'activity_count' => 0,
+                'attendee_events' => 0,
+                'presenter_events' => 0,
+                'standalone_presentations' => 0,
+                'total_participations' => 0,
+                'by_type' => [],
+                'by_kind' => [],
+            ];
+        }
+
+        $conditions = ['pr.user_id = ?'];
+        $types = 'i';
+        $params = [$facultyId];
+        if ($fromDate !== null && $fromDate !== '') {
+            $conditions[] = 'pr.participation_date >= ?';
+            $types .= 's';
+            $params[] = $fromDate;
+        }
+        if ($toDate !== null && $toDate !== '') {
+            $conditions[] = 'pr.participation_date <= ?';
+            $types .= 's';
+            $params[] = $toDate;
+        }
+
+        $cte = $this->participationCtes() . ', filtered_records AS (
+            SELECT pr.*
+              FROM participation_records pr
+             WHERE ' . implode(' AND ', $conditions) . '
+        )';
+        $summaryRows = $this->fetchAll(
+            $cte . " SELECT
+                COUNT(DISTINCT CASE WHEN record_kind = 'activity' THEN activity_id END) AS activity_count,
+                COUNT(DISTINCT CASE WHEN record_kind = 'activity' AND has_attendee = 1 THEN activity_id END) AS attendee_events,
+                COUNT(DISTINCT CASE WHEN record_kind = 'activity' AND has_presenter = 1 THEN activity_id END) AS presenter_events,
+                COUNT(DISTINCT CASE WHEN record_kind = 'presentation' THEN engagement_id END) AS standalone_presentations
+              FROM filtered_records",
+            $types,
+            $params
+        );
+        $summary = $summaryRows[0] ?? [];
+
+        $typeRows = $this->fetchAll(
+            $cte . " SELECT activity_type,
+                COUNT(DISTINCT CASE WHEN record_kind = 'activity' THEN activity_id END) AS activity_count,
+                COUNT(DISTINCT CASE WHEN record_kind = 'presentation' THEN engagement_id END) AS standalone_presentations
+              FROM filtered_records
+             GROUP BY activity_type
+             ORDER BY activity_type",
+            $types,
+            $params
+        );
+        $byType = array_map(static function (array $row): array {
+            $label = ucwords(str_replace('_', ' ', (string) $row['activity_type']));
+            $count = (int) $row['activity_count'] + (int) $row['standalone_presentations'];
+            return ['label' => $label, 'value' => $count];
+        }, $typeRows);
+
+        $activityCount = (int) ($summary['activity_count'] ?? 0);
+        $attendeeEvents = (int) ($summary['attendee_events'] ?? 0);
+        $presenterEvents = (int) ($summary['presenter_events'] ?? 0);
+        $standalonePresentations = (int) ($summary['standalone_presentations'] ?? 0);
+        $byKind = array_values(array_filter([
+            ['label' => 'Attended events', 'value' => $attendeeEvents],
+            ['label' => 'Presented events', 'value' => $presenterEvents],
+            ['label' => 'Standalone presentations', 'value' => $standalonePresentations],
+        ], static fn(array $row): bool => $row['value'] > 0));
+
+        return [
+            'available' => true,
+            'activity_count' => $activityCount,
+            'attendee_events' => $attendeeEvents,
+            'presenter_events' => $presenterEvents,
+            'standalone_presentations' => $standalonePresentations,
+            'total_participations' => $activityCount + $standalonePresentations,
+            'by_type' => $byType,
+            'by_kind' => $byKind,
+        ];
+    }
+
     public function getFacultyTypeSummary(): array
     {
         if (!$this->hasTable('users')) {
@@ -312,7 +404,7 @@ class FacultyParticipationService
             $academicYear = '';
         }
 
-        $activityTypes = ['all', 'seminar', 'training', 'workshop', 'colloquium', 'conference', 'conference_presentation'];
+        $activityTypes = ['all', 'seminar_workshop', 'training', 'colloquium', 'conference_congress', 'conference_presentation'];
         $activityType = is_string($rawFilters['activity_type'] ?? null) ? $rawFilters['activity_type'] : 'all';
         if (!in_array($activityType, $activityTypes, true)) {
             $activityType = 'all';

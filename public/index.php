@@ -81,7 +81,7 @@ $siteTitle = htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8');
           <section class="sec" id="features"><div class="w">
           <div class="sh rv"><h2>Everything in one workspace</h2><span class="tag">Research &bull; Collaboration &bull; Innovation</span></div>
           <div class="fg">
-          <div class="fc capacity rv"><div class="ic"><svg class="i" aria-hidden="true"><use href="#grp"/></svg></div><h3>Capacity Building</h3><p>Maintain records of seminars, trainings, workshops, colloquia, and conferences.</p><span>LEARN &amp; GROW</span></div>
+          <div class="fc capacity rv"><div class="ic"><svg class="i" aria-hidden="true"><use href="#grp"/></svg></div><h3>Capacity Building</h3><p>Maintain records of seminars / workshops, trainings, colloquia, and conference / congress activities.</p><span>LEARN &amp; GROW</span></div>
           <div class="fc development rv"><div class="ic"><svg class="i" aria-hidden="true"><use href="#doc"/></svg></div><h3>Research Development</h3><p>Submit research titles, monitor review decisions, and track progress through the workflow.</p><span>PLAN &amp; MONITOR</span></div>
           <div class="fc implementation rv"><div class="ic"><svg class="i" aria-hidden="true"><use href="#gear"/></svg></div><h3>Implementation &amp; Outputs</h3><p>Organize research records and retrieve available documents through archive views.</p><span>EXECUTE &amp; DELIVER</span></div>
           <div class="fc publication rv"><div class="ic"><svg class="i" aria-hidden="true"><use href="#bok"/></svg></div><h3>Publication &amp; Dissemination</h3><p>Maintain scholarly publication records for institutional documentation and monitoring.</p><span>SHARE KNOWLEDGE</span></div>

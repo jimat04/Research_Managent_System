@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/activity-schedule.php';
 require_once __DIR__ . '/../../includes/activity-budget.php';
 require_once __DIR__ . '/../../includes/activity-document.php';
+require_once __DIR__ . '/../../includes/activity-qr.php';
 require_once __DIR__ . '/../../includes/student-shell.php';
 require_once __DIR__ . '/../../includes/faculty-shell.php';
 require_once __DIR__ . '/../../includes/staff-shell.php';
@@ -64,35 +65,43 @@ function activityDetailBudgetRevisionSummary(?array $snapshot): string
 
 $role = (string) ($user['role'] ?? 'student');
 $userId = (int) ($user['user_id'] ?? 0);
-$capacityPageInput = trim((string) ($_GET['capacity_page'] ?? ''));
-$capacityPage = in_array($capacityPageInput, ['seminars', 'trainings', 'workshops'], true)
-    ? $capacityPageInput
-    : '';
-$canManageActivity = static function (string $activityType, string $selectedPage) use ($role, $userId): bool {
+$capacityModulePages = rmsPermissionModules()['research_capacity_building']['pages'];
+$modulePageInput = trim((string) ($_GET['module_page'] ?? ''));
+$modulePage = array_key_exists($modulePageInput, $capacityModulePages) ? $modulePageInput : '';
+$activityManagePages = ['view_activity', 'upcoming_activities', 'ongoing_activities', 'conducted_activities'];
+if ($role === 'research_staff' && $modulePage !== '' && !in_array($modulePage, $activityManagePages, true)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$canManageActivity = static function (string $activityType, string $permissionPage) use ($role, $userId, $activityManagePages): bool {
     if ($role === 'admin') {
         return true;
     }
-    $pages = match ($activityType) {
-        'seminar' => ['seminars'],
-        'training' => ['trainings'],
-        'workshop' => ['workshops'],
-        'colloquium', 'conference' => ['seminars', 'trainings', 'workshops'],
-        default => ['seminars', 'trainings', 'workshops'],
-    };
-    foreach ($pages as $pageKey) {
-        if (hasModulePermission($userId, 'research_capacity_building', 'manage', $pageKey)) {
-            return true;
-        }
-    }
-    return false;
+    return in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)
+        && in_array($permissionPage, $activityManagePages, true)
+        && hasModulePermission($userId, 'research_capacity_building', 'manage', $permissionPage);
 };
 $activityId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+$activityDetailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) ($activityId ?? 0)
+    . ($modulePage !== '' ? '&module_page=' . rawurlencode($modulePage) : '');
 
 $activitiesAvailable = rmsActivityScheduleTableExists($conn, 'research_activities');
 $activityDocumentsAvailable = $activitiesAvailable
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'document_upload_id');
+$activitySourceLinksAvailable = $activitiesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_project_id')
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_publication_id');
 $participantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_participants');
 $scheduleTablesAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates');
+$activityCheckinDetailsAvailable = $scheduleTablesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'attendee_affiliation')
+    && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'attendee_program_department');
+$activityCheckinKeyConfigured = preg_match('/^[a-f0-9]{64}$/i', ACTIVITY_CHECKIN_HASH_KEY) === 1;
+$activityCheckinSchemaAvailable = $scheduleTablesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_hash')
+    && rmsActivityScheduleTableExists($conn, 'activity_schedule_checkins')
+    && $activityCheckinDetailsAvailable;
+$activityCheckinAvailable = $activityCheckinSchemaAvailable && $activityCheckinKeyConfigured;
 $invitationResponseSchemaAvailable = $scheduleTablesAvailable
     && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'invitation_response')
     && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'invitation_responded_at');
@@ -101,9 +110,15 @@ $budgetSchemaAvailable = rmsActivityBudgetSchemaAvailable($conn);
 $activity = null;
 if ($activitiesAvailable && $activityId) {
     $documentColumn = $activityDocumentsAvailable ? ', document_upload_id' : '';
+    $activitySourceSelect = $activitySourceLinksAvailable
+        ? ', ra.source_project_id, ra.source_publication_id, rp.title AS source_project_title, p.research_title AS source_publication_title'
+        : ', NULL AS source_project_id, NULL AS source_publication_id, NULL AS source_project_title, NULL AS source_publication_title';
+    $activitySourceJoins = $activitySourceLinksAvailable
+        ? ' LEFT JOIN research_projects rp ON rp.project_id = ra.source_project_id LEFT JOIN publications p ON p.publication_id = ra.source_publication_id'
+        : '';
     $activitySql = $scheduleTablesAvailable
-        ? 'SELECT activity_id, activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date, venue, speaker, organizer, description, status, created_by' . $documentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1'
-        : 'SELECT activity_id, activity_type, title, activity_date, activity_time, venue, speaker, organizer, description, status, created_by' . $documentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1';
+        ? 'SELECT ra.activity_id, ra.activity_type, ra.title, ra.activity_date, ra.activity_time, ra.is_multi_day, ra.schedule_start_date, ra.schedule_end_date, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1'
+        : 'SELECT ra.activity_id, ra.activity_type, ra.title, ra.activity_date, ra.activity_time, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1';
     try {
         $stmt = rmsActivitySchedulePrepare($conn, $activitySql);
         $stmt->bind_param('i', $activityId);
@@ -118,13 +133,131 @@ if ($activitiesAvailable && $activityId) {
         $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'Activity details could not be loaded.'];
     }
 }
+if ($activity && in_array($role, ['student', 'faculty'], true)
+    && !rmsActivityScheduleUserInvited($conn, (int) $activity['activity_id'], $userId)) {
+    header('Location: ' . SITE_URL . 'public/403.php');
+    exit;
+}
+$canManage = $activity ? $canManageActivity((string) $activity['activity_type'], $modulePage) : false;
 $scheduleDates = [];
 if ($activity && $scheduleTablesAvailable) {
     try {
-        $scheduleDates = rmsActivityScheduleLoad($conn, (int) $activityId, $invitationResponseSchemaAvailable);
+        $scheduleDates = rmsActivityScheduleLoad(
+            $conn,
+            (int) $activityId,
+            $invitationResponseSchemaAvailable,
+            $activityCheckinDetailsAvailable,
+            !$canManage,
+            $userId
+        );
     } catch (Throwable $exception) {
         error_log('Activity schedule detail load failed: ' . $exception->getMessage());
         $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'The activity schedule could not be loaded.'];
+    }
+}
+$activityPageForStatus = 'view_activity';
+if ($activity) {
+    $effectiveActivityStatus = rmsActivityScheduleClockStatus(array_values($scheduleDates), (string) ($activity['status'] ?? ''));
+    $activityPageForStatus = match ($effectiveActivityStatus) {
+        'upcoming' => 'upcoming_activities',
+        'ongoing' => 'ongoing_activities',
+        'conducted', 'past' => 'conducted_activities',
+        default => 'view_activity',
+    };
+}
+if ($role === 'research_staff' && $activity) {
+    if ($modulePage === '') {
+        $modulePage = $activityPageForStatus;
+    }
+    if (!in_array($modulePage, $activityManagePages, true)
+        || ($modulePage !== 'view_activity' && $modulePage !== $activityPageForStatus)
+        || !hasModulePermission($userId, 'research_capacity_building', 'view', $modulePage)) {
+        header('Location: ' . SITE_URL . 'public/403.php');
+        exit;
+    }
+    $canManage = $canManageActivity((string) $activity['activity_type'], $modulePage);
+    if ($canManage && $scheduleTablesAvailable) {
+        try {
+            $scheduleDates = rmsActivityScheduleLoad(
+                $conn,
+                (int) $activityId,
+                $invitationResponseSchemaAvailable,
+                $activityCheckinDetailsAvailable,
+                true,
+                $userId
+            );
+        } catch (Throwable $exception) {
+            error_log('Activity schedule management data failed to load: ' . $exception->getMessage());
+            $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'Activity management data could not be loaded.'];
+        }
+    }
+}
+$rosterPageData = [];
+if ($activity && $canManage && $scheduleTablesAvailable) {
+    foreach ($scheduleDates as $scheduleRow) {
+        if ((string) ($scheduleRow['status'] ?? '') !== 'scheduled') {
+            continue;
+        }
+        $rosterScheduleId = (int) $scheduleRow['schedule_id'];
+        $readRosterQuery = static function (string $key, string $default = '') use ($rosterScheduleId): string {
+            $values = $_GET[$key] ?? null;
+            $value = is_array($values) ? ($values[$rosterScheduleId] ?? null) : null;
+            return is_scalar($value) ? (string) $value : $default;
+        };
+        $requestedPage = filter_var($readRosterQuery('roster_page', '1'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
+        $rosterFilters = [
+            'search' => substr(trim($readRosterQuery('roster_search')), 0, 400),
+            'role' => $readRosterQuery('roster_role'),
+            'affiliation' => $readRosterQuery('roster_affiliation'),
+            'rsvp' => $readRosterQuery('roster_rsvp'),
+            'attendance' => $readRosterQuery('roster_attendance'),
+        ];
+        try {
+            $rosterPageData[$rosterScheduleId] = rmsActivityScheduleLoadRosterPage(
+                $conn,
+                (int) $activityId,
+                $rosterScheduleId,
+                $requestedPage,
+                $rosterFilters['search'],
+                $rosterFilters['role'],
+                $rosterFilters['affiliation'],
+                $rosterFilters['rsvp'],
+                $rosterFilters['attendance'],
+                $invitationResponseSchemaAvailable,
+                $activityCheckinDetailsAvailable
+            );
+            $rosterPageData[$rosterScheduleId]['filters'] = $rosterFilters;
+        } catch (Throwable $exception) {
+            error_log('Activity roster page load failed: ' . $exception->getMessage());
+            $rosterPageData[$rosterScheduleId] = [
+                'participants' => [], 'total_count' => 0, 'attended_count' => 0,
+                'invited_count' => 0, 'other_count' => 0, 'filtered_count' => 0,
+                'filtered_invited_count' => 0, 'filtered_other_count' => 0,
+                'page' => 1, 'page_size' => 50, 'page_count' => 1, 'filters' => $rosterFilters,
+                'error' => true,
+            ];
+        }
+    }
+}
+$checkinTokenHashes = [];
+if ($activity && $activityCheckinSchemaAvailable) {
+    try {
+        $tokenStmt = $conn->prepare('SELECT schedule_id, checkin_token_hash FROM activity_schedule_dates WHERE activity_id = ?');
+        if (!$tokenStmt) {
+            throw new RuntimeException('Unable to prepare activity check-in tokens.');
+        }
+        $tokenStmt->bind_param('i', $activityId);
+        if (!$tokenStmt->execute()) {
+            throw new RuntimeException('Unable to load activity check-in tokens.');
+        }
+        $tokenResult = $tokenStmt->get_result();
+        while ($tokenRow = $tokenResult->fetch_assoc()) {
+            $checkinTokenHashes[(int) $tokenRow['schedule_id']] = (string) ($tokenRow['checkin_token_hash'] ?? '');
+        }
+        $tokenStmt->close();
+    } catch (Throwable $exception) {
+        error_log('Activity check-in token load failed: ' . $exception->getMessage());
+        $activityCheckinAvailable = false;
     }
 }
 $currentUserIsActivityInvitee = false;
@@ -138,7 +271,34 @@ foreach ($scheduleDates as $scheduleRow) {
     }
 }
 
-$canManage = $activity ? $canManageActivity((string) $activity['activity_type'], $capacityPage) : false;
+$canViewActivitySourceResearch = in_array($role, ['admin', 'student'], true)
+    || ($role === 'research_staff'
+        && hasModulePermission($userId, 'research_implementation_outputs', 'view', 'completed_research'));
+$canViewActivitySourcePublication = in_array($role, ['admin', 'faculty', 'student'], true)
+    || ($role === 'research_staff'
+        && (hasModulePermission($userId, 'research_implementation_outputs', 'view', 'research_outputs')
+            || hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records')));
+if ($activity && $role === 'faculty' && !empty($activity['source_project_id'])) {
+    try {
+        $sourceAccessStmt = $conn->prepare(
+            'SELECT 1 FROM research_projects rp
+              WHERE rp.project_id = ? AND rp.deleted_at IS NULL
+                AND (rp.adviser_id = ? OR EXISTS (
+                    SELECT 1 FROM project_advisers pa
+                     WHERE pa.project_id = rp.project_id AND pa.adviser_id = ?
+                ))
+              LIMIT 1'
+        );
+        $sourceProjectId = (int) $activity['source_project_id'];
+        $sourceAccessStmt->bind_param('iii', $sourceProjectId, $userId, $userId);
+        $sourceAccessStmt->execute();
+        $canViewActivitySourceResearch = $sourceAccessStmt->get_result()->num_rows > 0;
+        $sourceAccessStmt->close();
+    } catch (Throwable $exception) {
+        error_log('Activity source research access check failed: ' . $exception->getMessage());
+        $canViewActivitySourceResearch = false;
+    }
+}
 $activityDocument = $activity && $activityDocumentsAvailable && (int) ($activity['document_upload_id'] ?? 0) > 0
     ? rmsActivityDocumentLoad($conn, (int) $activityId)
     : null;
@@ -155,31 +315,10 @@ $canMarkConductedActivity = $role === 'admin'
     && $activity
     && in_array((string) $activity['status'], ['upcoming', 'scheduled'], true)
     && rmsActivityScheduleCanMarkConducted($conn, (int) $activityId, $scheduleTablesAvailable);
-if ($role === 'research_staff' && $activity) {
-    $viewPages = match ((string) $activity['activity_type']) {
-        'seminar' => ['seminars'],
-        'training' => ['trainings'],
-        'workshop' => ['workshops'],
-        'colloquium', 'conference' => ['seminars', 'trainings', 'workshops'],
-        default => ['seminars', 'trainings', 'workshops'],
-    };
-    $canView = false;
-    foreach ($viewPages as $pageKey) {
-        if (hasModulePermission($userId, 'research_capacity_building', 'view', $pageKey)) {
-            $canView = true;
-            break;
-        }
-    }
-    if (!$canView) {
-        header('Location: ' . SITE_URL . 'public/403.php');
-        exit;
-    }
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
         $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'Your form expired. Please try again.'];
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if (!$activitiesAvailable || !$activity || !$activityId) {
@@ -189,6 +328,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $action = (string) ($_POST['action'] ?? '');
+    if ($action === 'generate_checkin_qr' || $action === 'revoke_checkin_qr') {
+        $scheduleId = filter_var($_POST['schedule_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+        if (!$canManage || !$activityCheckinSchemaAvailable || !$scheduleId
+            || ($action === 'generate_checkin_qr' && !$activityCheckinKeyConfigured)) {
+            $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'Activity check-in QR management is unavailable.'];
+            header('Location: ' . $activityDetailUrl);
+            exit;
+        }
+        try {
+            $verifyStmt = $conn->prepare(
+                'SELECT d.schedule_id, d.status FROM activity_schedule_dates d
+                  WHERE d.schedule_id = ? AND d.activity_id = ? LIMIT 1'
+            );
+            if (!$verifyStmt) {
+                throw new RuntimeException('Unable to verify the scheduled date.');
+            }
+            $verifyStmt->bind_param('ii', $scheduleId, $activityId);
+            if (!$verifyStmt->execute() || !($verifiedSchedule = $verifyStmt->get_result()->fetch_assoc())) {
+                $verifyStmt->close();
+                throw new RuntimeException('Choose a valid scheduled date.');
+            }
+            $verifyStmt->close();
+            if ($action === 'generate_checkin_qr' && (string) $verifiedSchedule['status'] !== 'scheduled') {
+                throw new RuntimeException('A check-in QR can only be generated for an active scheduled date.');
+            }
+
+            if ($action === 'generate_checkin_qr') {
+                $checkinToken = bin2hex(random_bytes(16));
+                $tokenHash = hash('sha256', $checkinToken);
+                $updateStmt = $conn->prepare('UPDATE activity_schedule_dates SET checkin_token_hash = ? WHERE schedule_id = ? AND activity_id = ?');
+                if (!$updateStmt) {
+                    throw new RuntimeException('Unable to prepare the check-in QR update.');
+                }
+                $updateStmt->bind_param('sii', $tokenHash, $scheduleId, $activityId);
+                if (!$updateStmt->execute() || $updateStmt->affected_rows !== 1) {
+                    $updateStmt->close();
+                    throw new RuntimeException('Unable to generate the activity check-in QR.');
+                }
+                $updateStmt->close();
+                $_SESSION['activity_checkin_tokens'][$scheduleId] = $checkinToken;
+                $_SESSION['activities_flash'] = ['type' => 'success', 'message' => 'A new check-in QR code is ready. Any previous code for this date has been revoked.'];
+                logActivity("Generated attendance QR for activity #{$activityId}, date #{$scheduleId}", 'research_activities');
+            } else {
+                $updateStmt = $conn->prepare('UPDATE activity_schedule_dates SET checkin_token_hash = NULL WHERE schedule_id = ? AND activity_id = ?');
+                if (!$updateStmt) {
+                    throw new RuntimeException('Unable to prepare the check-in QR revocation.');
+                }
+                $updateStmt->bind_param('ii', $scheduleId, $activityId);
+                if (!$updateStmt->execute()) {
+                    $updateStmt->close();
+                    throw new RuntimeException('Unable to revoke the activity check-in QR.');
+                }
+                $updateStmt->close();
+                unset($_SESSION['activity_checkin_tokens'][$scheduleId]);
+                $_SESSION['activities_flash'] = ['type' => 'success', 'message' => 'The check-in QR code has been revoked.'];
+                logActivity("Revoked attendance QR for activity #{$activityId}, date #{$scheduleId}", 'research_activities');
+            }
+        } catch (Throwable $exception) {
+            error_log('Activity check-in QR update failed: ' . $exception->getMessage());
+            $_SESSION['activities_flash'] = ['type' => 'error', 'message' => 'The check-in QR could not be updated.'];
+        }
+        header('Location: ' . $activityDetailUrl);
+        exit;
+    }
     if ($action === 'save_invitation_response') {
         $participantId = filter_var($_POST['schedule_participant_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
         $response = is_scalar($_POST['invitation_response'] ?? null) ? (string) $_POST['invitation_response'] : '';
@@ -204,6 +407,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $response,
                 $invitationResponseSchemaAvailable
             );
+            if ($response === 'accepted') {
+                $_SESSION['activity_contribution_prompt_after_rsvp'][(int) $activityId] = [
+                    'participant_id' => (int) $participantId,
+                    'user_id' => $userId,
+                ];
+            } else {
+                unset($_SESSION['activity_contribution_prompt_after_rsvp'][(int) $activityId]);
+            }
             logActivity("Updated activity invitation response for activity #{$activityId}", 'research_activities');
             $_SESSION['activities_flash'] = [
                 'type' => 'success',
@@ -212,9 +423,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     : 'Your response is saved: you cannot attend. You can change it before the session starts.',
             ];
         } catch (Throwable $exception) {
+            unset($_SESSION['activity_contribution_prompt_after_rsvp'][(int) $activityId]);
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if ($action === 'remove_activity_document') {
@@ -242,14 +454,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log('Activity document removal failed: ' . $exception->getMessage());
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if ($action === 'save_contribution_response') {
         $participantId = filter_var($_POST['schedule_participant_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
         $response = is_scalar($_POST['contribution_response'] ?? null) ? (string) $_POST['contribution_response'] : '';
         try {
-            if (!$budgetSchemaAvailable || !$participantId || !in_array((string) $activity['status'], ['upcoming', 'scheduled', 'ongoing'], true)) {
+            if (!$budgetSchemaAvailable || !$invitationResponseSchemaAvailable || !$participantId
+                || !in_array((string) $activity['status'], ['upcoming', 'scheduled', 'ongoing'], true)) {
                 throw new RuntimeException('Contribution responses are not available for this activity.');
             }
             rmsActivityBudgetSaveContributionResponse($conn, (int) $activityId, $participantId, $userId, $response);
@@ -257,7 +470,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $exception) {
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if ($action === 'start_activity') {
@@ -275,7 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log('Activity start action failed: ' . $exception->getMessage());
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if ($action === 'mark_conducted') {
@@ -293,7 +506,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log('Activity conducted action failed: ' . $exception->getMessage());
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
-        header('Location: ' . SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) $activityId);
+        header('Location: ' . $activityDetailUrl);
         exit;
     }
     if (!$canManage) {
@@ -324,9 +537,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'save_schedule_attendance') {
         $scheduleId = filter_var($_POST['schedule_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
-        $listedIds = is_array($_POST['schedule_participant_ids'] ?? null) ? array_values(array_unique($_POST['schedule_participant_ids'])) : [];
-        if (!$scheduleTablesAvailable || !$scheduleId || !$listedIds) {
+        $hasAttendanceChangesPayload = is_string($_POST['schedule_attendance_changes'] ?? null)
+            && trim((string) $_POST['schedule_attendance_changes']) !== '';
+        $attendanceChanges = [];
+        $invalidAttendanceChangesPayload = false;
+        if ($hasAttendanceChangesPayload) {
+            $changesJson = (string) $_POST['schedule_attendance_changes'];
+            $attendanceChanges = strlen($changesJson) <= 2000000 ? json_decode($changesJson, true) : null;
+            $invalidAttendanceChangesPayload = !is_array($attendanceChanges) || json_last_error() !== JSON_ERROR_NONE;
+        }
+        $listedIds = $hasAttendanceChangesPayload
+            ? (is_array($attendanceChanges) ? array_keys($attendanceChanges) : [])
+            : (is_array($_POST['schedule_participant_ids'] ?? null) ? array_values(array_unique($_POST['schedule_participant_ids'])) : []);
+        if (!$scheduleTablesAvailable || !$scheduleId || $invalidAttendanceChangesPayload) {
             $flash['message'] = 'Choose a valid scheduled date with participants.';
+        } elseif (!$listedIds) {
+            $flash = ['type' => 'success', 'message' => 'No attendance changes to save.'];
         } else {
             try {
                 rmsActivityScheduleBegin($conn);
@@ -366,7 +592,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$ownerStmt->execute() || !$ownerStmt->get_result()->fetch_assoc()) {
                         throw new RuntimeException('A participant does not belong to this date.');
                     }
-                    $attended = isset($attendanceInput[$participantId]) && (string) $attendanceInput[$participantId] === '1' ? 1 : 0;
+                    if ($hasAttendanceChangesPayload) {
+                        $changeValue = $attendanceChanges[(string) $participantId] ?? $attendanceChanges[$participantId] ?? null;
+                        if (!in_array($changeValue, [0, 1, '0', '1'], true)) {
+                            throw new RuntimeException('An attendance value is invalid.');
+                        }
+                        $attended = (int) $changeValue;
+                    } else {
+                        $attended = isset($attendanceInput[$participantId]) && (string) $attendanceInput[$participantId] === '1' ? 1 : 0;
+                    }
                     $attendanceStmt->bind_param('iii', $attended, $participantId, $scheduleId);
                     if (!$attendanceStmt->execute()) {
                         throw new RuntimeException('Unable to save date attendance.');
@@ -377,6 +611,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 rmsActivityScheduleCommit($conn);
                 logActivity("Updated date attendance for activity #{$activityId}", 'research_activities');
                 $flash = ['type' => 'success', 'message' => 'Attendance saved for this scheduled date.'];
+                $_SESSION['activity_attendance_saved'] = ['activity_id' => (int) $activityId, 'schedule_id' => $scheduleId];
             } catch (Throwable $exception) {
                 $conn->rollback();
                 error_log('Activity date attendance save failed: ' . $exception->getMessage());
@@ -428,9 +663,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$selectedUser) {
                         throw new RuntimeException('Choose an active eligible account.');
                     }
-                    if ($participantName === '') {
-                        $participantName = trim((string) $selectedUser['full_name']);
-                    }
+                    $participantName = trim((string) $selectedUser['full_name']);
                     $existingParticipantStmt = rmsActivitySchedulePrepare(
                         $conn,
                         'SELECT is_invited, is_notified FROM activity_schedule_participants
@@ -719,7 +952,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $_SESSION['activities_flash'] = $flash;
-    $redirect = $redirectToDetail ? SITE_URL . 'pages/shared/activity-detail.php?id=' . $activityId : SITE_URL . 'pages/shared/activities.php';
+    $redirect = SITE_URL . 'pages/shared/activities.php';
+    if ($redirectToDetail) {
+        $redirectParams = ['id' => (int) $activityId];
+        if ($modulePage !== '') {
+            $redirectParams['module_page'] = $modulePage;
+        }
+        $allowedScheduleIds = array_map(static fn (array $row): int => (int) $row['schedule_id'], array_values($scheduleDates));
+        foreach (['roster_page', 'roster_search', 'roster_role', 'roster_affiliation', 'roster_rsvp', 'roster_attendance'] as $queryKey) {
+            $inputValues = $_GET[$queryKey] ?? null;
+            if (!is_array($inputValues)) {
+                continue;
+            }
+            foreach ($allowedScheduleIds as $allowedScheduleId) {
+                $value = $inputValues[$allowedScheduleId] ?? null;
+                if (!is_scalar($value)) {
+                    continue;
+                }
+                if ($queryKey === 'roster_page') {
+                    $value = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
+                } elseif ($queryKey === 'roster_search') {
+                    $value = substr(trim((string) $value), 0, 400);
+                } elseif ($queryKey === 'roster_role') {
+                    $value = in_array((string) $value, ['attendee', 'speaker', 'organizer'], true) ? (string) $value : '';
+                } elseif ($queryKey === 'roster_affiliation') {
+                    $value = in_array((string) $value, ['student', 'faculty', 'staff', 'guest'], true) ? (string) $value : '';
+                } elseif ($queryKey === 'roster_rsvp') {
+                    $value = in_array((string) $value, ['pending', 'accepted', 'declined'], true) ? (string) $value : '';
+                } elseif ($queryKey === 'roster_attendance') {
+                    $value = in_array((string) $value, ['attended', 'not_attended'], true) ? (string) $value : '';
+                }
+                $redirectParams[$queryKey][$allowedScheduleId] = $value;
+            }
+        }
+        $redirect = SITE_URL . 'pages/shared/activity-detail.php?' . http_build_query($redirectParams);
+    }
     header('Location: ' . $redirect);
     exit;
 }
@@ -809,6 +1076,41 @@ $canRespondToContribution = $budgetData
     && !empty($budgetData['contribution_prompt'])
     && !$hasMandatoryParticipantCharge
     && in_array((string) $activity['status'], ['upcoming', 'scheduled', 'ongoing'], true);
+$autoOpenContributionParticipantId = 0;
+$pendingContributionPrompt = $activityId
+    ? ($_SESSION['activity_contribution_prompt_after_rsvp'][(int) $activityId] ?? null)
+    : null;
+if ($activityId) {
+    unset($_SESSION['activity_contribution_prompt_after_rsvp'][(int) $activityId]);
+}
+if ($canRespondToContribution
+    && is_array($pendingContributionPrompt)
+    && (int) ($pendingContributionPrompt['user_id'] ?? 0) === $userId) {
+    $pendingParticipantId = (int) ($pendingContributionPrompt['participant_id'] ?? 0);
+    foreach ($scheduleDates as $scheduleRow) {
+        if ((string) ($scheduleRow['status'] ?? '') !== 'scheduled') {
+            continue;
+        }
+        foreach ($scheduleRow['participants'] ?? [] as $scheduleParticipant) {
+            if ((int) ($scheduleParticipant['participant_id'] ?? 0) === $pendingParticipantId
+                && (int) ($scheduleParticipant['user_id'] ?? 0) === $userId
+                && (int) ($scheduleParticipant['is_invited'] ?? 0) === 1
+                && (string) ($scheduleParticipant['invitation_response'] ?? '') === 'accepted'
+                && empty($contributionResponses[$pendingParticipantId]['response'])) {
+                $autoOpenContributionParticipantId = $pendingParticipantId;
+                break 2;
+            }
+        }
+    }
+}
+
+$attendanceSavedScheduleId = 0;
+$attendanceSavedState = $_SESSION['activity_attendance_saved'] ?? null;
+if (is_array($attendanceSavedState)
+    && (int) ($attendanceSavedState['activity_id'] ?? 0) === (int) ($activityId ?? 0)) {
+    $attendanceSavedScheduleId = (int) ($attendanceSavedState['schedule_id'] ?? 0);
+    unset($_SESSION['activity_attendance_saved']);
+}
 
 $flash = $_SESSION['activities_flash'] ?? null;
 unset($_SESSION['activities_flash']);
@@ -821,7 +1123,7 @@ elseif ($shell === 'staff') renderStaffShell($user, 'activities.php', $pageTitle
 elseif ($shell === 'faculty') renderFacultyShell($user, 'activities.php', $pageTitle, 'Research activity details');
 else renderStudentShell($user, 'activities.php', $pageTitle, 'Research activity details');
 
-$typeLabels = ['seminar' => 'Seminar', 'training' => 'Training', 'workshop' => 'Workshop', 'colloquium' => 'Colloquium', 'conference' => 'Conference'];
+$typeLabels = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress'];
 $activityStoredStatus = (string) ($activity['status'] ?? '');
 $activityDisplayStatus = $activity
     ? rmsActivityScheduleClockStatus(array_values($scheduleDates), $activityStoredStatus)
@@ -851,6 +1153,13 @@ if ($activity && !empty($activity['is_multi_day'])) {
 .detail-page{max-width:1180px;margin:0 auto;color:#172033}.detail-back{display:inline-flex;margin-bottom:16px;color:#0f766e;font-size:12px;font-weight:800;text-decoration:none}.detail-hero{padding:28px 30px;border-left:5px solid #0f766e;border-radius:4px 18px 18px 4px;background:#eef8f6}.detail-tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:10px;font-weight:800}.type-badge{background:#d9ede9;color:#0f5f58}.tone-info{background:#e0f2fe;color:#075985}.tone-success{background:#dcfce7;color:#166534}.tone-danger{background:#fee2e2;color:#991b1b}.tone-neutral{background:#e2e8f0;color:#475569}.detail-hero h1{max-width:850px;margin:0;font-size:clamp(26px,4vw,42px);line-height:1.08;letter-spacing:-.04em;text-wrap:balance}.detail-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-top:25px;padding-top:20px;border-top:1px solid #cfdfdc}.meta-item span{display:block;color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em}.meta-item strong{display:block;margin-top:6px;font-size:13px;line-height:1.4}.description{max-width:760px;margin:22px 0 0;color:#475569;line-height:1.7}.action-bar{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 24px;padding:14px;border:1px solid #dfe7e5;border-radius:13px;background:#fff}.action-bar form{display:inline}.button{display:inline-flex;align-items:center;justify-content:center;min-height:39px;box-sizing:border-box;border:1px solid #0f766e;border-radius:8px;padding:8px 13px;background:#0f766e;color:#fff;font:inherit;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;transition:transform .18s ease,background .18s ease}.button:hover{background:#115e59;color:#fff;transform:translateY(-1px)}.button.secondary{border-color:#cbd5e1;background:#fff;color:#475569}.button.danger{border-color:#dc2626;background:#fff;color:#b42318}.button:focus-visible,.detail-back:focus-visible,input:focus,select:focus{outline:3px solid rgba(15,118,110,.13);outline-offset:2px}.flash{margin:18px 0;padding:13px 16px;border:1px solid;border-radius:11px;font-size:13px;font-weight:650}.flash-success{border-color:#bbdfcf;background:#eefaf4;color:#166534}.flash-error{border-color:#fecaca;background:#fff1f2;color:#991b1b}.panel{margin-bottom:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 12px 30px rgba(30,50,70,.05)}.panel-head{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px 20px;border-bottom:1px solid #e8edf3}.panel-head h2{margin:0;font-size:17px}.panel-head p{margin:4px 0 0;color:#64748b;font-size:12px}.count-mark{display:grid;place-items:center;min-width:42px;height:42px;border-radius:11px;background:#e3f3f0;color:#0f766e;font-weight:850}.table-wrap{overflow-x:auto}.detail-table{width:100%;min-width:680px;border-collapse:collapse}.detail-table th{padding:11px 16px;background:#f8fafc;color:#64748b;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em}.detail-table td{padding:14px 16px;border-top:1px solid #edf1f5;font-size:13px}.attendance-yes{color:#166534;font-weight:800}.attendance-no{color:#64748b}.inline-form{display:grid;grid-template-columns:1fr 1fr 160px auto;gap:13px;align-items:end;padding:20px}.field label{display:block;margin-bottom:6px;color:#475569;font-size:11px;font-weight:800}.field input,.field select{width:100%;min-height:42px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;background:#fff;color:#172033;font:inherit;font-size:12px}.attendance-list{padding:7px 20px 20px}.attendance-row{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:12px 2px;border-bottom:1px solid #edf1f5}.attendance-row label{font-size:13px;font-weight:700}.attendance-row input{width:18px;height:18px;accent-color:#0f766e}.attendance-submit{display:flex;justify-content:flex-end;margin-top:16px}.empty{padding:45px 24px;text-align:center;color:#64748b}.empty h2{margin:0 0 6px;color:#172033;font-size:17px}.privacy-note{padding:32px 24px;text-align:center;color:#64748b;font-size:13px}.not-found{padding:70px 25px;border:1px solid #e2e8f0;border-radius:17px;background:#fff;text-align:center}.not-found h1{margin:0;font-size:24px}.not-found p{margin:9px auto 20px;max-width:500px;color:#64748b;line-height:1.6}@media(max-width:800px){.detail-meta{grid-template-columns:1fr 1fr}.inline-form{grid-template-columns:1fr 1fr}}@media(max-width:560px){.detail-hero{padding:24px 21px}.detail-meta,.inline-form{grid-template-columns:1fr}.action-bar,.action-bar form,.button{width:100%}}
 .date-schedule-list{display:grid;gap:14px;padding:18px}.date-schedule-card{padding:18px;border:1px solid #e2e8f0;border-radius:13px;background:#fff}.date-schedule-card.cancelled{background:#f8fafc;opacity:.82}.date-schedule-card h3{margin:0 0 12px;font-size:16px}.date-schedule-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.date-schedule-meta span{display:block;color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase}.date-schedule-meta strong{display:block;margin-top:4px;font-size:12px;line-height:1.5}.date-participant-list{margin:0;padding:0;list-style:none}.date-participant-list li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #edf1f5;font-size:12px}.date-participant-actions{margin-top:15px;padding-top:14px;border-top:1px solid #e8edf3}.date-participant-actions .inline-form{padding:10px 0 0}.date-attendance{margin-top:12px}.date-attendance .attendance-list{padding:0 0 8px}@media(max-width:800px){.date-schedule-meta{grid-template-columns:1fr 1fr}}@media(max-width:560px){.date-schedule-meta{grid-template-columns:1fr}.date-participant-list li{align-items:flex-start;flex-direction:column}}
 .budget-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:18px 20px}.budget-summary-item{padding:13px;border:1px solid #e2e8f0;border-radius:11px;background:#fbfefd}.budget-summary-item span{display:block;color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.budget-summary-item strong{display:block;margin-top:6px;font-size:13px}.budget-status-note{margin:0 20px 16px;padding:12px 14px;border-radius:10px;background:#fff8e8;color:#8a5b06;font-size:12px;line-height:1.6}.budget-cost-list{display:grid;gap:8px;padding:0 20px 18px}.budget-cost-row{display:flex;justify-content:space-between;gap:14px;padding:11px 13px;border:1px solid #e8edf3;border-radius:10px;font-size:12px}.budget-cost-row strong{display:block}.budget-cost-row small{display:block;margin-top:3px;color:#64748b}.budget-cost-values{text-align:right;white-space:nowrap}.budget-history-list{display:grid;gap:12px;padding:18px}.budget-history-item{padding:13px;border:1px solid #e2e8f0;border-radius:10px}.budget-history-item p{margin:6px 0;color:#475569;font-size:12px;line-height:1.6}.budget-history-item summary{cursor:pointer;font-size:12px;font-weight:800}.notice-recipient-list{display:grid;gap:6px;margin-top:10px;padding-left:18px;color:#475569;font-size:11px}.contribution-response{margin:12px 0;padding:13px;border:1px solid #dbe7e4;border-radius:11px;background:#f7fbfa}.contribution-response p{margin:0 0 8px;color:#475569;font-size:12px}.contribution-response form{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.contribution-response select{min-width:230px;min-height:38px;border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#172033;font:inherit;font-size:12px}.delivery-failed{color:#b42318}.delivery-done{color:#166534}@media(max-width:800px){.budget-summary-grid{grid-template-columns:1fr 1fr}.budget-cost-row{align-items:flex-start;flex-direction:column}.budget-cost-values{text-align:left;white-space:normal}}@media(max-width:560px){.budget-summary-grid{grid-template-columns:1fr}}
+.date-participant-actions{margin-top:20px;padding-top:20px;border-top:1px solid #e8edf3}.date-management-head{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:16px}.date-management-head h4,.date-attendance-head h4{margin:0;color:#172033;font-size:15px;line-height:1.3}.date-management-head p{margin:5px 0 0;color:#64748b;font-size:12px;line-height:1.5}.date-management-head .date-management-kicker{margin:0 0 4px;color:#0f766e;font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.date-attendance-summary{display:flex;flex:none;align-items:baseline;gap:5px;padding:9px 12px;border:1px solid #d9e9e5;border-radius:10px;background:#f3faf8;color:#526174;font-size:11px}.date-attendance-summary strong{color:#0f766e;font-size:15px;font-variant-numeric:tabular-nums}.date-participant-form{display:grid;grid-template-columns:minmax(160px,1fr) minmax(220px,1.2fr) minmax(135px,.75fr) auto;gap:12px;align-items:end;padding:16px;border:1px solid #e1e9e7;border-radius:12px;background:#f8fbfa}.date-participant-form .field{min-width:0;margin:0}.date-participant-form .field label,.date-attendance-search label{margin-bottom:6px;color:#526174;font-size:11px;font-weight:750}.date-participant-form .field label span{color:#7b8794;font-weight:500}.date-participant-form .field input,.date-participant-form .field select,.date-attendance-search input{width:100%;min-height:42px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;background:#fff;color:#172033;font:inherit;font-size:12px}.date-participant-form .field input[readonly]{background:#f1f5f9;color:#475569}.date-participant-form .button{width:auto;min-height:42px;white-space:nowrap}.date-participant-hint,.date-duplicate-name-note{grid-column:1/-1;margin:0;color:#64748b;font-size:11px;line-height:1.5}.date-duplicate-name-note{padding:9px 11px;border-left:3px solid #d97706;border-radius:5px;background:#fff8e8;color:#805b15}.date-duplicate-name-note[hidden]{display:none}.date-attendance-form{margin-top:18px;padding-top:17px;border-top:1px solid #e8edf3}.date-attendance-head{display:flex;justify-content:space-between;align-items:end;gap:18px}.date-attendance-head p{margin:5px 0 0;color:#64748b;font-size:11px}.date-attendance-search{width:min(100%,260px)}.date-attendance-search label{display:block}.date-attendance-filter-count{margin:9px 0 0;color:#718096;font-size:10px}.date-attendance-rows{display:grid;margin-top:5px}.date-attendance-row{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:57px;padding:10px 4px;border-top:1px solid #edf1f5}.date-attendance-row[hidden]{display:none}.date-attendance-person{display:grid;gap:3px;min-width:0}.date-attendance-person>label{color:#172033;font-size:12px;font-weight:750}.date-attendance-person small{color:#718096;font-size:10px;line-height:1.4}.date-attendance-toggle{display:flex;align-items:center;gap:9px;flex:none;color:#64748b;font-size:10px;font-weight:700;cursor:pointer}.date-attendance-toggle input{width:19px;height:19px;margin:0;accent-color:#0f766e}.date-attendance-empty{display:grid;gap:4px;margin-top:14px;padding:15px 16px;border:1px dashed #cbd8d4;border-radius:10px;background:#f8fbfa}.date-attendance-empty strong{color:#334155;font-size:12px}.date-attendance-empty span{color:#64748b;font-size:11px}.date-attendance-form .attendance-submit{margin-top:13px}.date-attendance-form .attendance-submit .button{width:auto}@media(max-width:800px){.date-participant-form{grid-template-columns:1fr 1fr}.date-participant-form>.button{justify-self:start}.date-attendance-head{align-items:stretch;flex-direction:column}.date-attendance-search{width:100%}}@media(max-width:560px){.date-management-head{align-items:flex-start;flex-direction:column}.date-attendance-summary{align-self:flex-start}.date-participant-form{grid-template-columns:1fr;padding:13px}.date-participant-form>.button,.date-attendance-form .attendance-submit .button{width:100%}.date-attendance-row{align-items:flex-start}.date-attendance-toggle{padding-top:2px}}
+.date-participant-form .field label,.date-attendance-search label{text-transform:none;letter-spacing:0}.date-attendance-row{flex-wrap:wrap}.date-attendance-person{flex:1 1 180px}.date-cancel-invitation{min-height:32px;padding:6px 9px;font-size:10px;white-space:nowrap}@media(max-width:560px){.date-attendance-row .date-cancel-invitation{width:auto;order:3}}
+.roster-filter-form{display:grid;grid-template-columns:minmax(190px,1.6fr) repeat(4,minmax(120px,1fr)) auto;gap:10px;align-items:end;margin:18px 0 10px;padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.roster-filter-form .field{min-width:0;margin:0}.roster-filter-form .field label{display:block;margin-bottom:5px;color:#526174;font-size:10px;font-weight:750}.roster-filter-form input,.roster-filter-form select{width:100%;min-height:39px;border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#172033;font:inherit;font-size:11px}.roster-filter-form>.button{width:auto;min-height:39px;white-space:nowrap}.roster-page-summary{margin:12px 0;color:#64748b;font-size:11px}.invited-audience-toggle{display:flex;width:auto;min-height:36px;gap:9px;margin:10px 0 0;padding:7px 11px;font-size:11px}.invited-audience-toggle[hidden],.roster-table tbody[hidden]{display:none}.invited-audience-toggle span{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:20px;background:#d9ede9;color:#0f5f58}.roster-table-wrap{width:100%;overflow:visible}.roster-table{width:100%;border-collapse:collapse;color:#172033;font-size:11px}.roster-table thead th{padding:10px 9px;background:#f8fafc;color:#64748b;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}.roster-table td{padding:11px 9px;border-top:1px solid #edf1f5;vertical-align:middle;line-height:1.45}.roster-table td:first-child{font-weight:750}.roster-group-heading th{padding:12px 9px 7px;border-top:1px solid #e5ecea;background:#f2f8f6;color:#334155;text-align:left;font-size:10px}.roster-group-heading th span{margin-left:5px;color:#64748b;font-weight:600}.roster-empty-row td{color:#64748b;text-align:center}.roster-attendance-control{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;cursor:pointer}.roster-attendance-control input{width:19px;height:19px;margin:0;accent-color:#0f766e}.roster-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;color:#64748b;font-size:11px}.roster-pagination>div{display:flex;gap:7px}.roster-pagination .button{width:auto;min-height:34px;padding:6px 10px;font-size:10px}.date-attendance-form .attendance-submit{margin-top:14px}.date-attendance-form .attendance-submit .button{width:auto}@media(max-width:1050px){.roster-filter-form{grid-template-columns:repeat(3,minmax(0,1fr))}.roster-filter-form .field:first-child{grid-column:span 2}.roster-filter-form>.button{justify-self:start}}@media(max-width:700px){.roster-filter-form{grid-template-columns:1fr 1fr;padding:12px}.roster-filter-form .field:first-child{grid-column:1/-1}.roster-filter-form>.button{width:100%}.roster-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.roster-table,.roster-table tbody{display:block}.roster-table tbody{margin-top:8px}.roster-table tr:not(.roster-group-heading):not(.roster-empty-row){display:grid;grid-template-columns:1fr 1fr;margin:0 0 10px;border:1px solid #e2e8f0;border-radius:11px;background:#fff;overflow:hidden}.roster-table td{display:grid;grid-template-columns:minmax(95px,38%) 1fr;gap:8px;padding:9px 10px;border-top:1px solid #edf1f5}.roster-table td::before{content:attr(data-label);color:#64748b;font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.03em}.roster-table td:first-child{grid-column:1/-1;background:#f8fafc;font-size:13px}.roster-group-heading th{display:block;border:0;border-radius:9px}.roster-empty-row td{display:block}.roster-empty-row td::before{content:none}}@media(max-width:480px){.roster-filter-form{grid-template-columns:1fr}.roster-filter-form .field:first-child{grid-column:auto}.roster-table tr:not(.roster-group-heading):not(.roster-empty-row){grid-template-columns:1fr}.roster-table td,.roster-table td:first-child{grid-column:1/-1}.roster-pagination{align-items:flex-start;flex-direction:column}.roster-pagination>div{width:100%}.roster-pagination .button{flex:1}.date-attendance-form .attendance-submit .button{width:100%}}
+</style>
+
+<style>
+.checkin-qr-tools{margin-top:16px;padding:16px;border:1px solid #dce9e6;border-radius:12px;background:#f7fbfa}.checkin-qr-tools h4{margin:0 0 5px;font-size:14px}.checkin-qr-tools p{margin:8px 0;color:#526174;font-size:12px;line-height:1.55}.checkin-qr-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.checkin-qr-actions form{margin:0}.checkin-qr-preview{display:flex;align-items:center;flex-direction:column;gap:6px;width:min(100%,270px);margin-top:14px;padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;text-align:center}.checkin-qr-preview>div{width:100%;max-width:240px}.checkin-qr-preview svg{display:block;width:100%;height:auto}.checkin-qr-preview span,.checkin-qr-preview a{font-size:11px}.checkin-qr-preview a{color:#0f766e;font-weight:700}.checkin-qr-error{color:#991b1b!important}@media(max-width:560px){.checkin-qr-actions,.checkin-qr-actions form,.checkin-qr-actions .button{width:100%}}
 </style>
 
 <style>
@@ -858,6 +1167,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
 </style>
 
 <style>
+.contribution-response button[hidden]{display:none!important}.contribution-dialog{width:min(520px,calc(100% - 32px));max-height:min(88vh,720px);overflow:auto;padding:0;border:1px solid #d5e2df;border-radius:16px;background:#fff;color:#172033;box-shadow:0 24px 80px rgba(15,23,42,.24)}.contribution-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(2px)}.contribution-dialog-content{padding:24px}.contribution-dialog h2{margin:0;font-size:20px;line-height:1.25}.contribution-dialog p{margin:10px 0 0;color:#475569;font-size:13px;line-height:1.6}.contribution-dialog fieldset{display:grid;gap:9px;margin:20px 0 0;padding:0;border:0}.contribution-dialog legend{margin-bottom:8px;color:#334155;font-size:12px;font-weight:800}.contribution-dialog-option{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dbe5e2;border-radius:10px;background:#fbfefd;color:#334155;font-size:13px;line-height:1.45;cursor:pointer}.contribution-dialog-option input{flex:0 0 16px;width:16px;height:16px;margin:2px 0 0;accent-color:#0f766e}.contribution-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px;margin-top:20px}.contribution-dialog-actions .button{width:auto}.contribution-dialog :focus-visible{outline:3px solid rgba(15,118,110,.3);outline-offset:2px}@media(max-width:560px){.contribution-dialog-content{padding:20px}.contribution-dialog-actions,.contribution-dialog-actions .button{width:100%}}
 .activity-document-panel .panel-head{padding:20px 24px;border-bottom:1px solid #edf1f5}
 .activity-document-panel .activity-document-row{display:flex;align-items:center;gap:16px;padding:24px}
 .activity-document-panel .activity-document-badge{display:grid;place-items:center;flex:0 0 44px;height:52px;border:1px solid #dce7e5;border-radius:8px;background:#f1f7f6;color:#0f766e;font-size:11px;font-weight:800;letter-spacing:.04em}
@@ -874,9 +1184,32 @@ if ($activity && !empty($activity['is_multi_day'])) {
 @media(max-width:640px){.activity-document-panel .activity-document-row{flex-wrap:wrap;padding:20px}.activity-document-panel .activity-document-actions{width:100%;padding-top:4px}.activity-document-panel .activity-document-actions .button,.activity-document-panel .activity-document-actions form{width:auto}.activity-document-panel .panel-head{padding:20px}}
 </style>
 
+<style>
+.activity-save-toast{position:fixed;z-index:1300;top:50%;left:50%;right:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:start;width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:18px 18px 18px 20px;border:1px solid #a7d7bf;border-left:5px solid #16a34a;border-radius:14px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.18);color:#14532d;transform:translate(-50%,-50%);animation:activity-toast-enter .24s cubic-bezier(.2,.75,.3,1) both}
+.activity-save-toast-content{display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;align-items:start}
+.activity-save-toast-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#dcfce7;color:#166534;font-size:18px;font-weight:800}
+.activity-save-toast-copy strong{display:block;color:#14532d;font-size:14px;line-height:1.4}
+.activity-save-toast-copy p{margin:4px 0 0;color:#365b45;font-size:12px;font-weight:500;line-height:1.55}
+.activity-save-toast-dismiss{display:grid;place-items:center;width:34px;height:34px;margin:-6px -6px 0 0;border:1px solid transparent;border-radius:8px;background:transparent;color:#365b45;font:inherit;font-size:22px;line-height:1;cursor:pointer}
+.activity-save-toast-dismiss:hover{border-color:#bbdfcf;background:#f0fdf4}
+.activity-save-toast-dismiss:focus-visible{outline:3px solid rgba(22,163,74,.3);outline-offset:2px}
+@keyframes activity-toast-enter{from{opacity:0;margin-top:-8px}to{opacity:1;margin-top:0}}
+@media(max-width:640px){.activity-save-toast{width:calc(100vw - 32px);padding:16px;gap:12px}}
+@media(prefers-reduced-motion:reduce){.activity-save-toast{animation:none}}
+</style>
+
 <div class="detail-page">
   <a class="detail-back" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activities.php') ?>">← All research activities</a>
-  <?php if (is_array($flash)): ?><div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= activityDetailEscape($flash['message'] ?? '') ?></div><?php endif; ?>
+  <?php if (is_array($flash)): ?>
+    <?php if (($flash['type'] ?? '') === 'success' && !empty($flash['popup'])): ?>
+      <div class="activity-save-toast" data-activity-save-toast>
+        <div class="activity-save-toast-content" role="status" aria-live="polite" aria-atomic="true"><span class="activity-save-toast-icon" aria-hidden="true">✓</span><div class="activity-save-toast-copy"><strong>Activity created</strong><p><?= activityDetailEscape($flash['message'] ?? '') ?></p></div></div>
+        <button class="activity-save-toast-dismiss" type="button" aria-label="Dismiss activity saved message" data-dismiss-activity-save-toast>×</button>
+      </div>
+    <?php else: ?>
+      <div class="flash flash-<?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status"><?= activityDetailEscape($flash['message'] ?? '') ?></div>
+    <?php endif; ?>
+  <?php endif; ?>
   <?php if (!$activity): ?>
     <section class="not-found"><h1>Activity not found</h1><p><?= activityDetailEscape($activitiesAvailable ? 'The activity may have been removed, or the link is incomplete.' : 'The research activities module is not installed on this database.') ?></p><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activities.php') ?>">Return to activities</a></section>
   <?php else: ?>
@@ -892,6 +1225,12 @@ if ($activity && !empty($activity['is_multi_day'])) {
           <div class="meta-item"><span>Venue default</span><strong><?= activityDetailEscape($activity['venue'] ?: 'To be announced') ?></strong></div>
           <div class="meta-item"><span>Speaker default</span><strong><?= activityDetailEscape($activity['speaker'] ?: 'Not specified') ?></strong></div>
           <div class="meta-item"><span>Organizer</span><strong><?= activityDetailEscape($activity['organizer'] ?: 'Not specified') ?></strong></div>
+          <?php if ($canViewActivitySourceResearch && !empty($activity['source_project_id']) && !empty($activity['source_project_title'])): ?>
+            <div class="meta-item"><span>Archived research</span><strong><a href="<?= activityDetailEscape(SITE_URL . 'pages/shared/view-research.php?id=' . (int) $activity['source_project_id']) ?>"><?= activityDetailEscape((string) $activity['source_project_title']) ?></a></strong></div>
+          <?php endif; ?>
+          <?php if ($canViewActivitySourcePublication && !empty($activity['source_publication_id']) && !empty($activity['source_publication_title'])): ?>
+            <div class="meta-item"><span>Archived publication</span><strong><a href="<?= activityDetailEscape(SITE_URL . 'pages/shared/publication-detail.php?id=' . (int) $activity['source_publication_id']) ?>"><?= activityDetailEscape((string) $activity['source_publication_title']) ?></a></strong></div>
+          <?php endif; ?>
         </div>
         <?php if ($activity['description']): ?><p class="description"><?= nl2br(activityDetailEscape($activity['description'])) ?></p><?php endif; ?>
       <?php endif; ?>
@@ -914,7 +1253,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
       </section>
     <?php endif; ?>
 
-    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '')) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><button class="button" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" onsubmit="return confirm('Delete this activity and all participant records? This cannot be undone.');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav><?php endif; ?>
+    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage)) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><button class="button" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" onsubmit="return confirm('Delete this activity and all participant records? This cannot be undone.');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav><?php endif; ?>
 
     <?php
       $expenseLabels = ['registration' => 'Registration', 'transport' => 'Transportation / travel', 'accommodation' => 'Accommodation', 'meals' => 'Meals', 'online_fee' => 'Online participation fee', 'other' => 'Other related cost'];
@@ -928,7 +1267,34 @@ if ($activity && !empty($activity['is_multi_day'])) {
             $scheduleVenue = $scheduleRow['venue_override'] ?: ($activity['venue'] ?? '');
             $scheduleSpeaker = $scheduleRow['speaker_override'] ?: ($activity['speaker'] ?? '');
             $scheduleParticipants = $scheduleRow['participants'];
+            $scheduleIdForRoster = (int) $scheduleRow['schedule_id'];
+            $scheduleRoster = $rosterPageData[$scheduleIdForRoster] ?? null;
+            $scheduleRosterParticipants = is_array($scheduleRoster['participants'] ?? null) ? $scheduleRoster['participants'] : [];
+            $scheduleRosterTotal = $canManage ? (int) ($scheduleRoster['total_count'] ?? 0) : count($scheduleParticipants);
             $scheduleActive = (string) $scheduleRow['status'] === 'scheduled';
+            $scheduleIdForQr = (int) $scheduleRow['schedule_id'];
+            $checkinSessionToken = (string) ($_SESSION['activity_checkin_tokens'][$scheduleIdForQr] ?? '');
+            $storedCheckinHash = $checkinTokenHashes[$scheduleIdForQr] ?? '';
+            $checkinQrMarkup = '';
+            $checkinLink = '';
+            $checkinQrError = false;
+            $checkinQrUsesLocalhost = false;
+            $hasCurrentCheckinQr = $checkinSessionToken !== ''
+                && $storedCheckinHash !== ''
+                && hash_equals($storedCheckinHash, hash('sha256', $checkinSessionToken));
+            if ($canManage && $activityCheckinAvailable && $scheduleActive && $hasCurrentCheckinQr) {
+                try {
+                    $checkinBaseUrl = rmsActivityCheckinBaseUrl();
+                    $checkinLink = $checkinBaseUrl . 'public/activity-check-in.php?code=' . rawurlencode($checkinSessionToken);
+                    $checkinQrHost = strtolower((string) parse_url($checkinBaseUrl, PHP_URL_HOST));
+                    $checkinQrUsesLocalhost = in_array($checkinQrHost, ['localhost', '127.0.0.1', '::1'], true);
+                    $checkinQrMarkup = rmsActivityQrSvg(
+                        $checkinLink
+                    );
+                } catch (Throwable $exception) {
+                    $checkinQrError = true;
+                }
+            }
             $currentInviteParticipant = null;
             foreach ($scheduleParticipants as $scheduleParticipant) {
                 if ((int) ($scheduleParticipant['user_id'] ?? 0) === $userId
@@ -962,7 +1328,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
                 <div><span>Time</span><strong><?= activityDetailEscape($scheduleStartTime . ($scheduleEndTime !== '' ? ' – ' . $scheduleEndTime : '')) ?></strong></div>
                 <div><span>Venue</span><strong><?= activityDetailEscape($scheduleVenue ?: 'To be announced') ?></strong></div>
                 <div><span>Speaker</span><strong><?= activityDetailEscape($scheduleSpeaker ?: 'Not specified') ?></strong></div>
-                <div><span>Participants</span><strong><?= count($scheduleParticipants) ?></strong></div>
+                <div><span>Participants</span><strong><?= $scheduleRosterTotal ?></strong></div>
               </div><?php endif; ?>
               <?php if ($currentInviteParticipant): ?>
                 <?php
@@ -1066,12 +1432,13 @@ if ($activity && !empty($activity['is_multi_day'])) {
                 <?php else: ?>
                   <p class="privacy-note">Participant names are limited to authorized viewers.</p>
                 <?php endif; ?>
-              <?php elseif (!$scheduleParticipants): ?><p class="schedule-window-note">No participants are registered for this date.</p>
-              <?php else: ?>
+              <?php elseif (!$canManage && !$scheduleParticipants): ?><p class="schedule-window-note">No participants are registered for this date.</p>
+              <?php elseif (!$canManage): ?>
                 <ul class="date-participant-list">
                   <?php foreach ($scheduleParticipants as $scheduleParticipant): ?>
                     <?php $participantRsvpLabel = match ((string) ($scheduleParticipant['invitation_response'] ?? 'pending')) { 'accepted' => 'Accepted', 'declined' => 'Declined', default => 'No response' }; ?>
                     <li><span><?= activityDetailEscape($scheduleParticipant['participant_name'] ?: 'Unnamed participant') ?> · <?= activityDetailEscape(ucfirst((string) ($scheduleParticipant['role'] ?: 'attendee'))) ?><?= (int) $scheduleParticipant['is_invited'] === 1 || $isConductedActivity ? '' : ' · Invitation withdrawn' ?></span>
+                      <?php if (!empty($scheduleParticipant['attendee_affiliation']) || !empty($scheduleParticipant['attendee_program_department'])): ?><small><?php if (!empty($scheduleParticipant['attendee_affiliation'])): ?>Affiliation: <?= activityDetailEscape(ucfirst((string) $scheduleParticipant['attendee_affiliation'])) ?><?php endif; ?><?php if (!empty($scheduleParticipant['attendee_program_department'])): ?><?= !empty($scheduleParticipant['attendee_affiliation']) ? ' · ' : '' ?>Program/department: <?= activityDetailEscape((string) $scheduleParticipant['attendee_program_department']) ?><?php endif; ?></small><?php endif; ?>
                       <?php if ($invitationResponseSchemaAvailable && (int) $scheduleParticipant['is_invited'] === 1): ?><small>RSVP: <?= activityDetailEscape($participantRsvpLabel) ?></small><?php endif; ?>
                       <span class="<?= (int) $scheduleParticipant['attended'] === 1 ? 'attendance-yes' : 'attendance-no' ?>"><?= (int) $scheduleParticipant['attended'] === 1 ? 'Attended' : 'Not marked attended' ?>
                         <?php if ($canManage && $scheduleActive && (int) $scheduleParticipant['is_invited'] === 1 && (int) $scheduleParticipant['attended'] !== 1): ?><form method="post" style="display:inline" onsubmit="return confirm('Cancel this participant invitation for this date?');"><?= csrfField() ?><input type="hidden" name="action" value="remove_schedule_participant"><input type="hidden" name="schedule_participant_id" value="<?= (int) $scheduleParticipant['participant_id'] ?>"><button class="button danger" type="submit">Cancel invitation</button></form><?php endif; ?>
@@ -1086,29 +1453,229 @@ if ($activity && !empty($activity['is_multi_day'])) {
                     $participantIsCurrentUser = (int) ($scheduleParticipant['user_id'] ?? 0) === $userId
                         && (int) $scheduleParticipant['is_invited'] === 1;
                     $canRespondForDate = $participantIsCurrentUser
+                        && (string) ($scheduleParticipant['invitation_response'] ?? '') === 'accepted'
                         && $budgetData['budget_status'] === 'pending';
-                    $currentResponse = $contributionResponses[(int) $scheduleParticipant['participant_id']]['response'] ?? '';
+                    $scheduleParticipantId = (int) $scheduleParticipant['participant_id'];
+                    $currentResponse = $contributionResponses[$scheduleParticipantId]['response'] ?? '';
+                    $contributionDialogId = 'contribution-dialog-' . $scheduleParticipantId;
+                    $autoOpenContributionDialog = $autoOpenContributionParticipantId === $scheduleParticipantId;
                   ?>
                   <?php if ($canRespondForDate): ?>
-                    <div class="contribution-response"><p>Optional contribution response · This records willingness only and does not indicate payment.</p><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="save_contribution_response"><input type="hidden" name="schedule_participant_id" value="<?= (int) $scheduleParticipant['participant_id'] ?>"><div><label for="contribution-response-<?= (int) $scheduleParticipant['participant_id'] ?>">Your response</label><select id="contribution-response-<?= (int) $scheduleParticipant['participant_id'] ?>" name="contribution_response" required><option value="">Choose a response</option><option value="willing" <?= $currentResponse === 'willing' ? 'selected' : '' ?>>Willing to contribute</option><option value="unwilling" <?= $currentResponse === 'unwilling' ? 'selected' : '' ?>>Not willing to contribute</option><option value="needs_information" <?= $currentResponse === 'needs_information' ? 'selected' : '' ?>>Need more information</option></select></div><button class="button" type="submit">Save response</button></form></div>
+                    <div class="contribution-response">
+                      <p>Your attendance is saved. Your contribution response will not change whether you attend or record a payment.</p>
+                      <?php if ($currentResponse !== ''): ?><p>Saved contribution response: <?= activityDetailEscape(match ($currentResponse) { 'willing' => 'Willing to contribute', 'unwilling' => 'Not willing to contribute', 'needs_information' => 'Needs more information', default => 'Recorded' }) ?></p><?php endif; ?>
+                      <button class="button secondary" type="button" data-open-contribution-dialog="<?= activityDetailEscape($contributionDialogId) ?>" hidden><?= $currentResponse !== '' ? 'Change contribution response' : 'Respond about contributing' ?></button>
+                    </div>
+                    <dialog class="contribution-dialog" id="<?= activityDetailEscape($contributionDialogId) ?>" data-contribution-dialog data-auto-open="<?= $autoOpenContributionDialog ? 'true' : 'false' ?>" aria-labelledby="<?= activityDetailEscape($contributionDialogId) ?>-title" aria-describedby="<?= activityDetailEscape($contributionDialogId) ?>-description">
+                      <div class="contribution-dialog-content">
+                        <h2 id="<?= activityDetailEscape($contributionDialogId) ?>-title">Would you be willing to contribute?</h2>
+                        <p id="<?= activityDetailEscape($contributionDialogId) ?>-description">Your attendance response is already saved. This answer will not affect your attendance and does not confirm or record a payment.</p>
+                        <form method="post">
+                          <?= csrfField() ?>
+                          <input type="hidden" name="action" value="save_contribution_response">
+                          <input type="hidden" name="schedule_participant_id" value="<?= $scheduleParticipantId ?>">
+                          <fieldset>
+                            <legend>Choose a response</legend>
+                            <label class="contribution-dialog-option"><input type="radio" name="contribution_response" value="willing" required <?= $currentResponse === 'willing' ? 'checked' : '' ?>><span>Willing to contribute</span></label>
+                            <label class="contribution-dialog-option"><input type="radio" name="contribution_response" value="unwilling" required <?= $currentResponse === 'unwilling' ? 'checked' : '' ?>><span>Not willing to contribute</span></label>
+                            <label class="contribution-dialog-option"><input type="radio" name="contribution_response" value="needs_information" required <?= $currentResponse === 'needs_information' ? 'checked' : '' ?>><span>Need more information</span></label>
+                          </fieldset>
+                          <div class="contribution-dialog-actions"><button class="button" type="submit">Save response</button><button class="button secondary" type="button" data-close-contribution-dialog>Not now</button></div>
+                        </form>
+                      </div>
+                    </dialog>
+                    <noscript>
+                      <form class="contribution-response" method="post"><?= csrfField() ?><input type="hidden" name="action" value="save_contribution_response"><input type="hidden" name="schedule_participant_id" value="<?= $scheduleParticipantId ?>"><div class="field"><label for="contribution-response-fallback-<?= $scheduleParticipantId ?>">Your contribution response</label><select id="contribution-response-fallback-<?= $scheduleParticipantId ?>" name="contribution_response" required><option value="">Choose a response</option><option value="willing" <?= $currentResponse === 'willing' ? 'selected' : '' ?>>Willing to contribute</option><option value="unwilling" <?= $currentResponse === 'unwilling' ? 'selected' : '' ?>>Not willing to contribute</option><option value="needs_information" <?= $currentResponse === 'needs_information' ? 'selected' : '' ?>>Need more information</option></select></div><button class="button" type="submit">Save response</button></form>
+                    </noscript>
                   <?php endif; ?>
                 <?php endforeach; ?>
               <?php endif; ?>
-              <?php if ($canManage && $scheduleActive): ?>
-                <div class="date-participant-actions">
-                  <form class="inline-form" method="post"><?= csrfField() ?><input type="hidden" name="action" value="add_schedule_participant"><input type="hidden" name="schedule_id" value="<?= (int) $scheduleRow['schedule_id'] ?>">
-                    <div class="field"><label for="date-name-<?= (int) $scheduleRow['schedule_id'] ?>">Participant name</label><input id="date-name-<?= (int) $scheduleRow['schedule_id'] ?>" name="participant_name" maxlength="255" placeholder="Full name"></div>
-                    <div class="field"><label for="date-user-<?= (int) $scheduleRow['schedule_id'] ?>">Eligible user (optional)</label><select id="date-user-<?= (int) $scheduleRow['schedule_id'] ?>" name="user_id"><option value="">No linked account</option><?php foreach ($activeUsers as $activeUser): ?><option value="<?= (int) $activeUser['user_id'] ?>"><?= activityDetailEscape(trim((string) $activeUser['first_name'] . ' ' . (string) $activeUser['last_name']) . ' · ' . ucfirst((string) $activeUser['role'])) ?></option><?php endforeach; ?></select></div>
-                    <div class="field"><label for="date-role-<?= (int) $scheduleRow['schedule_id'] ?>">Role</label><select id="date-role-<?= (int) $scheduleRow['schedule_id'] ?>" name="participant_role"><option value="attendee">Attendee</option><option value="speaker">Speaker</option><option value="organizer">Organizer</option></select></div>
-                    <button class="button" type="submit">Add to this date</button>
-                  </form>
-                  <?php if ($canViewParticipants && $canRecordActivityAttendance && $scheduleParticipants): ?>
-                    <form class="attendance-list date-attendance" method="post"><?= csrfField() ?><input type="hidden" name="action" value="save_schedule_attendance"><input type="hidden" name="schedule_id" value="<?= (int) $scheduleRow['schedule_id'] ?>">
-                      <?php foreach ($scheduleParticipants as $scheduleParticipant): ?><input type="hidden" name="schedule_participant_ids[]" value="<?= (int) $scheduleParticipant['participant_id'] ?>"><div class="attendance-row"><label for="schedule-attended-<?= (int) $scheduleParticipant['participant_id'] ?>"><?= activityDetailEscape($scheduleParticipant['participant_name'] ?: 'Unnamed participant') ?></label><input id="schedule-attended-<?= (int) $scheduleParticipant['participant_id'] ?>" name="schedule_attended[<?= (int) $scheduleParticipant['participant_id'] ?>]" type="checkbox" value="1" <?= (int) $scheduleParticipant['attended'] === 1 ? 'checked' : '' ?>></div><?php endforeach; ?>
-                      <div class="attendance-submit"><button class="button" type="submit">Save date attendance</button></div>
-                    </form>
+              <?php if ($canManage): ?>
+                <section class="checkin-qr-tools" aria-label="Attendance QR check-in">
+                  <h4>QR attendance check-in</h4>
+                  <?php if (!$activityCheckinSchemaAvailable): ?>
+                    <p>QR check-in is unavailable until its database migration is applied.</p>
+                  <?php elseif (!$activityCheckinKeyConfigured): ?>
+                    <p>QR check-in needs a 64-character hexadecimal <code>ACTIVITY_CHECKIN_HASH_KEY</code> in the local environment file before new codes can be used.</p>
+                    <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                  <?php elseif (!$scheduleActive): ?>
+                    <p>This date is cancelled, so it cannot accept QR check-ins.</p>
+                    <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                  <?php else: ?>
+                    <p>Attendees can use this date’s QR code while the activity is ongoing. Check-in closes after the scheduled date.</p>
+                    <?php if ($hasCurrentCheckinQr && $checkinQrUsesLocalhost): ?><p class="checkin-qr-error">This QR link uses localhost, which attendee phones cannot reach. Set <code>ACTIVITY_CHECKIN_BASE_URL</code> to this server’s LAN or public address to use the QR from another device.</p><?php endif; ?>
+                    <div class="checkin-qr-actions">
+                      <form method="post"><?= csrfField() ?><input type="hidden" name="action" value="generate_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button" type="submit"><?= $storedCheckinHash !== '' ? 'Regenerate QR code' : 'Generate QR code' ?></button></form>
+                      <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                    </div>
+                    <?php if ($hasCurrentCheckinQr): ?>
+                      <?php if ($checkinQrError): ?><p class="checkin-qr-error">This check-in link is too long or invalid for QR encoding. Review the configured site and check-in base URLs.</p><?php if ($checkinLink !== ''): ?><a href="<?= activityDetailEscape($checkinLink) ?>">Open check-in link</a><?php endif; ?>
+                      <?php else: ?><div class="checkin-qr-preview"><div><?= $checkinQrMarkup ?></div><span>Scan to open the public check-in form</span><a href="<?= activityDetailEscape($checkinLink) ?>">Open check-in link</a></div><?php endif; ?>
+                    <?php elseif ($storedCheckinHash !== ''): ?>
+                      <p>The current QR code was generated in another or expired session. Regenerate it here to display a new code; this revokes the previous one.</p>
+                    <?php endif; ?>
                   <?php endif; ?>
-                </div>
+                </section>
+              <?php endif; ?>
+              <?php if ($canManage && $scheduleActive): ?>
+                <?php
+                  $dateParticipantCount = (int) ($scheduleRoster['total_count'] ?? 0);
+                  $dateAttendedCount = (int) ($scheduleRoster['attended_count'] ?? 0);
+                  $dateParticipantFormId = 'date-participant-form-' . (int) $scheduleRow['schedule_id'];
+                  $dateAttendanceFormId = 'date-attendance-form-' . (int) $scheduleRow['schedule_id'];
+                  $rosterPage = (int) ($scheduleRoster['page'] ?? 1);
+                  $rosterPageCount = (int) ($scheduleRoster['page_count'] ?? 1);
+                  $rosterFilteredCount = (int) ($scheduleRoster['filtered_count'] ?? 0);
+                  $rosterFilters = $scheduleRoster['filters'] ?? ['search' => '', 'role' => '', 'affiliation' => '', 'rsvp' => '', 'attendance' => ''];
+                  $invitedRosterRows = array_values(array_filter($scheduleRosterParticipants, static fn (array $participant): bool => (int) ($participant['is_invited'] ?? 0) === 1));
+                  $otherRosterRows = array_values(array_filter($scheduleRosterParticipants, static fn (array $participant): bool => (int) ($participant['is_invited'] ?? 0) !== 1));
+                  $rosterQuery = [
+                      'id' => (int) $activityId,
+                      'module_page' => $modulePage,
+                      'roster_page' => [$scheduleIdForRoster => $rosterPage],
+                      'roster_search' => [$scheduleIdForRoster => $rosterFilters['search']],
+                      'roster_role' => [$scheduleIdForRoster => $rosterFilters['role']],
+                      'roster_affiliation' => [$scheduleIdForRoster => $rosterFilters['affiliation']],
+                      'roster_rsvp' => [$scheduleIdForRoster => $rosterFilters['rsvp']],
+                      'roster_attendance' => [$scheduleIdForRoster => $rosterFilters['attendance']],
+                  ];
+                  $rosterPageUrl = static function (int $targetPage) use ($rosterQuery, $scheduleIdForRoster): string {
+                      $query = $rosterQuery;
+                      $query['roster_page'][$scheduleIdForRoster] = $targetPage;
+                      return SITE_URL . 'pages/shared/activity-detail.php?' . http_build_query($query);
+                  };
+                  $rosterStart = $rosterFilteredCount > 0 ? (($rosterPage - 1) * 50) + 1 : 0;
+                  $rosterEnd = min($rosterPage * 50, $rosterFilteredCount);
+                  $invitedAudienceId = 'invited-audience-' . $scheduleIdForRoster;
+                ?>
+                <section class="date-participant-actions" data-date-participant-panel>
+                  <header class="date-management-head">
+                    <div>
+                      <p class="date-management-kicker">Roster management</p>
+                      <h4>Manage participants</h4>
+                      <p>Add an RMS account or a guest, then mark who attended.</p>
+                    </div>
+                    <span class="date-attendance-summary" data-attendance-summary>
+                      <strong data-attendance-count data-attendance-base="<?= $dateAttendedCount ?>" data-attendance-total="<?= $dateParticipantCount ?>"><?= $dateAttendedCount ?> of <?= $dateParticipantCount ?></strong>
+                      <span>marked attended</span>
+                    </span>
+                  </header>
+
+                  <form id="<?= activityDetailEscape($dateParticipantFormId) ?>" class="date-participant-form" method="post" data-participant-form>
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="add_schedule_participant">
+                    <input type="hidden" name="schedule_id" value="<?= (int) $scheduleRow['schedule_id'] ?>">
+                    <div class="field">
+                      <label for="date-name-<?= (int) $scheduleRow['schedule_id'] ?>">Participant name</label>
+                      <input id="date-name-<?= (int) $scheduleRow['schedule_id'] ?>" name="participant_name" maxlength="255" placeholder="Guest full name" autocomplete="name" data-participant-name-input>
+                    </div>
+                    <div class="field">
+                      <label for="date-user-<?= (int) $scheduleRow['schedule_id'] ?>">Link RMS account <span>(optional)</span></label>
+                      <select id="date-user-<?= (int) $scheduleRow['schedule_id'] ?>" name="user_id" data-participant-user-select>
+                        <option value="">Guest / no linked account</option>
+                        <?php foreach ($activeUsers as $activeUser): $activeUserName = trim((string) $activeUser['first_name'] . ' ' . (string) $activeUser['last_name']); ?>
+                          <option value="<?= (int) $activeUser['user_id'] ?>" data-account-name="<?= activityDetailEscape($activeUserName) ?>"><?= activityDetailEscape($activeUserName . ' · ' . ucfirst((string) $activeUser['role'])) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="date-role-<?= (int) $scheduleRow['schedule_id'] ?>">Activity role</label>
+                      <select id="date-role-<?= (int) $scheduleRow['schedule_id'] ?>" name="participant_role">
+                        <option value="attendee">Attendee</option>
+                        <option value="speaker">Speaker</option>
+                        <option value="organizer">Organizer</option>
+                      </select>
+                    </div>
+                    <button class="button" type="submit">Add participant</button>
+                    <p class="date-participant-hint" data-participant-name-hint>Choose an RMS account to use its saved name, or leave it unlinked to add a guest.</p>
+                    <p class="date-duplicate-name-note" data-duplicate-name-note role="status" aria-live="polite" hidden></p>
+                  </form>
+
+                  <?php
+                    foreach (array_merge($invitedRosterRows, $otherRosterRows) as $scheduleParticipant) {
+                        if ((int) ($scheduleParticipant['is_invited'] ?? 0) !== 1 || (int) ($scheduleParticipant['attended'] ?? 0) === 1) {
+                            continue;
+                        }
+                        $cancelInvitationFormId = 'cancel-date-invitation-' . (int) $scheduleParticipant['participant_id'];
+                  ?>
+                    <form id="<?= activityDetailEscape($cancelInvitationFormId) ?>" method="post" hidden onsubmit="return confirm('Cancel this participant invitation for this date?');">
+                      <?= csrfField() ?>
+                      <input type="hidden" name="action" value="remove_schedule_participant">
+                      <input type="hidden" name="schedule_participant_id" value="<?= (int) $scheduleParticipant['participant_id'] ?>">
+                    </form>
+                  <?php } ?>
+
+                  <?php if (!empty($scheduleRoster['error'])): ?>
+                    <div class="date-attendance-empty"><strong>Roster unavailable</strong><span>Refresh the page or contact an activity administrator.</span></div>
+                  <?php elseif ($dateParticipantCount === 0): ?>
+                    <div class="date-attendance-empty"><strong>No participants on this date yet</strong><span>Add an RMS account or guest above to start the attendance roster.</span></div>
+                  <?php else: ?>
+                    <form class="roster-filter-form" method="get" action="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-detail.php') ?>">
+                      <input type="hidden" name="id" value="<?= (int) $activityId ?>">
+                      <?php if ($modulePage !== ''): ?><input type="hidden" name="module_page" value="<?= activityDetailEscape($modulePage) ?>"><?php endif; ?>
+                      <div class="field"><label for="roster-search-<?= $scheduleIdForRoster ?>">Search roster</label><input id="roster-search-<?= $scheduleIdForRoster ?>" name="roster_search[<?= $scheduleIdForRoster ?>]" type="search" maxlength="100" value="<?= activityDetailEscape($rosterFilters['search']) ?>" placeholder="Name or program" autocomplete="off"></div>
+                      <div class="field"><label for="roster-role-<?= $scheduleIdForRoster ?>">Role</label><select id="roster-role-<?= $scheduleIdForRoster ?>" name="roster_role[<?= $scheduleIdForRoster ?>]"><option value="">All roles</option><option value="attendee" <?= $rosterFilters['role'] === 'attendee' ? 'selected' : '' ?>>Attendee</option><option value="speaker" <?= $rosterFilters['role'] === 'speaker' ? 'selected' : '' ?>>Speaker</option><option value="organizer" <?= $rosterFilters['role'] === 'organizer' ? 'selected' : '' ?>>Organizer</option></select></div>
+                      <?php if ($activityCheckinDetailsAvailable): ?><div class="field"><label for="roster-affiliation-<?= $scheduleIdForRoster ?>">Affiliation</label><select id="roster-affiliation-<?= $scheduleIdForRoster ?>" name="roster_affiliation[<?= $scheduleIdForRoster ?>]"><option value="">All affiliations</option><option value="student" <?= $rosterFilters['affiliation'] === 'student' ? 'selected' : '' ?>>Student</option><option value="faculty" <?= $rosterFilters['affiliation'] === 'faculty' ? 'selected' : '' ?>>Faculty</option><option value="staff" <?= $rosterFilters['affiliation'] === 'staff' ? 'selected' : '' ?>>Staff</option><option value="guest" <?= $rosterFilters['affiliation'] === 'guest' ? 'selected' : '' ?>>Guest</option></select></div><?php endif; ?>
+                      <?php if ($invitationResponseSchemaAvailable): ?><div class="field"><label for="roster-rsvp-<?= $scheduleIdForRoster ?>">RSVP</label><select id="roster-rsvp-<?= $scheduleIdForRoster ?>" name="roster_rsvp[<?= $scheduleIdForRoster ?>]"><option value="">All RSVP states</option><option value="pending" <?= $rosterFilters['rsvp'] === 'pending' ? 'selected' : '' ?>>No response</option><option value="accepted" <?= $rosterFilters['rsvp'] === 'accepted' ? 'selected' : '' ?>>Accepted</option><option value="declined" <?= $rosterFilters['rsvp'] === 'declined' ? 'selected' : '' ?>>Declined</option></select></div><?php endif; ?>
+                      <div class="field"><label for="roster-attendance-<?= $scheduleIdForRoster ?>">Attendance</label><select id="roster-attendance-<?= $scheduleIdForRoster ?>" name="roster_attendance[<?= $scheduleIdForRoster ?>]"><option value="">All attendance</option><option value="attended" <?= $rosterFilters['attendance'] === 'attended' ? 'selected' : '' ?>>Attended</option><option value="not_attended" <?= $rosterFilters['attendance'] === 'not_attended' ? 'selected' : '' ?>>Not marked</option></select></div>
+                      <button class="button secondary" type="submit">Apply filters</button>
+                    </form>
+
+                    <p class="roster-page-summary" aria-live="polite">Showing <?= $rosterStart ?>–<?= $rosterEnd ?> of <?= $rosterFilteredCount ?> matching participants · <?= $dateAttendedCount ?> of <?= $dateParticipantCount ?> marked attended overall</p>
+                    <button class="button secondary invited-audience-toggle" type="button" aria-expanded="true" aria-controls="<?= activityDetailEscape($invitedAudienceId) ?>" data-invited-audience-toggle hidden><span data-invited-toggle-label>Hide invited audience</span><span><?= (int) ($scheduleRoster['invited_count'] ?? 0) ?></span></button>
+                    <?php if ($canRecordActivityAttendance): ?>
+                      <form id="<?= activityDetailEscape($dateAttendanceFormId) ?>" class="date-attendance-form" method="post" data-date-attendance-form data-roster-state-key="rms-attendance-<?= (int) $activityId ?>-<?= $scheduleIdForRoster ?>" data-attendance-saved="<?= (int) ($attendanceSavedScheduleId ?? 0) === $scheduleIdForRoster ? 'true' : 'false' ?>">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="save_schedule_attendance">
+                        <input type="hidden" name="schedule_id" value="<?= $scheduleIdForRoster ?>">
+                        <input type="hidden" name="schedule_attendance_changes" value="" data-attendance-changes>
+                        <?php foreach ($scheduleRosterParticipants as $scheduleParticipant): ?><input type="hidden" name="schedule_participant_ids[]" value="<?= (int) $scheduleParticipant['participant_id'] ?>"><?php endforeach; ?>
+                    <?php endif; ?>
+                    <div class="roster-table-wrap">
+                      <table class="roster-table">
+                        <thead><tr><th scope="col">Participant</th><th scope="col">Affiliation</th><th scope="col">Program/Department</th><th scope="col">Role</th><th scope="col">RSVP</th><th scope="col">Attendance</th><th scope="col">Actions</th></tr></thead>
+                        <tbody id="<?= activityDetailEscape($invitedAudienceId) ?>" data-invited-audience-rows>
+                          <?php if ($invitedRosterRows): foreach ($invitedRosterRows as $scheduleParticipant):
+                            $scheduleParticipantName = trim((string) ($scheduleParticipant['participant_name'] ?? '')) ?: 'Unnamed participant';
+                            $scheduleParticipantId = (int) $scheduleParticipant['participant_id'];
+                            $scheduleParticipantRole = ucfirst((string) ($scheduleParticipant['role'] ?? 'attendee') ?: 'Attendee');
+                            $scheduleParticipantRsvp = match ((string) ($scheduleParticipant['invitation_response'] ?? 'pending')) { 'accepted' => 'Accepted', 'declined' => 'Declined', default => 'No response' };
+                          ?>
+                            <tr data-attendance-row data-attendance-name="<?= activityDetailEscape($scheduleParticipantName) ?>" data-user-id="<?= activityDetailEscape((string) ($scheduleParticipant['user_id'] ?? '')) ?>">
+                              <td data-label="Participant"><span><?= activityDetailEscape($scheduleParticipantName) ?></span></td>
+                              <td data-label="Affiliation"><span><?= activityDetailEscape(ucfirst((string) ($scheduleParticipant['attendee_affiliation'] ?? '')) ?: '—') ?></span></td>
+                              <td data-label="Program/Department"><span><?= activityDetailEscape((string) ($scheduleParticipant['attendee_program_department'] ?? '') ?: '—') ?></span></td>
+                              <td data-label="Role"><span><?= activityDetailEscape($scheduleParticipantRole) ?></span></td>
+                              <td data-label="RSVP"><span><?= activityDetailEscape($scheduleParticipantRsvp) ?></span></td>
+                              <td data-label="Attendance"><?php if ($canRecordActivityAttendance): ?><label class="roster-attendance-control" for="schedule-attended-<?= $scheduleParticipantId ?>"><input id="schedule-attended-<?= $scheduleParticipantId ?>" name="schedule_attended[<?= $scheduleParticipantId ?>]" type="checkbox" value="1" aria-label="Mark <?= activityDetailEscape($scheduleParticipantName) ?> as attended" data-attendance-checkbox data-initial-attended="<?= (int) $scheduleParticipant['attended'] ?>" <?= (int) $scheduleParticipant['attended'] === 1 ? 'checked' : '' ?>></label><?php else: ?><span class="<?= (int) $scheduleParticipant['attended'] === 1 ? 'attendance-yes' : 'attendance-no' ?>"><?= (int) $scheduleParticipant['attended'] === 1 ? 'Attended' : 'Not marked' ?></span><?php endif; ?></td>
+                              <td data-label="Actions"><?php if ((int) ($scheduleParticipant['attended'] ?? 0) !== 1): ?><?php $cancelInvitationFormId = 'cancel-date-invitation-' . $scheduleParticipantId; ?><button class="button secondary date-cancel-invitation" type="submit" form="<?= activityDetailEscape($cancelInvitationFormId) ?>">Cancel invitation</button><?php else: ?><span>—</span><?php endif; ?></td>
+                            </tr>
+                          <?php endforeach; else: ?><tr class="roster-empty-row"><td colspan="7">No invited participants match this page and filter.</td></tr><?php endif; ?>
+                        </tbody>
+                        <tbody data-other-roster-rows>
+                          <tr class="roster-group-heading"><th colspan="7" scope="rowgroup">Guests and other participants <span><?= (int) ($scheduleRoster['other_count'] ?? 0) ?></span></th></tr>
+                          <?php if ($otherRosterRows): foreach ($otherRosterRows as $scheduleParticipant):
+                            $scheduleParticipantName = trim((string) ($scheduleParticipant['participant_name'] ?? '')) ?: 'Unnamed participant';
+                            $scheduleParticipantId = (int) $scheduleParticipant['participant_id'];
+                            $scheduleParticipantRole = ucfirst((string) ($scheduleParticipant['role'] ?? 'attendee') ?: 'Attendee');
+                          ?>
+                            <tr data-attendance-row data-attendance-name="<?= activityDetailEscape($scheduleParticipantName) ?>" data-user-id="<?= activityDetailEscape((string) ($scheduleParticipant['user_id'] ?? '')) ?>">
+                              <td data-label="Participant"><span><?= activityDetailEscape($scheduleParticipantName) ?></span></td>
+                              <td data-label="Affiliation"><span><?= activityDetailEscape(ucfirst((string) ($scheduleParticipant['attendee_affiliation'] ?? '')) ?: '—') ?></span></td>
+                              <td data-label="Program/Department"><span><?= activityDetailEscape((string) ($scheduleParticipant['attendee_program_department'] ?? '') ?: '—') ?></span></td>
+                              <td data-label="Role"><span><?= activityDetailEscape($scheduleParticipantRole) ?></span></td>
+                              <td data-label="RSVP"><span>—</span></td>
+                              <td data-label="Attendance"><?php if ($canRecordActivityAttendance): ?><label class="roster-attendance-control" for="schedule-attended-<?= $scheduleParticipantId ?>"><input id="schedule-attended-<?= $scheduleParticipantId ?>" name="schedule_attended[<?= $scheduleParticipantId ?>]" type="checkbox" value="1" aria-label="Mark <?= activityDetailEscape($scheduleParticipantName) ?> as attended" data-attendance-checkbox data-initial-attended="<?= (int) $scheduleParticipant['attended'] ?>" <?= (int) $scheduleParticipant['attended'] === 1 ? 'checked' : '' ?>></label><?php else: ?><span class="<?= (int) $scheduleParticipant['attended'] === 1 ? 'attendance-yes' : 'attendance-no' ?>"><?= (int) $scheduleParticipant['attended'] === 1 ? 'Attended' : 'Not marked' ?></span><?php endif; ?></td>
+                              <td data-label="Actions"><span>—</span></td>
+                            </tr>
+                          <?php endforeach; else: ?><tr class="roster-empty-row"><td colspan="7">No guests or other participants match this page and filter.</td></tr><?php endif; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                    <?php if ($rosterPageCount > 1): ?><nav class="roster-pagination" aria-label="Roster pages"><span>Page <?= $rosterPage ?> of <?= $rosterPageCount ?></span><div><?php if ($rosterPage > 1): ?><a class="button secondary" href="<?= activityDetailEscape($rosterPageUrl($rosterPage - 1)) ?>" rel="prev">Previous</a><?php endif; ?><?php if ($rosterPage < $rosterPageCount): ?><a class="button secondary" href="<?= activityDetailEscape($rosterPageUrl($rosterPage + 1)) ?>" rel="next">Next</a><?php endif; ?></div></nav><?php endif; ?>
+                    <?php if ($canRecordActivityAttendance): ?><div class="attendance-submit"><button class="button" type="submit">Save date attendance</button></div></form><?php endif; ?>
+                  <?php endif; ?>
+                </section>
               <?php endif; ?>
             </article>
           <?php endforeach; ?>
@@ -1135,7 +1702,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
         $formatLabels = ['on_site' => 'On-site', 'online' => 'Online', 'hybrid' => 'Hybrid'];
         $activityWideExpenses = array_values(array_filter($budgetData['expenses'], static fn (array $expense): bool => $expense['schedule_id'] === null));
       ?>
-      <section class="panel" aria-labelledby="budget-heading"><div class="panel-head"><div><h2 id="budget-heading">Budget and participation details</h2><p>Organizational spending and participant charges are recorded separately.</p></div><?php if ($canManage): ?><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activityId . '&mode=budget' . ($capacityPage !== '' ? '&capacity_page=' . rawurlencode($capacityPage) : '') . '#budget-section') ?>">Edit budget</a><?php endif; ?></div>
+      <section class="panel" aria-labelledby="budget-heading"><div class="panel-head"><div><h2 id="budget-heading">Budget and participation details</h2><p>Organizational spending and participant charges are recorded separately.</p></div><?php if ($canManage): ?><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . (int) $activityId . '&mode=budget&module_page=' . rawurlencode($modulePage) . '#budget-section') ?>">Edit budget</a><?php endif; ?></div>
         <div class="budget-summary-grid">
           <div class="budget-summary-item"><span>Format</span><strong><?= activityDetailEscape($formatLabels[$budgetData['activity_format']] ?? 'Not specified') ?></strong></div>
           <div class="budget-summary-item"><span>Funding</span><strong><?= activityDetailEscape($fundingLabels[$budgetData['funding_source']] ?? 'Not specified') ?></strong></div>
@@ -1181,6 +1748,158 @@ if ($activity && !empty($activity['is_multi_day'])) {
   <?php endif; ?>
 </div>
 
+<script>
+document.querySelectorAll('[data-dismiss-activity-save-toast]').forEach((button) => {
+  button.addEventListener('click', () => button.closest('[data-activity-save-toast]')?.remove());
+});
+
+document.querySelectorAll('[data-open-contribution-dialog]').forEach((button) => {
+  const dialog = document.getElementById(button.dataset.openContributionDialog || '');
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  button.hidden = false;
+  button.addEventListener('click', () => dialog.showModal());
+  dialog.querySelectorAll('[data-close-contribution-dialog]').forEach((closeButton) => {
+    closeButton.addEventListener('click', () => dialog.close());
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  if (dialog.dataset.autoOpen === 'true') dialog.showModal();
+});
+
+document.querySelectorAll('[data-participant-form]').forEach((form) => {
+  const nameInput = form.querySelector('[data-participant-name-input]');
+  const userSelect = form.querySelector('[data-participant-user-select]');
+  const nameHint = form.querySelector('[data-participant-name-hint]');
+  const duplicateNote = form.querySelector('[data-duplicate-name-note]');
+  const roster = form.closest('[data-date-participant-panel]');
+  const rows = Array.from(roster?.querySelectorAll('[data-attendance-row]') || []);
+  if (!nameInput || !userSelect || !duplicateNote) return;
+
+  const normalizeName = (value) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const refreshDuplicateNote = () => {
+    const selectedUserId = userSelect.value;
+    const existingAccount = selectedUserId
+      ? rows.find((row) => row.dataset.userId === selectedUserId)
+      : null;
+    if (existingAccount) {
+      duplicateNote.textContent = 'This RMS account is already on this date. Adding it again updates its role instead of creating another row.';
+      duplicateNote.hidden = false;
+      return;
+    }
+
+    const currentName = normalizeName(nameInput.value);
+    const duplicateName = currentName !== ''
+      && rows.some((row) => normalizeName(row.dataset.attendanceName || '') === currentName);
+    duplicateNote.textContent = duplicateName
+      ? 'A participant with this name is already listed. Check the details; people with the same name can still be added.'
+      : '';
+    duplicateNote.hidden = !duplicateName;
+  };
+
+  userSelect.addEventListener('change', () => {
+    const selectedOption = userSelect.selectedOptions[0];
+    const accountName = selectedOption?.dataset.accountName || '';
+    if (userSelect.value && accountName !== '') {
+      nameInput.value = accountName;
+      nameInput.readOnly = true;
+      nameInput.dataset.linkedName = accountName;
+      if (nameHint) nameHint.textContent = 'Using the selected RMS account’s saved name.';
+    } else {
+      if (nameInput.readOnly && nameInput.value === (nameInput.dataset.linkedName || '')) {
+        nameInput.value = '';
+      }
+      nameInput.readOnly = false;
+      delete nameInput.dataset.linkedName;
+      if (nameHint) nameHint.textContent = 'Enter a guest name, or choose an RMS account to use its saved name.';
+    }
+    refreshDuplicateNote();
+  });
+  nameInput.addEventListener('input', refreshDuplicateNote);
+  refreshDuplicateNote();
+});
+
+document.querySelectorAll('[data-date-attendance-form]').forEach((form) => {
+  const countOutput = form.closest('[data-date-participant-panel]')?.querySelector('[data-attendance-count]');
+  const changesInput = form.querySelector('[data-attendance-changes]');
+  const storageKey = form.dataset.rosterStateKey || '';
+  const changes = new Map();
+  if (form.dataset.attendanceSaved === 'true' && storageKey !== '') {
+    try { sessionStorage.removeItem(storageKey); } catch (error) {}
+  } else if (storageKey !== '') {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+      Object.entries(saved).forEach(([id, state]) => {
+        if (state && [0, 1].includes(Number(state.initial)) && [0, 1].includes(Number(state.value))) {
+          changes.set(id, {initial: Number(state.initial), value: Number(state.value)});
+        }
+      });
+    } catch (error) {}
+  }
+  const checkboxes = Array.from(form.querySelectorAll('[data-attendance-checkbox]'));
+  checkboxes.forEach((checkbox) => {
+    const id = checkbox.name.match(/\[(\d+)\]/)?.[1];
+    const saved = id ? changes.get(id) : null;
+    if (saved) checkbox.checked = saved.value === 1;
+  });
+  const persistChanges = () => {
+    if (storageKey === '') return;
+    try { sessionStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(changes))); } catch (error) {}
+  };
+  const updateAttendanceCount = () => {
+    const baseCount = Number(countOutput?.dataset.attendanceBase || 0);
+    const totalCount = Number(countOutput?.dataset.attendanceTotal || 0);
+    const pendingDelta = Array.from(changes.values()).reduce((sum, state) => sum + state.value - state.initial, 0);
+    if (countOutput) countOutput.textContent = `${baseCount + pendingDelta} of ${totalCount}`;
+  };
+  checkboxes.forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      const id = checkbox.name.match(/\[(\d+)\]/)?.[1];
+      if (!id) return;
+      const initial = Number(checkbox.dataset.initialAttended || 0);
+      const value = checkbox.checked ? 1 : 0;
+      if (value === initial) changes.delete(id);
+      else changes.set(id, {initial, value});
+      persistChanges();
+      updateAttendanceCount();
+    });
+  });
+  form.addEventListener('submit', () => {
+    const payload = Object.fromEntries(Array.from(changes, ([id, state]) => [id, state.value]));
+    if (changesInput) changesInput.value = JSON.stringify(payload);
+    persistChanges();
+  });
+  updateAttendanceCount();
+});
+
+document.querySelectorAll('[data-invited-audience-toggle]').forEach((button) => {
+  const rows = document.getElementById(button.getAttribute('aria-controls') || '');
+  const label = button.querySelector('[data-invited-toggle-label]');
+  if (!rows || !label) return;
+  button.hidden = false;
+  button.addEventListener('click', () => {
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    rows.hidden = expanded;
+    label.textContent = expanded ? 'Show invited audience' : 'Hide invited audience';
+  });
+});
+
+document.querySelectorAll('form[id^="cancel-date-invitation-"]').forEach((cancelForm) => {
+  cancelForm.addEventListener('submit', () => {
+    const panel = cancelForm.closest('[data-date-participant-panel]');
+    const attendanceForm = panel?.querySelector('[data-date-attendance-form]');
+    const storageKey = attendanceForm?.dataset.rosterStateKey || '';
+    const participantId = cancelForm.querySelector('[name="schedule_participant_id"]')?.value || '';
+    if (storageKey === '' || participantId === '') return;
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+      delete pending[participantId];
+      sessionStorage.setItem(storageKey, JSON.stringify(pending));
+    } catch (error) {}
+  });
+});
+</script>
 <script src="<?= activityDetailEscape(SITE_URL . 'js/activity-status-clock.js') ?>" defer></script>
 <?php
 if ($shell === 'admin') renderAdminShellClose();

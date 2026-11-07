@@ -249,9 +249,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 220px;
-  max-width: 440px;
-  flex: 1;
+  width: clamp(180px, 24vw, 320px);
+  min-width: 0;
+  flex: 0 1 320px;
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid #e5e7eb;
@@ -261,6 +261,7 @@
 }
 .admin-topbar-search input {
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: #1f2937;
@@ -446,6 +447,9 @@
   .admin-breadcrumb { font-size: 9px; }
   .admin-topbar-title { font-size: 16px; }
   .admin-topbar-right { gap: 5px; }
+  .admin-topbar-search { width: clamp(112px, 32vw, 150px); flex-basis: auto; padding-inline: 9px; }
+  .admin-topbar-search-icon { font-size: 16px; }
+  .admin-topbar-search input { font-size: 12px; }
   .admin-topbar-icon-link, .admin-mobile-menu-btn { width: 35px; height: 35px; flex-basis: 35px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -561,7 +565,7 @@ body.admin-body .admin-dashboard .admin-page-content .module-greeting {
 body.admin-body .admin-dashboard .admin-page-content .module-kicker,
 body.admin-body .admin-dashboard .admin-page-content .module-intro h1,
 body.admin-body .admin-dashboard .admin-page-content .module-greeting h1 { color: var(--admin-primary) !important; }
-body.admin-body .admin-dashboard .admin-page-content .hub-button,
+body.admin-body .admin-dashboard .admin-page-content .hub-button:not(.secondary),
 body.admin-body .admin-dashboard .admin-page-content .hero-action-primary,
 body.admin-body .admin-dashboard .admin-page-content .archive-button,
 body.admin-body .admin-dashboard .admin-page-content .action-button:not(.secondary):not(.success) {
@@ -569,7 +573,7 @@ body.admin-body .admin-dashboard .admin-page-content .action-button:not(.seconda
   background: var(--admin-primary) !important;
   color: #fff !important;
 }
-body.admin-body .admin-dashboard .admin-page-content .hub-button:hover,
+body.admin-body .admin-dashboard .admin-page-content .hub-button:not(.secondary):hover,
 body.admin-body .admin-dashboard .admin-page-content .hero-action-primary:hover,
 body.admin-body .admin-dashboard .admin-page-content .archive-button:hover,
 body.admin-body .admin-dashboard .admin-page-content .action-button:not(.secondary):not(.success):hover {

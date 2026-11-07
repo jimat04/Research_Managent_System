@@ -31,6 +31,74 @@ function rmsActivityScheduleTableExists(mysqli $conn, string $tableName): bool
     return $exists;
 }
 
+function rmsActivityScheduleInvitedActivityIds(mysqli $conn, int $userId): array
+{
+    if ($userId <= 0
+        || !rmsActivityScheduleTableExists($conn, 'activity_schedule_dates')
+        || !rmsActivityScheduleTableExists($conn, 'activity_schedule_participants')) {
+        return [];
+    }
+
+    $stmt = $conn->prepare(
+        'SELECT DISTINCT d.activity_id
+         FROM activity_schedule_dates d
+         INNER JOIN activity_schedule_participants sp ON sp.schedule_id = d.schedule_id
+         WHERE sp.user_id = ? AND sp.is_invited = 1'
+    );
+    if (!$stmt) {
+        return [];
+    }
+
+    $stmt->bind_param('i', $userId);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return [];
+    }
+
+    $result = $stmt->get_result();
+    $activityIds = [];
+    while ($result instanceof mysqli_result && ($row = $result->fetch_assoc())) {
+        $activityId = (int) ($row['activity_id'] ?? 0);
+        if ($activityId > 0) {
+            $activityIds[$activityId] = $activityId;
+        }
+    }
+    $stmt->close();
+
+    return array_values($activityIds);
+}
+
+function rmsActivityScheduleUserInvited(mysqli $conn, int $activityId, int $userId): bool
+{
+    if ($activityId <= 0 || $userId <= 0
+        || !rmsActivityScheduleTableExists($conn, 'activity_schedule_dates')
+        || !rmsActivityScheduleTableExists($conn, 'activity_schedule_participants')) {
+        return false;
+    }
+
+    $stmt = $conn->prepare(
+        'SELECT 1
+         FROM activity_schedule_dates d
+         INNER JOIN activity_schedule_participants sp ON sp.schedule_id = d.schedule_id
+         WHERE d.activity_id = ? AND sp.user_id = ? AND sp.is_invited = 1
+         LIMIT 1'
+    );
+    if (!$stmt) {
+        return false;
+    }
+
+    $stmt->bind_param('ii', $activityId, $userId);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return false;
+    }
+    $result = $stmt->get_result();
+    $invited = $result instanceof mysqli_result && $result->num_rows > 0;
+    $stmt->close();
+
+    return $invited;
+}
+
 function rmsActivityScheduleColumnExists(mysqli $conn, string $tableName, string $columnName): bool
 {
     $stmt = rmsActivitySchedulePrepare(
@@ -285,7 +353,14 @@ function rmsActivityScheduleEligibleUsers(mysqli $conn): array
     return $users;
 }
 
-function rmsActivityScheduleLoad(mysqli $conn, int $activityId, bool $invitationResponsesAvailable = false): array
+function rmsActivityScheduleLoad(
+    mysqli $conn,
+    int $activityId,
+    bool $invitationResponsesAvailable = false,
+    bool $checkinDetailsAvailable = false,
+    bool $loadAllParticipants = true,
+    ?int $participantUserId = null
+): array
 {
     $stmt = rmsActivitySchedulePrepare(
         $conn,
@@ -336,15 +411,26 @@ function rmsActivityScheduleLoad(mysqli $conn, int $activityId, bool $invitation
         $invitationResponseColumns = $invitationResponsesAvailable
             ? ', invitation_response, invitation_responded_at'
             : '';
-        $participantStmt = rmsActivitySchedulePrepare(
-            $conn,
-            'SELECT schedule_id, participant_id, user_id, participant_name, role, attended, is_invited'
-                . $invitationResponseColumns . '
+        $checkinDetailColumns = $checkinDetailsAvailable
+            ? ', attendee_affiliation, attendee_program_department'
+            : ', NULL AS attendee_affiliation, NULL AS attendee_program_department';
+        $participantSql = 'SELECT schedule_id, participant_id, user_id, participant_name, role, attended, is_invited'
+            . $invitationResponseColumns . $checkinDetailColumns . '
              FROM activity_schedule_participants
-             WHERE schedule_id IN (SELECT schedule_id FROM activity_schedule_dates WHERE activity_id = ?)
-             ORDER BY participant_name ASC, participant_id ASC'
-        );
-        $participantStmt->bind_param('i', $activityId);
+             WHERE schedule_id IN (SELECT schedule_id FROM activity_schedule_dates WHERE activity_id = ?)';
+        if (!$loadAllParticipants) {
+            $participantSql .= ' AND user_id = ? AND is_invited = 1';
+        }
+        $participantSql .= ' ORDER BY participant_name ASC, participant_id ASC';
+        $participantStmt = rmsActivitySchedulePrepare($conn, $participantSql);
+        if ($loadAllParticipants) {
+            $participantStmt->bind_param('i', $activityId);
+        } elseif ($participantUserId !== null && $participantUserId > 0) {
+            $participantStmt->bind_param('ii', $activityId, $participantUserId);
+        } else {
+            $participantStmt->close();
+            throw new RuntimeException('A user is required when loading only personal activity invitations.');
+        }
         if (!$participantStmt->execute()) {
             $participantStmt->close();
             throw new RuntimeException('Unable to load date participants.');
@@ -373,7 +459,8 @@ function rmsActivityScheduleLoad(mysqli $conn, int $activityId, bool $invitation
         }
         $participantStmt->close();
         foreach ($dates as &$dateRow) {
-            if ($dateRow['audience_user_ids'] === null
+            if ($loadAllParticipants
+                && $dateRow['audience_user_ids'] === null
                 && (string) $dateRow['audience_scope'] === 'specific') {
                 $dateRow['manual_recipient_ids'] = array_values(array_unique($dateRow['recipients']));
             }
@@ -381,6 +468,135 @@ function rmsActivityScheduleLoad(mysqli $conn, int $activityId, bool $invitation
         unset($dateRow);
     }
     return $dates;
+}
+
+function rmsActivityScheduleBindDynamic(mysqli_stmt $stmt, string $types, array &$values): void
+{
+    $typeString = $types;
+    $parameters = [&$typeString];
+    foreach ($values as &$value) {
+        $parameters[] = &$value;
+    }
+    unset($value);
+    if (!$stmt->bind_param(...$parameters)) {
+        throw new RuntimeException('Unable to bind activity roster filters.');
+    }
+}
+
+function rmsActivityScheduleLoadRosterPage(
+    mysqli $conn,
+    int $activityId,
+    int $scheduleId,
+    int $page = 1,
+    string $search = '',
+    string $role = '',
+    string $affiliation = '',
+    string $rsvp = '',
+    string $attendance = '',
+    bool $invitationResponsesAvailable = false,
+    bool $checkinDetailsAvailable = false
+): array {
+    $pageSize = 50;
+    $page = max(1, $page);
+    $search = trim(substr($search, 0, 400));
+    $role = in_array($role, ['attendee', 'speaker', 'organizer'], true) ? $role : '';
+    $affiliation = in_array($affiliation, ['student', 'faculty', 'staff', 'guest'], true) ? $affiliation : '';
+    $rsvp = in_array($rsvp, ['pending', 'accepted', 'declined'], true) ? $rsvp : '';
+    $attendance = in_array($attendance, ['attended', 'not_attended'], true) ? $attendance : '';
+
+    $globalStmt = rmsActivitySchedulePrepare($conn, 'SELECT COUNT(*) AS total_count, COALESCE(SUM(attended = 1), 0) AS attended_count, COALESCE(SUM(is_invited = 1), 0) AS invited_count, COALESCE(SUM(is_invited = 0), 0) AS other_count FROM activity_schedule_participants WHERE schedule_id = ?');
+    $globalStmt->bind_param('i', $scheduleId);
+    if (!$globalStmt->execute()) {
+        $globalStmt->close();
+        throw new RuntimeException('Unable to count date participants.');
+    }
+    $globalCounts = $globalStmt->get_result()->fetch_assoc() ?: [];
+    $globalStmt->close();
+
+    $invitationResponseSelect = $invitationResponsesAvailable ? ', COALESCE(sp.invitation_response, \'pending\') AS invitation_response' : ', NULL AS invitation_response';
+    $checkinDetailsSelect = $checkinDetailsAvailable ? ', sp.attendee_affiliation, sp.attendee_program_department' : ', NULL AS attendee_affiliation, NULL AS attendee_program_department';
+    $where = ['d.activity_id = ?', 'sp.schedule_id = ?'];
+    $types = 'ii';
+    $values = [$activityId, $scheduleId];
+    if ($search !== '') {
+        $where[] = '(sp.participant_name LIKE ?' . ($checkinDetailsAvailable ? ' OR sp.attendee_affiliation LIKE ? OR sp.attendee_program_department LIKE ?' : '') . ')';
+        $pattern = '%' . $search . '%';
+        $types .= $checkinDetailsAvailable ? 'sss' : 's';
+        $values[] = $pattern;
+        if ($checkinDetailsAvailable) {
+            $values[] = $pattern;
+            $values[] = $pattern;
+        }
+    }
+    if ($role !== '') {
+        $where[] = 'sp.role = ?';
+        $types .= 's';
+        $values[] = $role;
+    }
+    if ($affiliation !== '' && $checkinDetailsAvailable) {
+        $where[] = 'sp.attendee_affiliation = ?';
+        $types .= 's';
+        $values[] = $affiliation;
+    }
+    if ($rsvp !== '' && $invitationResponsesAvailable) {
+        $where[] = 'sp.is_invited = 1 AND COALESCE(sp.invitation_response, \'pending\') = ?';
+        $types .= 's';
+        $values[] = $rsvp;
+    }
+    if ($attendance !== '') {
+        $where[] = 'sp.attended = ?';
+        $types .= 'i';
+        $values[] = $attendance === 'attended' ? 1 : 0;
+    }
+    $whereSql = implode(' AND ', $where);
+    $countSql = 'SELECT COUNT(*) AS filtered_count, COALESCE(SUM(sp.is_invited = 1), 0) AS filtered_invited_count, COALESCE(SUM(sp.is_invited = 0), 0) AS filtered_other_count FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id WHERE ' . $whereSql;
+    $countStmt = rmsActivitySchedulePrepare($conn, $countSql);
+    $countValues = $values;
+    rmsActivityScheduleBindDynamic($countStmt, $types, $countValues);
+    if (!$countStmt->execute()) {
+        $countStmt->close();
+        throw new RuntimeException('Unable to filter date participants.');
+    }
+    $filteredCounts = $countStmt->get_result()->fetch_assoc() ?: [];
+    $countStmt->close();
+
+    $filteredCount = (int) ($filteredCounts['filtered_count'] ?? 0);
+    $pageCount = max(1, (int) ceil($filteredCount / $pageSize));
+    $page = min($page, $pageCount);
+    $offset = ($page - 1) * $pageSize;
+    $rowSql = 'SELECT sp.schedule_id, sp.participant_id, sp.user_id, sp.participant_name, sp.role, sp.attended, sp.is_invited' . $invitationResponseSelect . $checkinDetailsSelect . ' FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id WHERE ' . $whereSql . ' ORDER BY sp.is_invited DESC, sp.participant_name ASC, sp.participant_id ASC LIMIT ? OFFSET ?';
+    $rowStmt = rmsActivitySchedulePrepare($conn, $rowSql);
+    $rowValues = $values;
+    $rowValues[] = $pageSize;
+    $rowValues[] = $offset;
+    rmsActivityScheduleBindDynamic($rowStmt, $types . 'ii', $rowValues);
+    if (!$rowStmt->execute()) {
+        $rowStmt->close();
+        throw new RuntimeException('Unable to load this roster page.');
+    }
+    $rows = [];
+    $rowResult = $rowStmt->get_result();
+    while ($participant = $rowResult->fetch_assoc()) {
+        $participant['participant_id'] = (int) $participant['participant_id'];
+        $participant['user_id'] = $participant['user_id'] === null ? null : (int) $participant['user_id'];
+        $participant['attended'] = (int) $participant['attended'];
+        $participant['is_invited'] = (int) $participant['is_invited'];
+        $rows[] = $participant;
+    }
+    $rowStmt->close();
+    return [
+        'participants' => $rows,
+        'total_count' => (int) ($globalCounts['total_count'] ?? 0),
+        'attended_count' => (int) ($globalCounts['attended_count'] ?? 0),
+        'invited_count' => (int) ($globalCounts['invited_count'] ?? 0),
+        'other_count' => (int) ($globalCounts['other_count'] ?? 0),
+        'filtered_count' => $filteredCount,
+        'filtered_invited_count' => (int) ($filteredCounts['filtered_invited_count'] ?? 0),
+        'filtered_other_count' => (int) ($filteredCounts['filtered_other_count'] ?? 0),
+        'page' => $page,
+        'page_size' => $pageSize,
+        'page_count' => $pageCount,
+    ];
 }
 
 function rmsActivityScheduleSaveInvitationResponse(
@@ -762,12 +978,75 @@ function rmsActivityScheduleSave(
     $firstDate = reset($scheduleRows);
     $legacyDate = (string) $firstDate['schedule_date'];
     $legacyTime = $firstDate['start_time'];
+    $checkinTokenColumnAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates')
+        && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_hash');
+    $checkinTokenResetSql = $checkinTokenColumnAvailable
+        ? "checkin_token_hash = IF(status = 'cancelled', NULL, checkin_token_hash), "
+        : '';
     $oldDates = [];
     $oldDefaults = ['venue' => null, 'speaker' => null];
     $recordOnly = $initialStatus === 'conducted';
+    $sourceProjectId = isset($activity['source_project_id']) && $activity['source_project_id'] !== ''
+        ? (int) $activity['source_project_id']
+        : null;
+    $sourcePublicationId = isset($activity['source_publication_id']) && $activity['source_publication_id'] !== ''
+        ? (int) $activity['source_publication_id']
+        : null;
+    $activityType = (string) ($activity['activity_type'] ?? '');
+    if (($sourceProjectId !== null && $sourceProjectId <= 0)
+        || ($sourcePublicationId !== null && $sourcePublicationId <= 0)
+        || ($sourceProjectId !== null && $sourcePublicationId !== null)
+        || ($sourceProjectId !== null && $activityType !== 'colloquium')
+        || ($sourcePublicationId !== null && $activityType !== 'conference_congress')) {
+        throw new RuntimeException('Choose a source record that matches the activity type.');
+    }
+    if ($sourceProjectId !== null && !hasRole('admin')
+        && !hasModulePermission($userId, 'research_implementation_outputs', 'view', 'completed_research')) {
+        throw new RuntimeException('You do not have access to the student research archive.');
+    }
+    if ($sourcePublicationId !== null && !hasRole('admin')
+        && !hasModulePermission($userId, 'research_implementation_outputs', 'view', 'research_outputs')
+        && !hasModulePermission($userId, 'publication_dissemination', 'view', 'publication_records')) {
+        throw new RuntimeException('You do not have access to the faculty publication archive.');
+    }
 
     rmsActivityScheduleBegin($conn);
     try {
+        if ($sourceProjectId !== null) {
+            $sourceStmt = rmsActivitySchedulePrepare(
+                $conn,
+                "SELECT rp.project_id
+                   FROM research_projects rp
+                   JOIN users owner ON owner.user_id = rp.created_by AND owner.role = 'student'
+                  WHERE rp.project_id = ? AND rp.deleted_at IS NULL
+                    AND rp.status IN ('completed', 'archived')
+                  LIMIT 1 FOR UPDATE"
+            );
+            $sourceStmt->bind_param('i', $sourceProjectId);
+            if (!$sourceStmt->execute() || !$sourceStmt->get_result()->fetch_assoc()) {
+                $sourceStmt->close();
+                throw new RuntimeException('Choose an active archived student research record.');
+            }
+            $sourceStmt->close();
+        }
+        if ($sourcePublicationId !== null) {
+            $sourceStmt = rmsActivitySchedulePrepare(
+                $conn,
+                "SELECT publication_id
+                   FROM publications
+                  WHERE publication_id = ? AND researcher_category = 'faculty'
+                    AND deactivated_at IS NULL
+                    AND (archival_status = 'archived' OR status = 'published')
+                  LIMIT 1 FOR UPDATE"
+            );
+            $sourceStmt->bind_param('i', $sourcePublicationId);
+            if (!$sourceStmt->execute() || !$sourceStmt->get_result()->fetch_assoc()) {
+                $sourceStmt->close();
+                throw new RuntimeException('Choose an active archived or published faculty publication.');
+            }
+            $sourceStmt->close();
+        }
+
         $recipientIdsToVerify = [];
         foreach ($scheduleRows as $row) {
             foreach ($row['recipients'] as $recipientId) {
@@ -862,11 +1141,12 @@ function rmsActivityScheduleSave(
                 $conn,
                 'UPDATE research_activities SET activity_type = ?, title = ?, activity_date = ?,
                     activity_time = ?, is_multi_day = ?, schedule_start_date = ?, schedule_end_date = ?,
-                    venue = ?, speaker = ?, organizer = ?, description = ?
+                    venue = ?, speaker = ?, organizer = ?, description = ?,
+                    source_project_id = ?, source_publication_id = ?
                  WHERE activity_id = ?'
             );
             $stmt->bind_param(
-                'ssssissssssi',
+                'ssssissssssiii',
                 $activity['activity_type'],
                 $activity['title'],
                 $legacyDate,
@@ -878,6 +1158,8 @@ function rmsActivityScheduleSave(
                 $activity['speaker'],
                 $activity['organizer'],
                 $activity['description'],
+                $sourceProjectId,
+                $sourcePublicationId,
                 $activityId
             );
             if (!$stmt->execute()) {
@@ -890,11 +1172,11 @@ function rmsActivityScheduleSave(
                 $conn,
                 'INSERT INTO research_activities
                     (activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date,
-                     venue, speaker, organizer, description, status, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                     venue, speaker, organizer, description, source_project_id, source_publication_id, status, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->bind_param(
-                'ssssisssssssi',
+                'ssss' . 'i' . 'ssssss' . 'iis' . 'i',
                 $activity['activity_type'],
                 $activity['title'],
                 $legacyDate,
@@ -906,6 +1188,8 @@ function rmsActivityScheduleSave(
                 $activity['speaker'],
                 $activity['organizer'],
                 $activity['description'],
+                $sourceProjectId,
+                $sourcePublicationId,
                 $initialStatus,
                 $userId
             );
@@ -930,7 +1214,7 @@ function rmsActivityScheduleSave(
                 $stmt = rmsActivitySchedulePrepare(
                     $conn,
                     "UPDATE activity_schedule_dates
-                     SET start_time = ?, end_time = ?, venue_override = ?, speaker_override = ?,
+                     SET {$checkinTokenResetSql}start_time = ?, end_time = ?, venue_override = ?, speaker_override = ?,
                          audience_scope = ?, audience_roles = ?, audience_user_ids = ?, status = 'scheduled'
                      WHERE schedule_id = ? AND activity_id = ?"
                 );

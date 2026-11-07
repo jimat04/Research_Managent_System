@@ -187,6 +187,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $is_approval_list = $module_page === 'research_approval';
+$has_review_filter_panel = !$is_approval_list && in_array($active_tab, ['proposals', 'chapters', 'final_manuscript'], true);
+$review_filter_heading = [
+    'proposals' => 'Find proposals for review',
+    'chapters' => 'Find chapters for review',
+    'final_manuscript' => 'Find final manuscripts for review',
+][$active_tab] ?? 'Find submissions for review';
+$queue_sort_options = [
+    'oldest' => 'Oldest submissions first',
+    'newest' => 'Newest submissions first',
+    'submitter' => 'Submitter name (A–Z)',
+];
+$requested_queue_sort = is_string($_GET['sort'] ?? null) ? $_GET['sort'] : '';
+$queue_sort = isset($queue_sort_options[$requested_queue_sort]) ? $requested_queue_sort : 'oldest';
+$queue_order_by = 'v.submitted_at DESC, v.version_id DESC';
+if ($has_review_filter_panel) {
+    $queue_order_by = [
+        'oldest' => 'v.submitted_at ASC, v.version_id ASC',
+        'newest' => 'v.submitted_at DESC, v.version_id DESC',
+        'submitter' => "CONCAT(submitter.first_name, ' ', submitter.last_name) ASC, v.submitted_at ASC, v.version_id ASC",
+    ][$queue_sort];
+}
 $approval_list = null;
 $approval_project_filter = '';
 $queue_version_condition = "NOT EXISTS (
@@ -198,6 +219,16 @@ $queue_version_condition = "NOT EXISTS (
 )";
 $queue_params = [$type_filter, $type_filter, $status_filter, $status_filter, $course_filter, $course_filter];
 $queue_types = 'ssssss';
+$queue_search = $has_review_filter_panel && is_string($_GET['q'] ?? null)
+    ? mb_substr(trim($_GET['q']), 0, 200, 'UTF-8')
+    : '';
+$queue_search_condition = '';
+if ($has_review_filter_panel) {
+    $queue_search_like = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $queue_search) . '%';
+    $queue_search_condition = " AND (? = '' OR rp.title LIKE ? ESCAPE '=' OR CONCAT(submitter.first_name, ' ', submitter.last_name) LIKE ? ESCAPE '=')";
+    $queue_params = array_merge($queue_params, [$queue_search, $queue_search_like, $queue_search_like]);
+    $queue_types .= 'sss';
+}
 if ($is_approval_list) {
     require_once __DIR__ . '/../../includes/research-approval-list.php';
     $approval_list = rms_approval_projects($conn, $_GET, $type_filter, $course_filter);
@@ -245,8 +276,9 @@ $sql = "
              WHERE course.program_code = ?
                AND (submitter.program = course.program_code OR submitter.program = course.program_name)
         ))
+        $queue_search_condition
         $approval_project_filter
-  ORDER BY v.submitted_at DESC, v.version_id DESC"
+  ORDER BY $queue_order_by"
     . ($is_approval_list ? '' : ' LIMIT 100');
 $queue_stmt = $conn->prepare($sql);
 if (!$queue_stmt) {
@@ -297,9 +329,23 @@ while ($row = $result->fetch_assoc()) {
 $result->free();
 $queue_stmt->close();
 
-uasort($items, static function (array $left, array $right): int {
+uasort($items, static function (array $left, array $right) use ($has_review_filter_panel, $queue_sort): int {
+    if ($has_review_filter_panel && $queue_sort === 'submitter') {
+        $submitter_order = strcasecmp($left['submitter_name'], $right['submitter_name']);
+        if ($submitter_order !== 0) {
+            return $submitter_order;
+        }
+    }
     $submitted_order = strcmp($left['submitted_at'], $right['submitted_at']);
-    return $submitted_order !== 0 ? $submitted_order : $left['version_id'] <=> $right['version_id'];
+    if ($has_review_filter_panel && $queue_sort === 'newest') {
+        $submitted_order *= -1;
+    }
+    if ($submitted_order !== 0) {
+        return $submitted_order;
+    }
+    return $has_review_filter_panel && $queue_sort === 'newest'
+        ? $right['version_id'] <=> $left['version_id']
+        : $left['version_id'] <=> $right['version_id'];
 });
 
 if ($is_approval_list) {
@@ -324,8 +370,8 @@ if ($role === 'admin') {
     renderStaffShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, $section['description'] ?? 'Review title and chapter submissions according to your assigned permissions.');
 }
 ?>
-<?php if ($is_approval_list): ?>
-<link rel="stylesheet" href="<?php echo SITE_URL; ?>css/research-approval.css">
+    <?php if ($is_approval_list || $has_review_filter_panel): ?>
+<link rel="stylesheet" href="<?php echo SITE_URL; ?>css/research-approval.css?v=<?php echo (int) filemtime(__DIR__ . '/../../css/research-approval.css'); ?>">
 <?php endif; ?>
 <style>
   .submission-review-workspace{--review-accent:#f57c00;--review-ink:#9a3412;--review-tint:#fff7ed;--review-border:#fed7aa;max-width:1440px;margin:0 auto;padding-bottom:32px}
@@ -436,7 +482,7 @@ if ($role === 'admin') {
       </a>
     <?php endforeach; ?>
   </nav>
-  <?php if (!$is_approval_list): ?>
+  <?php if (!$is_approval_list && !$has_review_filter_panel): ?>
   <section class="submission-review-hero" aria-labelledby="submission-review-heading">
     <div>
       <h2 id="submission-review-heading"><?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
@@ -446,6 +492,45 @@ if ($role === 'admin') {
   <?php endif; ?>
 <?php endif; ?>
 
+<?php if ($has_review_filter_panel): ?>
+<div class="approval-list">
+  <form class="approval-search" method="get" action="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php" role="search">
+    <input type="hidden" name="module_page" value="<?php echo htmlspecialchars($module_page, ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="hidden" name="view" value="<?php echo htmlspecialchars($active_tab, ENT_QUOTES, 'UTF-8'); ?>">
+    <div class="approval-filter-heading">
+      <h2><?php echo htmlspecialchars($review_filter_heading, ENT_QUOTES, 'UTF-8'); ?></h2>
+      <p>Search by title or researcher, then narrow results by course.</p>
+    </div>
+    <div class="approval-search-grid has-sort-filter">
+      <div class="approval-filter-field approval-filter-search">
+        <label for="review-queue-search">Title or researcher</label>
+        <input id="review-queue-search" type="search" name="q" maxlength="200" placeholder="Search submissions" value="<?php echo htmlspecialchars($queue_search, ENT_QUOTES, 'UTF-8'); ?>">
+      </div>
+      <div class="approval-filter-field">
+        <label for="review-course">Course</label>
+        <select id="review-course" name="course">
+          <option value="">All courses</option>
+          <?php foreach (['BSIT', 'BSCS'] as $course): ?>
+            <option value="<?php echo $course; ?>"<?php echo $course_filter === $course ? ' selected' : ''; ?>><?php echo $course; ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="approval-filter-field">
+        <label for="review-sort">Sort by</label>
+        <select id="review-sort" name="sort">
+          <?php foreach ($queue_sort_options as $sort_value => $sort_label): ?>
+            <option value="<?php echo htmlspecialchars($sort_value, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $queue_sort === $sort_value ? ' selected' : ''; ?>><?php echo htmlspecialchars($sort_label, ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <button class="approval-button approval-button-primary approval-filter-submit" type="submit">Apply filters</button>
+      <?php if ($queue_search !== '' || $course_filter !== '' || $queue_sort !== 'oldest'): ?>
+        <a class="approval-button approval-filter-clear" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php?module_page=<?php echo rawurlencode($module_page); ?>&amp;view=<?php echo rawurlencode($active_tab); ?>">Clear filters</a>
+      <?php endif; ?>
+    </div>
+  </form>
+</div>
+<?php elseif (!$is_approval_list): ?>
 <form class="submission-course-filter" method="get" action="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php">
   <input type="hidden" name="module_page" value="<?php echo htmlspecialchars($module_page, ENT_QUOTES, 'UTF-8'); ?>">
   <input type="hidden" name="view" value="<?php echo htmlspecialchars($active_tab, ENT_QUOTES, 'UTF-8'); ?>">
@@ -460,6 +545,7 @@ if ($role === 'admin') {
   </select>
   <button type="submit">Apply filter</button>
 </form>
+<?php endif; ?>
 
 <?php if ($flash['success'] !== ''): ?><div class="review-alert success"><?php echo htmlspecialchars($flash['success'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
 <?php if ($flash['error'] !== ''): ?><div class="review-alert error"><?php echo htmlspecialchars($flash['error'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
@@ -471,8 +557,12 @@ if ($role === 'admin') {
   <?php if (!$items): ?>
     <section class="submission-review-empty" aria-live="polite">
       <span class="submission-review-empty-mark" aria-hidden="true"><?php echo $section && $section['accent'] === 'approval' ? '✓' : ($section && $section['accent'] === 'review' ? '⌕' : '▤'); ?></span>
-      <h3><?php echo htmlspecialchars($section['empty_title'] ?? 'No title or chapter submissions are available yet', ENT_QUOTES, 'UTF-8'); ?></h3>
-      <p><?php echo htmlspecialchars($section['empty_description'] ?? 'Submitted title and chapter versions will appear here with their review history.', ENT_QUOTES, 'UTF-8'); ?></p>
+      <h3><?php echo $has_review_filter_panel && ($queue_search !== '' || $course_filter !== '')
+          ? 'No submissions match these filters'
+          : htmlspecialchars($section['empty_title'] ?? 'No title or chapter submissions are available yet', ENT_QUOTES, 'UTF-8'); ?></h3>
+      <p><?php echo $has_review_filter_panel && ($queue_search !== '' || $course_filter !== '')
+          ? 'Try another research title or researcher name, or clear the filters to see all submissions awaiting review.'
+          : htmlspecialchars($section['empty_description'] ?? 'Submitted title and chapter versions will appear here with their review history.', ENT_QUOTES, 'UTF-8'); ?></p>
     </section>
   <?php endif; ?>
   <?php foreach ($items as $item): ?>

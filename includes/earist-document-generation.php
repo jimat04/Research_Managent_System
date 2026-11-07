@@ -409,6 +409,9 @@ function earistDocumentHistoryOpenForScope(mysqli $conn, int $generatedId, strin
     $row = $stmt->get_result()->fetch_assoc() ?: null;
     $stmt->close();
     if (!$row) throw new DomainException('Generated document is unavailable.', 404);
+    if (($row['file_retention_status'] ?? 'available') !== 'available') {
+        throw new DomainException('This older DOCX file was removed to free storage. Its RMS history entry remains available.', 410);
+    }
     $draft = ['draft_id' => $row['joined_draft_id'], 'research_record_id' => $row['joined_draft_record_id'],
         'owner_id' => $row['joined_draft_owner_id'], 'document_type' => $row['joined_draft_type'],
         'created_by' => $row['joined_draft_creator'], 'updated_by' => $row['joined_draft_updater']];

@@ -76,7 +76,13 @@ function renderStaffShellNavigationNode(array $node, callable $isActive, string 
     echo '<details class="' . $groupClass . '"' . ($groupActive ? ' open' : '') . '>';
     echo '<summary class="staff-nav-group-summary" title="' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '" aria-controls="' . $groupId . '">';
     echo '<span class="staff-nav-icon" aria-hidden="true">' . rmsShellIcon($icon) . '</span>';
-    echo '<span class="staff-nav-label">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+    if (isset($node['href']) && trim((string) $node['href']) !== '') {
+        $groupHref = (string) $node['href'];
+        $groupLinkActive = $isActive($groupHref);
+        echo '<a class="staff-nav-label staff-nav-group-link" href="' . htmlspecialchars($groupHref, ENT_QUOTES, 'UTF-8') . '"' . ($groupLinkActive ? ' aria-current="page"' : '') . '>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</a>';
+    } else {
+        echo '<span class="staff-nav-label">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+    }
     echo '<span class="staff-nav-chevron" aria-hidden="true"></span>';
     echo '</summary><div class="staff-nav-subitems" id="' . $groupId . '"><div class="staff-nav-subitems-inner">';
 
@@ -174,11 +180,12 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $moduleIcons = [
         'add_activity' => 'activity', 'add_upcoming_activity' => 'seminar', 'add_conducted_activity' => 'records',
         'view_activity' => 'monitor', 'upcoming_activities' => 'document', 'ongoing_activities' => 'monitor',
-        'conducted_activities' => 'output', 'seminars' => 'seminar', 'trainings' => 'presentation', 'workshops' => 'activity',
+        'conducted_activities' => 'output',
         'research_proposals' => 'document', 'research_review' => 'monitor', 'research_approval' => 'reports',
         'ongoing_research' => 'monitor', 'completed_research' => 'records', 'research_outputs' => 'output',
         'journal_publications' => 'publication', 'conference_presentations' => 'presentation', 'research_repository' => 'repository',
         'copyrights' => 'copyright', 'patents_utility_models' => 'output', 'innovation_technology_transfer' => 'users',
+        'publication_records' => 'publication', 'publication_add' => 'document', 'publication_reports' => 'reports',
     ];
     $moduleLinks = static function (string $moduleKey, array $pageKeys, array $labelOverrides = []) use ($permissionModules, $permissionMatrix, $moduleIcons, $shell_user): array {
         $modulePages = $permissionModules[$moduleKey]['pages'] ?? [];
@@ -209,7 +216,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
     $capacityChildren = [];
     $capacityAddLinks = $moduleLinks('research_capacity_building',
-        ['add_upcoming_activity', 'add_conducted_activity'],
+        ['add_activity', 'add_upcoming_activity', 'add_conducted_activity'],
         ['add_upcoming_activity' => 'Upcoming', 'add_conducted_activity' => 'Completed']
     );
     if ($capacityAddLinks) {
@@ -218,6 +225,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $capacityViewLinks = $moduleLinks('research_capacity_building',
         ['upcoming_activities', 'ongoing_activities', 'conducted_activities']
     );
+    $capacityActivityLinks = $moduleLinks('research_capacity_building', ['view_activity']);
     if ($capacityViewLinks) {
         $capacityChildren[] = ['title' => 'View', 'icon' => 'monitor', 'links' => $capacityViewLinks];
     }
@@ -226,23 +234,43 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
             'title' => 'Research Capacity Building',
             'icon' => 'seminar',
             'children' => [
-                ['title' => 'Research Activities', 'icon' => 'activity', 'children' => $capacityChildren],
+                [
+                    'title' => 'Research Activities',
+                    'icon' => 'activity',
+                    'href' => $capacityActivityLinks[0][0] ?? '',
+                    'children' => $capacityChildren,
+                ],
             ],
         ];
     }
 
     $developmentLinks = $moduleLinks('research_development', ['research_proposals', 'research_review', 'research_approval']);
-    $navTree[] = ['title' => 'Research Development', 'icon' => 'records', 'links' => $developmentLinks];
+    if ($developmentLinks) {
+        $navTree[] = ['title' => 'Research Development', 'icon' => 'records', 'links' => $developmentLinks];
+    }
 
     $implementationLinks = $moduleLinks('research_implementation_outputs', ['ongoing_research', 'completed_research', 'research_outputs']);
     if ($implementationLinks) {
         $navTree[] = ['title' => 'Research Implementation & Outputs', 'icon' => 'output', 'links' => $implementationLinks];
     }
 
-    $publicationLinks = $moduleLinks('publication_dissemination',
-        ['journal_publications', 'conference_presentations', 'research_repository'],
-        ['conference_presentations' => 'Conference presentations']
-    );
+    $publicationCanView = static function (string $pageKey) use ($user): bool {
+        return hasModulePermission((int) ($user['user_id'] ?? 0), 'publication_dissemination', 'view', $pageKey);
+    };
+    $publicationCanAdd = static function (string $pageKey) use ($user): bool {
+        return hasModulePermission((int) ($user['user_id'] ?? 0), 'publication_dissemination', 'manage', $pageKey);
+    };
+    $publicationHasView = $publicationCanView('publication_records');
+    $publicationLinks = [];
+    if ($publicationHasView) {
+        $publicationLinks[] = [SITE_URL . 'pages/shared/publications.php?module_page=publication_records', 'All Records', 'publication', 0];
+    }
+    if ($publicationCanAdd('publication_add')) {
+        $publicationLinks[] = [SITE_URL . 'pages/shared/publication-form.php?module_page=publication_add', 'Add New', 'document', 0];
+    }
+    if ($publicationCanView('publication_reports')) {
+        $publicationLinks[] = [SITE_URL . 'pages/shared/publications.php?module_page=publication_reports&report=1', 'Reports', 'reports', 0];
+    }
     if ($publicationLinks) {
         $navTree[] = ['title' => 'Publication & Dissemination', 'icon' => 'publication', 'links' => $publicationLinks];
     }
@@ -250,6 +278,19 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $ipLinks = $moduleLinks('intellectual_property_utilization', ['copyrights', 'patents_utility_models', 'innovation_technology_transfer']);
     if ($ipLinks) {
         $navTree[] = ['title' => 'Intellectual Property & Utilization', 'icon' => 'copyright', 'links' => $ipLinks];
+    }
+
+    if (hasModulePermission((int) ($user['user_id'] ?? 0), 'research_development', 'view', 'research_engagement_records')) {
+        $navTree[] = [
+            'title' => 'Faculty Research & Engagement',
+            'icon' => 'users',
+            'links' => [[
+                SITE_URL . 'pages/admin/admin-faculty-engagement.php',
+                'Research Engagement Records',
+                'activity',
+                0,
+            ]],
+        ];
     }
 
     $navTree[] = [
@@ -277,18 +318,16 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
     $current_module_key = trim((string) ($_GET['module_page'] ?? ''));
     if ($current_module_key === '') {
         $current_module_key = match ($current_basename) {
-            'activities.php' => match ((string) ($_GET['type'] ?? '')) {
-                'seminar' => 'seminars',
-                'training' => 'trainings',
-                'workshop' => 'workshops',
-                default => '',
+            'activities.php' => match ((string) ($_GET['view'] ?? '')) {
+                'upcoming' => 'upcoming_activities',
+                'ongoing' => 'ongoing_activities',
+                'conducted', 'past' => 'conducted_activities',
+                default => 'view_activity',
             },
             'publications.php' => match (true) {
-                (string) ($_GET['repository'] ?? '') === '1' => 'research_repository',
-                (string) ($_GET['publication_type'] ?? '') === 'journal' => 'journal_publications',
-                (string) ($_GET['publication_type'] ?? '') === 'conference' => 'conference_presentations',
+                (string) ($_GET['report'] ?? '') === '1' => 'publication_reports',
                 (string) ($_GET['status'] ?? '') === 'published' => 'research_outputs',
-                default => '',
+                default => 'publication_records',
             },
             'copyrights.php' => match (true) {
                 in_array((string) ($_GET['ip_scope'] ?? ''), ['patents_utility_models', 'innovation_technology_transfer'], true) => (string) $_GET['ip_scope'],
@@ -306,6 +345,10 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
         }
         $target = parse_url((string) $href);
         $href_basename = basename(str_replace('\\', '/', (string) ($target['path'] ?? '')));
+        if (in_array($href_basename, ['publications.php', 'publication-form.php'], true)) {
+            parse_str((string) ($target['query'] ?? ''), $targetQuery);
+            return $current_module_key !== '' && $current_module_key === (string) ($targetQuery['module_page'] ?? '');
+        }
         if ($href_basename === 'admin-research-module.php') {
             parse_str((string) ($target['query'] ?? ''), $targetQuery);
             return $current_module_key !== '' && $current_module_key === (string) ($targetQuery['module'] ?? '');

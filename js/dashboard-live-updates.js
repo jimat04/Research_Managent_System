@@ -9,8 +9,10 @@
   const pollInterval = 30_000;
   const maxRetryDelay = 300_000;
   const chartSeries = [
-    { key: 'seminars', color: '#4F8DF7' },
-    { key: 'workshops', color: '#7C4DFF' },
+    { key: 'seminars_workshops', color: '#4F8DF7' },
+    { key: 'trainings', color: '#2D72C4' },
+    { key: 'colloquia', color: '#7C4DFF' },
+    { key: 'conferences', color: '#64748B' },
     { key: 'publications', color: '#19B98A' },
     { key: 'copyrights', color: '#F5AB18' },
   ];
@@ -52,7 +54,7 @@
     const innerWidth = width - paddingLeft - paddingRight;
     const innerHeight = height - paddingTop - paddingBottom;
     const groupWidth = innerWidth / Math.max(1, chartData.months.length);
-    const barWidth = Math.min(8, Math.max(4, groupWidth / 7));
+    const barWidth = Math.min(6, Math.max(2, groupWidth / 10));
     let maxValue = 1;
 
     chartData.months.forEach((month) => chartSeries.forEach((series) => {
@@ -87,7 +89,8 @@
         const rawValue = Number(month[series.key]);
         const value = Number.isFinite(rawValue) ? Math.max(0, rawValue) : 0;
         const barHeight = innerHeight * (value / maxValue);
-        const x = monthX - (barWidth * 2) + (seriesIndex * (barWidth + 4));
+        const groupedSeriesWidth = (chartSeries.length * barWidth) + ((chartSeries.length - 1) * 2);
+        const x = monthX - (groupedSeriesWidth / 2) + (seriesIndex * (barWidth + 2));
         const y = height - paddingBottom - barHeight;
         appendSvgElement(svg, 'rect', {
           x,

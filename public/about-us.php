@@ -71,34 +71,6 @@ function contact_escape($value) {
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
-// These public aggregate queries contain no user input and are safe from SQL injection; prepared statements keep the page consistent with protected areas.
-$total_research_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects");
-$total_research_stmt->execute();
-$stat_total_research = $total_research_stmt->get_result()->fetch_assoc()['count'];
-
-$active_users_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM users WHERE status = 'active' AND role = 'student'");
-$active_users_stmt->execute();
-$stat_active_students = $active_users_stmt->get_result()->fetch_assoc()['count'];
-
-$completed_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('completed', 'archived')");
-$completed_stmt->execute();
-$stat_completed = $completed_stmt->get_result()->fetch_assoc()['count'];
-
-$approval_rate_stmt = $conn->prepare("SELECT ROUND(100.0 * COUNT(CASE WHEN status IN ('completed', 'approved', 'archived') THEN 1 END) / NULLIF(COUNT(CASE WHEN status NOT IN ('draft') THEN 1 END), 0)) AS rate FROM research_projects");
-$approval_rate_stmt->execute();
-$stat_approval_rate = $approval_rate_stmt->get_result()->fetch_assoc()['rate'] ?? 0;
-
-$under_review_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM research_projects WHERE status IN ('submitted', 'under_review', 'under_crec_review', 'under_erec_review')");
-$under_review_stmt->execute();
-$stat_under_review = $under_review_stmt->get_result()->fetch_assoc()['count'];
-
-$faculty_advisers_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'faculty' AND status = 'active'");
-$faculty_advisers_stmt->execute();
-$stat_faculty_advisers = $faculty_advisers_stmt->get_result()->fetch_assoc()['count'];
-
-$research_staff_stmt = $conn->prepare("SELECT COUNT(*) AS count FROM users WHERE role IN ('research_staff', 'admin') AND status = 'active'");
-$research_staff_stmt->execute();
-$stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -151,7 +123,6 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
             <a href="#research-workflow">The process</a>
             <a href="#research-features">Features</a>
             <a href="#research-roles">Your role</a>
-            <a href="#research-activity">Research activity</a>
             <a href="#contact-us">Contact</a>
           </div>
         </nav>
@@ -278,7 +249,7 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                     <a class="feature-card" data-feature-message="Students and faculty can submit midway progress and terminal reports for authorized staff review." href="<?php echo SITE_URL; ?>/public/login.php#register"><span class="about-feature-symbol" aria-hidden="true"><svg class="i"><use href="#arr"/></svg></span><h3>Progress &amp; Terminal Reports</h3><p>Students and faculty can submit midway progress and terminal reports for authorized staff review.</p></a>
                     <a class="feature-card" data-feature-message="Browse completed research and scholarly publication records. Faculty can prepare and generate DOCX documents from saved research records using approved EARIST templates." href="<?php echo SITE_URL; ?>/public/login.php#register"><span class="about-feature-symbol" aria-hidden="true"><svg class="i"><use href="#bld"/></svg></span><h3>Research Archive &amp; Journal</h3><p>Browse completed research and scholarly publication records. Faculty can prepare and generate DOCX documents from saved research records using approved EARIST templates.</p></a>
                     <a class="feature-card" data-feature-message="Eligible student teams can include co-researchers; faculty advising follows a separate student-request and faculty-decision process." href="<?php echo SITE_URL; ?>/public/login.php#register"><span class="about-feature-symbol" aria-hidden="true"><svg class="i"><use href="#grp"/></svg></span><h3>Student Teams &amp; Faculty Advising</h3><p>Eligible student teams can include co-researchers; faculty advising follows a separate student-request and faculty-decision process.</p></a>
-                    <a class="feature-card" data-feature-message="The Research Office records capacity-building activities, while researchers receive relevant decision and revision updates." href="<?php echo SITE_URL; ?>/public/login.php#register"><span class="about-feature-symbol" aria-hidden="true"><svg class="i"><use href="#mal"/></svg></span><h3>Research Activities &amp; Updates</h3><p>The Research Office records seminars, trainings, workshops, colloquia, and conferences. Researchers receive relevant updates about decisions and revisions.</p></a>
+                    <a class="feature-card" data-feature-message="The Research Office records capacity-building activities, while researchers receive relevant decision and revision updates." href="<?php echo SITE_URL; ?>/public/login.php#register"><span class="about-feature-symbol" aria-hidden="true"><svg class="i"><use href="#mal"/></svg></span><h3>Research Activities &amp; Updates</h3><p>The Research Office records seminars / workshops, trainings, colloquia, and conference / congress activities. Researchers receive relevant updates about decisions and revisions.</p></a>
                 </div>
                 <dialog class="about-feature-dialog" id="research-feature-dialog" aria-labelledby="research-feature-dialog-title" aria-describedby="research-feature-dialog-message">
                     <p class="about-feature-dialog-eyebrow">Research at EARIST</p>
@@ -386,63 +357,6 @@ $stat_research_staff = $research_staff_stmt->get_result()->fetch_assoc()['count'
                         <svg class="i about-standard-icon" aria-hidden="true"><use href="#fld"/></svg>
                         <div><h3>Outputs kept on record</h3><p>Maintain publication, repository, and intellectual-property records for research outputs.</p></div>
                     </article>
-                </div>
-            </div>
-        </section>
-
-        <!-- STATISTICS -->
-        <section id="research-activity" class="about-stats-band" data-reveal aria-labelledby="about-activity-title">
-            <div class="container">
-                <div class="about-stats-heading">
-                    <div>
-                        <p class="about-stats-eyebrow">RMS / Research activity</p>
-                        <h2 id="about-activity-title">Research in the system</h2>
-                    </div>
-                    <p class="stats-note">A snapshot of the research and people recorded in RMS.</p>
-                </div>
-                <div class="about-stats-grid">
-                    <div class="about-stat about-stat--total">
-                        <div class="about-stat-heading"><span>Collection</span><svg class="i" aria-hidden="true"><use href="#doc"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_total_research, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Total research</h3>
-                        <p class="about-stat-description">Research records across all stages.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Research status</span><svg class="i" aria-hidden="true"><use href="#fld"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_completed, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Completed studies</h3>
-                        <p class="about-stat-description">Records marked completed or archived.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Research status</span><svg class="i" aria-hidden="true"><use href="#chk"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_under_review, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Under review</h3>
-                        <p class="about-stat-description">Submissions recorded in review statuses.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Research status</span><svg class="i" aria-hidden="true"><use href="#arr"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_approval_rate, ENT_QUOTES, 'UTF-8'); ?><span class="about-stat-unit">%</span></div>
-                        <h3 class="about-stat-label">Approval rate</h3>
-                        <p class="about-stat-description">Approved, completed or archived records; excludes drafts.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Our researchers</span><svg class="i" aria-hidden="true"><use href="#cap"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_active_students, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Active students</h3>
-                        <p class="about-stat-description">Student accounts currently active.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Our researchers</span><svg class="i" aria-hidden="true"><use href="#usr"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_faculty_advisers, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Active faculty</h3>
-                        <p class="about-stat-description">Faculty accounts currently active.</p>
-                    </div>
-                    <div class="about-stat">
-                        <div class="about-stat-heading"><span>Research support</span><svg class="i" aria-hidden="true"><use href="#bld"/></svg></div>
-                        <div class="about-stat-value"><?php echo htmlspecialchars((string) $stat_research_staff, ENT_QUOTES, 'UTF-8'); ?></div>
-                        <h3 class="about-stat-label">Research office</h3>
-                        <p class="about-stat-description">Active research staff and administrators.</p>
-                    </div>
                 </div>
             </div>
         </section>

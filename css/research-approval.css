@@ -5,12 +5,28 @@
 }
 
 .approval-list * { box-sizing: border-box; }
-.approval-search { margin: 0 0 24px; }
-.approval-search label { display: block; margin-bottom: 8px; font-weight: 600; }
-.approval-search-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.approval-search {
+    margin: 0 0 24px;
+    padding: 22px 24px 24px;
+    border: 1px solid var(--review-border, #fed7aa);
+    border-left: 4px solid var(--review-accent, #f57c00);
+    border-radius: 16px;
+    background: linear-gradient(110deg, #fff 0%, var(--review-tint, #fff7ed) 150%);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+}
+.approval-filter-heading { margin-bottom: 18px; }
+.approval-filter-heading h2 { margin: 0; color: #111827; font-size: 18px; font-weight: 700; letter-spacing: -.01em; line-height: 1.35; }
+.approval-filter-heading p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
+.approval-search-grid { display: grid; grid-template-columns: minmax(260px, 1.5fr) minmax(145px, .7fr) auto auto; align-items: end; gap: 12px; }
+.approval-search-grid.has-year-filter { grid-template-columns: minmax(260px, 1.5fr) minmax(145px, .7fr) minmax(145px, .7fr) auto auto; }
+.approval-search-grid.has-sort-filter { grid-template-columns: minmax(250px, 1.5fr) minmax(130px, .65fr) minmax(190px, .9fr) auto auto; }
+.approval-filter-field { display: grid; min-width: 0; gap: 7px; }
+.approval-filter-field label { display: block; margin: 0; color: #334155; font-size: 13px; font-weight: 600; }
 .approval-search input,
-body.admin-body .admin-page-content .approval-search input {
-    flex: 1 1 320px;
+body.admin-body .admin-page-content .approval-search input,
+.approval-search select,
+body.admin-body .admin-page-content .approval-search select {
+    width: 100%;
     min-width: 0;
     min-height: 48px;
     padding: 10px 14px;
@@ -20,6 +36,9 @@ body.admin-body .admin-page-content .approval-search input {
     color: #111827;
     font: inherit;
 }
+.approval-search input::placeholder { color: #94a3b8; }
+.approval-search-grid .approval-button { min-height: 48px; white-space: nowrap; }
+.approval-search-grid .approval-filter-clear { min-width: 104px; }
 
 .approval-list .approval-button {
     display: inline-flex;
@@ -94,8 +113,8 @@ body.admin-body .admin-page-content .approval-search input {
 .approval-history-note { max-width: 70ch; margin: 24px 0 12px; color: #475569; }
 .approval-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px 24px; margin-top: 32px; }
 .approval-empty p { max-width: 65ch; margin: 8px 0 0; color: #475569; }
-.approval-list a:focus-visible, .approval-list button:focus-visible, .approval-list input:focus-visible, .approval-documents > summary:focus-visible { outline: 3px solid var(--review-ink); outline-offset: 3px; }
-body.admin-body .admin-page-content .approval-search input:focus {
+.approval-list a:focus-visible, .approval-list button:focus-visible, .approval-list input:focus-visible, .approval-list select:focus-visible, .approval-documents > summary:focus-visible { outline: 3px solid var(--review-ink); outline-offset: 3px; }
+body.admin-body .admin-page-content .approval-search :is(input, select):focus {
     border-color: var(--review-ink);
     box-shadow: none;
     outline: 3px solid var(--review-ink);
@@ -105,18 +124,19 @@ body.admin-body .admin-page-content .approval-search input:focus {
 @media (max-width: 900px) {
     .approval-project-header h2 { padding-right: 0; }
     .approval-documents > summary { position: static; width: 100%; max-width: none; margin-left: 0; text-align: center; }
+    .approval-search-grid, .approval-search-grid.has-year-filter, .approval-search-grid.has-sort-filter { grid-template-columns: minmax(220px, 1fr) minmax(160px, .7fr); }
+    .approval-search-grid .approval-button { justify-self: start; }
 }
 
 @media (max-width: 700px) {
-    .approval-search-controls { align-items: stretch; }
-    .approval-search input,
-    body.admin-body .admin-page-content .approval-search input { flex-basis: 100%; }
+    .approval-search { padding: 18px; }
+    .approval-search-grid, .approval-search-grid.has-year-filter, .approval-search-grid.has-sort-filter { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .approval-search-grid .approval-button { width: 100%; }
     .approval-file { display: block; }
     .approval-file-actions { margin-top: 12px; }
     .approval-file-actions .approval-button { flex: 1 1 160px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .approval-search input,
-    body.admin-body .admin-page-content .approval-search input { transition: none; }
+    .approval-search-grid .approval-button { transition: none; }
 }

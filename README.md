@@ -1,6 +1,6 @@
 # Research Management System (RMS)
 
-A PHP and MySQL research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: submit a title → authorized review → sequential Chapters 1–5 → submit the complete manuscript → authorized final review. A project is complete only after its final manuscript is approved. Staff access is organized as 5 modules × 3 sub-pages.
+A PHP and MySQL research management system for students, faculty, research staff, and administrators. Students and faculty use one research workflow: submit a title → authorized review → sequential Chapters 1–5 → submit the complete manuscript → authorized final review. A project is complete only after its final manuscript is approved. Staff permissions follow a dynamic module and page catalog, with separate access and download grants.
 
 **Stack:** PHP 8.1+ · MySQL/MariaDB · Apache (XAMPP/WAMP) · Composer (phpdotenv, PHPMailer)
 
@@ -53,7 +53,7 @@ A PHP and MySQL research management system for students, faculty, research staff
    For an existing database, inspect its current schema and migration ledger,
    then apply only the applicable numbered migrations in order using the
    documented migration runner. The numbered scripts are the upgrade history
-   (currently through migration 066); do not treat the highest number alone as
+   (currently through migration 075); do not treat the highest number alone as
    proof that every migration is applicable. Migration 010 remains marked
    `needs-verifier`: follow [the reconciliation procedure](docs/MIGRATION_003_010_RECONCILIATION.md)
    before deciding whether it can run. Numbered migrations are not needed after
@@ -117,7 +117,7 @@ rms/
   .github/skills/                  Shared skills, task index, and snapshot catalog
 ```
 
-Research submission and chapter work is implemented in `pages/researcher/`; the matching student URLs remain thin compatibility redirects. Staff permissions use 5 modules with 3 sub-pages each, defined by `rmsPermissionModules()` in `includes/auth.php`.
+Research submission and chapter work is implemented in `pages/researcher/`; the matching student URLs remain thin compatibility redirects. Staff permissions are defined by `rmsPermissionModules()` in `includes/auth.php`. The catalog includes separate Publication & Dissemination actions (`publication_records`, `publication_add`, `publication_reports`) and Research Development's `research_engagement_records`; Chapter Review remains `research_review`.
 
 For shared Copilot/local agent routing and skills, see [Copilot workflow setup](docs/COPILOT_WORKFLOW.md).
 
@@ -159,7 +159,7 @@ APP_ENV / APP_DEBUG                     Development or production mode
 ## Security Notes
 
 - Database credentials live in `.env` (gitignored), never in code
-- Production deployments must use HTTPS. Configure the production Apache virtual host to set `RMS_FORCE_HTTPS=1`; session cookies use `Secure` in production and `HttpOnly; SameSite=Lax` in web environments.
+- Production deployments must use HTTPS. Configure the production Apache virtual host to set `RMS_FORCE_HTTPS=1`; session cookies use `Secure` in production and `HttpOnly; SameSite=Lax` in web environments. The root `.htaccess` currently assumes the app is mounted at `/rms/`; if the host uses the domain root or another path prefix, update `RewriteBase` and the `ErrorDocument` paths to match.
 
 ## Official EARIST document templates
 
@@ -182,7 +182,7 @@ Use **Admin → System Settings → Application settings → EARIST document gen
 - Login rate limiting and account activity logging (`activity_log` table)
 - Custom 403/404/500 pages with graceful fallback
 
-For production: set `APP_ENV=production`, disable `APP_DEBUG`, configure real SMTP credentials, review upload permissions, and remove or rotate demo accounts.
+For production: set `APP_ENV=production`, `APP_DEBUG=false`, an HTTPS `SITE_URL`, and non-root database credentials with a non-empty password. Set `ACTIVITY_CHECKIN_HASH_KEY` to 64 hexadecimal characters generated from 32 random bytes. Production startup rejects missing or unsafe core settings and hides database connection details from visitors. Configure real SMTP credentials, review upload permissions, and remove or rotate demo accounts.
 
 ## Project Status
 

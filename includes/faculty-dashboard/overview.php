@@ -33,62 +33,84 @@
                 'Publication Records' => 'publications',
                 'Verified Engagements' => 'engagements',
             ];
+            $statsByLabel = array_column($data['stats'], null, 'label');
+            $statOrder = array_values(array_filter([
+                'Active Research Records',
+                'Publication Records',
+                'Upcoming Activities',
+                'Advising Projects',
+                'Verified Engagements',
+            ], static function (string $label) use ($statsByLabel): bool {
+                return in_array($label, ['Active Research Records', 'Upcoming Activities'], true)
+                    || isset($statsByLabel[$label]);
+            }));
+            $statPosition = 0;
             ?>
-            <?php foreach ($data['stats'] as $key => $stat): ?>
+            <?php foreach ($statOrder as $label): ?>
                 <?php
-                $statUrlKey = $statUrlKeys[$stat['label']] ?? null;
-                $statUrl = $statUrlKey !== null ? ($urls[$statUrlKey] ?? null) : null;
+                $statPosition++;
+                $positionClass = $statPosition === 4
+                    ? ' faculty-stat-link--fourth'
+                    : ($statPosition === 5 ? ' faculty-stat-link--fifth' : '');
                 ?>
-                <?php if ($statUrl !== null): ?>
-                    <a class="faculty-stat-link" href="<?= htmlspecialchars($statUrl, ENT_QUOTES, 'UTF-8') ?>">
-                <?php endif; ?>
-                <article class="faculty-stat-card faculty-stat-card--<?= $stat['tone'] ?>">
-                    <div class="faculty-stat-icon" style="--stat-color: <?= $stat['color'] ?>">
-                        <?= $stat['icon'] ?>
-                    </div>
-                    <div class="faculty-stat-content">
-                        <div class="faculty-stat-value"><?= $stat['value'] ?></div>
-                        <div class="faculty-stat-label"><?= htmlspecialchars($stat['label']) ?></div>
-                        <?php if (!empty($stat['subtext'])): ?>
-                            <div class="faculty-stat-subtext"><?= htmlspecialchars($stat['subtext']) ?></div>
-                        <?php endif; ?>
-                    </div>
-                </article>
-                <?php if ($statUrl !== null): ?>
+                <?php if ($label === 'Active Research Records'): ?>
+                    <a class="faculty-stat-link<?= $positionClass ?>" href="<?= htmlspecialchars($urls['researchRecords'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your active research records">
+                        <article class="faculty-stat-card <?= $data['researchRecordCount'] === null ? 'faculty-stat-card--neutral' : 'faculty-stat-card--secondary' ?>">
+                            <div class="faculty-stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <path d="M8 8h8M8 12h8M8 16h5" />
+                                </svg>
+                            </div>
+                            <div class="faculty-stat-content">
+                                <div class="faculty-stat-value"><?= $data['researchRecordCount'] === null ? '—' : (int) $data['researchRecordCount'] ?></div>
+                                <div class="faculty-stat-label">Active Research Records</div>
+                                <div class="faculty-stat-subtext"><?= $data['researchRecordCount'] === null ? 'Records are unavailable' : 'Ready to reuse in research documents' ?></div>
+                            </div>
+                        </article>
                     </a>
+                <?php elseif ($label === 'Upcoming Activities'): ?>
+                    <a class="faculty-stat-link<?= $positionClass ?>" href="<?= htmlspecialchars($urls['activities'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View upcoming activities">
+                        <article class="faculty-stat-card <?= $data['upcomingActivityCount'] === null ? 'faculty-stat-card--neutral' : 'faculty-stat-card--secondary' ?>">
+                            <div class="faculty-stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <rect x="3" y="5" width="18" height="16" rx="2" />
+                                    <path d="M16 3v4M8 3v4M3 11h18M8 16l2 2 5-5" />
+                                </svg>
+                            </div>
+                            <div class="faculty-stat-content">
+                                <div class="faculty-stat-value"><?= $data['upcomingActivityCount'] === null ? '—' : (int) $data['upcomingActivityCount'] ?></div>
+                                <div class="faculty-stat-label">Upcoming Activities</div>
+                                <div class="faculty-stat-subtext"><?= $data['upcomingActivityCount'] === null ? 'Activities are unavailable' : 'Scheduled research activities' ?></div>
+                            </div>
+                        </article>
+                    </a>
+                <?php elseif (isset($statsByLabel[$label])): ?>
+                    <?php
+                    $stat = $statsByLabel[$label];
+                    $statUrlKey = $statUrlKeys[$label] ?? null;
+                    $statUrl = $statUrlKey !== null ? ($urls[$statUrlKey] ?? null) : null;
+                    ?>
+                    <?php if ($statUrl !== null): ?>
+                        <a class="faculty-stat-link<?= $positionClass ?>" href="<?= htmlspecialchars($statUrl, ENT_QUOTES, 'UTF-8') ?>">
+                    <?php endif; ?>
+                    <article class="faculty-stat-card faculty-stat-card--<?= $stat['tone'] ?>">
+                        <div class="faculty-stat-icon" style="--stat-color: <?= $stat['color'] ?>">
+                            <?= $stat['icon'] ?>
+                        </div>
+                        <div class="faculty-stat-content">
+                            <div class="faculty-stat-value"><?= $stat['value'] ?></div>
+                            <div class="faculty-stat-label"><?= htmlspecialchars($stat['label']) ?></div>
+                            <?php if (!empty($stat['subtext'])): ?>
+                                <div class="faculty-stat-subtext"><?= htmlspecialchars($stat['subtext']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </article>
+                    <?php if ($statUrl !== null): ?>
+                        </a>
+                    <?php endif; ?>
                 <?php endif; ?>
             <?php endforeach; ?>
-            <?php if ($data['upcomingActivityCount'] === null): ?>
-                <a class="faculty-stat-link faculty-stat-link--records" href="<?= htmlspecialchars($urls['researchRecords'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your active research records">
-                    <article class="faculty-stat-card <?= $data['researchRecordCount'] === null ? 'faculty-stat-card--neutral' : 'faculty-stat-card--secondary' ?>">
-                        <span class="faculty-stat-value"><?= $data['researchRecordCount'] === null ? '—' : (int) $data['researchRecordCount'] ?></span>
-                        <span class="faculty-stat-label">Active Research Records</span>
-                        <span class="faculty-stat-subtext"><?= $data['researchRecordCount'] === null ? 'Records are unavailable' : 'Ready to reuse in research documents' ?></span>
-                    </article>
-                </a>
-                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['activities'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View upcoming activities">
-                    <article class="faculty-stat-card faculty-stat-card--neutral">
-                        <span class="faculty-stat-value">—</span>
-                        <span class="faculty-stat-label">Upcoming Activities</span>
-                        <span class="faculty-stat-subtext"><?= $data['upcomingActivityCount'] === null ? 'Activities are unavailable' : 'Scheduled research activities' ?></span>
-                    </article>
-                </a>
-            <?php else: ?>
-                <a class="faculty-stat-link faculty-stat-link--records" href="<?= htmlspecialchars($urls['researchRecords'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your active research records">
-                    <article class="faculty-stat-card <?= $data['researchRecordCount'] === null ? 'faculty-stat-card--neutral' : 'faculty-stat-card--secondary' ?>">
-                        <span class="faculty-stat-value"><?= $data['researchRecordCount'] === null ? '—' : (int) $data['researchRecordCount'] ?></span>
-                        <span class="faculty-stat-label">Active Research Records</span>
-                        <span class="faculty-stat-subtext"><?= $data['researchRecordCount'] === null ? 'Records are unavailable' : 'Ready to reuse in research documents' ?></span>
-                    </article>
-                </a>
-                <a class="faculty-stat-link faculty-stat-link--activities" href="<?= htmlspecialchars($urls['activities'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View upcoming activities">
-                    <article class="faculty-stat-card faculty-stat-card--secondary">
-                        <span class="faculty-stat-value"><?= (int) $data['upcomingActivityCount'] ?></span>
-                        <span class="faculty-stat-label">Upcoming Activities</span>
-                        <span class="faculty-stat-subtext"><?= $data['upcomingActivityCount'] === null ? 'Activities are unavailable' : 'Scheduled research activities' ?></span>
-                    </article>
-                </a>
-            <?php endif; ?>
         </div>
 
     </section>

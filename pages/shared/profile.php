@@ -94,6 +94,10 @@ $user_stmt->bind_param('i', $user_id);
 $user_stmt->execute();
 $user_row = $user_stmt->get_result()->fetch_assoc() ?: $user;
 $user_stmt->close();
+$faculty_department = trim((string) ($user_row['department'] ?? ''));
+if ($role === 'faculty' && $academic_affiliation_summary) {
+    $faculty_department = (string) array_key_first($academic_affiliation_summary);
+}
 
 // ---------------------------------------------------------------
 // POST handling — runs before any HTML output so we can redirect.
@@ -457,8 +461,8 @@ $profileTheme = match ($role) {
         <?php endif; ?>
       <?php elseif ($role === 'faculty'): ?>
         <div class="profile-info-row">
-          <div class="profile-info-label">Department</div>
-          <div class="profile-info-value"><?php echo htmlspecialchars((string) ($user_row['department'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="profile-info-label">Department / Academic Unit</div>
+          <div class="profile-info-value"><?php echo htmlspecialchars($faculty_department !== '' ? $faculty_department : '—', ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
         <?php if ($has_column['specialization']): ?>
         <div class="profile-info-row">
@@ -510,10 +514,12 @@ $profileTheme = match ($role) {
       <?php endif; ?>
       <?php if ($academic_affiliation_enabled): ?>
         <?php foreach ($academic_affiliation_summary as $groupName => $programNames): ?>
+        <?php if ($role !== 'faculty' || $groupName !== $faculty_department): ?>
         <div class="profile-info-row">
-          <div class="profile-info-label">Academic Unit / Program Group</div>
+          <div class="profile-info-label"><?php echo $role === 'faculty' ? 'Additional Academic Unit' : 'Academic Unit / Program Group'; ?></div>
           <div class="profile-info-value"><?php echo htmlspecialchars($groupName, ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
+        <?php endif; ?>
         <div class="profile-info-row">
           <div class="profile-info-label">Academic Program</div>
           <div class="profile-info-value"><?php echo htmlspecialchars($programNames, ENT_QUOTES, 'UTF-8'); ?></div>
@@ -666,14 +672,15 @@ $profileTheme = match ($role) {
           <?php if ($academic_affiliation_enabled): ?>
           <section class="academic-affiliation-editor" id="profileAcademicAffiliationEditor" data-academic-affiliation-editor
                    data-catalog="<?php echo htmlspecialchars(json_encode($academic_affiliation_catalog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>"
-                   data-initial="<?php echo htmlspecialchars(json_encode($academic_affiliations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>">
+                   data-initial="<?php echo htmlspecialchars(json_encode($academic_affiliations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>"
+                   data-group-label="<?php echo $role === 'faculty' ? 'Department / Academic Unit' : 'Academic Unit / Program Group'; ?>">
             <input type="hidden" name="academic_affiliations_submitted" value="1">
             <div class="affiliation-editor-heading">
               <div>
                 <h4>Academic Affiliation</h4>
                 <p>Institute: <strong>EARIST</strong>. Leave the program selection empty when it does not apply.</p>
               </div>
-              <button class="btn btn-secondary btn-sm" type="button" data-add-affiliation>Add academic unit</button>
+              <button class="btn btn-secondary btn-sm" type="button" data-add-affiliation><?php echo $role === 'faculty' ? 'Add department' : 'Add academic unit'; ?></button>
             </div>
             <div class="affiliation-editor-rows" data-affiliation-rows></div>
           </section>
@@ -750,9 +757,10 @@ if ($academic_affiliation_enabled):
 .affiliation-group-field select:focus{outline:2px solid var(--affiliation-accent);outline-offset:2px}
 .affiliation-remove{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font:inherit;font-size:12px;cursor:pointer}
 .affiliation-program-field{margin:14px 0 0;padding:0;border:0}
-.affiliation-program-options{margin-top:8px}
-.affiliation-program-select{display:block;width:100%;min-height:96px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font:inherit;font-size:12px;line-height:1.4}
-.affiliation-program-select:focus{outline:2px solid var(--affiliation-accent);outline-offset:2px}
+.affiliation-program-options{display:grid;gap:6px;margin-top:8px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+.affiliation-program-option{display:flex;align-items:flex-start;gap:9px;padding:5px 4px;border-radius:5px;color:#334155;font-size:13px;line-height:1.45;cursor:pointer}
+.affiliation-program-option input{flex:0 0 auto;width:16px;height:16px;margin:1px 0 0;accent-color:var(--affiliation-accent)}
+.affiliation-program-option input:focus-visible{outline:2px solid var(--affiliation-accent);outline-offset:2px}
 .affiliation-empty{grid-column:1/-1;color:#64748b;font-size:12px}
 @media(max-width:640px){.academic-affiliation-editor{padding:15px}.affiliation-editor-heading{flex-direction:column}}
 </style>

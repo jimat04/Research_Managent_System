@@ -75,6 +75,8 @@ define('UPLOADS_URL', SITE_URL . 'uploads/');
 define('SESSION_TIMEOUT', (int) rms_env('SESSION_TIMEOUT', 1800));
 define('BCRYPT_COST',     (int) rms_env('BCRYPT_COST', 12));
 define('MAX_UPLOAD_SIZE', (int) rms_env('MAX_UPLOAD_SIZE', 10485760));
+define('ACTIVITY_CHECKIN_HASH_KEY', (string) rms_env('ACTIVITY_CHECKIN_HASH_KEY', ''));
+define('ACTIVITY_CHECKIN_BASE_URL', trim((string) rms_env('ACTIVITY_CHECKIN_BASE_URL', '')));
 define('ALLOWED_FILE_TYPES', rms_env(
     'ALLOWED_FILE_TYPES',
     'pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png'
@@ -83,6 +85,63 @@ define('ALLOWED_FILE_TYPES', rms_env(
 // Application mode
 define('APP_ENV',   rms_env('APP_ENV', 'development'));
 define('APP_DEBUG', filter_var(rms_env('APP_DEBUG', false), FILTER_VALIDATE_BOOLEAN));
+
+if (!in_array(APP_ENV, ['development', 'production'], true)) {
+    error_log('RMS configuration rejected an unsupported APP_ENV value.');
+    http_response_code(500);
+    exit('The application is not configured correctly.');
+}
+
+if (APP_ENV === 'production') {
+    ini_set('display_errors', '0');
+    ini_set('display_startup_errors', '0');
+    ini_set('log_errors', '1');
+
+    if (!RMS_E2E_MODE) {
+        $productionConfigErrors = [];
+        $siteUrlParts = parse_url(SITE_URL);
+
+        if (APP_DEBUG) {
+            $productionConfigErrors[] = 'APP_DEBUG';
+        }
+        if (!is_array($siteUrlParts)
+            || filter_var(SITE_URL, FILTER_VALIDATE_URL) === false
+            || strtolower((string) ($siteUrlParts['scheme'] ?? '')) !== 'https'
+            || empty($siteUrlParts['host'])
+            || isset($siteUrlParts['user'])
+            || isset($siteUrlParts['pass'])
+            || isset($siteUrlParts['query'])
+            || isset($siteUrlParts['fragment'])
+            || !str_ends_with(SITE_URL, '/')) {
+            $productionConfigErrors[] = 'SITE_URL';
+        }
+
+        foreach (['DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME'] as $key) {
+            $value = rms_env($key);
+            if (!is_string($value) || trim($value) === '') {
+                $productionConfigErrors[] = $key;
+            }
+        }
+
+        $configuredDbUser = strtolower(trim((string) rms_env('DB_USER', '')));
+        $configuredDbPassword = trim((string) rms_env('DB_PASS', ''));
+        if (in_array($configuredDbUser, ['root', 'your_database_user'], true)) {
+            $productionConfigErrors[] = 'DB_USER';
+        }
+        if ($configuredDbPassword === 'your_database_password') {
+            $productionConfigErrors[] = 'DB_PASS';
+        }
+        if (preg_match('/^[a-f0-9]{64}$/i', ACTIVITY_CHECKIN_HASH_KEY) !== 1) {
+            $productionConfigErrors[] = 'ACTIVITY_CHECKIN_HASH_KEY';
+        }
+
+        if ($productionConfigErrors !== []) {
+            error_log('RMS production configuration rejected invalid settings: ' . implode(', ', array_unique($productionConfigErrors)));
+            http_response_code(500);
+            exit('The application is not configured for production.');
+        }
+    }
+}
 
 // Email verification can only be disabled explicitly for a local development site.
 // Use the configured URL, never the request Host header, to determine locality.
@@ -115,6 +174,11 @@ if (!defined('RMS_E2E_IDENTITY_ONLY') || RMS_E2E_IDENTITY_ONLY !== true) {
         $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
         if ($conn->connect_error) {
+            if (APP_ENV === 'production') {
+                error_log('RMS database connection failed in production; check private database configuration and connectivity.');
+                http_response_code(503);
+                die('The application is temporarily unavailable.');
+            }
             die("Connection failed: " . $conn->connect_error);
         }
 
@@ -124,6 +188,11 @@ if (!defined('RMS_E2E_IDENTITY_ONLY') || RMS_E2E_IDENTITY_ONLY !== true) {
         }
 
     } catch (Exception $e) {
+        if (APP_ENV === 'production') {
+            error_log('RMS database connection failed in production; check private database configuration and connectivity.');
+            http_response_code(503);
+            die('The application is temporarily unavailable.');
+        }
         die(RMS_E2E_MODE ? 'E2E safety check failed; database access refused.' : "Database Error: " . $e->getMessage());
     }
 }

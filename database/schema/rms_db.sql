@@ -659,6 +659,7 @@ CREATE TABLE `users` (
   KEY `idx_role` (`role`),
   KEY `idx_status` (`status`),
   KEY `idx_verification_token` (`email_verification_token`),
+  KEY `idx_users_student_id` (`student_id`),
   KEY `idx_users_deleted_at` (`deleted_at`),
   KEY `idx_users_role_status` (`role`,`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -886,7 +887,7 @@ CREATE TABLE `research_submission_annotations` (
 
 CREATE TABLE IF NOT EXISTS `research_activities` (
   `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
-  `activity_type` enum('seminar','training','workshop','colloquium','conference') NOT NULL,
+  `activity_type` enum('seminar_workshop','training','colloquium','conference_congress') NOT NULL,
   `title` varchar(255) NOT NULL,
   `activity_date` date NOT NULL,
   `activity_time` time DEFAULT NULL,
@@ -897,6 +898,8 @@ CREATE TABLE IF NOT EXISTS `research_activities` (
   `speaker` varchar(255) DEFAULT NULL,
   `organizer` varchar(255) DEFAULT NULL,
   `description` text DEFAULT NULL,
+  `source_project_id` int unsigned DEFAULT NULL,
+  `source_publication_id` int unsigned DEFAULT NULL,
   `document_upload_id` int(10) unsigned DEFAULT NULL,
   `status` enum('upcoming','ongoing','conducted','cancelled','scheduled','completed') NOT NULL DEFAULT 'upcoming',
   `created_by` int unsigned DEFAULT NULL,
@@ -904,6 +907,10 @@ CREATE TABLE IF NOT EXISTS `research_activities` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`activity_id`),
   UNIQUE KEY `uq_research_activities_document_upload` (`document_upload_id`),
+  KEY `idx_research_activities_source_project` (`source_project_id`),
+  KEY `idx_research_activities_source_publication` (`source_publication_id`),
+  CONSTRAINT `fk_research_activities_source_project`
+    FOREIGN KEY (`source_project_id`) REFERENCES `research_projects` (`project_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_research_activities_document_upload`
     FOREIGN KEY (`document_upload_id`) REFERENCES `uploads` (`upload_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -932,11 +939,13 @@ CREATE TABLE IF NOT EXISTS `activity_schedule_dates` (
   `audience_roles` JSON DEFAULT NULL,
   `audience_user_ids` JSON DEFAULT NULL,
   `status` enum('scheduled','cancelled') NOT NULL DEFAULT 'scheduled',
+  `checkin_token_hash` char(64) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`schedule_id`),
   UNIQUE KEY `uq_activity_schedule_date` (`activity_id`,`schedule_date`),
   UNIQUE KEY `uq_activity_schedule_activity_schedule` (`activity_id`,`schedule_id`),
+  UNIQUE KEY `uq_activity_schedule_checkin_token` (`checkin_token_hash`),
   KEY `idx_activity_schedule_date_status` (`schedule_date`,`status`),
   CONSTRAINT `fk_activity_schedule_dates_activity`
     FOREIGN KEY (`activity_id`) REFERENCES `research_activities` (`activity_id`) ON DELETE CASCADE
@@ -947,6 +956,8 @@ CREATE TABLE IF NOT EXISTS `activity_schedule_participants` (
   `schedule_id` int unsigned NOT NULL,
   `user_id` int unsigned DEFAULT NULL,
   `participant_name` varchar(255) DEFAULT NULL,
+  `attendee_affiliation` enum('student','faculty','staff','guest') DEFAULT NULL,
+  `attendee_program_department` varchar(150) DEFAULT NULL,
   `role` varchar(120) DEFAULT NULL COMMENT 'speaker/attendee/organizer',
   `attended` tinyint(1) NOT NULL DEFAULT 0,
   `is_invited` tinyint(1) NOT NULL DEFAULT 0,
@@ -959,6 +970,21 @@ CREATE TABLE IF NOT EXISTS `activity_schedule_participants` (
   KEY `idx_activity_schedule_participants_user` (`user_id`),
   CONSTRAINT `fk_activity_schedule_participants_date`
     FOREIGN KEY (`schedule_id`) REFERENCES `activity_schedule_dates` (`schedule_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `activity_schedule_checkins` (
+  `checkin_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `schedule_id` int unsigned NOT NULL,
+  `participant_id` int unsigned NOT NULL,
+  `identity_hash` char(64) NOT NULL,
+  `checked_in_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`checkin_id`),
+  UNIQUE KEY `uq_activity_schedule_checkin_identity` (`schedule_id`,`identity_hash`),
+  KEY `idx_activity_schedule_checkins_participant` (`participant_id`),
+  CONSTRAINT `fk_activity_schedule_checkins_date`
+    FOREIGN KEY (`schedule_id`) REFERENCES `activity_schedule_dates` (`schedule_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_activity_schedule_checkins_participant`
+    FOREIGN KEY (`participant_id`) REFERENCES `activity_schedule_participants` (`participant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `activity_budgets` (
@@ -1184,6 +1210,10 @@ CREATE TABLE IF NOT EXISTS `publications` (
   CONSTRAINT fk_publications_scope FOREIGN KEY (publication_scope_id) REFERENCES publication_scopes(publication_scope_id) ON DELETE RESTRICT,
   CONSTRAINT fk_publications_research_area FOREIGN KEY (research_area_id) REFERENCES research_areas(area_id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `research_activities`
+  ADD CONSTRAINT `fk_research_activities_source_publication`
+    FOREIGN KEY (`source_publication_id`) REFERENCES `publications` (`publication_id`) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS `copyright_applications` (
   archival_status enum('legacy','archived') NOT NULL DEFAULT 'legacy',
@@ -1540,9 +1570,9 @@ SELECT ua.`affiliation_id`, ua.`group_id`, gp.`affiliation_program_id`
 
 -- DEMO: Research activity records for fresh-install previews.
 INSERT INTO `research_activities` (`activity_id`, `activity_type`, `title`, `activity_date`, `activity_time`, `venue`, `speaker`, `organizer`, `description`, `status`, `created_by`) VALUES
-(1, 'seminar', 'Responsible Research and Publication Ethics', '2026-10-08', '09:00:00', 'EARIST Cavite Audio-Visual Room', 'Dr. Maria Santos', 'EREC Office', 'Orientation on ethical research conduct and responsible publication.', 'scheduled', 6),
-(2, 'workshop', 'Intellectual Property Documentation Workshop', '2026-08-21', '13:30:00', 'Research and Innovation Center', 'Engr. Jose Reyes', 'CREC', 'Hands-on preparation of copyright application materials.', 'completed', 7),
-(3, 'seminar', 'Student Research Forum 2026', '2026-11-14', NULL, 'Campus Multipurpose Hall', NULL, 'CREC Office', 'Interdisciplinary student research exchange.', 'scheduled', 7);
+(1, 'seminar_workshop', 'Responsible Research and Publication Ethics', '2026-10-08', '09:00:00', 'EARIST Cavite Audio-Visual Room', 'Dr. Maria Santos', 'EREC Office', 'Orientation on ethical research conduct and responsible publication.', 'scheduled', 6),
+(2, 'seminar_workshop', 'Intellectual Property Documentation Workshop', '2026-08-21', '13:30:00', 'Research and Innovation Center', 'Engr. Jose Reyes', 'CREC', 'Hands-on preparation of copyright application materials.', 'completed', 7),
+(3, 'seminar_workshop', 'Student Research Forum 2026', '2026-11-14', NULL, 'Campus Multipurpose Hall', NULL, 'CREC Office', 'Interdisciplinary student research exchange.', 'scheduled', 7);
 
 -- DEMO: Activity participant records, including linked users and a named guest.
 INSERT INTO `activity_participants` (`participant_id`, `activity_id`, `user_id`, `participant_name`, `role`, `attended`) VALUES
@@ -2450,6 +2480,11 @@ CREATE TABLE IF NOT EXISTS earist_generated_documents (
     docx_path VARCHAR(255) NOT NULL,
     docx_sha256 CHAR(64) NOT NULL,
     docx_size BIGINT UNSIGNED NOT NULL,
+    file_retention_status ENUM('available','pruning','pruned') NOT NULL DEFAULT 'available',
+    file_retention_started_at DATETIME NULL,
+    file_retention_completed_at DATETIME NULL,
+    file_retention_actor_id INT UNSIGNED NULL,
+    file_retention_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
     version_origin ENUM('generated','edited') NOT NULL DEFAULT 'generated',
     edited_from_generated_document_id INT UNSIGNED NULL,
     pdf_path VARCHAR(255) NULL,
@@ -2467,12 +2502,15 @@ CREATE TABLE IF NOT EXISTS earist_generated_documents (
     KEY idx_earist_generated_verifier (verified_by),
     KEY idx_earist_generated_type_date (document_type, generated_at, generated_document_id),
     KEY idx_earist_generated_edit_parent (edited_from_generated_document_id),
+    KEY idx_earist_generated_retention (owner_id, research_record_id, document_type, file_retention_status, document_version),
+    KEY idx_earist_generated_retention_actor (file_retention_actor_id),
     CONSTRAINT fk_earist_generated_draft FOREIGN KEY (draft_id) REFERENCES earist_document_drafts (draft_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_record FOREIGN KEY (research_record_id) REFERENCES faculty_research_records (research_record_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_owner FOREIGN KEY (owner_id) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_generator FOREIGN KEY (generated_by) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_verifier FOREIGN KEY (verified_by) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT fk_earist_generated_edit_parent FOREIGN KEY (edited_from_generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_generated_retention_actor FOREIGN KEY (file_retention_actor_id) REFERENCES users (user_id) ON DELETE RESTRICT,
     CONSTRAINT chk_earist_generated_json CHECK (JSON_VALID(snapshot_json) AND JSON_VALID(missing_fields_json) AND JSON_VALID(warnings_json)),
     CONSTRAINT chk_earist_generated_versions CHECK (document_version > 0 AND draft_revision > 0 AND source_record_version > 0 AND input_schema_version > 0 AND mapping_definition_version > 0 AND binding_version > 0),
     CONSTRAINT chk_earist_generated_hashes CHECK (source_fingerprint REGEXP '^[0-9a-f]{64}$' AND template_sha256 REGEXP '^[0-9a-f]{64}$' AND request_token_hash REGEXP '^[0-9a-f]{64}$' AND docx_sha256 REGEXP '^[0-9a-f]{64}$'),
@@ -2515,9 +2553,42 @@ CREATE TABLE IF NOT EXISTS earist_document_edit_sessions (
     CONSTRAINT chk_earist_edit_state CHECK ((state = 'active' AND active_lock_generated_document_id = generated_document_id AND saved_generated_document_id IS NULL) OR (state <> 'active' AND active_lock_generated_document_id IS NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `earist_google_drive_connections` (
+    owner_id INT UNSIGNED NOT NULL,
+    google_subject VARCHAR(255) NOT NULL,
+    google_email VARCHAR(255) NOT NULL,
+    refresh_token_ciphertext TEXT NOT NULL,
+    connected_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (owner_id),
+    CONSTRAINT fk_earist_google_connection_owner FOREIGN KEY (owner_id) REFERENCES users (user_id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `earist_google_drive_files` (
+    drive_file_id VARCHAR(128) NOT NULL,
+    owner_id INT UNSIGNED NOT NULL,
+    google_subject VARCHAR(255) NOT NULL,
+    generated_document_id INT UNSIGNED NOT NULL,
+    file_selector ENUM('primary','sdg_continuation') NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    web_view_link VARCHAR(512) NOT NULL,
+    drive_version VARCHAR(64) NULL,
+    last_imported_drive_version VARCHAR(64) NULL,
+    last_imported_generated_document_id INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    last_imported_at DATETIME NULL,
+    PRIMARY KEY (drive_file_id),
+    KEY idx_earist_google_file_owner_source (owner_id,generated_document_id,file_selector,created_at),
+    KEY idx_earist_google_file_imported (last_imported_generated_document_id),
+    CONSTRAINT fk_earist_google_file_owner FOREIGN KEY (owner_id) REFERENCES users (user_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_google_file_source FOREIGN KEY (generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_earist_google_file_imported FOREIGN KEY (last_imported_generated_document_id) REFERENCES earist_generated_documents (generated_document_id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- No seed data, triggers, grants, automatic cleanup or certificate-issuance state.
--- Rollback: disable generation access and retain both tables/files. Do not DROP
--- retained preparation inputs or generated history as an automatic rollback.
+-- Rollback: disable the relevant feature and retain preparation inputs, generated
+-- history, Drive metadata, and files. Do not DROP retained state automatically.
 
 CREATE TABLE `student_project_assignments` (
   `student_id` int(10) unsigned NOT NULL,

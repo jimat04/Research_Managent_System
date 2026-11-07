@@ -128,7 +128,7 @@
   if (!('IntersectionObserver' in window)) return;
 
   // Animate only when content reaches the viewport; content is visible if JS fails.
-  var revealSelector = '.about-hero-copy, .about-overview h2, .about-overview p, .about-purpose .feature-card, .section-header, .about-capabilities .feature-card, .about-role-row, .about-benefits .feature-card, .about-stats-grid > div, .about-cta .container';
+  var revealSelector = '.about-hero-copy, .about-overview h2, .about-overview p, .about-purpose .feature-card, .section-header, .about-capabilities .feature-card, .about-role-row, .about-benefits .feature-card, .about-cta .container';
   var revealObserver = new IntersectionObserver(function (entries) {
     entries.filter(function (entry) { return entry.isIntersecting; }).forEach(function (entry, index) {
       animate(entry.target, [

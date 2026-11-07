@@ -35,6 +35,14 @@ function publicReleaseRows(mysqli $conn, string $sql, string $types, array $valu
 $success = (string) ($_SESSION['public_release_success'] ?? '');
 $error = (string) ($_SESSION['public_release_error'] ?? '');
 unset($_SESSION['public_release_success'], $_SESSION['public_release_error']);
+$returnFilters = [];
+foreach (['search', 'source', 'status', 'school_year'] as $filterName) {
+    if (is_string($_GET[$filterName] ?? null) && $_GET[$filterName] !== '') {
+        $returnFilters[$filterName] = $_GET[$filterName];
+    }
+}
+$returnQuery = http_build_query($returnFilters);
+$returnUrl = SITE_URL . 'pages/admin/admin-public-releases.php' . ($returnQuery !== '' ? '?' . $returnQuery : '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -42,6 +50,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (($_POST['action'] ?? '') !== 'save_public_release') {
         http_response_code(400);
         exit('Invalid public release request.');
+    } elseif (($_POST['unarchive_source'] ?? '') === '1') {
+        $sourceType = is_string($_POST['source_type'] ?? null) ? $_POST['source_type'] : '';
+        $sourceId = filter_var($_POST['source_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
+        $sourceColumns = [
+            'student_project' => 'project_id',
+            'faculty_publication' => 'publication_id',
+            'faculty_research_record' => 'faculty_research_record_id',
+        ];
+
+        try {
+            if (!isset($sourceColumns[$sourceType]) || $sourceId <= 0) {
+                throw new RuntimeException('Choose a valid archived record.');
+            }
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('The record could not be restored. Please try again.');
+            }
+
+            if ($sourceType === 'student_project') {
+                $sourceStmt = $conn->prepare("SELECT rp.status FROM research_projects rp WHERE rp.project_id = ? AND rp.deleted_at IS NULL FOR UPDATE");
+                $sourceStmt->bind_param('i', $sourceId);
+                $sourceStmt->execute();
+                $source = $sourceStmt->get_result()->fetch_assoc() ?: null;
+                $sourceStmt->close();
+                if (!$source || $source['status'] !== 'archived') {
+                    throw new RuntimeException('This project is no longer eligible to be restored.');
+                }
+                $restoreStmt = $conn->prepare("UPDATE research_projects AS rp SET status = 'ongoing', updated_at = NOW() WHERE rp.project_id = ? AND rp.status = 'archived' AND rp.deleted_at IS NULL AND (SELECT COUNT(DISTINCT ch.chapter_number) FROM chapters ch WHERE ch.project_id = rp.project_id AND ch.chapter_number BETWEEN 1 AND 5 AND ch.status = 'approved' AND ch.deleted_at IS NULL) BETWEEN 1 AND 4");
+                $restoreStmt->bind_param('i', $sourceId);
+            } elseif ($sourceType === 'faculty_publication') {
+                $sourceStmt = $conn->prepare("SELECT archival_status FROM publications WHERE publication_id = ? AND researcher_category = 'faculty' AND deactivated_at IS NULL FOR UPDATE");
+                $sourceStmt->bind_param('i', $sourceId);
+                $sourceStmt->execute();
+                $source = $sourceStmt->get_result()->fetch_assoc() ?: null;
+                $sourceStmt->close();
+                if (!$source || $source['archival_status'] !== 'archived') {
+                    throw new RuntimeException('This publication is no longer archived.');
+                }
+                $restoreStmt = $conn->prepare("UPDATE publications SET archival_status = 'legacy', last_modified_by = ?, updated_at = NOW() WHERE publication_id = ? AND researcher_category = 'faculty' AND archival_status = 'archived' AND deactivated_at IS NULL");
+                $restoreStmt->bind_param('ii', $userId, $sourceId);
+            } else {
+                $sourceStmt = $conn->prepare("SELECT status FROM faculty_research_records WHERE research_record_id = ? AND deleted_at IS NULL FOR UPDATE");
+                $sourceStmt->bind_param('i', $sourceId);
+                $sourceStmt->execute();
+                $source = $sourceStmt->get_result()->fetch_assoc() ?: null;
+                $sourceStmt->close();
+                if (!$source || $source['status'] !== 'archived') {
+                    throw new RuntimeException('This faculty research record is no longer archived.');
+                }
+                $restoreStmt = $conn->prepare("UPDATE faculty_research_records SET status = 'active', version = version + 1, updated_at = NOW() WHERE research_record_id = ? AND status = 'archived' AND deleted_at IS NULL");
+                $restoreStmt->bind_param('i', $sourceId);
+            }
+
+            if (!$restoreStmt->execute() || $restoreStmt->affected_rows !== 1) {
+                $restoreStmt->close();
+                throw new RuntimeException('This record could not be restored. Refresh and try again.');
+            }
+            $restoreStmt->close();
+
+            $sourceColumn = $sourceColumns[$sourceType];
+            $releaseStmt = $conn->prepare("SELECT release_id FROM public_research_releases WHERE source_type = ? AND `{$sourceColumn}` = ? LIMIT 1 FOR UPDATE");
+            $releaseStmt->bind_param('si', $sourceType, $sourceId);
+            $releaseStmt->execute();
+            $hasReleaseDecision = $releaseStmt->get_result()->num_rows > 0;
+            $releaseStmt->close();
+            if ($hasReleaseDecision) {
+                throw new RuntimeException('This record already has a release decision. Refresh the queue and try again.');
+            }
+
+            $actionLabel = 'Admin unarchived ' . str_replace('_', ' ', $sourceType) . ' #' . $sourceId;
+            if (!logActivity($actionLabel, 'public_research_releases')) {
+                throw new RuntimeException('The record could not be restored and audited. No changes were kept.');
+            }
+            if (!$conn->commit()) {
+                throw new RuntimeException('The record could not be restored. Please try again.');
+            }
+            $success = 'Archived record restored. No public release decision was made.';
+        } catch (Throwable $exception) {
+            $conn->rollback();
+            $error = $exception instanceof mysqli_sql_exception
+                ? 'The record could not be restored. Refresh and try again.'
+                : $exception->getMessage();
+        }
+
+        $_SESSION[$error !== '' ? 'public_release_error' : 'public_release_success'] = $error !== '' ? $error : $success;
+        header('Location: ' . $returnUrl);
+        exit;
     } else {
         $sourceType = is_string($_POST['source_type'] ?? null) ? $_POST['source_type'] : '';
         $sourceId = filter_var($_POST['source_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
@@ -181,13 +275,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         $_SESSION[$error !== '' ? 'public_release_error' : 'public_release_success'] = $error !== '' ? $error : $success;
-        header('Location: ' . SITE_URL . 'pages/admin/admin-public-releases.php' . (!empty($_GET['source']) ? '?source=' . rawurlencode((string) $_GET['source']) : ''));
+        header('Location: ' . $returnUrl);
         exit;
     }
 }
 
 $search = trim((string) ($_GET['search'] ?? ''));
 $search = function_exists('mb_substr') ? mb_substr($search, 0, 120) : substr($search, 0, 120);
+$schoolYearOptions = publicReleaseRows($conn, 'SELECT ay_id, label FROM academic_years ORDER BY label DESC, ay_id DESC', '', []);
+$schoolYearFilter = filter_var($_GET['school_year'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
+if ($schoolYearFilter > 0 && !in_array($schoolYearFilter, array_map(static fn(array $year): int => (int) $year['ay_id'], $schoolYearOptions), true)) {
+    $schoolYearFilter = 0;
+}
 $sourceFilter = is_string($_GET['source'] ?? null) ? $_GET['source'] : 'all';
 if (!in_array($sourceFilter, ['all', 'student_project', 'faculty_publication', 'faculty_research_record'], true)) $sourceFilter = 'all';
 $statusFilter = is_string($_GET['status'] ?? null) ? $_GET['status'] : 'pending';
@@ -217,13 +316,14 @@ if ($sourceFilter === 'all' || $sourceFilter === 'student_project') {
       LEFT JOIN public_research_releases r ON r.source_type = 'student_project' AND r.project_id = rp.project_id
       LEFT JOIN users reviewer ON reviewer.user_id = r.reviewed_by
           WHERE rp.status IN ('completed','archived') AND rp.deleted_at IS NULL AND {$statusCondition}
+            AND (? = 0 OR rp.ay_id = ?)
             AND (? = '' OR rp.title LIKE ? OR rp.abstract LIKE ? OR EXISTS (SELECT 1 FROM research_author_snapshots ras_search WHERE ras_search.project_id = rp.project_id AND ras_search.author_name LIKE ?))
           ORDER BY rp.updated_at DESC, rp.project_id DESC",
-        'ssss', [$search, $searchTerm, $searchTerm, $searchTerm]));
+        'iissss', [$schoolYearFilter, $schoolYearFilter, $search, $searchTerm, $searchTerm, $searchTerm]));
 }
 if ($sourceFilter === 'all' || $sourceFilter === 'faculty_publication') {
     $rows = array_merge($rows, publicReleaseRows($conn,
-        "SELECT 'faculty_publication' AS source_type, p.publication_id AS source_id, p.research_title AS title, p.authors_json,
+        "SELECT 'faculty_publication' AS source_type, p.publication_id AS source_id, p.research_title AS title, p.authors_json, p.archival_status AS source_archive_status,
                 p.status AS record_status, COALESCE(NULLIF(p.researcher_name, ''), CONCAT('Faculty record #', p.publication_id)) AS author_names,
                 CONCAT_WS(' ', author_user.first_name, author_user.last_name) AS record_owner,
                 COALESCE(p.publication_date, p.updated_at) AS sort_at,
@@ -233,13 +333,15 @@ if ($sourceFilter === 'all' || $sourceFilter === 'faculty_publication') {
                 r.public_manuscript_version_id, r.publication_paper_released
            FROM publications p
       LEFT JOIN users author_user ON author_user.user_id = p.researcher_id
+      LEFT JOIN research_projects linked_project ON linked_project.project_id = p.research_project_id
       LEFT JOIN public_research_releases r ON r.source_type = 'faculty_publication' AND r.publication_id = p.publication_id
       LEFT JOIN users reviewer ON reviewer.user_id = r.reviewed_by
           WHERE p.researcher_category = 'faculty' AND (p.status = 'published' OR p.archival_status = 'archived')
             AND p.deactivated_at IS NULL AND {$statusCondition}
+            AND (? = 0 OR linked_project.ay_id = ?)
             AND (? = '' OR p.research_title LIKE ? OR p.abstract_text LIKE ? OR p.researcher_name LIKE ? OR p.authors_json LIKE ?)
           ORDER BY p.publication_date DESC, p.publication_id DESC",
-        'sssss', [$search, $searchTerm, $searchTerm, $searchTerm, $searchTerm]));
+        'iisssss', [$schoolYearFilter, $schoolYearFilter, $search, $searchTerm, $searchTerm, $searchTerm, $searchTerm]));
 }
 if ($sourceFilter === 'all' || $sourceFilter === 'faculty_research_record') {
     $rows = array_merge($rows, publicReleaseRows($conn,
@@ -258,12 +360,13 @@ if ($sourceFilter === 'all' || $sourceFilter === 'faculty_research_record') {
       LEFT JOIN public_research_releases r ON r.source_type = 'faculty_research_record' AND r.faculty_research_record_id = fr.research_record_id
       LEFT JOIN users reviewer ON reviewer.user_id = r.reviewed_by
           WHERE fr.status = 'archived' AND fr.deleted_at IS NULL AND {$statusCondition}
+            AND (? = 0)
           GROUP BY fr.research_record_id, fr.title, fr.status, fr.date_completed, fr.updated_at, owner.first_name, owner.last_name,
                    r.release_id, r.release_status, r.reviewed_by, r.reviewed_at,
                    reviewer.first_name, reviewer.last_name, r.public_manuscript_version_id, r.publication_paper_released
           HAVING (? = '' OR fr.title LIKE ? OR GROUP_CONCAT(fra.full_name ORDER BY fra.display_order SEPARATOR ', ') LIKE ?)
           ORDER BY fr.updated_at DESC, fr.research_record_id DESC",
-        'sss', [$search, $searchTerm, $searchTerm]));
+        'isss', [$schoolYearFilter, $search, $searchTerm, $searchTerm]));
 }
 
 usort($rows, static function (array $left, array $right): int {
@@ -298,8 +401,9 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
   .public-release-note strong{display:block;color:#111827;margin-bottom:4px}
   .public-release-alert{margin:18px 0;padding:13px 16px;border-radius:12px;background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}
   .public-release-alert.error{background:#fef2f2;color:#991b1b;border-color:#fecaca}
-  .public-release-filters{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,.55fr) minmax(180px,.55fr) auto;gap:12px;align-items:end;margin:20px 0;padding:18px;background:#fff;border:1px solid #e5e7eb;border-radius:16px}
+  .public-release-filters{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,minmax(160px,.55fr)) auto;gap:12px;align-items:end;margin:20px 0;padding:18px;background:#fff;border:1px solid #e5e7eb;border-radius:16px}
   .public-release-field label{display:block;margin-bottom:6px;color:#475569;font-size:12px;font-weight:700}
+  .public-release-filter-note{grid-column:1/-1;margin:0;color:#64748b;font-size:12px;line-height:1.4}
   .public-release-field input,.public-release-field select{width:100%;min-height:42px;padding:9px 12px;border:1px solid #d7dce3;border-radius:10px;background:#fff;color:#111827;font:inherit}
   .public-release-field input:focus,.public-release-field select:focus{outline:2px solid #f57c00;outline-offset:2px}
   .public-release-list{display:grid;gap:14px}
@@ -310,23 +414,26 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
   .public-release-meta{margin:10px 0 0;color:#64748b;font-size:13px;line-height:1.6}
   .public-release-state{flex:0 0 auto;padding:6px 10px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
   .public-release-state.published{background:#dcfce7;color:#166534}.public-release-state.withdrawn{background:#fff7ed;color:#9a3412}
-  .public-release-controls{display:grid;grid-template-columns:minmax(180px,.6fr) minmax(260px,1.2fr) auto;gap:16px;align-items:end;margin-top:20px;padding-top:18px;border-top:1px solid #edf0f4}
-  .public-release-controls .control{display:flex;flex-direction:column;justify-content:flex-end;align-self:stretch;min-height:100%}
+  .public-release-controls{display:grid;grid-template-columns:minmax(180px,.6fr) minmax(260px,1.2fr) auto;gap:16px;align-items:start;margin-top:20px;padding-top:18px;border-top:1px solid #edf0f4}
+  .public-release-controls .control{display:flex;flex-direction:column;justify-content:flex-start;align-self:start}
   .public-release-controls .control label{display:block;margin-bottom:6px;color:#475569;font-size:12px;font-weight:700}
   .public-release-controls select{width:100%;min-height:42px;padding:9px 12px;border:1px solid #d7dce3;border-radius:10px;background:#fff;color:#111827;font:inherit}
   .public-release-controls select:focus{outline:2px solid #f57c00;outline-offset:2px}
   .public-release-checkbox{display:flex;align-items:flex-start;gap:9px;margin:0 0 8px;color:#334155;font-size:13px;line-height:1.5}
   .public-release-checkbox input{margin-top:3px;accent-color:#f57c00}
   .public-release-help{display:block;color:#64748b;font-size:11px;line-height:1.45}
-  .public-release-actions{display:flex;justify-content:flex-end}
+  .public-release-actions{display:flex;justify-content:flex-end;align-self:center;gap:10px}
   .public-release-actions .btn{min-height:42px;white-space:nowrap}
+  .public-release-actions .btn-unarchive{border-color:#c75c00;background:#f57c00;color:#fff}
+  .public-release-actions .btn-unarchive:hover{border-color:#a84900;background:#c75c00}
+  .public-release-actions .btn-unarchive:focus-visible{outline:2px solid #9a3e00;outline-offset:2px}
   .public-release-empty{padding:36px 24px;text-align:center;background:#fff;border:1px dashed #cbd5e1;border-radius:16px;color:#64748b}
   .public-release-empty h3{margin:0 0 8px;color:#111827}
   .public-release-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;color:#64748b;font-size:13px}
   .public-release-pagination a{padding:8px 12px;border:1px solid #d7dce3;border-radius:9px;background:#fff;color:#334155;text-decoration:none}
   .public-release-pagination a:focus-visible,.public-release-actions button:focus-visible{outline:2px solid #f57c00;outline-offset:2px}
   @media(max-width:900px){.public-release-hero{grid-template-columns:1fr}.public-release-note{max-width:none}.public-release-filters{grid-template-columns:1fr 1fr}.public-release-controls{grid-template-columns:1fr 1fr}.public-release-actions{grid-column:1/-1}}
-  @media(max-width:600px){.public-release-page{padding:16px 14px 32px}.public-release-hero{padding:23px 20px}.public-release-filters{grid-template-columns:1fr}.public-release-card{padding:18px}.public-release-head{flex-direction:column}.public-release-controls{grid-template-columns:1fr}.public-release-actions{grid-column:auto}.public-release-actions .btn{width:100%}.public-release-pagination{flex-wrap:wrap}}
+  @media(max-width:600px){.public-release-page{padding:16px 14px 32px}.public-release-hero{padding:23px 20px}.public-release-filters{grid-template-columns:1fr}.public-release-card{padding:18px}.public-release-head{flex-direction:column}.public-release-controls{grid-template-columns:1fr}.public-release-actions{grid-column:auto;flex-direction:column}.public-release-actions .btn{width:100%}.public-release-pagination{flex-wrap:wrap}}
 </style>
 <main class="public-release-page">
   <section class="public-release-hero" aria-labelledby="public-release-title">
@@ -339,7 +446,9 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
     <div class="public-release-field"><label for="release-search">Search records and authors</label><input id="release-search" name="search" type="search" maxlength="120" value="<?php echo publicReleaseEscape($search); ?>" placeholder="Title or author"></div>
     <div class="public-release-field"><label for="release-source">Record type</label><select id="release-source" name="source"><option value="all"<?php echo $sourceFilter === 'all' ? ' selected' : ''; ?>>All record types</option><option value="student_project"<?php echo $sourceFilter === 'student_project' ? ' selected' : ''; ?>>Student projects</option><option value="faculty_publication"<?php echo $sourceFilter === 'faculty_publication' ? ' selected' : ''; ?>>Faculty publications</option><option value="faculty_research_record"<?php echo $sourceFilter === 'faculty_research_record' ? ' selected' : ''; ?>>Faculty research records</option></select></div>
     <div class="public-release-field"><label for="release-status">Release status</label><select id="release-status" name="status"><option value="pending"<?php echo $statusFilter === 'pending' ? ' selected' : ''; ?>>Needs review</option><option value="published"<?php echo $statusFilter === 'published' ? ' selected' : ''; ?>>Published</option><option value="withdrawn"<?php echo $statusFilter === 'withdrawn' ? ' selected' : ''; ?>>Withdrawn</option><option value="all"<?php echo $statusFilter === 'all' ? ' selected' : ''; ?>>All</option></select></div>
+    <div class="public-release-field"><label for="release-school-year">School year</label><select id="release-school-year" name="school_year"><option value="0">All school years</option><?php foreach ($schoolYearOptions as $year): ?><option value="<?php echo (int) $year['ay_id']; ?>"<?php echo $schoolYearFilter === (int) $year['ay_id'] ? ' selected' : ''; ?>><?php echo publicReleaseEscape($year['label']); ?></option><?php endforeach; ?></select></div>
     <button class="btn btn-primary" type="submit">Filter records</button>
+    <p class="public-release-filter-note">School year applies to student projects and faculty publications linked to a research project.</p>
   </form>
   <?php if (!$visibleRows): ?>
     <section class="public-release-empty"><h3>No matching records</h3><p>Try another filter. Existing records stay private until an administrator releases them.</p></section>
@@ -350,6 +459,9 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
           $recordId = (int) $row['source_id'];
           $sourceType = (string) $row['source_type'];
           $status = (string) ($row['release_status'] ?? 'pending');
+          $sourceArchived = $sourceType === 'faculty_publication'
+              ? (string) ($row['source_archive_status'] ?? '') === 'archived'
+              : (string) ($row['record_status'] ?? '') === 'archived';
           $currentVersion = (int) ($row['public_manuscript_version_id'] ?? 0);
           $currentPaper = (int) ($row['publication_paper_released'] ?? 0) === 1;
           $typeLabel = match ($sourceType) {
@@ -366,7 +478,7 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
         ?>
         <article class="public-release-card">
           <header class="public-release-head"><div><p class="public-release-type"><?php echo publicReleaseEscape($typeLabel); ?> · <?php echo publicReleaseEscape(ucfirst((string) $row['record_status'])); ?></p><h3><?php echo publicReleaseEscape($row['title']); ?></h3><p class="public-release-meta"><strong>Recorded author(s):</strong> <?php echo publicReleaseEscape($authorText); ?><?php if ($ownerText !== ''): ?><br><strong>Source record owner:</strong> <?php echo publicReleaseEscape($ownerText); ?><?php endif; ?><?php if (!empty($row['reviewed_at'])): ?><br><strong>Last release review:</strong> <?php echo publicReleaseEscape(trim(($row['reviewer_first_name'] ?? '') . ' ' . ($row['reviewer_last_name'] ?? '')) ?: 'Administrator'); ?> · <?php echo publicReleaseEscape($row['reviewed_at']); ?><?php endif; ?></p></div><span class="public-release-state <?php echo publicReleaseEscape($status); ?>"><?php echo publicReleaseEscape($status === 'pending' ? 'Needs review' : $status); ?></span></header>
-          <form class="public-release-controls" method="post" action="<?php echo publicReleaseEscape(SITE_URL . 'pages/admin/admin-public-releases.php'); ?>">
+          <form class="public-release-controls" method="post" action="<?php echo publicReleaseEscape($returnUrl); ?>">
             <?php echo csrfField(); ?><input type="hidden" name="action" value="save_public_release"><input type="hidden" name="source_type" value="<?php echo publicReleaseEscape($sourceType); ?>"><input type="hidden" name="source_id" value="<?php echo $recordId; ?>">
             <div class="control"><label for="release-status-<?php echo $sourceType . '-' . $recordId; ?>">Catalog visibility</label><select id="release-status-<?php echo $sourceType . '-' . $recordId; ?>" name="release_status"><option value="published"<?php echo $status === 'published' ? ' selected' : ''; ?>>Publish catalog record</option><option value="withdrawn"<?php echo $status !== 'published' ? ' selected' : ''; ?>>Keep hidden / withdraw</option></select><span class="public-release-help">Only eligible records appear in the public archive.</span></div>
             <div class="control">
@@ -380,13 +492,13 @@ renderAdminShell($user, SITE_URL . 'pages/admin/admin-public-releases.php', 'Pub
                 <label>Files</label><span class="public-release-help">This record contains catalog metadata only. Authorship and author ordering come from the original faculty record.</span>
               <?php endif; ?>
             </div>
-            <div class="public-release-actions"><button class="btn btn-primary" type="submit">Save release decision</button></div>
+            <div class="public-release-actions"><button class="btn btn-primary" type="submit">Save release decision</button><?php if ($status === 'pending' && $sourceArchived): ?> <button class="btn btn-unarchive" type="submit" name="unarchive_source" value="1">Unarchive</button><?php endif; ?></div>
           </form>
         </article>
       <?php endforeach; ?>
     </div>
     <?php if ($pageCount > 1): ?>
-      <?php $queryBase = ['search' => $search, 'source' => $sourceFilter, 'status' => $statusFilter]; ?>
+      <?php $queryBase = ['search' => $search, 'source' => $sourceFilter, 'status' => $statusFilter, 'school_year' => $schoolYearFilter]; ?>
       <nav class="public-release-pagination" aria-label="Release queue pages"><span>Page <?php echo $page; ?> of <?php echo $pageCount; ?> · <?php echo $totalRows; ?> records</span><div><?php if ($page > 1): ?><a href="?<?php echo publicReleaseEscape(http_build_query($queryBase + ['page' => $page - 1])); ?>">Previous</a><?php endif; ?> <?php if ($page < $pageCount): ?><a href="?<?php echo publicReleaseEscape(http_build_query($queryBase + ['page' => $page + 1])); ?>">Next</a><?php endif; ?></div></nav>
     <?php endif; ?>
   <?php endif; ?>

@@ -33,28 +33,29 @@ function earistDocumentRenderHistoryStatus(array $row): void
     echo '</details>';
 }
 
+/** Load the shared EARIST document styles on preparation and history pages. */
+function earistDocumentStyles(): void
+{
+    $css = dirname(__DIR__) . '/css/earist-documents.css';
+    echo '<link rel="stylesheet" href="' . earistDocumentEscape(SITE_URL . 'css/earist-documents.css?v=' . (is_file($css) ? filemtime($css) : '1')) . '">';
+}
+
 /** Load the local DOCX renderer and shared preview surface on generated-document history pages. */
 function earistDocumentPreviewAssets(): void
 {
     $root = dirname(__DIR__);
-    $css = $root . '/css/earist-documents.css';
     $jszip = $root . '/public/assets/vendor/docx-preview/jszip.min.js';
     $renderer = $root . '/public/assets/vendor/docx-preview/docx-preview.min.js';
     $script = $root . '/public/assets/js/earist-document-preview.js';
-    echo '<link rel="stylesheet" href="' . earistDocumentEscape(SITE_URL . 'css/earist-documents.css?v=' . (is_file($css) ? filemtime($css) : '1')) . '">';
+    earistDocumentStyles();
     echo '<script src="' . earistDocumentEscape(SITE_URL . 'public/assets/vendor/docx-preview/jszip.min.js?v=' . (is_file($jszip) ? filemtime($jszip) : '1')) . '" defer></script>';
     echo '<script src="' . earistDocumentEscape(SITE_URL . 'public/assets/vendor/docx-preview/docx-preview.min.js?v=' . (is_file($renderer) ? filemtime($renderer) : '1')) . '" defer></script>';
     echo '<script src="' . earistDocumentEscape(SITE_URL . 'public/assets/js/earist-document-preview.js?v=' . (is_file($script) ? filemtime($script) : '1')) . '" defer></script>';
 }
 
 /** Shared accessible DOCX preview dialog. */
-function earistDocumentRenderPreviewDialog(bool $facultyEdit = false): void
+function earistDocumentRenderPreviewDialog(): void
 {
-    $editorEnabled = false;
-    if ($facultyEdit) {
-        $editorConfig = require __DIR__ . '/../config/earist-document-editor.php';
-        $editorEnabled = (bool) $editorConfig['enabled'];
-    }
     ?>
     <dialog class="ed-docx-preview" data-earist-preview-dialog aria-labelledby="ed-docx-preview-title">
       <div class="ed-docx-preview__inner">
@@ -70,10 +71,6 @@ function earistDocumentRenderPreviewDialog(bool $facultyEdit = false): void
           <div class="ed-docx-preview__content" data-earist-preview-content></div>
         </div>
         <footer class="ed-docx-preview__footer">
-          <?php if ($facultyEdit): ?><form class="ed-docx-preview__edit-form" method="post" action="<?= earistDocumentEscape(SITE_URL . 'pages/faculty/faculty-document-editor.php') ?>" data-earist-preview-edit-form>
-            <?= csrfField() ?><input type="hidden" name="generated_document_id" data-earist-edit-id><input type="hidden" name="file" data-earist-edit-file>
-            <button class="ed-docx-preview__edit" type="submit" data-earist-edit-submit <?= $editorEnabled ? '' : 'disabled' ?>>Edit DOCX</button>
-          </form><?php if (!$editorEnabled): ?><span class="ed-docx-preview__edit-note">DOCX editing is not configured. Preview and download remain available.</span><?php endif; ?><?php endif; ?>
           <a class="ed-docx-preview__download" data-earist-preview-download href="#" hidden>Download DOCX</a>
         </footer>
       </div>
