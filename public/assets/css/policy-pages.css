@@ -1,0 +1,187 @@
+.policy-page {
+  min-height: 100vh;
+  background: var(--rms-public-bg, #F8FAFC);
+  color: var(--rms-public-text, #172033);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.policy-page #site-header {
+  display: flex;
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  height: 66px;
+  align-items: center;
+  gap: 28px;
+  margin: 12px auto 0;
+}
+
+.policy-main {
+  width: min(960px, calc(100% - 40px));
+  margin: 44px auto 72px;
+}
+
+.policy-document {
+  padding: clamp(24px, 5vw, 56px);
+  border: 1px solid var(--rms-public-border, #CBD5E1);
+  border-radius: 22px;
+  background: var(--rms-public-surface, #fff);
+  box-shadow: var(--rms-public-shadow, 0 8px 30px rgba(80, 60, 160, .12));
+}
+
+.policy-heading {
+  position: static;
+  top: auto;
+  z-index: auto;
+  max-width: 720px;
+  margin-bottom: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
+}
+
+.policy-eyebrow {
+  margin: 0 0 10px;
+  color: var(--rms-public-primary, #5B1EBC);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.policy-heading h1 {
+  margin: 0;
+  color: var(--rms-public-text, #172033);
+  font: 800 clamp(32px, 5vw, 48px)/1.12 'Plus Jakarta Sans', Inter, sans-serif;
+  letter-spacing: -.035em;
+}
+
+.policy-intro {
+  margin: 16px 0 0;
+  color: var(--rms-public-text-muted, #475569);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.policy-review-notice {
+  display: grid;
+  gap: 6px;
+  margin: 28px 0;
+  padding: 16px 18px;
+  border: 1px solid #F5C26B;
+  border-left: 4px solid #B45309;
+  border-radius: 12px;
+  background: #FFFBEB;
+  color: #713F12;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.policy-toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 28px 0 36px;
+  padding: 16px 0;
+  border-top: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.policy-toc strong {
+  color: #172033;
+}
+
+.policy-page a {
+  color: var(--rms-public-link, #5B1EBC);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.policy-page a:hover {
+  color: var(--rms-public-link-hover, #3D0F8A);
+}
+
+.policy-page a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--rms-public-primary, #5B1EBC);
+  outline-offset: 3px;
+}
+
+.policy-section {
+  max-width: 760px;
+  padding: 0 0 26px;
+  scroll-margin-top: 92px;
+}
+
+.policy-section h2 {
+  margin: 0 0 12px;
+  color: #172033;
+  font: 700 21px/1.35 'Plus Jakarta Sans', Inter, sans-serif;
+}
+
+.policy-section p,
+.policy-section li {
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.policy-section p {
+  margin: 0 0 12px;
+}
+
+.policy-section ul {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.policy-page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 8px;
+  padding-top: 22px;
+  border-top: 1px solid #E2E8F0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .policy-main {
+    width: min(100% - 24px, 960px);
+    margin: 20px auto 40px;
+  }
+
+  .policy-document {
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+
+  .policy-intro {
+    font-size: 15px;
+  }
+
+  .policy-toc {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .policy-toc a {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (max-width: 980px) {
+  .policy-page #site-header {
+    gap: 12px;
+  }
+}

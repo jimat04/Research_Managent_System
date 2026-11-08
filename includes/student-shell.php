@@ -157,6 +157,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Student — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
   <?php if ($is_research_basics): ?>
   <link rel="stylesheet" href="<?php echo htmlspecialchars(SITE_URL . 'css/research-basics.css?v=' . filemtime(__DIR__ . '/../css/research-basics.css'), ENT_QUOTES, 'UTF-8'); ?>">
@@ -240,16 +241,6 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
         </details>
       <?php endforeach; ?>
 
-      <div class="student-nav-session">
-        <div class="student-nav-group-title">Session</div>
-        <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="student-nav-logout-form" data-logout-confirm>
-          <?php echo csrfField(); ?>
-          <button type="submit" class="student-nav-item student-nav-logout">
-          <span class="student-nav-icon"><?php echo rmsShellIcon('logout'); ?></span>
-          <span class="student-nav-label">Logout</span>
-          </button>
-        </form>
-      </div>
     </nav>
 
     <div class="student-sidebar-footer">
@@ -295,13 +286,21 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
           <?php if ($unread_messages > 0): ?><span class="student-topbar-message-badge" aria-hidden="true"><?php echo $unread_messages > 99 ? '99+' : $unread_messages; ?></span><?php endif; ?>
         </a>
         <?php renderNotificationPopover($user_id, $unread_notifications, 'student'); ?>
-        <div class="student-topbar-user">
-          <div class="student-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="student-topbar-user-text">
-            <div class="student-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Student', ENT_QUOTES, 'UTF-8'); ?></div>
-            <div class="student-topbar-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></div>
+        <details class="student-profile-menu">
+          <summary class="student-topbar-user" aria-label="Open student profile menu">
+            <span class="student-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="student-topbar-user-text"><span class="student-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Student', ENT_QUOTES, 'UTF-8'); ?></span><span class="student-topbar-user-role"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span></span>
+            <span class="student-profile-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="student-profile-dropdown">
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/profile.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo rmsShellIcon('profile'); ?><span>Profile</span></a>
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/settings.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo rmsShellIcon('settings'); ?><span>Account settings</span></a>
+            <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" data-logout-confirm>
+              <?php echo csrfField(); ?>
+              <button type="submit" class="student-profile-action"><?php echo rmsShellIcon('logout'); ?><span>Log out</span></button>
+            </form>
           </div>
-        </div>
+        </details>
         <?php if ($is_research_basics && !$show_navigation && $show_intro_logout): ?>
         <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="student-topbar-intro-logout-form" data-logout-confirm>
           <?php echo csrfField(); ?>

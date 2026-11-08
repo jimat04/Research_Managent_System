@@ -106,7 +106,7 @@ earistDocumentPreviewAssets();
         <?php else: ?><p>Connect a Google account to edit DOCX working copies in Google Docs. RMS stores your connection securely; your RMS history changes only when you import an edit.</p><?php endif; ?>
       </div>
       <?php if ($googleEnabled && !$googleStorageUnavailable): ?>
-        <?php if ($googleConnection): ?><form class="earist-google-connection__action" method="post" action="<?= facultyRecordEscape(SITE_URL . 'pages/faculty/earist-google-drive.php') ?>" onsubmit="return confirm('Disconnect Google Drive? RMS will remove its saved authorization. Existing copies remain in Google Drive.');">
+        <?php if ($googleConnection): ?><form class="earist-google-connection__action" method="post" action="<?= facultyRecordEscape(SITE_URL . 'pages/faculty/earist-google-drive.php') ?>" onsubmit="return typeof window.earistDisconnectConfirm !== 'function' ? confirm('Disconnect Google Drive? RMS will remove its saved authorization. Existing copies remain in Google Drive.') : window.earistDisconnectConfirm(this, event);">
           <?= csrfField() ?><input type="hidden" name="action" value="disconnect"><button class="frr-btn ed-google-button" type="submit"><span class="ed-google-button__mark" aria-hidden="true">G</span>Disconnect Google Drive</button>
         </form><?php else: ?><form class="earist-google-connection__action" method="post" action="<?= facultyRecordEscape(SITE_URL . 'pages/faculty/earist-google-drive.php') ?>">
           <?= csrfField() ?><input type="hidden" name="action" value="connect"><button class="frr-btn ed-google-button" type="submit"><span class="ed-google-button__mark" aria-hidden="true">G</span>Connect Google Drive</button>
@@ -349,6 +349,7 @@ earistDocumentPreviewAssets();
     const message = dialog.querySelector('[data-ed-import-message]');
     const note = dialog.querySelector('[data-ed-confirm-note]');
     const noteMark = dialog.querySelector('[data-ed-confirm-note-mark]');
+    const mark = dialog.querySelector('.ed-import-confirm__mark');
     const retentionStats = dialog.querySelector('[data-ed-retention-stats]');
     const retentionSets = dialog.querySelector('[data-ed-retention-sets]');
     const retentionBytes = dialog.querySelector('[data-ed-retention-bytes]');
@@ -368,6 +369,7 @@ earistDocumentPreviewAssets();
       pendingForm = form;
       pendingSubmitter = event.submitter instanceof HTMLElement ? event.submitter : null;
       dialog.dataset.confirmKind = 'import';
+      mark.textContent = '↓';
       title.textContent = form.dataset.confirmTitle || 'Import your latest edit?';
       message.textContent = form.dataset.confirmMessage || '';
       retentionStats.hidden = true;
@@ -393,6 +395,7 @@ earistDocumentPreviewAssets();
       const pending = Math.max(0, Number.parseInt(form.dataset.retentionPending || '0', 10) || 0);
       const megabytes = (bytes / 1048576).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       dialog.dataset.confirmKind = 'retention';
+      mark.textContent = '−';
       title.textContent = pending > 0 ? 'Retry removing older files?' : 'Free up RMS storage?';
       message.textContent = `This will remove ${sets.toLocaleString()} older DOCX file ${sets === 1 ? 'set' : 'sets'} from RMS. This action cannot be undone.`;
       retentionSets.textContent = sets.toLocaleString();
@@ -401,6 +404,28 @@ earistDocumentPreviewAssets();
       noteMark.textContent = '✓';
       note.textContent = 'Your version history stays in RMS. The latest set for each document type, including both QSF files, stays available. Google Drive copies are not affected.';
       submitButton.textContent = pending > 0 ? 'Retry cleanup' : 'Remove older files';
+      dialog.returnValue = 'cancel';
+      dialog.showModal();
+      cancelButton.focus({ preventScroll: true });
+      return false;
+    };
+
+    window.earistDisconnectConfirm = (form, event) => {
+      if (form.dataset.edDisconnectConfirmed === 'true') {
+        delete form.dataset.edDisconnectConfirmed;
+        return true;
+      }
+      event.preventDefault();
+      pendingForm = form;
+      pendingSubmitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+      dialog.dataset.confirmKind = 'disconnect';
+      mark.textContent = '×';
+      title.textContent = 'Disconnect Google Drive?';
+      message.textContent = 'RMS will remove its saved Google authorization. You can reconnect at any time.';
+      retentionStats.hidden = true;
+      noteMark.textContent = '✓';
+      note.textContent = 'Existing copies remain in Google Drive. Your saved RMS documents and version history are unchanged.';
+      submitButton.textContent = 'Disconnect Google Drive';
       dialog.returnValue = 'cancel';
       dialog.showModal();
       cancelButton.focus({ preventScroll: true });
@@ -420,6 +445,12 @@ earistDocumentPreviewAssets();
       if (dialog.returnValue !== 'confirm' || !form || !form.isConnected) return;
       if (dialog.dataset.confirmKind === 'retention') {
         form.dataset.edRetentionConfirmed = 'true';
+        if (submitter && form.contains(submitter)) form.requestSubmit(submitter);
+        else form.requestSubmit();
+        return;
+      }
+      if (dialog.dataset.confirmKind === 'disconnect') {
+        form.dataset.edDisconnectConfirmed = 'true';
         if (submitter && form.contains(submitter)) form.requestSubmit(submitter);
         else form.requestSubmit();
         return;

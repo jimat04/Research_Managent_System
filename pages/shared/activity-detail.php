@@ -77,7 +77,7 @@ $canManageActivity = static function (string $activityType, string $permissionPa
     if ($role === 'admin') {
         return true;
     }
-    return in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)
+    return in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress', 'other'], true)
         && in_array($permissionPage, $activityManagePages, true)
         && hasModulePermission($userId, 'research_capacity_building', 'manage', $permissionPage);
 };
@@ -88,6 +88,11 @@ $activityDetailUrl = SITE_URL . 'pages/shared/activity-detail.php?id=' . (int) (
 $activitiesAvailable = rmsActivityScheduleTableExists($conn, 'research_activities');
 $activityDocumentsAvailable = $activitiesAvailable
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'document_upload_id');
+$customActivityTypeAvailable = $activitiesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'custom_activity_type');
+$customActivityTypeSelect = $customActivityTypeAvailable
+    ? 'ra.custom_activity_type'
+    : 'NULL AS custom_activity_type';
 $activitySourceLinksAvailable = $activitiesAvailable
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_project_id')
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_publication_id');
@@ -117,8 +122,8 @@ if ($activitiesAvailable && $activityId) {
         ? ' LEFT JOIN research_projects rp ON rp.project_id = ra.source_project_id LEFT JOIN publications p ON p.publication_id = ra.source_publication_id'
         : '';
     $activitySql = $scheduleTablesAvailable
-        ? 'SELECT ra.activity_id, ra.activity_type, ra.title, ra.activity_date, ra.activity_time, ra.is_multi_day, ra.schedule_start_date, ra.schedule_end_date, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1'
-        : 'SELECT ra.activity_id, ra.activity_type, ra.title, ra.activity_date, ra.activity_time, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1';
+        ? 'SELECT ra.activity_id, ra.activity_type, ' . $customActivityTypeSelect . ', ra.title, ra.activity_date, ra.activity_time, ra.is_multi_day, ra.schedule_start_date, ra.schedule_end_date, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1'
+        : 'SELECT ra.activity_id, ra.activity_type, ' . $customActivityTypeSelect . ', ra.title, ra.activity_date, ra.activity_time, ra.venue, ra.speaker, ra.organizer, ra.description, ra.status, ra.created_by' . $activitySourceSelect . $documentColumn . ' FROM research_activities ra' . $activitySourceJoins . ' WHERE ra.activity_id = ? LIMIT 1';
     try {
         $stmt = rmsActivitySchedulePrepare($conn, $activitySql);
         $stmt->bind_param('i', $activityId);
@@ -623,7 +628,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $participantRole = trim((string) ($_POST['participant_role'] ?? 'attendee'));
         $participantName = trim((string) ($_POST['participant_name'] ?? ''));
         $selectedUserId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
-        if (!$scheduleTablesAvailable || !$scheduleId || !preg_match('/^(speaker|organizer|attendee)$/D', $participantRole) || strlen($participantName) > 255) {
+        $participantAffiliation = strtolower(trim((string) ($_POST['attendee_affiliation'] ?? '')));
+        $participantProgramDepartment = trim((string) ($_POST['attendee_program_department'] ?? ''));
+        if (!$scheduleTablesAvailable || !$scheduleId || !preg_match('/^(speaker|organizer|attendee)$/D', $participantRole) || strlen($participantName) > 255
+            || ($activityCheckinDetailsAvailable && (!in_array($participantAffiliation, ['student', 'faculty', 'staff', 'guest'], true) || strlen($participantProgramDepartment) > 150))) {
             $flash['message'] = 'Enter a valid participant and scheduled date.';
         } else {
             try {
@@ -685,17 +693,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $participantAttended = $isConductedActivity ? 1 : 0;
                 $participantInvited = $isConductedActivity ? 0 : 1;
-                $participantStmt = rmsActivitySchedulePrepare(
-                    $conn,
-                    "INSERT INTO activity_schedule_participants
-                     (schedule_id, user_id, participant_name, role, attended, is_invited)
-                     VALUES (?, ?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE participant_name = VALUES(participant_name),
-                         role = VALUES(role), attended = IF(VALUES(attended) = 1, 1, attended),
-                         is_invited = VALUES(is_invited),
-                         is_notified = IF(VALUES(is_invited) = 0, 0, is_notified)"
-                );
-                $participantStmt->bind_param('iissii', $scheduleId, $selectedUserId, $participantName, $participantRole, $participantAttended, $participantInvited);
+                if ($activityCheckinDetailsAvailable) {
+                    $participantStmt = rmsActivitySchedulePrepare(
+                        $conn,
+                        "INSERT INTO activity_schedule_participants
+                         (schedule_id, user_id, participant_name, attendee_affiliation, attendee_program_department, role, attended, is_invited)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE participant_name = VALUES(participant_name),
+                             attendee_affiliation = VALUES(attendee_affiliation), attendee_program_department = VALUES(attendee_program_department),
+                             role = VALUES(role), attended = IF(VALUES(attended) = 1, 1, attended),
+                             is_invited = VALUES(is_invited), is_notified = IF(VALUES(is_invited) = 0, 0, is_notified)"
+                    );
+                    $participantStmt->bind_param('iissssii', $scheduleId, $selectedUserId, $participantName, $participantAffiliation, $participantProgramDepartment, $participantRole, $participantAttended, $participantInvited);
+                } else {
+                    $participantStmt = rmsActivitySchedulePrepare(
+                        $conn,
+                        "INSERT INTO activity_schedule_participants
+                         (schedule_id, user_id, participant_name, role, attended, is_invited)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE participant_name = VALUES(participant_name),
+                             role = VALUES(role), attended = IF(VALUES(attended) = 1, 1, attended),
+                             is_invited = VALUES(is_invited), is_notified = IF(VALUES(is_invited) = 0, 0, is_notified)"
+                    );
+                    $participantStmt->bind_param('iissii', $scheduleId, $selectedUserId, $participantName, $participantRole, $participantAttended, $participantInvited);
+                }
                 if (!$participantStmt->execute()) {
                     throw new RuntimeException('Unable to add the date participant.');
                 }
@@ -1123,7 +1144,7 @@ elseif ($shell === 'staff') renderStaffShell($user, 'activities.php', $pageTitle
 elseif ($shell === 'faculty') renderFacultyShell($user, 'activities.php', $pageTitle, 'Research activity details');
 else renderStudentShell($user, 'activities.php', $pageTitle, 'Research activity details');
 
-$typeLabels = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress'];
+$typeLabels = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress', 'other' => (string) ($activity['custom_activity_type'] ?? 'Other')];
 $activityStoredStatus = (string) ($activity['status'] ?? '');
 $activityDisplayStatus = $activity
     ? rmsActivityScheduleClockStatus(array_values($scheduleDates), $activityStoredStatus)
@@ -1185,6 +1206,9 @@ if ($activity && !empty($activity['is_multi_day'])) {
 </style>
 
 <style>
+.activity-delete-dialog{position:fixed;inset:50% auto auto 50%;transform:translate(-50%,-50%);margin:0;width:min(520px,calc(100% - 32px));max-height:min(88vh,720px);overflow:auto;padding:0;border:1px solid #d5e2df;border-radius:16px;background:#fff;color:#172033;box-shadow:0 24px 80px rgba(15,23,42,.24)}.activity-delete-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(2px)}.activity-delete-dialog-content{padding:24px}.activity-delete-dialog h2{margin:0;font-size:20px;line-height:1.25}.activity-delete-dialog p{margin:10px 0 0;color:#475569;font-size:13px;line-height:1.6}.activity-delete-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px;margin-top:20px}.activity-delete-dialog-actions .button{width:auto}.activity-delete-dialog :focus-visible{outline:3px solid rgba(15,118,110,.3);outline-offset:2px}@media(max-width:560px){.activity-delete-dialog-content{padding:20px}.activity-delete-dialog-actions,.activity-delete-dialog-actions .button{width:100%}}
+.checkin-qr-tools{width:min(100%,680px);box-sizing:border-box;margin:16px auto 0}.checkin-qr-preview{width:min(100%,360px);margin-right:auto;margin-left:auto}.checkin-qr-preview>div{max-width:320px}
+.checkin-qr-fullscreen-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.checkin-qr-fullscreen-actions[hidden],.checkin-qr-fullscreen-actions [hidden]{display:none!important}.checkin-qr-fullscreen-status{color:#991b1b!important}.checkin-qr-tools:fullscreen{display:flex;width:100vw;max-width:100vw;min-height:100vh;min-height:100dvh;box-sizing:border-box;flex-direction:column;justify-content:center;overflow:auto;margin:0;padding:clamp(20px,5vw,56px);border:0;border-radius:0;background:#f7fbfa;color:#172033}.checkin-qr-tools:fullscreen h4{font-size:clamp(20px,3vw,30px)}.checkin-qr-tools:fullscreen .checkin-qr-fullscreen-actions{position:absolute;top:clamp(16px,3vw,32px);right:clamp(16px,3vw,32px);margin:0}.checkin-qr-tools:fullscreen .checkin-qr-fullscreen-actions .button{width:auto;min-height:46px;padding:10px 18px;font-size:14px}.checkin-qr-tools:fullscreen .checkin-qr-preview{width:min(74vmin,760px);max-width:100%;box-sizing:border-box;margin:18px auto 0;padding:clamp(14px,3vmin,28px)}.checkin-qr-tools:fullscreen .checkin-qr-preview>div{width:min(66vmin,680px);max-width:100%}.checkin-qr-tools:fullscreen .checkin-qr-preview span,.checkin-qr-tools:fullscreen .checkin-qr-preview a{font-size:clamp(13px,2vmin,18px)}.checkin-qr-tools:fullscreen :focus-visible{outline:3px solid #0f766e;outline-offset:3px}@media(max-width:560px){.checkin-qr-fullscreen-actions,.checkin-qr-fullscreen-actions .button{width:100%}.checkin-qr-tools:fullscreen{justify-content:flex-start;padding:88px 18px 24px}.checkin-qr-tools:fullscreen .checkin-qr-fullscreen-actions{top:16px;right:16px;left:16px}.checkin-qr-tools:fullscreen .checkin-qr-fullscreen-actions .button{width:100%}.checkin-qr-tools:fullscreen .checkin-qr-preview{width:min(100%,76vmin);margin-top:auto;margin-bottom:auto}.checkin-qr-tools:fullscreen .checkin-qr-preview>div{width:min(100%,68vmin)}}
 .activity-save-toast{position:fixed;z-index:1300;top:50%;left:50%;right:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:start;width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:18px 18px 18px 20px;border:1px solid #a7d7bf;border-left:5px solid #16a34a;border-radius:14px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.18);color:#14532d;transform:translate(-50%,-50%);animation:activity-toast-enter .24s cubic-bezier(.2,.75,.3,1) both}
 .activity-save-toast-content{display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;align-items:start}
 .activity-save-toast-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#dcfce7;color:#166534;font-size:18px;font-weight:800}
@@ -1253,7 +1277,10 @@ if ($activity && !empty($activity['is_multi_day'])) {
       </section>
     <?php endif; ?>
 
-    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage)) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="complete"><button class="button" type="submit">Complete</button></form><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" onsubmit="return confirm('Delete this activity and all participant records? This cannot be undone.');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav><?php endif; ?>
+    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage)) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" data-delete-activity-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Delete this activity and its participant records?');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav>
+      <dialog class="activity-delete-dialog" data-delete-activity-dialog aria-labelledby="delete-activity-title" aria-describedby="delete-activity-description"><div class="activity-delete-dialog-content"><h2 id="delete-activity-title">Delete this activity?</h2><p id="delete-activity-description">This permanently deletes the activity and its participant records. This action cannot be undone.</p><div class="activity-delete-dialog-actions"><button class="button danger" type="button" data-confirm-delete-activity>Delete activity</button><button class="button secondary" type="button" data-cancel-delete-activity>Cancel</button></div></div></dialog>
+      <dialog class="activity-delete-dialog" data-revoke-checkin-dialog aria-labelledby="revoke-checkin-title" aria-describedby="revoke-checkin-description"><div class="activity-delete-dialog-content"><h2 id="revoke-checkin-title">Revoke QR check-in code?</h2><p id="revoke-checkin-description">This makes the current QR code unusable. Generate a new code if attendees still need to check in.</p><div class="activity-delete-dialog-actions"><button class="button danger" type="button" data-confirm-revoke-checkin>Revoke QR code</button><button class="button secondary" type="button" data-cancel-revoke-checkin autofocus>Keep QR code</button></div></div></dialog>
+    <?php endif; ?>
 
     <?php
       $expenseLabels = ['registration' => 'Registration', 'transport' => 'Transportation / travel', 'accommodation' => 'Accommodation', 'meals' => 'Meals', 'online_fee' => 'Online participation fee', 'other' => 'Other related cost'];
@@ -1493,20 +1520,27 @@ if ($activity && !empty($activity['is_multi_day'])) {
               <?php if ($canManage): ?>
                 <section class="checkin-qr-tools" aria-label="Attendance QR check-in">
                   <h4>QR attendance check-in</h4>
+                  <?php if ($hasCurrentCheckinQr && !$checkinQrError): ?>
+                    <div class="checkin-qr-fullscreen-actions" data-checkin-fullscreen-actions hidden>
+                      <button class="button secondary" type="button" data-enter-checkin-fullscreen>Full screen</button>
+                      <button class="button secondary" type="button" data-exit-checkin-fullscreen hidden>Exit full screen</button>
+                    </div>
+                    <p class="checkin-qr-fullscreen-status" data-checkin-fullscreen-status role="status" aria-live="polite" hidden></p>
+                  <?php endif; ?>
                   <?php if (!$activityCheckinSchemaAvailable): ?>
                     <p>QR check-in is unavailable until its database migration is applied.</p>
                   <?php elseif (!$activityCheckinKeyConfigured): ?>
                     <p>QR check-in needs a 64-character hexadecimal <code>ACTIVITY_CHECKIN_HASH_KEY</code> in the local environment file before new codes can be used.</p>
-                    <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                    <?php if ($storedCheckinHash !== ''): ?><form method="post" data-revoke-checkin-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
                   <?php elseif (!$scheduleActive): ?>
                     <p>This date is cancelled, so it cannot accept QR check-ins.</p>
-                    <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                    <?php if ($storedCheckinHash !== ''): ?><form method="post" data-revoke-checkin-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
                   <?php else: ?>
                     <p>Attendees can use this date’s QR code while the activity is ongoing. Check-in closes after the scheduled date.</p>
                     <?php if ($hasCurrentCheckinQr && $checkinQrUsesLocalhost): ?><p class="checkin-qr-error">This QR link uses localhost, which attendee phones cannot reach. Set <code>ACTIVITY_CHECKIN_BASE_URL</code> to this server’s LAN or public address to use the QR from another device.</p><?php endif; ?>
                     <div class="checkin-qr-actions">
                       <form method="post"><?= csrfField() ?><input type="hidden" name="action" value="generate_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button" type="submit"><?= $storedCheckinHash !== '' ? 'Regenerate QR code' : 'Generate QR code' ?></button></form>
-                      <?php if ($storedCheckinHash !== ''): ?><form method="post" onsubmit="return confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
+                      <?php if ($storedCheckinHash !== ''): ?><form method="post" data-revoke-checkin-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Revoke the current QR check-in code?');"><?= csrfField() ?><input type="hidden" name="action" value="revoke_checkin_qr"><input type="hidden" name="schedule_id" value="<?= $scheduleIdForQr ?>"><button class="button secondary" type="submit">Revoke QR code</button></form><?php endif; ?>
                     </div>
                     <?php if ($hasCurrentCheckinQr): ?>
                       <?php if ($checkinQrError): ?><p class="checkin-qr-error">This check-in link is too long or invalid for QR encoding. Review the configured site and check-in base URLs.</p><?php if ($checkinLink !== ''): ?><a href="<?= activityDetailEscape($checkinLink) ?>">Open check-in link</a><?php endif; ?>
@@ -1549,7 +1583,8 @@ if ($activity && !empty($activity['is_multi_day'])) {
                   $invitedAudienceId = 'invited-audience-' . $scheduleIdForRoster;
                 ?>
                 <section class="date-participant-actions" data-date-participant-panel>
-                  <header class="date-management-head">
+                  <details class="date-roster-disclosure">
+                  <summary class="date-management-head" style="display:flex;list-style:none;cursor:pointer">
                     <div>
                       <p class="date-management-kicker">Roster management</p>
                       <h4>Manage participants</h4>
@@ -1559,7 +1594,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
                       <strong data-attendance-count data-attendance-base="<?= $dateAttendedCount ?>" data-attendance-total="<?= $dateParticipantCount ?>"><?= $dateAttendedCount ?> of <?= $dateParticipantCount ?></strong>
                       <span>marked attended</span>
                     </span>
-                  </header>
+                  </summary>
 
                   <form id="<?= activityDetailEscape($dateParticipantFormId) ?>" class="date-participant-form" method="post" data-participant-form>
                     <?= csrfField() ?>
@@ -1574,12 +1609,24 @@ if ($activity && !empty($activity['is_multi_day'])) {
                       <select id="date-user-<?= (int) $scheduleRow['schedule_id'] ?>" name="user_id" data-participant-user-select>
                         <option value="">Guest / no linked account</option>
                         <?php foreach ($activeUsers as $activeUser): $activeUserName = trim((string) $activeUser['first_name'] . ' ' . (string) $activeUser['last_name']); ?>
-                          <option value="<?= (int) $activeUser['user_id'] ?>" data-account-name="<?= activityDetailEscape($activeUserName) ?>"><?= activityDetailEscape($activeUserName . ' · ' . ucfirst((string) $activeUser['role'])) ?></option>
+                          <option value="<?= (int) $activeUser['user_id'] ?>" data-account-name="<?= activityDetailEscape($activeUserName) ?>" data-account-affiliation="<?= activityDetailEscape((string) $activeUser['role'] === 'research_staff' ? 'staff' : (string) $activeUser['role']) ?>" data-account-program-department="<?= activityDetailEscape((string) ((string) $activeUser['role'] === 'student' ? ($activeUser['program'] ?? '') : ($activeUser['department'] ?? ''))) ?>"><?= activityDetailEscape($activeUserName . ' · ' . ucfirst((string) $activeUser['role'])) ?></option>
                         <?php endforeach; ?>
                       </select>
                     </div>
+                    <?php if ($activityCheckinDetailsAvailable): ?>
                     <div class="field">
-                      <label for="date-role-<?= (int) $scheduleRow['schedule_id'] ?>">Activity role</label>
+                      <label for="date-affiliation-<?= (int) $scheduleRow['schedule_id'] ?>">Affiliation</label>
+                      <select id="date-affiliation-<?= (int) $scheduleRow['schedule_id'] ?>" name="attendee_affiliation" required data-participant-affiliation>
+                        <option value="student">Student</option><option value="faculty">Faculty</option><option value="staff">Staff</option><option value="guest">Guest</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="date-program-department-<?= (int) $scheduleRow['schedule_id'] ?>">Program/Department</label>
+                      <input id="date-program-department-<?= (int) $scheduleRow['schedule_id'] ?>" name="attendee_program_department" type="text" maxlength="150" placeholder="Program or department" autocomplete="organization" data-participant-program-department>
+                    </div>
+                    <?php endif; ?>
+                    <div class="field">
+                      <label for="date-role-<?= (int) $scheduleRow['schedule_id'] ?>">Role</label>
                       <select id="date-role-<?= (int) $scheduleRow['schedule_id'] ?>" name="participant_role">
                         <option value="attendee">Attendee</option>
                         <option value="speaker">Speaker</option>
@@ -1675,6 +1722,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
                     <?php if ($rosterPageCount > 1): ?><nav class="roster-pagination" aria-label="Roster pages"><span>Page <?= $rosterPage ?> of <?= $rosterPageCount ?></span><div><?php if ($rosterPage > 1): ?><a class="button secondary" href="<?= activityDetailEscape($rosterPageUrl($rosterPage - 1)) ?>" rel="prev">Previous</a><?php endif; ?><?php if ($rosterPage < $rosterPageCount): ?><a class="button secondary" href="<?= activityDetailEscape($rosterPageUrl($rosterPage + 1)) ?>" rel="next">Next</a><?php endif; ?></div></nav><?php endif; ?>
                     <?php if ($canRecordActivityAttendance): ?><div class="attendance-submit"><button class="button" type="submit">Save date attendance</button></div></form><?php endif; ?>
                   <?php endif; ?>
+                  </details>
                 </section>
               <?php endif; ?>
             </article>
@@ -1753,6 +1801,108 @@ document.querySelectorAll('[data-dismiss-activity-save-toast]').forEach((button)
   button.addEventListener('click', () => button.closest('[data-activity-save-toast]')?.remove());
 });
 
+document.querySelectorAll('.checkin-qr-tools').forEach((section) => {
+  const controls = section.querySelector('[data-checkin-fullscreen-actions]');
+  const enterButton = section.querySelector('[data-enter-checkin-fullscreen]');
+  const exitButton = section.querySelector('[data-exit-checkin-fullscreen]');
+  const status = section.querySelector('[data-checkin-fullscreen-status]');
+  if (!controls || !enterButton || !exitButton || typeof section.requestFullscreen !== 'function' || typeof document.exitFullscreen !== 'function') return;
+
+  controls.hidden = false;
+  const updateButtons = () => {
+    const isFullscreen = document.fullscreenElement === section;
+    enterButton.hidden = isFullscreen;
+    exitButton.hidden = !isFullscreen;
+  };
+
+  enterButton.addEventListener('click', async () => {
+    if (status) status.hidden = true;
+    try {
+      await section.requestFullscreen();
+    } catch (error) {
+      if (status) {
+        status.textContent = 'Full screen could not be opened. Check your browser settings and try again.';
+        status.hidden = false;
+      }
+    }
+  });
+  exitButton.addEventListener('click', async () => {
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      if (status) {
+        status.textContent = 'Full screen could not be closed. Press Escape to return to the page.';
+        status.hidden = false;
+      }
+    }
+  });
+  document.addEventListener('fullscreenchange', updateButtons);
+  updateButtons();
+});
+
+const deleteActivityForm = document.querySelector('[data-delete-activity-form]');
+const deleteActivityDialog = document.querySelector('[data-delete-activity-dialog]');
+if (deleteActivityForm && deleteActivityDialog && typeof deleteActivityDialog.showModal === 'function') {
+  deleteActivityForm.dataset.nativeConfirm = 'false';
+  deleteActivityForm.addEventListener('submit', (event) => {
+    if (deleteActivityForm.dataset.confirmed === 'true') {
+      deleteActivityForm.dataset.confirmed = 'false';
+      return;
+    }
+    event.preventDefault();
+    deleteActivityDialog.showModal();
+  });
+  deleteActivityDialog.querySelector('[data-confirm-delete-activity]')?.addEventListener('click', () => {
+    deleteActivityDialog.close();
+    deleteActivityForm.dataset.confirmed = 'true';
+    deleteActivityForm.requestSubmit();
+  });
+  deleteActivityDialog.querySelector('[data-cancel-delete-activity]')?.addEventListener('click', () => deleteActivityDialog.close());
+  deleteActivityDialog.addEventListener('click', (event) => {
+    if (event.target === deleteActivityDialog) deleteActivityDialog.close();
+  });
+}
+
+const revokeCheckinDialog = document.querySelector('[data-revoke-checkin-dialog]');
+const confirmRevokeCheckinButton = revokeCheckinDialog?.querySelector('[data-confirm-revoke-checkin]');
+const cancelRevokeCheckinButton = revokeCheckinDialog?.querySelector('[data-cancel-revoke-checkin]');
+let pendingRevokeCheckinForm = null;
+if (revokeCheckinDialog && typeof revokeCheckinDialog.showModal === 'function') {
+  document.querySelectorAll('[data-revoke-checkin-form]').forEach((form) => {
+    form.dataset.nativeConfirm = 'false';
+    form.addEventListener('submit', (event) => {
+      if (form.dataset.confirmed === 'true') {
+        form.dataset.confirmed = 'false';
+        return;
+      }
+      event.preventDefault();
+      pendingRevokeCheckinForm = form;
+      revokeCheckinDialog.showModal();
+    });
+  });
+  confirmRevokeCheckinButton?.addEventListener('click', () => {
+    if (!pendingRevokeCheckinForm) return;
+    const form = pendingRevokeCheckinForm;
+    pendingRevokeCheckinForm = null;
+    revokeCheckinDialog.close();
+    form.dataset.confirmed = 'true';
+    form.requestSubmit();
+  });
+  cancelRevokeCheckinButton?.addEventListener('click', () => {
+    pendingRevokeCheckinForm = null;
+    revokeCheckinDialog.close();
+  });
+  revokeCheckinDialog.addEventListener('cancel', () => {
+    pendingRevokeCheckinForm = null;
+  });
+  revokeCheckinDialog.addEventListener('click', (event) => {
+    if (event.target === revokeCheckinDialog) {
+      pendingRevokeCheckinForm = null;
+      revokeCheckinDialog.close();
+    }
+  });
+}
+
 document.querySelectorAll('[data-open-contribution-dialog]').forEach((button) => {
   const dialog = document.getElementById(button.dataset.openContributionDialog || '');
   if (!dialog || typeof dialog.showModal !== 'function') return;
@@ -1800,11 +1950,15 @@ document.querySelectorAll('[data-participant-form]').forEach((form) => {
   userSelect.addEventListener('change', () => {
     const selectedOption = userSelect.selectedOptions[0];
     const accountName = selectedOption?.dataset.accountName || '';
+    const affiliationSelect = form.querySelector('[data-participant-affiliation]');
+    const programDepartmentInput = form.querySelector('[data-participant-program-department]');
     if (userSelect.value && accountName !== '') {
       nameInput.value = accountName;
       nameInput.readOnly = true;
       nameInput.dataset.linkedName = accountName;
       if (nameHint) nameHint.textContent = 'Using the selected RMS account’s saved name.';
+      if (affiliationSelect) affiliationSelect.value = selectedOption.dataset.accountAffiliation || 'guest';
+      if (programDepartmentInput) programDepartmentInput.value = selectedOption.dataset.accountProgramDepartment || '';
     } else {
       if (nameInput.readOnly && nameInput.value === (nameInput.dataset.linkedName || '')) {
         nameInput.value = '';
@@ -1812,6 +1966,8 @@ document.querySelectorAll('[data-participant-form]').forEach((form) => {
       nameInput.readOnly = false;
       delete nameInput.dataset.linkedName;
       if (nameHint) nameHint.textContent = 'Enter a guest name, or choose an RMS account to use its saved name.';
+      if (affiliationSelect) affiliationSelect.value = 'guest';
+      if (programDepartmentInput) programDepartmentInput.value = '';
     }
     refreshDuplicateNote();
   });

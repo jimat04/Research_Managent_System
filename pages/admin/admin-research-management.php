@@ -303,11 +303,6 @@ renderAdminShell(
       </div>
     <?php endif; ?>
 
-    <nav class="research-tabs" aria-label="Research lists">
-      <?php foreach (['' => 'All Research', 'ongoing' => 'Ongoing', 'completed' => 'Completed'] as $tab_status => $tab_label): ?>
-        <a href="<?php echo SITE_URL; ?>pages/admin/admin-research-management.php?status=<?php echo rawurlencode($tab_status); ?>"<?php echo $research_view === $tab_status ? ' aria-current="page"' : ''; ?>><?php echo $tab_label; ?><?php if ($tab_status !== ''): ?> <span><?php echo $tab_status === 'ongoing' ? $research_implementing : $research_completed; ?></span><?php endif; ?></a>
-      <?php endforeach; ?>
-    </nav>
     <?php foreach (glob(__DIR__ . '/../../includes/project-deletion-jobs/*.json') ?: [] as $cleanup_file): ?>
       <?php $cleanup_id = (int) basename($cleanup_file, '.json'); ?>
       <form method="post" class="research-flash research-flash-error">
@@ -321,12 +316,6 @@ renderAdminShell(
 
     <!-- RESEARCH TABLE CARD -->
     <section class="research-directory" id="research-directory" aria-labelledby="research-directory-title">
-      <div class="directory-header">
-        <div>
-          <h3 class="section-title" id="research-directory-title"><?php echo $research_view !== '' ? htmlspecialchars($research_view_title, ENT_QUOTES, 'UTF-8') : 'All research projects'; ?></h3>
-          <p class="section-copy"><?php echo $matching_projects; ?> matching project<?php echo $matching_projects === 1 ? '' : 's'; ?><?php echo htmlspecialchars($directory_context, ENT_QUOTES, 'UTF-8'); ?>.</p>
-        </div>
-      </div>
 
       <!-- FILTERS -->
       <form method="GET" action="admin-research-management.php" class="filter-bar">
@@ -365,7 +354,7 @@ renderAdminShell(
           <a class="btn btn-secondary" href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/implementation-outputs.php?' . http_build_query(['view' => 'completed', 'module_page' => 'completed_research', 'q' => $search, 'year' => $completion_year, 'status' => $record_status, 'export' => 'csv']), ENT_QUOTES, 'UTF-8'); ?>">Export CSV</a>
         <?php endif; ?>
         <?php if (!empty($search) || !empty($status_filter) || !empty($course_filter)): ?>
-          <a href="<?php echo SITE_URL; ?>pages/admin/admin-research-management.php?status=<?php echo rawurlencode($research_view); ?>" class="btn btn-secondary">Clear filters</a>
+          <a href="<?php echo htmlspecialchars('admin-research-management.php' . ($research_view === '' ? '' : '?status=' . rawurlencode($research_view)), ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-secondary">Clear filters</a>
         <?php endif; ?>
       </form>
 

@@ -86,6 +86,7 @@ function contact_escape($value) {
         <link rel="stylesheet" href="assets/css/public-header.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-header.css'); ?>">
         <link rel="stylesheet" href="../css/about-editorial.css?v=<?php echo filemtime(__DIR__ . '/../css/about-editorial.css'); ?>">
         <link rel="stylesheet" href="assets/css/public-footer.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-footer.css'); ?>">
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
     <body class="public-v2 about-page">
         <svg class="icon-defs" width="0" height="0" aria-hidden="true"><defs>

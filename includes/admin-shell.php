@@ -250,6 +250,7 @@ function renderAdminShell($user, $current_page, $page_title, $page_subtitle = ''
   <meta name="theme-color" content="#101d3d">
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Admin — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body class="admin-body">

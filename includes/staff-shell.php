@@ -368,6 +368,7 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Staff — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body>
@@ -388,17 +389,6 @@ function renderStaffShell($user, $current_page, $page_title, $page_subtitle = ''
 
     <nav class="staff-sidebar-nav" aria-label="Primary" data-role-shell-nav>
       <?php foreach ($navTree as $navNode) { renderStaffShellNavigationNode($navNode, $is_active); } ?>
-
-      <div class="staff-nav-session">
-        <div class="staff-nav-group-title">Session</div>
-        <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="staff-nav-logout-form" data-logout-confirm>
-          <?php echo csrfField(); ?>
-          <button type="submit" class="staff-nav-item staff-nav-logout">
-          <span class="staff-nav-icon" aria-hidden="true"><?php echo rmsShellIcon('logout'); ?></span>
-          <span class="staff-nav-label">Logout</span>
-          </button>
-        </form>
-      </div>
     </nav>
 
     <div class="staff-sidebar-footer">

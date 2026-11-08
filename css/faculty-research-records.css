@@ -72,6 +72,18 @@
 .frr-alert--error { border-color: #f1c3be; background: #fef3f2; color: #912018; }
 .frr-alert h3 { margin: 0 0 8px; font-size: 15px; }
 .frr-alert ul { padding-left: 20px; margin: 0; }
+.frr-docx-saved { box-sizing: border-box; position: fixed; inset: 0; width: min(480px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; border: 1px solid #dbe5f4; border-radius: 22px; background: #fff; color: #111827; box-shadow: 0 28px 90px rgb(15 23 42 / 28%); }
+.frr-docx-saved::backdrop { background: rgb(15 23 42 / 56%); backdrop-filter: blur(3px); }
+.frr-docx-saved__card { display: flex; flex-direction: column; align-items: center; padding: 32px; text-align: center; animation: frr-docx-success-enter .3s cubic-bezier(.16, 1, .3, 1) both; }
+.frr-docx-saved__mark { display: grid; width: 58px; height: 58px; place-items: center; margin-bottom: 18px; border: 1px solid #bbdfcc; border-radius: 50%; background: #f0fdf4; color: #15803d; font-size: 30px; font-weight: 800; line-height: 1; }
+.frr-docx-saved__eyebrow { margin: 0 0 8px; color: #1d4ed8; font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.frr-docx-saved h2 { margin: 0 0 10px; color: #111827; font-size: 23px; font-weight: 750; letter-spacing: -.025em; line-height: 1.3; }
+.frr-docx-saved__message { max-width: 42ch; margin: 0; color: #475569; font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; }
+.frr-docx-saved [data-docx-saved-close] { min-width: 120px; min-height: 44px; margin-top: 24px; }
+.frr-docx-saved [data-docx-saved-close]:focus-visible { outline: 3px solid rgb(29 78 216 / 30%); outline-offset: 2px; }
+@keyframes frr-docx-success-enter { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 520px) { .frr-docx-saved { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); border-radius: 18px; } .frr-docx-saved__card { padding: 24px; } .frr-docx-saved h2 { font-size: 21px; } }
+@media (prefers-reduced-motion: reduce) { .frr-docx-saved__card { animation: none; } }
 .frr-author { min-width: 0; padding: 20px; margin: 20px 0; border: 1px solid #dbe3ef; border-radius: 12px; background: #fbfcfe; }
 .frr-author legend { padding: 0 8px; color: #1d4ed8; font-size: 13px; font-weight: 700; }
 .frr-author-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }

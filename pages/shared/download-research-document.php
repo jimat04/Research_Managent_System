@@ -630,6 +630,7 @@ if ($mode === 'viewer') {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="icon" type="image/png" href="<?= htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8') ?>">
       <?php if ($documentType === 'research' && $isPreviewable): ?>
         <link rel="stylesheet" href="<?= htmlspecialchars(SITE_URL . 'public/assets/vendor/pdfjs/web/pdf_viewer.css', ENT_QUOTES, 'UTF-8') ?>">
         <link rel="stylesheet" href="<?= htmlspecialchars(SITE_URL . 'css/pdf-review-viewer.css?v=' . filemtime(__DIR__ . '/../../css/pdf-review-viewer.css'), ENT_QUOTES, 'UTF-8') ?>">

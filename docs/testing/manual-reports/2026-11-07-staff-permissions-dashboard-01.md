@@ -32,8 +32,17 @@ Pending.
 
 - Added postcondition verifiers for migrations 073 and 075 in `scripts/migrate.php`: 073 checks retired publication keys are absent and users with research-review grants have corresponding engagement-record grants; 075 checks retired activity-type permission keys are absent. The checks are limited to postconditions changed by each migration.
 - `php -l scripts/migrate.php` passed. Read-only `php scripts/migrate.php status` reports 073 and 075 as pending. The pre-migration target is local `rms_db`; neither migration was applied, and no database was changed. The verifier postconditions have not been exercised against a migrated state.
+- Status recheck (2026-11-07 Asia/Taipei): ran `php scripts/migrate.php status` again against the confirmed local `rms_db`. Both `073_refresh_staff_permissions.sql` and `075_staff_activity_status_permissions.sql` still report `pending`. Graphify query terms `migration`, `verify_migration`, `print_status`, and `schema_migrations` returned truncated migration-runner hints; the map is stale (`built_at_commit` `9d996919`, current HEAD `d128a3b2`). Confirmed current runner source at `scripts/migrate.php` lines 393, 803, 1372, and 1485–1491; status reads the tracking table and the existing ledger is present. No migration was applied.
 - Staff browser permission checks remain pending as listed above.
 
 ## Limitations
 
-Migration `075_staff_activity_status_permissions.sql` removes old type-specific rows when run. It has not been run; no database was changed. Existing legacy type grants will therefore remain in stored data until the migration is applied, but are no longer exposed or honored by the permission catalog.
+Migration `075_staff_activity_status_permissions.sql` removes old type-specific rows. It is now applied and verified on local `rms_db`; those legacy permission rows were removed there. Staff browser checks remain pending.
+
+## Authorized migration execution (2026-11-07 Asia/Taipei)
+
+- User authorized running migrations 073 and 075 against local `rms_db`.
+- Before execution, `php scripts/backup-archival-records.php` created an integrity-verified backup at `backups/archive-20261107-134318-70f13c` (78 tables and 31 supporting files; restore not rehearsed).
+- `php scripts/migrate.php apply 073_refresh_staff_permissions.sql` returned `APPLIED`; immediate status reported `applied / executed`.
+- `php scripts/migrate.php apply 075_staff_activity_status_permissions.sql` returned `APPLIED`; final read-only status reported both 073 and 075 as `applied / executed`.
+- The runner's postcondition verifiers passed for both migrations. No production database was targeted. Staff browser checks remain pending.

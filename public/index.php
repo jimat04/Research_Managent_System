@@ -32,6 +32,7 @@ $siteTitle = htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8');
           <link rel="stylesheet" href="assets/css/landing-v2.css?v=<?php echo filemtime(__DIR__ . '/assets/css/landing-v2.css'); ?>">
           <link rel="stylesheet" href="assets/css/public-header.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-header.css'); ?>">
           <link rel="stylesheet" href="assets/css/public-footer.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-footer.css'); ?>">
+          <link rel="icon" type="image/png" href="../photos/rms-logo.png">
           </head>
           <body>
         <svg class="icon-defs" width="0" height="0" aria-hidden="true"><defs>

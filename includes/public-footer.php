@@ -22,6 +22,8 @@
         'About Us' => 'about-us.php',
         'Features' => 'about-us.php#research-features',
         'Contact' => 'about-us.php#contact-us',
+        'Privacy Policy (Draft)' => 'privacy-policy.php',
+        'Terms of Service (Draft)' => 'terms-of-service.php',
     ];
 ?>
 <footer id="contact" class="public-footer">

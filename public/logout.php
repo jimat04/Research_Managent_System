@@ -262,6 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isLoggedIn()) {
             }
         }
     </style>
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body>
     <main class="logout-shell" aria-labelledby="logout-title">

@@ -203,6 +203,7 @@ if (isset($conn) && $conn instanceof mysqli) {
             }
         }
     </style>
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body>
     <div class="error-container">

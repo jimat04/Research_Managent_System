@@ -923,6 +923,11 @@ function verify_migration(mysqli $conn, string $filename): ?bool
         '075_staff_activity_status_permissions.sql' =>
             migration_table_exists($conn, 'staff_permissions')
             && (int) migration_scalar($conn, "SELECT COUNT(*) FROM staff_permissions WHERE module_key = 'research_capacity_building' AND subpage_key IN ('seminars', 'seminars_workshops', 'trainings', 'workshops')") === 0,
+        '076_custom_activity_type.sql' =>
+            strtolower(migration_column_type($conn, 'research_activities', 'activity_type'))
+                === "enum('seminar_workshop','training','colloquium','conference_congress','other')"
+            && strtolower(migration_column_type($conn, 'research_activities', 'custom_activity_type')) === 'varchar(100)'
+            && migration_column_nullable($conn, 'research_activities', 'custom_activity_type'),
         '051_complete_faculty_academic_ranks.sql' => verify_faculty_academic_ranks($conn),
         '050_faculty_research_records.sql' => verify_faculty_research_records($conn),
         '049_faculty_document_profile_fields.sql' =>

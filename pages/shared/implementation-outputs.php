@@ -787,56 +787,6 @@ $tabs = [
   color: #172033;
   container: implementation / inline-size;
 }
-.implementation-hub .io-tabs {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  margin: 0 0 22px;
-  padding: 4px 2px 10px;
-}
-.implementation-hub .io-tab {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 9px;
-  min-height: 44px;
-  padding: 9px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 11px;
-  background: #fff;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease;
-}
-.implementation-hub .io-tab:hover {
-  transform: translateY(-1px);
-  border-color: var(--io-accent-border);
-  color: var(--io-accent-dark);
-}
-.implementation-hub .io-tab[aria-current="page"] {
-  border-color: var(--io-accent-border);
-  background: var(--io-accent-tint);
-  color: var(--io-accent-dark);
-  box-shadow: 0 5px 16px rgba(30, 41, 59, .06);
-}
-.implementation-hub .io-tab-index {
-  display: grid;
-  width: 23px;
-  height: 23px;
-  flex: 0 0 23px;
-  place-items: center;
-  border-radius: 7px;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-}
-.implementation-hub .io-tab[aria-current="page"] .io-tab-index {
-  background: var(--io-accent);
-  color: #fff;
-}
 .implementation-hub .io-intro {
   position: relative;
   display: grid;
@@ -1045,39 +995,6 @@ $tabs = [
   font-size: 12px;
   line-height: 1.6;
 }
-.implementation-hub .completed-register-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr);
-  align-items: center;
-  gap: 28px;
-}
-.implementation-hub .completed-register-summary { min-width: 0; }
-.implementation-hub .completed-register-method {
-  display: grid;
-  min-width: 0;
-  border-left: 2px solid var(--io-accent-border);
-  padding-left: 20px;
-}
-.implementation-hub .completed-register-method h3 {
-  margin: 0 0 5px;
-  color: #334155;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.implementation-hub .completed-register-method p {
-  max-width: none;
-  margin: 0;
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.55;
-}
-.implementation-hub .completed-register-method p + p {
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid #eef0f3;
-}
 .implementation-hub .outputs-register-head {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
@@ -1284,7 +1201,6 @@ $tabs = [
 .implementation-hub .io-button:hover { transform: translateY(-1px); filter: brightness(.96); }
 .implementation-hub .io-button:active { transform: translateY(0) scale(.98); }
 .implementation-hub .io-reset { padding: 9px 4px; color: #475569; font-size: 12px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.implementation-hub .io-tab:focus-visible,
 .implementation-hub .io-button:focus-visible,
 .implementation-hub .io-reset:focus-visible,
 .implementation-hub .io-title:focus-visible,
@@ -1305,15 +1221,11 @@ $tabs = [
   .implementation-hub .io-attention-list { grid-template-columns: 1fr; }
 }
 @container implementation (max-width: 700px) {
-  .implementation-hub .io-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
-  .implementation-hub .io-tab { min-width: 0; white-space: normal; }
   .implementation-hub .io-intro { gap: 18px; padding: 24px 20px; }
   .implementation-hub .io-stage { align-items: flex-start; flex-direction: column; gap: 10px; }
   .implementation-hub .io-stage-label { flex: auto; }
   .implementation-hub .io-stage-list { width: 100%; }
   .implementation-hub .io-stage-list li { align-items: flex-start; flex-direction: column; gap: 6px; }
-  .implementation-hub .completed-register-head { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .implementation-hub .completed-register-method { border-top: 1px solid #eef0f3; border-left: 0; padding: 13px 0 0; }
   .implementation-hub .outputs-register-head { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .implementation-hub .outputs-register-scope { border-top: 1px solid #eef0f3; border-left: 0; padding: 13px 0 0; }
 }
@@ -1333,7 +1245,6 @@ $tabs = [
   .implementation-hub .io-pagination .io-button { flex: 0 1 auto; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .implementation-hub .io-tab,
   .implementation-hub .io-button,
   .implementation-hub .stat-card-link { transition: none; }
   .implementation-hub .io-button:hover,
@@ -1342,19 +1253,6 @@ $tabs = [
 </style>
 
 <main class="implementation-hub">
-  <?php if ($view !== 'ongoing' && $view !== 'outputs'): ?>
-  <nav class="io-tabs" aria-label="Research implementation sections">
-    <?php foreach ($tabs as $tabView => $label): ?>
-      <?php if ($canViewTab($tabView)): ?>
-        <a class="io-tab" href="<?= implementationOutputsEscape(SITE_URL . 'pages/shared/implementation-outputs.php?view=' . rawurlencode($tabView) . '&module_page=' . rawurlencode($viewConfig[$tabView]['module_page'])) ?>" <?= $view === $tabView ? 'aria-current="page"' : '' ?>>
-          <span class="io-tab-index" aria-hidden="true"><?= sprintf('%02d', array_search($tabView, array_keys($tabs), true) + 1) ?></span>
-          <?= implementationOutputsEscape($label) ?>
-        </a>
-      <?php endif; ?>
-    <?php endforeach; ?>
-  </nav>
-  <?php endif; ?>
-
   <header class="io-intro">
     <div>
       <p class="io-eyebrow">Research implementation · portfolio overview</p>
@@ -1447,18 +1345,7 @@ $tabs = [
       </div>
     </form>
 
-    <section class="hub-panel" aria-labelledby="completed-directory-heading">
-      <div class="panel-head completed-register-head">
-        <div class="completed-register-summary">
-          <h2 id="completed-directory-heading">Completed research register</h2>
-          <p><?= count($completedProjects) ?> matching <?= count($completedProjects) === 1 ? 'record' : 'records' ?>. Completed research requires all five approved chapters and an approved complete manuscript.</p>
-        </div>
-        <aside class="completed-register-method" aria-label="How this register is calculated">
-          <h3>How this register is calculated</h3>
-          <p><strong>Year filter:</strong> Uses the final-manuscript approval date. The yearly metric counts projects whose final manuscript was approved this year.</p>
-          <p><strong>Average duration:</strong> Runs from approved-title submission (or project creation when unavailable) to final-manuscript approval.</p>
-        </aside>
-      </div>
+    <section class="hub-panel" aria-label="Completed research records">
       <?php if (!$completedProjects): ?>
         <div class="empty-state"><div class="empty-mark" aria-hidden="true">✓</div><div><h3><?= $searchQuery !== '' || $completedStatus !== '' || $completedYear > 0 ? 'No records match these filters' : 'No completed research yet' ?></h3><p><?= $searchQuery !== '' || $completedStatus !== '' || $completedYear > 0 ? 'Adjust or clear the filters to see more records.' : 'Projects appear here after all five chapters and the complete manuscript are approved.' ?></p></div></div>
       <?php else: ?>

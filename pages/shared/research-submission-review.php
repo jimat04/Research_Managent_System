@@ -81,6 +81,7 @@ $review_tabs = [
     'chapters' => ['module' => 'research_review', 'title' => 'Chapter Review'],
     'final_manuscript' => ['module' => 'research_review', 'title' => 'Review Final Manuscript'],
     'approved_final_manuscript' => ['module' => 'research_approval', 'title' => 'Approved Final Manuscript'],
+    'research_calendar' => ['module' => 'research_approval', 'title' => 'Research Calendar'],
 ];
 $active_tab = is_string($_GET['view'] ?? null) ? $_GET['view'] : '';
 if (!isset($review_tabs[$active_tab]) || $review_tabs[$active_tab]['module'] !== $module_page) {
@@ -99,6 +100,11 @@ if ($section && in_array($active_tab, ['final_manuscript', 'approved_final_manus
     $section['empty_description'] = $active_tab === 'final_manuscript'
         ? 'Submitted final manuscripts appear here for review.'
         : 'Approved final manuscripts and their review history appear here.';
+}
+if ($section && $active_tab === 'research_calendar') {
+    $section['title'] = 'Research Calendar';
+    $section['description'] = 'Track approved-title research projects through their recorded submissions and review decisions.';
+    $section['empty_description'] = 'Projects with an approved research title will appear here as they progress through the workflow.';
 }
 $page_title = $section['title'] ?? 'Research Submission Review';
 $type_filter = $section['type'] ?? $type_filter;
@@ -186,7 +192,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$is_approval_list = $module_page === 'research_approval';
+$is_research_calendar = $module_page === 'research_approval' && $active_tab === 'research_calendar';
+$is_approval_list = $module_page === 'research_approval' && !$is_research_calendar;
 $has_review_filter_panel = !$is_approval_list && in_array($active_tab, ['proposals', 'chapters', 'final_manuscript'], true);
 $review_filter_heading = [
     'proposals' => 'Find proposals for review',
@@ -242,7 +249,16 @@ if ($is_approval_list) {
     $queue_types .= str_repeat('i', count($approval_project_ids));
 }
 
-$sql = "
+$research_calendar = null;
+if ($is_research_calendar) {
+    require_once __DIR__ . '/../../includes/research-calendar.php';
+    $research_calendar = rms_research_calendar_load($conn, $_GET, $course_filter);
+}
+
+if ($is_research_calendar) {
+    $items = [];
+} else {
+    $sql = "
     SELECT v.version_id, v.project_id, v.chapter_id, v.submission_type, v.version_number,
            v.submitted_at, v.status, v.snapshot_json,
             rp.title, v.submitted_by, submitter.role AS submitter_role,
@@ -280,7 +296,7 @@ $sql = "
         $approval_project_filter
   ORDER BY $queue_order_by"
     . ($is_approval_list ? '' : ' LIMIT 100');
-$queue_stmt = $conn->prepare($sql);
+    $queue_stmt = $conn->prepare($sql);
 if (!$queue_stmt) {
     throw new RuntimeException('Unable to prepare research submission queue: ' . $conn->error);
 }
@@ -364,30 +380,24 @@ if ($is_approval_list) {
     unset($approval_project);
 }
 
+}
+
 if ($role === 'admin') {
     renderAdminShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, $section['description'] ?? 'Review title and chapter submissions separately.');
 } else {
     renderStaffShell($user, $module_page !== '' ? $module_page : 'research-submission-review', $page_title, $section['description'] ?? 'Review title and chapter submissions according to your assigned permissions.');
 }
 ?>
-    <?php if ($is_approval_list || $has_review_filter_panel): ?>
+    <?php if ($is_approval_list || $is_research_calendar || $has_review_filter_panel): ?>
 <link rel="stylesheet" href="<?php echo SITE_URL; ?>css/research-approval.css?v=<?php echo (int) filemtime(__DIR__ . '/../../css/research-approval.css'); ?>">
 <?php endif; ?>
 <style>
   .submission-review-workspace{--review-accent:#f57c00;--review-ink:#9a3412;--review-tint:#fff7ed;--review-border:#fed7aa;max-width:1440px;margin:0 auto;padding-bottom:32px}
   .staff-dashboard .submission-review-workspace{--review-accent:#0d9488;--review-ink:#0b7a71;--review-tint:#f0fdfa;--review-border:#99f6e4}
   .submission-review-tabs{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0 0 24px;padding:0;border-bottom:1px solid #e5e7eb}
-  .submission-course-filter{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:24px}
-  .submission-course-filter label{font-size:14px;font-weight:600}
-  .submission-course-filter select,.submission-course-filter button{min-height:44px;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font:inherit}
-  .submission-course-filter button{cursor:pointer;font-weight:600}
-  .submission-course-filter :is(select,button):focus-visible{outline:2px solid var(--review-accent);outline-offset:3px}
   .submission-review-tab{display:flex;align-items:center;min-height:44px;padding:12px 0;border-bottom:3px solid transparent;color:#64748b;text-decoration:none;font-size:14px;font-weight:600;transition:border-color .2s ease,color .2s ease}
   .submission-review-tab:hover{border-bottom-color:var(--review-border);color:var(--review-ink)}
   .submission-review-tab[aria-current="page"]{border-bottom-color:var(--review-accent);color:var(--review-ink)}
-  .submission-review-hero{margin-bottom:24px;padding:24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}
-  .submission-review-hero h2{max-width:700px;margin:0;color:#111827;font-size:clamp(24px,2.6vw,30px);font-weight:700;letter-spacing:-.02em;line-height:1.25;text-wrap:balance}
-  .submission-review-hero-copy{max-width:65ch;margin:8px 0 0;color:#64748b;font-size:14px;line-height:1.65}
   .submission-review-grid{display:grid;gap:16px}
   .submission-review-card{scroll-margin-top:90px;background:#fff;border:1px solid #e5e7eb;border-top:3px solid #cbd5e1;border-radius:16px}
   .submission-review-card[data-status="submitted"]{border-top-color:#2563eb}
@@ -420,11 +430,11 @@ if ($role === 'admin') {
   .submission-review-card[data-status="submitted"] .submission-review-status{background:#eff6ff;color:#1d4ed8}
   .submission-review-card[data-status="approved"] .submission-review-status{background:#dcfce7;color:#166534}
   .submission-review-card[data-status="returned"] .submission-review-status{background:#fff7ed;color:#9a3412}
-  .submission-review-section{margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb}
-  .submission-review-section h3{font-size:15px;margin:0 0 8px;color:#111827}
+  .submission-review-section{margin-top:16px;padding:18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc}
+  .submission-review-section h3{font-size:14px;margin:0 0 12px;color:#334155;font-weight:700;letter-spacing:.01em}
   .submission-review-section p{white-space:pre-wrap;margin:4px 0;color:#475569}
-  .submission-review-document-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
-  .submission-review-document-name{min-width:0;overflow-wrap:anywhere}
+  .submission-review-document-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
+  .submission-review-document-name{min-width:0;margin:0;color:#334155;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
   .submission-review-document-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .submission-review-document-action{display:inline-flex;justify-content:center;align-items:center;min-height:40px;padding:8px 14px;border:1px solid #d1d5db;border-radius:9px;background:#fff;color:#334155;font:inherit;font-size:13px;font-weight:650;text-decoration:none;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
   .submission-review-document-action:hover{border-color:#f57c00;background:#fff7ed;color:#9a3412;transform:translateY(-1px)}
@@ -438,14 +448,21 @@ if ($role === 'admin') {
   .submission-review-content summary{padding:8px 0;color:var(--review-ink);font-size:14px;font-weight:600;cursor:pointer}
   .submission-review-content h3{margin:16px 0 8px;font-size:14px}
   .submission-review-content p{max-width:75ch;color:#475569;line-height:1.7;overflow-wrap:anywhere}
-  .submission-review-actions{display:grid;gap:10px;margin-top:18px}
-  .title-decision-options{display:grid;gap:9px;margin:4px 0 8px;padding:12px;border:1px solid #d1d5db;border-radius:10px}
-  .title-decision-options label{display:flex;align-items:flex-start;gap:8px}
-  .title-decision-options input{margin-top:3px;accent-color:#0d9488}
-  .submission-review-actions textarea{width:100%;min-height:85px;border:1px solid #d1d5db;border-radius:10px;padding:10px;font:inherit}
-  .submission-review-actions button{border:0;border-radius:9px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
-  .submission-review-actions .approve{background:#0d9488;color:#fff}
-  .submission-review-actions .return{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
+  .submission-review-actions{display:grid;gap:10px;margin-top:18px;padding:20px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
+  .title-decision-options{display:grid;gap:8px;margin:0 0 8px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc}
+  .title-decision-options legend{padding:0 8px;color:#111827;font-size:15px;font-weight:700}
+  .title-decision-options label{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:start;gap:4px 10px;padding:12px;border:1px solid transparent;border-radius:10px;background:#fff;color:#334155;font-size:14px;line-height:1.55;cursor:pointer;transition:border-color .18s ease,background .18s ease}
+  .title-decision-options label:hover{border-color:var(--review-border);background:var(--review-tint)}
+  .title-decision-options label:has(input:checked){border-color:var(--review-accent);background:var(--review-tint);box-shadow:inset 3px 0 var(--review-accent)}
+  .title-decision-options input{grid-column:1;grid-row:1;margin:4px 0 0;accent-color:var(--review-accent)}
+  .title-decision-options label > span{grid-column:2;color:#64748b;font-size:13px;line-height:1.5}
+  .submission-review-actions > label{color:#334155;font-size:14px;font-weight:650}
+  .submission-review-actions textarea{width:100%;min-height:100px;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;background:#fff;color:#111827;font:inherit;line-height:1.55;resize:vertical}
+  .submission-review-button-row{display:flex;gap:10px;flex-wrap:wrap}
+  .submission-review-actions button{min-height:44px;border:0;border-radius:9px;padding:10px 18px;font:inherit;font-size:14px;font-weight:650;cursor:pointer;transition:filter .18s ease,transform .18s ease}
+  .submission-review-actions button:hover{filter:brightness(.95);transform:translateY(-1px)}
+  .submission-review-actions .approve{background:var(--review-accent);color:#fff}
+  .submission-review-actions .return{background:var(--review-tint);color:var(--review-ink);border:1px solid var(--review-border)}
   .submission-annotation-note{margin:2px 0 0;padding:9px 11px;border-left:3px solid #b45309;border-radius:6px;background:#fff7ed;color:#7c2d12;font-size:13px}
   .review-approval-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;width:min(520px,calc(100vw - 32px));max-width:none;padding:0;border:1px solid var(--review-border);border-radius:18px;background:#fff;color:#111827;box-shadow:0 24px 70px rgba(15,23,42,.24)}
   .review-approval-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(3px)}
@@ -469,7 +486,7 @@ if ($role === 'admin') {
   .review-alert.success{background:#dcfce7;color:#166534}.review-alert.error{background:#fee2e2;color:#991b1b}
   .submission-review-tab:focus-visible,.submission-review-trail-link:focus-visible,.submission-review-content summary:focus-visible,.submission-review-document-action:focus-visible,.submission-review-actions button:focus-visible,.submission-review-actions textarea:focus-visible{outline:2px solid var(--review-accent);outline-offset:3px}
   @media(max-width:480px){.submission-review-field{grid-template-columns:minmax(0,1fr);gap:4px}}
-  @media(max-width:700px){.submission-review-summary{gap:7px 10px;padding:16px}.submission-review-summary-title{font-size:16px}.submission-review-summary-action{gap:6px;font-size:12px}.submission-review-summary-action-label{display:none}.submission-review-detail{padding:0 16px 18px}.submission-review-tabs{gap:4px 16px}.submission-review-tab{min-width:0;font-size:13px}.submission-review-hero{padding:24px}.submission-review-empty h3{font-size:18px}}
+  @media(max-width:700px){.submission-review-summary{gap:7px 10px;padding:16px}.submission-review-summary-title{font-size:16px}.submission-review-summary-action{gap:6px;font-size:12px}.submission-review-summary-action-label{display:none}.submission-review-detail{padding:0 16px 18px}.submission-review-tabs{gap:4px 16px}.submission-review-tab{min-width:0;font-size:13px}.submission-review-empty h3{font-size:18px}}
   @media(prefers-reduced-motion:reduce){.submission-review-tab,.submission-review-summary-icon,.submission-review-document-action{transition:none}}
 </style>
 
@@ -477,19 +494,12 @@ if ($role === 'admin') {
 <?php if ($section): ?>
   <nav class="submission-review-tabs" aria-label="Research development sections">
     <?php foreach ($review_tabs as $key => $tab): ?>
+      <?php if ($key === 'research_calendar' && $role !== 'admin' && !hasModulePermission($user_id, 'research_development', 'view', 'research_approval')) { continue; } ?>
       <a class="submission-review-tab" href="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php?module_page=<?php echo rawurlencode($tab['module']); ?>&amp;view=<?php echo rawurlencode($key); ?>&amp;course=<?php echo rawurlencode($course_filter); ?>"<?php echo $active_tab === $key ? ' aria-current="page"' : ''; ?>>
         <?php echo htmlspecialchars($tab['title'], ENT_QUOTES, 'UTF-8'); ?>
       </a>
     <?php endforeach; ?>
   </nav>
-  <?php if (!$is_approval_list && !$has_review_filter_panel): ?>
-  <section class="submission-review-hero" aria-labelledby="submission-review-heading">
-    <div>
-      <h2 id="submission-review-heading"><?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
-      <p class="submission-review-hero-copy"><?php echo htmlspecialchars($section['description'], ENT_QUOTES, 'UTF-8'); ?></p>
-    </div>
-  </section>
-  <?php endif; ?>
 <?php endif; ?>
 
 <?php if ($has_review_filter_panel): ?>
@@ -530,27 +540,14 @@ if ($role === 'admin') {
     </div>
   </form>
 </div>
-<?php elseif (!$is_approval_list): ?>
-<form class="submission-course-filter" method="get" action="<?php echo SITE_URL; ?>pages/shared/research-submission-review.php">
-  <input type="hidden" name="module_page" value="<?php echo htmlspecialchars($module_page, ENT_QUOTES, 'UTF-8'); ?>">
-  <input type="hidden" name="view" value="<?php echo htmlspecialchars($active_tab, ENT_QUOTES, 'UTF-8'); ?>">
-  <?php if (!$section): ?><input type="hidden" name="type" value="<?php echo htmlspecialchars($type_filter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
-  <?php if ($is_approval_list): ?><input type="hidden" name="q" value="<?php echo htmlspecialchars($approval_list['search'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
-  <label for="review-course">Course</label>
-  <select id="review-course" name="course">
-    <option value="">All courses</option>
-    <?php foreach (['BSIT', 'BSCS'] as $course): ?>
-      <option value="<?php echo $course; ?>"<?php echo $course_filter === $course ? ' selected' : ''; ?>><?php echo $course; ?></option>
-    <?php endforeach; ?>
-  </select>
-  <button type="submit">Apply filter</button>
-</form>
 <?php endif; ?>
 
 <?php if ($flash['success'] !== ''): ?><div class="review-alert success"><?php echo htmlspecialchars($flash['success'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
 <?php if ($flash['error'] !== ''): ?><div class="review-alert error"><?php echo htmlspecialchars($flash['error'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
 
-<?php if ($is_approval_list): ?>
+<?php if ($is_research_calendar): ?>
+  <?php require __DIR__ . '/../../includes/research-calendar-view.php'; ?>
+<?php elseif ($is_approval_list): ?>
   <?php require __DIR__ . '/../../includes/research-approval-view.php'; ?>
 <?php else: ?>
 <div class="submission-review-grid">
@@ -809,7 +806,7 @@ if ($role === 'admin') {
           <?php endif; ?>
           <label for="comments-<?php echo (int) $item['version_id']; ?>">Comments/Suggestions <?php echo $can_return ? '(required when returning; optional when approving)' : '(optional)'; ?></label>
           <textarea id="comments-<?php echo (int) $item['version_id']; ?>" name="comments" maxlength="5000"><?php echo htmlspecialchars((string) ($_POST['comments'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="submission-review-button-row">
             <?php if ($can_approve && !$item_has_annotations): ?><button class="approve" type="submit" name="decision" value="approved">Approve</button><?php endif; ?>
             <?php if ($can_return): ?><button class="return" type="submit" name="decision" value="returned">Return for Revision</button><?php endif; ?>
           </div>

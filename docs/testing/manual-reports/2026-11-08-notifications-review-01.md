@@ -1,0 +1,60 @@
+# Verification: notifications review
+
+- Date/time: 2026-11-08, Asia/Taipei
+- Assistant: Codex
+- Target and expected behavior: Review the supplied `notifications.php` attachment for source compatibility and PHP syntax.
+- Environment URL: `https://rmsportal.freehosting.dev/` (user-confirmed live deployment)
+- Roles and disposable records/files: Not applicable; source review only.
+- Session state: Finished
+
+## Graphify and source context
+- Question and selected graph vocabulary: How does the notifications page relate to CSRF helpers, role shells, and the notifications table? Selected terms: `notifications`, `csrfField`, `renderStudentShell`.
+- Query/lookup and result: `rtk graphify query "notifications csrfField renderStudentShell" --budget 1500`. Graph returned 42 nodes and 67 edges; output was truncated by the command wrapper. Relevant hints identify `csrfField()` in `includes/auth.php`, `renderStudentShell()` and its close helper in `includes/student-shell.php`, and the notifications table in the migration SQL.
+- Relevant source locations and verified relationships: Current page uses `requireLogin()`, validates CSRF, binds notification operations to the logged-in `user_id`, and renders the role-specific shell (`pages/shared/notifications.php`, lines 32, 134–135, 143–159, 164–200, 212–242, 315–321, 572–578). The current schema defines all selected notification columns (`database/schema/rms_db.sql`, lines 255–272); current helpers define login and CSRF behavior (`includes/auth.php`, lines 174, 205–214).
+- Missing, inferred, stale, or truncated context: The graph has no node for `pages/shared/notifications.php`; its notifications-table edge points to `database/migrations/rms_db_migration.sql`, so the graph hint was checked against the current schema and page source. Graph query output was truncated; direct source inspection filled in the needed context. Live hosting configuration and deployed file were not inspected.
+
+## Checks
+| ID | Method / role / page | Action | Expected | Observed / evidence source | Status |
+|---|---|---|---|---|---|
+| 1 | PHP CLI, supplied attachment | Run `php -l` on the attachment | No syntax errors | `No syntax errors detected` | Passed |
+| 2 | Source review | Inspect authentication, CSRF, ownership filters, SQL, shell selection, schema fields, and notification link redirects | Page uses existing RMS helpers/schema and scopes mutations to the current user | Confirmed helper/schema matches and user-scoped prepared statements. Found that absolute and protocol-relative notification links to other hosts are returned unchanged and then used in a redirect (`pages/shared/notifications.php`, lines 54–91, 164–200). | Failed |
+| 3 | Hosted browser, admin | Open `/pages/shared/notifications.php` after replacing `notif_link_url()` | The role shell and notification content render | User screenshot shows the admin shell/header but an empty main content area. A zero-notification inbox should still render the hero and empty-state markup. | Failed |
+| 4 | Hosted browser, admin | Open the Admin Dashboard | Dashboard main content appears, isolating the blank content to Notifications or its route-specific runtime path | User confirms the dashboard shows content. | Passed |
+| 5 | PHP CLI and supplied updated attachment | Lint the latest attachment and inspect its rendered markup structure | Syntax is valid and notification markup/shell close remain present | `php -l` passes; the attachment contains the notifications workspace, hero, list/empty state, and admin shell close. This does not establish that the host is serving this exact file or that its runtime completed. | Passed |
+| 6 | Hosted browser, admin | Open a fresh View Source for Notifications | Browser displays response HTML for the Notifications page | User confirms the source view shows HTML. | Passed |
+| 7 | Hosted browser View Source, admin | Search response HTML for page text `RMS activity ledger` | The notifications page body is present in the server response | User reports no result, including after hard reload. The response contains shell HTML but not this page-copy marker. | Failed |
+| 8 | Hosting file manager/source attachment | Check the live `pages/shared/notifications.php` for `RMS activity ledger` and syntax | The live file contains the marker and parses | User supplied the file as the live copy; it matches the preceding attachment, contains the complete page body, and `php -l` passes. Exact server execution remains inconsistent with View Source. | Passed |
+| 9 | Hosting control panel, read-only | Check PHP error log for the blank Notifications request | Identify any runtime fatal/warning and source line | User reports they cannot find the PHP error log. | Blocked |
+| 10 | Hosted browser, admin | After saving `<!-- notif-checkpoint -->` near the page `<style>`, hard reload and inspect View Source for the marker | Marker appears if PHP reaches the page template output | User screenshot shows the marker in the response and the beginning of inline CSS. This confirms execution reached at least the style/template section; page copy still needs confirmation. | Passed |
+| 11 | Hosted browser View Source, admin | Search response for `RMS activity ledger` after the checkpoint edit | Page heading copy appears in the response | User reports no match. Checkpoint appears in the response, so output reaches the inline style but not the expected page text. | Failed |
+| 12 | Hosted browser View Source, admin | Search response for `</style>` | Inline CSS block closes in the response | User reports the response's last line is `<!-- notif-checkpoint -->`; no closing style tag follows. | Failed |
+| 13 | User-provided rendered HTML response | Inspect the final response text around the checkpoint | Response continues past inline PHP-generated CSS values | Latest paste ends at `.notifications-workspace { --notif-ink:#192235; --notif-gold:` before the first value is emitted. | Failed |
+| 14 | Live website, admin | Reload Notifications with hosting Display Errors enabled | Page renders or displays a diagnostic | User confirms the 403 occurs at step 5 (reloading Notifications), not while opening/saving the hosting panel. The response is a server 403 with a secondary ErrorDocument 403. | Failed |
+| 15 | Review user-pasted live `.htaccess` | Inspect access-control regexes and error handler targets | Sensitive files are denied without blocking normal pages | Pasted `<FilesMatch "^(.|composer.json|...)"` uses an unescaped `.` as a wildcard, then applies `Deny from all`; this matches ordinary filenames and also blocks the configured error page. Local source has escaped literal dots. | Failed |
+| 16 | Hosted browser, admin | Open Admin Dashboard after correcting live `.htaccess` | Dashboard content renders without 403 | User confirms dashboard loads. | Passed |
+| 17 | Hosted browser DevTools, admin | Inspect the reported page error after the `.htaccess` correction | Determine whether a browser-side script error remains | User screenshot shows CSP blocking a JavaScript `eval()` call. Local `pages/shared/notifications.php` and `includes/admin-shell.php` contain no `eval()` or `new Function()` call; the screenshot does not identify the script or confirm whether Notifications content renders. | Pending |
+| 18 | Hosted browser, admin | Open Notifications after the `.htaccess` correction | Page content renders | User confirms the Notifications page is still blank while the dashboard loads. Earlier source output stopped at the first CSS interpolation. | Failed |
+| 19 | Source review and CSS suggestion | Determine whether the modal's hidden state explains the blank page | Hidden modal is not painted over the page | Local CSS already had `.notif-modal[hidden]{display:none}` before its base `.notif-modal{display:grid}` rule; the hidden selector has higher specificity. User applied `!important` live, but the page remained blank. The local defensive edit was reverted because this did not solve the issue. | Failed |
+| 20 | Hosted browser, admin | Reload Notifications after applying the hidden-modal CSS rule | Notification page content appears | User confirms the page remains blank; screenshot shows the admin shell and empty main area, without a visible dark modal overlay. | Failed |
+| 21 | Review user-pasted live PHP attachment | Check that the escaping helper used in the CSS exists | Every called helper is defined before use | The attachment calls `notif_se()` in CSS and throughout page output, but defines no `function notif_se(...)`; the helper comment is followed immediately by `function notif_link_url(...)`. This explains PHP terminating at the first CSS interpolation with a missing-function fatal error (inference from the source and response cutoff). | Passed |
+| 22 | Hosted browser, admin | Reload Notifications after adding `notif_se()` | Page content renders | User screenshot shows the Notifications hero, totals, command bar, and recent activity list. This confirms the page is no longer blank after the PHP helper was added. The hero background appears very light while its text is white, leaving a separate contrast issue to review. | Passed |
+| 23 | Hosted browser, admin | Apply the hero contrast CSS and reload Notifications | Hero text is legible on a dark background and the page content remains visible | User confirms “all passed” after receiving the CSS correction. | Passed |
+
+## Failures, decisions, fixes, and retests
+- The `open_record` action permits a stored notification link to redirect to an arbitrary external host. That may be intentional for external links; if this page should only open RMS records, restrict accepted links to the configured application origin or internal paths. No code change was made during this review.
+- After the user changed the fallback from returning `$link` to returning `''` on the live page, opening a linked notification produced the generic failure flash. The live saved link format and `SITE_URL` remain unknown; do not restore unrestricted external redirects to work around the failure.
+- User then replaced the whole helper; the live Notifications URL now shows the admin shell but no main content (screenshot). In the local source, `notif_link_url()` is only called inside the POST `open_record` action, so that helper cannot explain a blank normal GET by itself. The exact live file and server error log have not been inspected.
+- User supplied an updated attachment. Its `notif_link_url()` is syntactically complete; `notifications-workspace` markup and the role shell close are still present, and `php -l` passes. The attachment may still differ from the file currently served by the host, and no host runtime error output was supplied.
+- The user's pasted live PHP attachment is missing the `notif_se()` helper called at the first CSS interpolation and later in page markup. This is the likely PHP fatal causing the partial response; it is inferred from the source and response cutoff because the host error was not available. The local source already defines this helper.
+- The hidden-modal CSS theory was not supported by local specificity and applying its defensive `!important` change live did not resolve the blank page. The temporary local CSS change was reverted.
+
+## Assistant-run checks
+- `php -l 'C:\Users\jimwe\.codex\attachments\e52868f8-c15a-40d1-bfc9-966b7d0be377\Pasted text.txt'` — passed.
+- Reviewed `pages/shared/notifications.php`, `includes/auth.php`, and `database/schema/rms_db.sql`.
+- Reviewed the user-pasted live attachment: it calls `notif_se()` but has no corresponding function definition; local `pages/shared/notifications.php` does define the helper.
+
+## Resume / handoff
+- Last user-confirmed state: User reports all checks passed after adding `notif_se()` and applying the hero contrast CSS.
+- Next pending action: None.
+- Blocked/skipped checks and remaining verification gaps: Live `SITE_URL`, saved notification link shape, exact served-file identity, and hosting runtime error remain unverified; the host error log was not accessible to the user.
+- User-performed data changes and cleanup status: None.

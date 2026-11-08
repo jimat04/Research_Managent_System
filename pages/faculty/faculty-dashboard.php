@@ -40,11 +40,12 @@ $data = $dashboardService->getOverviewData($userId, $adviseePage);
 $urls = [
     'analytics' => SITE_URL . 'pages/faculty/faculty-analytics.php',
     'advising' => SITE_URL . 'pages/faculty/faculty-advising.php',
-    'engagements' => SITE_URL . 'pages/faculty/faculty-engagement.php?view=history',
+    'engagements' => SITE_URL . 'pages/faculty/faculty-engagement-history.php',
     'activities' => SITE_URL . 'pages/shared/activities.php?view=upcoming',
     'researchRecords' => SITE_URL . 'pages/faculty/faculty-research-records.php',
     'addEngagement' => SITE_URL . 'pages/faculty/faculty-engagement.php',
     'profile' => SITE_URL . 'pages/faculty/faculty-profile.php',
+    'registeredIp' => SITE_URL . 'pages/faculty/faculty-profile.php?tab=achievements',
     'publications' => SITE_URL . 'pages/faculty/faculty-publications.php',
     'addPublication' => SITE_URL . 'pages/faculty/faculty-publication-form.php',
 ];

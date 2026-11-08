@@ -137,9 +137,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (mb_strlen($last_name)  > 80) $profile_errors[] = 'Last name is too long (max 80 characters).';
         if (mb_strlen($contact) > 30)    $profile_errors[] = 'Contact number is too long (max 30 characters).';
 
-        // Student: validate year_level against the ENUM (only if the column exists)
-        $allowed_year_levels = ['1st', '2nd', '3rd', '4th', 'Graduate', 'Masters', 'Doctorate'];
-        if ($has_column['year_level'] && $year_level !== '' && !in_array($year_level, $allowed_year_levels, true)) {
+        // Keep student profile choices aligned with the registration form.
+        // Permit an unchanged legacy value so editing other profile fields does
+        // not silently reject or erase data created by the older option list.
+        $allowed_year_levels = ['3rd', '4th'];
+        $current_year_level = trim((string) ($user_row['year_level'] ?? ''));
+        if ($has_column['year_level'] && $year_level !== ''
+            && !in_array($year_level, $allowed_year_levels, true)
+            && $year_level !== $current_year_level) {
             $profile_errors[] = 'Invalid year level.';
         }
         if ($has_column['academic_rank'] && !rmsFacultyAcademicRankIsValid($academic_rank, $user_row['academic_rank'] ?? null)) {
@@ -331,8 +336,13 @@ $role_labels = [
 ];
 $role_label = $role_labels[$role] ?? ucwords(str_replace('_', ' ', $role));
 
-// Year-level options (matches the ENUM in migration 002).
-$year_level_options = ['', '1st', '2nd', '3rd', '4th', 'Graduate', 'Masters', 'Doctorate'];
+// Match the student year levels offered during registration. Keep an existing
+// older enum value visible so it is preserved unless the student changes it.
+$year_level_options = ['', '3rd', '4th'];
+$current_year_level = trim((string) ($user_row['year_level'] ?? ''));
+if ($current_year_level !== '' && !in_array($current_year_level, $year_level_options, true)) {
+    $year_level_options[] = $current_year_level;
+}
 $rank_options = array_merge([''], array_keys(rmsFacultyAcademicRanks()));
 $current_rank = (string) ($user_row['academic_rank'] ?? '');
 if ($current_rank !== '' && !in_array($current_rank, $rank_options, true)) {

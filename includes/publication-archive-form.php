@@ -23,11 +23,11 @@ $version=$record?hash('sha256',json_encode([$record,$contributorsBefore],JSON_TH
 $selectedAuthors=array_map('intval',array_column($contributorsBefore,'user_id'));
 $allContributors=rmsOutputContributorOptions($conn);
 $facultyAuthorName='';
-if(!$record&&$role==='faculty') {
+if($role==='faculty') {
     foreach($allContributors as $contributor) {
         if((int)$contributor['user_id']!==$userId) continue;
         $facultyAuthorName=trim($contributor['first_name'].' '.$contributor['last_name']);
-        $selectedAuthors[]=$userId;
+        if(!$record) $selectedAuthors[]=$userId;
         break;
     }
 }
@@ -48,6 +48,21 @@ foreach(['publication_type_id','publication_subtype_id','publication_scope_id'] 
     $input[$classificationKey]=isset($record[$classificationKey])?(string)$record[$classificationKey]:'';
 }
 $input['author_names']=publicationAuthors($record??[])?:($facultyAuthorName!==''?[$facultyAuthorName]:['']);
+$hasFacultyNameInAuthorList = static function ($authorNames) use ($role, $facultyAuthorName): bool {
+    if ($role !== 'faculty' || $facultyAuthorName === '' || !is_array($authorNames)) return false;
+    $normalize = static function ($name): string {
+        if (!is_string($name)) return '';
+        $trimmed = trim($name);
+        $collapsed = preg_replace('/\s+/u', ' ', $trimmed);
+        return mb_strtolower($collapsed === null ? $trimmed : $collapsed, 'UTF-8');
+    };
+    $facultyName = $normalize($facultyAuthorName);
+    if ($facultyName === '') return false;
+    foreach ($authorNames as $authorName) if ($normalize($authorName) === $facultyName) return true;
+    return false;
+};
+$facultyOwnAuthorListed = $hasFacultyNameInAuthorList($input['author_names']);
+if ($facultyOwnAuthorListed && !in_array($userId, $selectedAuthors, true)) $selectedAuthors[] = $userId;
 $input['publication_keywords']=publicationJson($record['keywords_json']??null);
 $input['publication_metadata']=$metadata;
 foreach(['volume'=>'volume','issue'=>'issue','pages'=>'page_numbers'] as $key=>$column) if(!isset($input['publication_metadata'][$key])&&!empty($record[$column])) $input['publication_metadata'][$key]=$record[$column];
@@ -63,6 +78,7 @@ $fieldErrors=[]; $duplicates=[]; $duplicateToken='';
 $rules=publicationEffectiveRules($catalog,(int)($record['publication_type_id']??0),(int)($record['publication_subtype_id']??0),$record);
 if($_SERVER['REQUEST_METHOD']==='POST') {
     $input=$_POST;
+    $facultyOwnAuthorListed = $hasFacultyNameInAuthorList($input['author_names'] ?? null);
     $input['publication_metadata']=array_merge($metadata,is_array($_POST['publication_metadata']??null)?$_POST['publication_metadata']:[]);
     if(!isCsrfTokenValid($_POST['csrf_token']??null)) $errors[]='Your form expired. Refresh and try again.';
     if(publicationText($input,'action')!=='save_record'||publicationText($input,'record_id')!==(string)$id) $errors[]='Invalid archive request.';
@@ -81,6 +97,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         $uid=is_scalar($raw)?filter_var($raw,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]):false;
         if(!$uid) $fieldErrors['contributor_ids']='Choose valid linked authors.'; else $selectedAuthors[]=$uid;
     }
+    if($facultyOwnAuthorListed) $selectedAuthors[]=$userId;
     $selectedAuthors=array_values(array_unique($selectedAuthors)); sort($selectedAuthors);
     $newAuthors=array_values(array_diff($selectedAuthors,array_map('intval',array_column($contributorsBefore,'user_id'))));
     if(rmsValidateOutputContributorIds($conn,$newAuthors,0)===null) $fieldErrors['contributor_ids']='New contributor links must refer to active faculty or student accounts.';
@@ -200,7 +217,7 @@ archiveShellOpen($user,$c,$record?'Edit Publication Record':'Add Publication Rec
 </div><p id="publication-rule-note" class="publication-notice" role="status"></p><noscript><p>Choose a subtype within its type. All metadata fields are shown; server validation applies the chosen subtype rules.</p></noscript></section>
 <section class="archive-card"><h2>Research information</h2><?php $field('research_title',$titleLabel,'text',500,true); ?>
 <fieldset class="publication-author-field"><legend>Authors in publication order *</legend><div id="publication-authors"><?php $authorInputs=is_array($input['author_names']??null)?array_slice($input['author_names'],0,50):['']; if(!$authorInputs)$authorInputs=['']; foreach($authorInputs as $i=>$name): ?><div class="publication-author-row"><label>Author <span data-author-number><?= $i+1 ?></span><input name="author_names[]" value="<?= archiveEscape(is_string($name)?$name:'') ?>" maxlength="255"></label><button type="button" class="archive-button secondary" data-author-up aria-label="Move author up">↑</button><button type="button" class="archive-button secondary" data-author-down aria-label="Move author down">↓</button><button type="button" class="archive-button secondary" data-author-remove>Remove</button></div><?php endforeach; ?></div><button type="button" id="publication-add-author" class="archive-button secondary">Add author</button><?php $errorFor('author_names'); ?><small>External authors need no RMS account. The record owner and encoder are recorded separately.</small></fieldset>
-<details class="publication-author-link-panel"><summary>Link RMS author accounts</summary><div class="publication-author-link-body"><div class="archive-field publication-author-link-row"><div class="publication-author-link-field"><label for="publication-account-course">Filter by course</label><select id="publication-account-course"><option value="">All faculty programs</option><?php foreach($facultyProgramOptions as $program): ?><option value="<?= (int)$program['program_id'] ?>"><?= archiveEscape($program['program_code'].' — '.$program['program_name']) ?></option><?php endforeach; ?></select></div><div class="publication-author-link-field"><label for="publication-account-author">Add a faculty / researcher name to RMS</label><select id="publication-account-author"><option value="">Choose an account</option><?php foreach($allContributors as $author): $authorLabel = trim($author['first_name'].' '.$author['last_name']); $programLabel = trim((string)($author['program_codes'] ?? '')); $displayLabel = $programLabel !== '' ? $authorLabel.' ('.$programLabel.')' : $authorLabel.' ('.$author['role'].')'; ?><option value="<?= (int)$author['user_id'] ?>" data-name="<?= archiveEscape($authorLabel) ?>" data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>"><?= archiveEscape($displayLabel) ?></option><?php endforeach; ?></select></div><button type="button" id="publication-link-author" class="archive-button">Add and link author</button></div><div class="archive-authors"><?php foreach($allContributors as $author): $authorLabel = trim($author['first_name'].' '.$author['last_name']); $programLabel = trim((string)($author['program_codes'] ?? '')); ?><label data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>"><?php if($programLabel !== ''): ?><span class="publication-author-program"><?= archiveEscape($programLabel) ?></span><?php endif; ?><input type="checkbox" name="contributor_ids[]" value="<?= (int)$author['user_id'] ?>" data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>" <?= in_array((int)$author['user_id'],$selectedAuthors,true)?'checked':'' ?>><?= archiveEscape($authorLabel) ?></label><?php endforeach; ?></div><p class="publication-author-note">Linked authors may view this record. Editing remains restricted to its owner and authorized administrators/staff. Removing a name does not silently remove a saved account link.</p><?php $errorFor('contributor_ids'); ?></div></details>
+<details class="publication-author-link-panel"><summary>Link RMS author accounts</summary><div class="publication-author-link-body"><div class="archive-field publication-author-link-row"><div class="publication-author-link-field"><label for="publication-account-course">Filter by program</label><select id="publication-account-course"><option value="">All programs</option><?php foreach($facultyProgramOptions as $program): ?><option value="<?= (int)$program['program_id'] ?>"><?= archiveEscape($program['program_code'].' — '.$program['program_name']) ?></option><?php endforeach; ?></select></div><div class="publication-author-link-field"><label for="publication-account-author">Choose an unlinked faculty account</label><select id="publication-account-author"><option value="" selected>Choose an account</option><?php foreach($allContributors as $author): $authorId=(int)$author['user_id']; $authorLabel = trim($author['first_name'].' '.$author['last_name']); $programLabel = trim((string)($author['program_codes'] ?? '')); $displayLabel = $programLabel !== '' ? $authorLabel.' ('.$programLabel.')' : $authorLabel.' ('.$author['role'].')'; $alreadyLinked=in_array($authorId,$selectedAuthors,true); ?><option value="<?= $authorId ?>" data-name="<?= archiveEscape($authorLabel) ?>" data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>" <?= $alreadyLinked?'hidden disabled':'' ?>><?= archiveEscape($displayLabel) ?></option><?php endforeach; ?></select></div><button type="button" id="publication-link-author" class="archive-button" disabled>Add and link author</button></div><div class="archive-authors"><?php foreach($allContributors as $author): $authorId=(int)$author['user_id']; $authorLabel=trim($author['first_name'].' '.$author['last_name']); $programLabel=trim((string)($author['program_codes']??'')); $lockFacultyAuthor=$facultyOwnAuthorListed&&$role==='faculty'&&$authorId===$userId; ?><label data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>"><?php if($programLabel!==''): ?><span class="publication-author-program"><?= archiveEscape($programLabel) ?></span><?php endif; ?><input type="checkbox" name="contributor_ids[]" value="<?= $authorId ?>" data-program-ids="<?= archiveEscape((string)($author['program_ids'] ?? '')) ?>" <?= in_array($authorId,$selectedAuthors,true)?'checked':'' ?><?= $lockFacultyAuthor?' disabled aria-describedby="publication-author-link-note"':'' ?>><?= archiveEscape($authorLabel) ?><?php if($lockFacultyAuthor): ?><input type="hidden" name="contributor_ids[]" value="<?= $authorId ?>"><?php endif; ?></label><?php endforeach; ?></div><p class="publication-author-note" id="publication-author-link-note">Linked authors may view this record. Editing remains restricted to its owner and authorized administrators/staff. Removing a name does not silently remove a saved account link.<?php if($facultyOwnAuthorListed): ?> Your account stays linked while your name appears in the author list.<?php endif; ?></p><?php $errorFor('contributor_ids'); ?></div></details>
 <?php $field('abstract_text','Abstract','textarea',20000); ?><p id="abstract-word-count" role="status"></p>
 <fieldset><legend>Keywords</legend><div class="archive-grid" id="publication-keywords"><?php $keywords=is_array($input['publication_keywords']??null)?$input['publication_keywords']:[]; for($i=0;$i<max(10,count($keywords));$i++): ?><div class="archive-field keyword-item"><label for="publication-keyword-<?= $i ?>">Keyword <?= $i+1 ?></label><input id="publication-keyword-<?= $i ?>" name="publication_keywords[]" maxlength="100" value="<?= archiveEscape(is_string($keywords[$i]??null)?$keywords[$i]:'') ?>"></div><?php endfor; ?></div><?php $errorFor('publication_keywords'); ?></fieldset></section>
 <section class="archive-card"><h2>Publication details</h2><p>For proceedings papers, record the published collection. Attendance, presentations and acceptance notices alone do not establish publication.</p><?php $errorFor('metadata'); ?><p id="publication-retained-note" hidden>Previously entered metadata remains visible and is retained when classifications change.</p><div class="archive-grid">
@@ -224,5 +241,5 @@ archiveShellOpen($user,$c,$record?'Edit Publication Record':'Add Publication Rec
 <div class="archive-actions"><a href="<?= archiveEscape($listUrl.$navigationQuery) ?>">Cancel</a><button class="archive-button" type="submit"><?= $record?'Save changes':'Save publication' ?></button></div>
 </form>
 <script type="application/json" id="publication-rules"><?= json_encode(['rules'=>$clientRules,'typeRules'=>$clientTypeRules,'legacyRules'=>$legacyClientRules,'systemMaxKb'=>publicationUploadLimit([]),'savedType'=>(int)($record['publication_type_id']??0),'savedSubtype'=>(int)($record['publication_subtype_id']??0),'legacy'=>(bool)($record&&!$record['publication_type_id']),'hasRecord'=>(bool)$record,'hasFiles'=>['supporting_file'=>!empty($record['file_path']),'evidence_file'=>!empty($record['evidence_file_path']),'references_file'=>!empty($record['references_file_path'])]],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR) ?></script>
-<script src="<?= archiveEscape(SITE_URL.'js/file-uploader.js') ?>"></script><script src="<?= archiveEscape(SITE_URL.'js/publication-classification.js') ?>"></script>
+<script src="<?= archiveEscape(SITE_URL.'js/file-uploader.js') ?>"></script><script src="<?= archiveEscape(SITE_URL.'js/publication-classification.js?v='.filemtime(__DIR__.'/../js/publication-classification.js')) ?>"></script>
 <?php archiveShellClose($user); ?>

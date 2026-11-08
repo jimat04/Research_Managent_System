@@ -372,6 +372,6 @@ function rmsEnforceMaintenanceMode(): void
     $message = htmlspecialchars(rmsSetting('maintenance_message'), ENT_QUOTES, 'UTF-8');
     $loginUrl = htmlspecialchars(SITE_URL . 'public/login.php', ENT_QUOTES, 'UTF-8');
     $loginLink = empty($_SESSION['user_id']) ? '<p><a href="' . $loginUrl . '">Administrator sign in</a></p>' : '';
-    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>System maintenance</title></head><body><main><h1>System maintenance</h1><p>' . $message . '</p>' . $loginLink . '</main></body></html>';
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="' . htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8') . '"><title>System maintenance</title></head><body><main><h1>System maintenance</h1><p>' . $message . '</p>' . $loginLink . '</main></body></html>';
     exit;
 }

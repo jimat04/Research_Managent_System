@@ -35,6 +35,10 @@
 #publication-link-author{white-space:nowrap;min-height:48px;padding:0 18px;background:var(--publication-accent);border-color:var(--publication-accent);color:#fff;font-weight:700;box-shadow:0 8px 18px rgba(128,0,32,.16)}
 .publication-author-link-panel .archive-authors{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 12px}
 .publication-author-link-panel .archive-authors label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #dfe7ef;border-radius:10px;background:#fff;color:#1f2937;font-size:13px;line-height:1.4}
+.publication-author-link-panel .publication-linked-author{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #dfe7ef;border-radius:10px;background:#fff;color:#1f2937;font-size:13px;line-height:1.4}
+.publication-linked-author__identity{min-width:0;overflow-wrap:anywhere}
+.publication-linked-author .archive-button{flex:none;white-space:nowrap}
+.publication-linked-author-empty{grid-column:1/-1;margin:0;padding:8px 2px;color:#667085;font-size:13px}
 .publication-author-note{margin:12px 0 0;color:#475467;font-size:13px;line-height:1.6}
 .publication-form button:disabled{opacity:.5;cursor:default}
 .publication-form small{display:block;margin-top:8px;line-height:1.5}

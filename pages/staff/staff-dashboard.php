@@ -99,6 +99,7 @@ function monitoringDashboardTableExists(mysqli $connection, string $table): bool
         'research_projects',
         'research_submission_versions',
         'chapters',
+        'faculty_engagement_records',
     ];
 
     if (!in_array($table, $allowedTables, true)) {
@@ -132,6 +133,7 @@ $tables = [
     'projects' => monitoringDashboardTableExists($conn, 'research_projects'),
     'submissions' => monitoringDashboardTableExists($conn, 'research_submission_versions'),
     'chapters' => monitoringDashboardTableExists($conn, 'chapters'),
+    'engagement_records' => monitoringDashboardTableExists($conn, 'faculty_engagement_records'),
 ];
 if ($role === 'admin') {
     foreach ([
@@ -139,6 +141,7 @@ if ($role === 'admin') {
         'projects' => 'research_projects',
         'publications' => 'publications',
         'copyrights' => 'copyright_applications',
+        'engagement_records' => 'faculty_engagement_records',
     ] as $sourceKey => $sourceTable) {
         if (!$tables[$sourceKey]) {
             error_log('RMS dashboard count source unavailable: ' . $sourceTable);
@@ -193,6 +196,7 @@ $stats = [
     'proposals' => 0,
     'review_required' => 0,
     'approval_required' => 0,
+    'engagement_total' => 0,
     'ongoing' => 0,
     'completed' => 0,
     'archived' => 0,
@@ -244,6 +248,13 @@ if ($tables['copyrights']) {
     $stats['registered_copyrights'] = (int) ($row['registered_copyrights'] ?? 0);
     $stats['patent_utility_models'] = (int) ($row['patent_utility_models'] ?? 0);
     $stats['innovation_technology_transfer'] = (int) ($row['innovation_technology_transfer'] ?? 0);
+}
+if ($tables['engagement_records']) {
+    $stmt = $conn->prepare('SELECT COUNT(*) AS engagement_total FROM faculty_engagement_records');
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    $stats['engagement_total'] = (int) ($row['engagement_total'] ?? 0);
 }
 if ($tables['projects']) {
     $deletedClause = $projectHasDeletedAt ? ' WHERE deleted_at IS NULL' : '';
@@ -503,12 +514,16 @@ $dashboardModuleCards = [
         'key' => 'research_development',
         'class' => 'module-development',
         'label' => 'Research Development',
-        'pages' => [
-            ['key' => 'research_proposals', 'label' => 'Research Proposals', 'count' => $developmentAvailable ? $stats['proposals'] : null, 'detail' => $developmentAvailable ? 'proposals' : 'unavailable'],
-            ['key' => 'research_review', 'label' => 'Chapter Review', 'count' => $developmentAvailable ? $stats['review_required'] : null, 'detail' => $developmentAvailable ? 'requiring review' : 'unavailable'],
-            ['key' => 'research_approval', 'label' => 'Approved Proposals', 'count' => $developmentAvailable ? $stats['approval_required'] : null, 'detail' => $developmentAvailable ? 'approved proposals' : 'unavailable'],
-            ['key' => 'research_engagement_records', 'label' => 'Research Engagement Records', 'count' => null, 'detail' => 'faculty records'],
-        ],
+        'pages' => array_merge(
+            [
+                ['key' => 'research_proposals', 'label' => 'Research Proposals', 'count' => $developmentAvailable ? $stats['proposals'] : null, 'detail' => $developmentAvailable ? 'proposals' : 'unavailable'],
+                ['key' => 'research_review', 'label' => 'Chapter Review', 'count' => $developmentAvailable ? $stats['review_required'] : null, 'detail' => $developmentAvailable ? 'requiring review' : 'unavailable'],
+                ['key' => 'research_approval', 'label' => 'Approved Proposals', 'count' => $developmentAvailable ? $stats['approval_required'] : null, 'detail' => $developmentAvailable ? 'approved proposals' : 'unavailable'],
+            ],
+            $role === 'admin' ? [] : [
+                ['key' => 'research_engagement_records', 'label' => 'Research Engagement Records', 'count' => $tables['engagement_records'] ? $stats['engagement_total'] : null, 'detail' => 'faculty records'],
+            ]
+        ),
     ],
     [
         'key' => 'research_implementation_outputs',

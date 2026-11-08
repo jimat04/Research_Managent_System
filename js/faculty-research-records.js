@@ -449,6 +449,17 @@
     syncTriggerName();
   });
 
+  const docxSavedDialog = document.querySelector('[data-docx-saved-dialog]');
+  if (docxSavedDialog && typeof docxSavedDialog.showModal === 'function') {
+    const closeButton = docxSavedDialog.querySelector('[data-docx-saved-close]');
+    closeButton.addEventListener('click', () => docxSavedDialog.close());
+    docxSavedDialog.addEventListener('click', event => {
+      if (event.target === docxSavedDialog) docxSavedDialog.close();
+    });
+    docxSavedDialog.showModal();
+    closeButton.focus({ preventScroll: true });
+  }
+
   document.querySelectorAll('[data-delete-disclosure]').forEach(disclosure => {
     const toggle = disclosure.querySelector('summary');
     const updateLabel = () => { toggle.textContent = disclosure.open ? 'Cancel' : 'Delete'; };

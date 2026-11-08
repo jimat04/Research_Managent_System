@@ -144,6 +144,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         'Advising & Engagement' => [
             [SITE_URL . 'pages/faculty/faculty-advising.php', 'Advising', 'seminar', true, 0],
             [SITE_URL . 'pages/faculty/faculty-engagement.php', 'Add an Engagement Record', 'activity', true, 0],
+            [SITE_URL . 'pages/faculty/faculty-engagement-history.php', 'My Engagement History', 'activity', true, 0],
         ],
     ];
 
@@ -213,6 +214,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($page_title_safe, ENT_QUOTES, 'UTF-8'); ?> — Faculty — RMS</title>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_style, ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="stylesheet" href="<?php echo htmlspecialchars($url_shell, ENT_QUOTES, 'UTF-8'); ?>">
   <?php echo $extra_css_links; ?>
 </head>
@@ -294,16 +296,6 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
         </details>
       <?php endforeach; ?>
 
-      <div class="faculty-nav-session">
-        <div class="faculty-nav-group-title">Session</div>
-        <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" class="faculty-nav-logout-form" data-logout-confirm>
-          <?php echo csrfField(); ?>
-          <button type="submit" class="faculty-nav-item faculty-nav-logout">
-          <span class="faculty-nav-icon" aria-hidden="true"><?php echo facultyShellIcon('logout'); ?></span>
-          <span class="faculty-nav-label">Logout</span>
-          </button>
-        </form>
-      </div>
     </nav>
 
     <div class="faculty-sidebar-footer">
@@ -343,15 +335,21 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
           <?php if ($unread_messages > 0): ?><span class="faculty-topbar-message-badge" aria-hidden="true"><?php echo $unread_messages > 99 ? '99+' : $unread_messages; ?></span><?php endif; ?>
         </a>
         <?php renderNotificationPopover($user_id, $unread_notifications, 'faculty'); ?>
-        <div class="faculty-topbar-user">
-          <div class="faculty-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
-          <div class="faculty-topbar-user-text">
-            <div class="faculty-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Faculty', ENT_QUOTES, 'UTF-8'); ?></div>
-            <div class="faculty-topbar-user-role faculty-role-line">
-              <span><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span>
-            </div>
+        <details class="faculty-profile-menu">
+          <summary class="faculty-topbar-user" aria-label="Open faculty profile menu">
+            <span class="faculty-topbar-avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="faculty-topbar-user-text"><span class="faculty-topbar-user-name"><?php echo htmlspecialchars($shell_user['first_name'] !== '' ? $shell_user['first_name'] : 'Faculty', ENT_QUOTES, 'UTF-8'); ?></span><span class="faculty-topbar-user-role faculty-role-line"><?php echo htmlspecialchars($role_label, ENT_QUOTES, 'UTF-8'); ?></span></span>
+            <span class="faculty-profile-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="faculty-profile-dropdown">
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/profile.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo facultyShellIcon('profile'); ?><span>Profile</span></a>
+            <a href="<?php echo htmlspecialchars(SITE_URL . 'pages/shared/settings.php', ENT_QUOTES, 'UTF-8'); ?>"><?php echo facultyShellIcon('settings'); ?><span>Account settings</span></a>
+            <form method="post" action="<?php echo htmlspecialchars($url_logout, ENT_QUOTES, 'UTF-8'); ?>" data-logout-confirm>
+              <?php echo csrfField(); ?>
+              <button type="submit" class="faculty-profile-action"><?php echo facultyShellIcon('logout'); ?><span>Log out</span></button>
+            </form>
           </div>
-        </div>
+        </details>
       </div>
     </header>
 

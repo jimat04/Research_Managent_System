@@ -6,21 +6,26 @@ $preserveArchiveIntent = ($_GET['continue'] ?? '') === RMS_RESEARCH_ARCHIVE_RETU
 if ($preserveArchiveIntent) {
     rmsSetResearchArchiveReturnIntent(RMS_RESEARCH_ARCHIVE_RETURN_VALUE);
 }
-$loginUrl = 'login.php' . ($preserveArchiveIntent
+
+$loginUrl = SITE_URL . 'public/login.php' . ($preserveArchiveIntent
     ? '?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE)
     : '');
+$resendUrl = SITE_URL . 'public/resend-verification.php' . ($preserveArchiveIntent
+    ? '?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE)
+    : '');
+$homeUrl = SITE_URL . 'public/index.php';
 
 $error = '';
 $success = '';
+$verificationState = 'error';
 
 if (isset($_GET['token'])) {
     $token = sanitize($_GET['token']);
 
-    if (empty($token)) {
-        $error = 'Invalid verification token.';
+    if ($token === '') {
+        $error = 'No usable verification token was provided.';
     } else {
-        // Check if token exists and is not expired
-        $stmt = $conn->prepare("SELECT user_id, first_name, email, email_verified, email_verification_expires FROM users WHERE email_verification_token = ? LIMIT 1");
+        $stmt = $conn->prepare('SELECT user_id, email_verified, email_verification_expires FROM users WHERE email_verification_token = ? LIMIT 1');
         $stmt->bind_param('s', $token);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -28,87 +33,102 @@ if (isset($_GET['token'])) {
         if ($result && $result->num_rows > 0) {
             $user = $result->fetch_assoc();
 
-            if ($user['email_verified'] == 1) {
-                $error = 'Email already verified. You can log in now.';
-            } elseif (strtotime($user['email_verification_expires']) < time()) {
-                $error = 'Verification link has expired. Please request a new one.';
+            if ((int) $user['email_verified'] === 1) {
+                $verificationState = 'already-verified';
+                $error = 'This email address is already verified. You can sign in to RMS.';
+            } elseif (empty($user['email_verification_expires'])
+                || strtotime($user['email_verification_expires']) < time()) {
+                $verificationState = 'expired';
+                $error = 'This verification link has expired. Request a new email to continue.';
             } else {
-                // Verify email
-                $updateStmt = $conn->prepare("UPDATE users SET email_verified = 1, email_verification_token = NULL, email_verification_expires = NULL, updated_at = NOW() WHERE user_id = ?");
+                $updateStmt = $conn->prepare('UPDATE users SET email_verified = 1, email_verification_token = NULL, email_verification_expires = NULL, updated_at = NOW() WHERE user_id = ?');
                 $updateStmt->bind_param('i', $user['user_id']);
 
                 if ($updateStmt->execute()) {
                     logActivity('Email verified', 'authentication');
-                    $success = 'Email verified successfully! You can now log in.';
+                    $verificationState = 'verified';
+                    $success = 'Your email address is confirmed. You can sign in to RMS now.';
                 } else {
-                    $error = 'Verification failed. Please try again.';
+                    $error = 'We could not complete verification. Please try again.';
                 }
+                $updateStmt->close();
             }
         } else {
-            $error = 'Invalid verification token.';
+            $error = 'This verification link is invalid or has already been used.';
         }
+        $stmt->close();
     }
 } else {
-    $error = 'No verification token provided.';
+    $error = 'No verification token was provided.';
 }
+
+$isVerified = in_array($verificationState, ['verified', 'already-verified'], true);
+$pageHeading = $verificationState === 'verified'
+    ? 'Email verified'
+    : ($verificationState === 'already-verified' ? 'Email already verified' : 'Verification link unavailable');
+$statusLabel = $isVerified ? 'Confirmation complete' : 'Confirmation not complete';
+$statusMessage = $success !== '' ? $success : $error;
+$primaryUrl = $isVerified ? $loginUrl : $resendUrl;
+$primaryLabel = $isVerified ? 'Continue to sign in' : 'Request a new link';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Email — <?php echo htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8'); ?></title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Confirm your email address for the EARIST Research Management System.">
+  <title><?php echo htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8'); ?> | <?php echo htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8'); ?></title>
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(SITE_URL . 'css/style.css', ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(SITE_URL . 'css/verify-email.css?v=' . filemtime(__DIR__ . '/../css/verify-email.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
-<body style="background: linear-gradient(135deg, #0A0833 0%, #1a0a3a 50%, #0a1a3a 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<body class="verify-result-page">
+<main class="verify-result-shell verify-result-<?php echo htmlspecialchars($isVerified ? 'success' : 'error', ENT_QUOTES, 'UTF-8'); ?>">
+  <aside class="verify-result-brand" aria-label="EARIST Research Management System">
+    <a class="verify-result-brandmark" href="<?php echo htmlspecialchars($homeUrl, ENT_QUOTES, 'UTF-8'); ?>" aria-label="EARIST RMS home">
+      <img src="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>" alt="">
+      <span>EARIST <strong>RMS</strong></span>
+    </a>
 
-<div class="auth-container">
-  <div class="auth-card" style="max-width: 500px;">
-    <div class="auth-header">
-      <div class="auth-logo" style="background: linear-gradient(135deg, <?php echo $success ? '#16A34A' : '#DC2626'; ?>, <?php echo $success ? '#059669' : '#B91C1C'; ?>);">
-        <?php echo $success ? '✓' : '✕'; ?>
-      </div>
-      <h1><?php echo $success ? 'Email Verified' : 'Verification Failed'; ?></h1>
-      <p><?php echo $success ? 'Your email has been successfully verified' : 'We could not verify your email'; ?></p>
+    <div class="verify-result-brand-copy">
+      <p class="verify-result-brand-kicker">Account access</p>
+      <h1>Research Management System</h1>
+      <p>Official workspace for EARIST research submissions and records.</p>
     </div>
 
-    <?php if ($error): ?>
-      <div style="padding: 24px;">
-        <div class="alert alert-error" style="margin-bottom: 20px;">
-          <span style="color: #dc2626;">✕</span>
-          <?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
-        </div>
+    <p class="verify-result-brand-footer">Email confirmation</p>
+  </aside>
 
-        <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-          🔑 Go to Login
-        </a>
+  <section class="verify-result-content" aria-labelledby="verify-result-title">
+    <div class="verify-result-content-inner">
+      <p class="verify-result-eyebrow">Account setup</p>
+      <div class="verify-result-status">
+        <span class="verify-result-mark" aria-hidden="true"></span>
+        <div>
+          <p class="verify-result-status-label"><?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?></p>
+          <h2 id="verify-result-title"><?php echo htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8'); ?></h2>
+        </div>
       </div>
-    <?php endif; ?>
 
-    <?php if ($success): ?>
-      <div style="padding: 24px;">
-        <div class="alert alert-success" style="margin-bottom: 20px;">
-          <span style="color: #15803d;">✓</span>
-          <?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?>
-        </div>
+      <p class="verify-result-message" role="<?php echo $isVerified ? 'status' : 'alert'; ?>" aria-live="<?php echo $isVerified ? 'polite' : 'assertive'; ?>"><?php echo htmlspecialchars($statusMessage, ENT_QUOTES, 'UTF-8'); ?></p>
 
-        <div style="background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 0.85rem; color: #93c5fd; line-height: 1.6;">
-          <strong style="color: #bfdbfe;">What's next?</strong><br>
-          You can now log in to your account and start using the Research Management System.
-        </div>
+      <?php if ($isVerified): ?>
+        <p class="verify-result-guidance">Use the email address and password from your registration to sign in.</p>
+      <?php endif; ?>
 
-        <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-          🔑 Log In Now
+      <div class="verify-result-actions">
+        <a class="verify-result-primary" href="<?php echo htmlspecialchars($primaryUrl, ENT_QUOTES, 'UTF-8'); ?>">
+          <?php echo htmlspecialchars($primaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+          <span aria-hidden="true">→</span>
         </a>
+        <?php if (!$isVerified): ?>
+          <a class="verify-result-secondary" href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">Back to sign in</a>
+        <?php endif; ?>
       </div>
-    <?php endif; ?>
 
-    <p style="text-align: center; margin-top: 20px; padding: 0 24px 24px;">
-      <a href="index.php" style="color: #8B8FAD; font-size: 0.85rem; text-decoration: none;">← Back to homepage</a>
-    </p>
-  </div>
-</div>
-
-<script src="../js/public-motion.js?v=<?php echo filemtime(__DIR__ . '/../js/public-motion.js'); ?>" defer></script>
+      <a class="verify-result-home" href="<?php echo htmlspecialchars($homeUrl, ENT_QUOTES, 'UTF-8'); ?>">Return to RMS home</a>
+    </div>
+  </section>
+</main>
 </body>
 </html>

@@ -887,7 +887,8 @@ CREATE TABLE `research_submission_annotations` (
 
 CREATE TABLE IF NOT EXISTS `research_activities` (
   `activity_id` int unsigned NOT NULL AUTO_INCREMENT,
-  `activity_type` enum('seminar_workshop','training','colloquium','conference_congress') NOT NULL,
+  `activity_type` enum('seminar_workshop','training','colloquium','conference_congress','other') NOT NULL,
+  `custom_activity_type` varchar(100) DEFAULT NULL,
   `title` varchar(255) NOT NULL,
   `activity_date` date NOT NULL,
   `activity_time` time DEFAULT NULL,

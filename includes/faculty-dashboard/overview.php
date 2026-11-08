@@ -26,32 +26,43 @@
         </div>
 
         <!-- Stat Cards Grid -->
-        <div class="faculty-stats-grid" role="group" aria-label="Faculty dashboard metrics">
-            <?php
-            $statUrlKeys = [
-                'Advising Projects' => 'advising',
-                'Publication Records' => 'publications',
-                'Verified Engagements' => 'engagements',
-            ];
-            $statsByLabel = array_column($data['stats'], null, 'label');
-            $statOrder = array_values(array_filter([
-                'Active Research Records',
-                'Publication Records',
-                'Upcoming Activities',
-                'Advising Projects',
-                'Verified Engagements',
-            ], static function (string $label) use ($statsByLabel): bool {
-                return in_array($label, ['Active Research Records', 'Upcoming Activities'], true)
-                    || isset($statsByLabel[$label]);
-            }));
-            $statPosition = 0;
-            ?>
+        <?php
+        $statUrlKeys = [
+            'Advising Projects' => 'advising',
+            'Publication Records' => 'publications',
+            'Verified Engagements' => 'engagements',
+            'Registered IP Outputs' => 'registeredIp',
+        ];
+        $statsByLabel = array_column($data['stats'], null, 'label');
+        $statOrder = array_values(array_filter([
+            'Active Research Records',
+            'Registered IP Outputs',
+            'Publication Records',
+            'Upcoming Activities',
+            'Advising Projects',
+            'Verified Engagements',
+        ], static function (string $label) use ($statsByLabel): bool {
+            return in_array($label, ['Active Research Records', 'Upcoming Activities'], true)
+                || isset($statsByLabel[$label]);
+        }));
+        $statPosition = 0;
+        ?>
+        <div class="faculty-stats-grid<?= count($statOrder) === 6 ? ' faculty-stats-grid--six' : '' ?>" role="group" aria-label="Faculty dashboard metrics">
             <?php foreach ($statOrder as $label): ?>
                 <?php
                 $statPosition++;
-                $positionClass = $statPosition === 4
-                    ? ' faculty-stat-link--fourth'
-                    : ($statPosition === 5 ? ' faculty-stat-link--fifth' : '');
+                if (count($statOrder) === 6) {
+                    $positionClass = match ($statPosition) {
+                        4 => ' faculty-stat-link--fourth',
+                        5 => ' faculty-stat-link--fifth',
+                        6 => ' faculty-stat-link--sixth',
+                        default => '',
+                    };
+                } else {
+                    $positionClass = $statPosition === 4
+                        ? ' faculty-stat-link--fourth'
+                        : ($statPosition === 5 ? ' faculty-stat-link--fifth' : '');
+                }
                 ?>
                 <?php if ($label === 'Active Research Records'): ?>
                     <a class="faculty-stat-link<?= $positionClass ?>" href="<?= htmlspecialchars($urls['researchRecords'], ENT_QUOTES, 'UTF-8') ?>" aria-label="View your active research records">

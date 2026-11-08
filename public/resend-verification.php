@@ -2,127 +2,137 @@
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/email.php';
-require_once __DIR__ . '/../includes/logout-transition.php';
 
-// Must be logged in but email not verified
-if (!isLoggedIn()) {
-    header('Location: login.php');
-    exit();
-}
-
-$user_id = $_SESSION['user_id'];
+$email = '';
 $error = '';
-$success = '';
+$notice = '';
+$preserveArchiveIntent = ($_GET['continue'] ?? '') === RMS_RESEARCH_ARCHIVE_RETURN_VALUE
+    || rmsHasResearchArchiveReturnIntent();
 
-// Get user info
-$stmt = $conn->prepare("SELECT first_name, email, email_verified, email_verification_token, email_verification_expires FROM users WHERE user_id = ?");
-$stmt->bind_param('i', $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$user = $result->fetch_assoc();
-
-if (!$user) {
-    header('Location: login.php');
-    exit();
+if (($_GET['continue'] ?? '') === RMS_RESEARCH_ARCHIVE_RETURN_VALUE) {
+    rmsSetResearchArchiveReturnIntent(RMS_RESEARCH_ARCHIVE_RETURN_VALUE);
 }
 
-// Already verified - redirect to dashboard
-if ($user['email_verified'] == 1) {
-    $role = $_SESSION['role'] ?? 'student';
-    if ($role === 'student' && rmsHasResearchArchiveReturnIntent()) {
-        header('Location: ' . SITE_URL . 'public/login.php?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE));
-        exit();
-    }
-    $dashboardMap = [
-        'student'        => '../pages/student/student-dashboard.php',
-        'faculty'        => '../pages/faculty/faculty-dashboard.php',
-        'research_staff' => '../pages/staff/staff-dashboard.php',
-        'admin'          => '../pages/admin/admin-dashboard.php',
-    ];
-    header('Location: ' . ($dashboardMap[$role] ?? '../pages/student/student-dashboard.php'));
-    exit();
-}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $emailInput = $_POST['email'] ?? '';
+    $email = is_string($emailInput) ? trim($emailInput) : '';
 
-// Handle resend request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'resend') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
-        $error = 'Invalid request. Please try again.';
+        $error = 'Your form has expired. Please try again.';
     } else {
-        // Check if existing token is still valid (less than 10 minutes old)
-        if (!empty($user['email_verification_expires']) && strtotime($user['email_verification_expires']) > time() + (14 * 60)) {
-            $error = 'A verification email was recently sent. Please check your inbox or wait a few minutes before requesting another.';
-        } else {
-            // Send new verification email
-            $preserveArchiveIntent = ($_SESSION['role'] ?? '') === 'student'
-                && rmsHasResearchArchiveReturnIntent();
-            if (sendVerificationEmail($user_id, $user['email'], $user['first_name'], $preserveArchiveIntent)) {
-                $success = 'Verification email sent! Please check your inbox (and spam folder).';
-            } else {
-                $error = 'Failed to send verification email. Please try again later or contact support.';
+        // Keep the response identical for unknown, verified, and unverified
+        // addresses so this public recovery form cannot disclose account state.
+        if (isValidEmail($email)) {
+            $stmt = $conn->prepare('SELECT user_id, first_name, email_verified, email_verification_expires, role FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1');
+            if ($stmt) {
+                $stmt->bind_param('s', $email);
+                if ($stmt->execute()) {
+                    $user = $stmt->get_result()->fetch_assoc();
+                    if ($user && (int) ($user['email_verified'] ?? 0) !== 1
+                        && strtolower((string) $user['role']) !== 'admin') {
+                        $expiresAt = !empty($user['email_verification_expires'])
+                            ? strtotime($user['email_verification_expires'])
+                            : false;
+                        // Verification links expire 24 hours after issue. This
+                        // threshold identifies tokens issued in the last 10 minutes.
+                        $recentlySent = $expiresAt !== false
+                            && $expiresAt > time() + (24 * 60 * 60) - (10 * 60);
+
+                        if (!$recentlySent) {
+                            sendVerificationEmail(
+                                (int) $user['user_id'],
+                                $email,
+                                (string) $user['first_name'],
+                                $preserveArchiveIntent
+                            );
+                        }
+                    }
+                }
+                $stmt->close();
             }
         }
+
+        $notice = 'If this address belongs to an account that needs verification, a message will be sent when email delivery is available. Check your inbox and spam folder. If it does not arrive, wait a few minutes before trying again.';
     }
 }
+
+$formAction = $preserveArchiveIntent
+    ? '?continue=' . rawurlencode(RMS_RESEARCH_ARCHIVE_RETURN_VALUE)
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Your Email — <?php echo htmlspecialchars(rmsSetting('site_title'), ENT_QUOTES, 'UTF-8'); ?></title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Request a new email verification link for your RMS account.">
+  <title>Resend verification email | RMS</title>
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(SITE_URL . 'css/style.css', ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(SITE_URL . 'css/resend-verification.css?v=' . filemtime(__DIR__ . '/../css/resend-verification.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
-<body style="background: linear-gradient(135deg, #0A0833 0%, #1a0a3a 50%, #0a1a3a 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<body class="verification-page">
+<main class="verification-shell">
+  <aside class="verification-brand" aria-label="RMS account verification">
+    <a class="verification-brandmark" href="<?php echo htmlspecialchars(SITE_URL . 'public/index.php', ENT_QUOTES, 'UTF-8'); ?>" aria-label="EARIST RMS home">
+      <img src="<?php echo htmlspecialchars(SITE_URL . 'photos/rms-logo.png', ENT_QUOTES, 'UTF-8'); ?>" alt="">
+      <span>EARIST <strong>RMS</strong></span>
+    </a>
 
-<div class="auth-container">
-  <div class="auth-card" style="max-width: 500px;">
-    <div class="auth-header">
-      <div class="auth-logo" style="background: linear-gradient(135deg, #EA580C, #DC2626);">📧</div>
-      <h1>Verify Your Email</h1>
-      <p>Check your inbox to complete registration</p>
+    <div class="verification-brand-copy">
+      <p class="verification-eyebrow"><span aria-hidden="true"></span> Account access</p>
+      <h1>Keep your research account connected.</h1>
+      <p class="verification-brand-description">Confirm the email address you registered with to continue to your RMS workspace.</p>
     </div>
 
-    <div style="padding: 24px;">
-      <?php if ($error): ?>
-        <div class="alert alert-error" style="margin-bottom: 20px;">
-          <span style="color: #dc2626;">✕</span>
-          <?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
+    <div class="verification-brand-note">
+      <span class="verification-note-icon" aria-hidden="true">✉</span>
+      <p><strong>One quick check</strong><br>Verification links expire after 24 hours.</p>
+    </div>
+    <span class="verification-orbit verification-orbit-one" aria-hidden="true"></span>
+    <span class="verification-orbit verification-orbit-two" aria-hidden="true"></span>
+  </aside>
+
+  <section class="verification-panel" aria-labelledby="verification-title">
+    <div class="verification-content">
+      <div class="verification-icon" aria-hidden="true">✉</div>
+      <p class="verification-kicker">Email confirmation</p>
+      <h2 id="verification-title">Resend verification email</h2>
+      <p class="verification-intro">Enter the address you used to register. We’ll send a new link if the account needs verification.</p>
+
+      <?php if ($error !== ''): ?>
+        <div class="verification-feedback verification-feedback-error" role="alert">
+          <span class="verification-feedback-symbol" aria-hidden="true">!</span>
+          <p><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></p>
         </div>
       <?php endif; ?>
 
-      <?php if ($success): ?>
-        <div class="alert alert-success" style="margin-bottom: 20px;">
-          <span style="color: #15803d;">✓</span>
-          <?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?>
+      <?php if ($notice !== ''): ?>
+        <div class="verification-feedback verification-feedback-success" role="status" aria-live="polite">
+          <span class="verification-feedback-symbol" aria-hidden="true">✓</span>
+          <p><?php echo htmlspecialchars($notice, ENT_QUOTES, 'UTF-8'); ?></p>
         </div>
       <?php endif; ?>
 
-      <div style="background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 0.85rem; color: #93c5fd; line-height: 1.6;">
-        <strong style="color: #bfdbfe;">📬 Email sent to:</strong><br>
-        <span style="color: #ffffff; font-size: 0.95rem;"><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></span><br><br>
-
-        <strong style="color: #bfdbfe;">What to do next:</strong><br>
-        1. Check your inbox (and spam/junk folder)<br>
-        2. Click the verification link in the email<br>
-        3. Return here and log in
-      </div>
-
-      <form method="POST" style="margin-bottom: 16px;">
-        <input type="hidden" name="action" value="resend">
+      <form class="verification-form" method="POST" action="<?php echo htmlspecialchars(SITE_URL . 'public/resend-verification.php' . $formAction, ENT_QUOTES, 'UTF-8'); ?>">
         <?php echo csrfField(); ?>
-        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-          🔄 Resend Verification Email
+        <div class="verification-field">
+          <label class="verification-label" for="verificationEmail">Email address</label>
+          <input type="email" name="email" id="verificationEmail" class="verification-input" autocomplete="email" inputmode="email" required maxlength="160" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>" aria-describedby="verification-help">
+          <p class="verification-help" id="verification-help">If you don’t see the message, check your spam folder.</p>
+        </div>
+        <button type="submit" class="verification-submit">
+          <span>Send verification email</span>
+          <span class="verification-submit-arrow" aria-hidden="true">→</span>
         </button>
       </form>
 
-      <form method="post" action="logout.php">
-        <?php echo csrfField(); ?>
-        <button type="submit" class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.1);">← Back to Login</button>
-      </form>
+      <div class="verification-footer">
+        <span aria-hidden="true">←</span>
+        <a href="<?php echo htmlspecialchars(SITE_URL . 'public/login.php' . $formAction, ENT_QUOTES, 'UTF-8'); ?>">Back to sign in</a>
+      </div>
     </div>
-  </div>
-</div>
-
-<?php renderLogoutTransition(); ?>
+  </section>
+</main>
 </body>
 </html>

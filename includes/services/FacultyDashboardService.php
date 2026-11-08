@@ -156,6 +156,7 @@ class FacultyDashboardService
         $projectCount = $this->getAdvisingProjectCount($userId);
         $publishedCount = $this->getPublishedOutputCount($userId);
         $verifiedEngagementCount = $this->engagementService->getVerifiedCount($userId);
+        $registeredIpCount = $this->getRegisteredIpOutputCount($userId);
         $stats = [
             [
                 'label' => 'Advising Projects',
@@ -189,7 +190,68 @@ class FacultyDashboardService
             ];
         }
 
+        $stats[] = [
+            'label' => 'Registered IP Outputs',
+            'value' => $registeredIpCount === null ? '—' : $registeredIpCount,
+            'tone' => 'secondary',
+            'icon' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M8 13h8M8 17h5" /></svg>',
+            'color' => 'var(--faculty-success)',
+            'subtext' => $registeredIpCount === null ? 'IP records are unavailable' : 'Registered intellectual property outputs',
+        ];
+
         return $stats;
+    }
+
+    /**
+     * Count registered IP outputs credited to this faculty member.
+     * Returns null when the IP archive tables are not installed.
+     */
+    private function getRegisteredIpOutputCount(int $userId): ?int
+    {
+        $tableCheck = $this->conn->prepare(
+            'SELECT COUNT(*) AS table_count
+               FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME IN (?, ?)'
+        );
+        if (!$tableCheck) {
+            throw new RuntimeException('Unable to check faculty IP record availability: ' . $this->conn->error);
+        }
+        $applicationsTable = 'copyright_applications';
+        $contributorsTable = 'copyright_contributors';
+        $tableCheck->bind_param('ss', $applicationsTable, $contributorsTable);
+        $tableCheck->execute();
+        $tablesAvailable = (int) ($tableCheck->get_result()->fetch_assoc()['table_count'] ?? 0) === 2;
+        $tableCheck->close();
+        if (!$tablesAvailable) {
+            return null;
+        }
+
+        $stmt = $this->conn->prepare(
+            "SELECT COUNT(*) AS total
+               FROM copyright_applications c
+              WHERE c.output_type IN ('software','research','instructional_material','module','other','patent','utility_model','innovation','technology_transfer')
+                AND c.deactivated_at IS NULL
+                AND EXISTS (
+                    SELECT 1
+                      FROM copyright_contributors cc
+                     WHERE cc.copyright_id = c.copyright_id
+                       AND cc.user_id = ?
+                )
+                AND (
+                    c.external_status = 'registered'
+                    OR (c.external_status IS NULL AND c.status = 'registered' AND NULLIF(c.copyright_ref_no, '') IS NOT NULL)
+                )"
+        );
+        if (!$stmt) {
+            throw new RuntimeException('Unable to count faculty IP records: ' . $this->conn->error);
+        }
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $total = (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+        $stmt->close();
+
+        return $total;
     }
 
     /**
@@ -217,12 +279,12 @@ class FacultyDashboardService
     }
 
     /**
-     * Count active publication records explicitly linked to this faculty contributor
+     * Count active publication records owned by or explicitly linked to this faculty member
      */
     private function getPublishedOutputCount(int $userId): ?int
     {
-        $stmt = $this->conn->prepare("SELECT COUNT(*) AS total FROM publications p WHERE p.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM publication_contributors pc WHERE pc.publication_id = p.publication_id AND pc.user_id = ?)");
-        $stmt->bind_param('i', $userId);
+        $stmt = $this->conn->prepare("SELECT COUNT(*) AS total FROM publications p WHERE p.deactivated_at IS NULL AND (p.researcher_id = ? OR EXISTS (SELECT 1 FROM publication_contributors pc WHERE pc.publication_id = p.publication_id AND pc.user_id = ?))");
+        $stmt->bind_param('ii', $userId, $userId);
         $stmt->execute();
         $total = (int) $stmt->get_result()->fetch_assoc()['total'];
         $stmt->close();
@@ -234,8 +296,8 @@ class FacultyDashboardService
      */
     private function getRecentPublications(int $userId, int $limit): array
     {
-        $stmt = $this->conn->prepare("SELECT p.publication_id, p.research_title, p.publication_type, p.archival_status AS status, p.publication_date, p.journal_publisher AS journal_reference FROM publications p WHERE p.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM publication_contributors pc WHERE pc.publication_id = p.publication_id AND pc.user_id = ?) ORDER BY p.publication_date DESC, p.created_at DESC LIMIT ?");
-        $stmt->bind_param('ii', $userId, $limit);
+        $stmt = $this->conn->prepare("SELECT p.publication_id, p.research_title, p.publication_type, p.archival_status AS status, p.publication_date, p.journal_publisher AS journal_reference FROM publications p WHERE p.deactivated_at IS NULL AND (p.researcher_id = ? OR EXISTS (SELECT 1 FROM publication_contributors pc WHERE pc.publication_id = p.publication_id AND pc.user_id = ?)) ORDER BY p.publication_date DESC, p.created_at DESC LIMIT ?");
+        $stmt->bind_param('iii', $userId, $userId, $limit);
         $stmt->execute();
         $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();

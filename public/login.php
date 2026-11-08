@@ -183,6 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="2;url=<?php echo htmlspecialchars($dashboard, ENT_QUOTES, 'UTF-8'); ?>">
     <title>Login successful | RMS</title>
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body>
     <?php renderLogoutTransition([
@@ -285,14 +286,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     // Send email verification
                     require_once __DIR__ . '/../includes/email.php';
                     $preserveArchiveIntent = $role === 'student' && rmsHasResearchArchiveReturnIntent();
-                    sendVerificationEmail($userId, $email, $first_name, $preserveArchiveIntent);
+                    $verificationEmailSent = sendVerificationEmail($userId, $email, $first_name, $preserveArchiveIntent);
 
                     if ($role === 'student') {
-                        $success = 'Registration successful! Please check your email to verify your account. You can now log in.';
+                        $success = $verificationEmailSent
+                            ? 'Registration successful! Please verify your email before signing in.'
+                            : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again.';
                     } else {
                         // Notify admins about pending approval
                         sendPendingApprovalNotification($first_name, $last_name, $email, $role);
-                        $success = 'Registration successful! Please check your email to verify your account. An administrator will review and approve your account shortly.';
+                        $success = $verificationEmailSent
+                            ? 'Registration successful! Please verify your email. An administrator will also review and approve your account.'
+                            : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again. An administrator will review and approve your account.';
                         rmsClearResearchArchiveReturnIntent();
                     }
 
@@ -754,6 +759,7 @@ $authContinuationQuery = $publicRecordIntent
       .auth-split-form .auth-card { padding: 24px 20px; }
     }
   </style>
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body>
 
@@ -825,6 +831,10 @@ $authContinuationQuery = $publicRecordIntent
             Sign In
           </button>
         </form>
+
+        <p style="text-align: center; margin-top: 14px; font-size: 0.85rem;">
+          <a href="resend-verification.php<?php echo $authContinuationQuery; ?>" style="color: var(--primary-light); font-weight: 600;">Need to verify your email? Resend the verification email</a>
+        </p>
 
         <p style="text-align:center; margin-top:12px;">
           <a href="index.php" class="back-home">← Back to homepage</a>

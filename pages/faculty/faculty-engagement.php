@@ -49,6 +49,13 @@ $recordsAvailable = facultyEngagementTableExists($conn, 'faculty_engagement_reco
     && facultyEngagementTableExists($conn, 'uploads');
 $userId = (int) $user['user_id'];
 $view = (string) ($_GET['view'] ?? 'all');
+$legacyHistoryFilters = $_GET;
+unset($legacyHistoryFilters['view']);
+if ($view === 'history') {
+    $historyQuery = http_build_query($legacyHistoryFilters);
+    header('Location: ' . SITE_URL . 'pages/faculty/faculty-engagement-history.php' . ($historyQuery !== '' ? '?' . $historyQuery : ''));
+    exit;
+}
 $legacyViewRedirects = [
     'training' => SITE_URL . 'pages/faculty/faculty-engagement.php',
     'conference' => SITE_URL . 'pages/faculty/faculty-engagement.php',
@@ -60,10 +67,6 @@ if (isset($legacyViewRedirects[$view])) {
     $returnQuery = isset($_GET['saved']) && $_GET['saved'] === '1' ? '?saved=1' : '';
     header('Location: ' . $legacyViewRedirects[$view] . ($view === 'opportunities' ? '' : $returnQuery));
     exit;
-}
-$allowedViews = ['all', 'history'];
-if (!in_array($view, $allowedViews, true)) {
-    $view = 'all';
 }
 $formError = '';
 $formSuccess = isset($_GET['saved']) && $_GET['saved'] === '1' ? 'Your engagement record was submitted for verification.' : '';
@@ -224,40 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$engagementRecords = [];
-if ($recordsAvailable) {
-    $stmt = $conn->prepare(
-        'SELECT e.engagement_id, e.engagement_type, e.custom_engagement_type, e.title, e.participation_role, e.activity_date, e.organizer, e.location, e.description, e.review_status, e.review_comments, e.evidence_upload_id, up.original_name
-           FROM faculty_engagement_records e
-           LEFT JOIN uploads up ON up.upload_id = e.evidence_upload_id
-          WHERE e.faculty_id = ?
-          ORDER BY e.activity_date DESC, e.engagement_id DESC
-          LIMIT 100'
-    );
-    if (!$stmt) {
-        throw new RuntimeException('Unable to load your engagement history: ' . $conn->error);
-    }
-    $stmt->bind_param('i', $userId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
-        $engagementRecords[] = $row;
-    }
-    $stmt->close();
-}
-
-$visibleEngagementRecords = $engagementRecords;
-
-$viewLabels = [
-    'all' => 'Add an Engagement Record',
-    'history' => 'My Engagement History',
-];
-
-$pageSubtitle = match ($view) {
-    'history' => 'Review your submitted and verified engagement records.',
-    default => 'Submit activities for institutional verification.',
-};
-renderFacultyShell($user, 'faculty-engagement.php', $viewLabels[$view], $pageSubtitle);
+renderFacultyShell($user, 'faculty-engagement.php', 'Add an Engagement Record', 'Submit activities for institutional verification.');
 ?>
 <style>
 .faculty-engagement-workspace{max-width:1200px;margin:0 auto}.engagement-panel{padding:24px;margin:0 0 24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.engagement-panel h2{margin:0 0 8px;color:#111827;font-size:22px}.engagement-panel>p{margin:0 0 20px;color:#64748b;line-height:1.6}.engagement-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.engagement-form label{display:grid;gap:6px;color:#475569;font-size:13px;font-weight:600}.engagement-form input,.engagement-form select,.engagement-form textarea{width:100%;box-sizing:border-box;min-height:42px;padding:10px 12px;border:1px solid #d1d5db;border-radius:9px;background:#fff;color:#111827;font:inherit}.engagement-form textarea{min-height:110px;resize:vertical}.engagement-form input:focus-visible,.engagement-form select:focus-visible,.engagement-form textarea:focus-visible,.engagement-form button:focus-visible{outline:3px solid rgba(29,78,216,.2);outline-offset:2px;border-color:#1d4ed8}.engagement-form .full{grid-column:1/-1}.engagement-form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.engagement-form-actions button{min-height:44px;padding:10px 18px;border:0;border-radius:9px;background:#1d4ed8;color:#fff;font:600 14px/1.2 Inter,Arial,sans-serif;cursor:pointer}.engagement-status{display:inline-flex;padding:6px 11px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700;text-transform:capitalize;white-space:nowrap}.engagement-status--verified{border-color:#bbf7d0;background:#f0fdf4;color:#166534}.engagement-status--returned{border-color:#fed7aa;background:#fff7ed;color:#9a3412}.engagement-status--pending{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}.engagement-message{padding:13px 16px;margin-bottom:18px;border-radius:10px;background:#eff6ff;color:#1e40af}.engagement-message.error{background:#fef2f2;color:#b91c1c}.engagement-history-item{position:relative;padding:22px 24px;margin:16px 0 0;border:1px solid #dbe5f1;border-left:3px solid #1d4ed8;border-radius:14px;background:linear-gradient(115deg,#f8fbff 0%,#fff 42%);transition:border-color .2s ease,box-shadow .2s ease}.engagement-history-item:first-of-type{margin-top:18px}.engagement-history-item:hover{border-color:#bfd0e5;box-shadow:0 5px 18px rgba(29,78,216,.07)}.engagement-history-item h3{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 14px;margin:0 0 15px;color:#111827;font-size:18px;line-height:1.4;letter-spacing:-.015em}.engagement-history-item h3 .engagement-status{margin-top:1px}.engagement-history-meta{display:flex;flex-wrap:wrap;gap:9px 10px;color:#475569;font-size:13px}.engagement-history-meta>span{display:inline-flex;align-items:center;gap:5px;min-width:0;padding:6px 9px;border:1px solid #e6edf5;border-radius:8px;background:rgba(255,255,255,.82);line-height:1.4}.engagement-history-meta>span::before{color:#94a3b8;font-size:10px;font-weight:700;letter-spacing:.045em;text-transform:uppercase}.engagement-history-meta .engagement-meta-type::before{content:"Activity"}.engagement-history-meta .engagement-meta-date::before{content:"Date"}.engagement-history-meta .engagement-meta-role::before{content:"Role"}.engagement-history-meta .engagement-meta-organizer::before{content:"Organizer"}.engagement-history-meta .engagement-evidence-link{display:flex;align-items:center;gap:9px;width:fit-content;max-width:100%;margin-top:8px;padding:9px 12px;border:1px solid #dbe5f1;border-radius:9px;background:#fff;color:#1d4ed8;font-size:13px;font-weight:600;text-decoration:none;overflow-wrap:anywhere;transition:background-color .2s ease,border-color .2s ease}.engagement-history-meta .engagement-evidence-link::before{content:"📎";flex:none}.engagement-history-meta .engagement-evidence-link:hover{border-color:#93b4e5;background:#f4f8ff;text-decoration:underline}.engagement-history-meta .engagement-evidence-link:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}.engagement-history-item .engagement-description{max-width:82ch;margin:17px 0 0;color:#475569;line-height:1.7;white-space:pre-wrap}.engagement-history-item .engagement-review-comment{padding:12px 14px;margin:16px 0 0;border-left:3px solid #f59e0b;border-radius:0 9px 9px 0;background:#fffbeb;color:#713f12;line-height:1.6}.engagement-history-item p strong{color:#713f12}.engagement-note{padding:12px 14px;border-radius:9px;background:#fff7ed;color:#9a3412}@media(max-width:700px){.engagement-panel{padding:18px}.engagement-form{grid-template-columns:1fr}.engagement-form .full{grid-column:auto}.engagement-form-actions button{width:100%}.engagement-history-item{padding:18px 16px}.engagement-history-item h3{font-size:16px}.engagement-history-meta{align-items:stretch}.engagement-history-meta>span{max-width:100%;overflow-wrap:anywhere}.engagement-history-meta .engagement-evidence-link{width:100%;box-sizing:border-box}}@media(prefers-reduced-motion:reduce){.engagement-history-item,.engagement-history-meta .engagement-evidence-link{transition:none}}
@@ -291,7 +261,6 @@ renderFacultyShell($user, 'faculty-engagement.php', $viewLabels[$view], $pageSub
   <?php if (!$recordsAvailable): ?>
     <section class="engagement-panel"><h2>Engagement records are not installed</h2><p>Apply database migration 024 before submitting records.</p></section>
   <?php else: ?>
-    <?php if ($view !== 'history'): ?>
     <section class="engagement-panel">
       <h2>Submit an engagement record</h2>
       <p>Records are saved as pending and become verified contributions only after administrative review. Do not enter a verification decision here.</p>
@@ -329,26 +298,6 @@ renderFacultyShell($user, 'faculty-engagement.php', $viewLabels[$view], $pageSub
         })();
       </script>
       <p class="engagement-note">Evidence uploads are limited to PDF or Word documents, up to 10 MB. Only you and administrators can access evidence attached to your record.</p>
-    </section>
-    <?php endif; ?>
-    <section class="engagement-panel">
-      <div class="faculty-panel-head"><h2>My Engagement History</h2></div>
-      <?php if (!$visibleEngagementRecords): ?><p>No engagement records have been submitted yet.</p><?php endif; ?>
-      <?php foreach ($visibleEngagementRecords as $record): ?>
-        <article id="engagement-<?= (int) $record['engagement_id'] ?>" class="engagement-history-item">
-          <h3><?= facultyEngagementEscape($record['title']) ?><span class="engagement-status engagement-status--<?= facultyEngagementEscape($record['review_status']) ?>"><?= facultyEngagementEscape($record['review_status']) ?></span></h3>
-          <div class="engagement-history-meta"><span class="engagement-meta-type"><?php
-                    $engType = $record['engagement_type'];
-                    $displayType = $engagementTypes[$engType] ?? 'Research engagement';
-                    if ($engType === 'other' && !empty($record['custom_engagement_type'])) {
-                        $displayType .= ': ' . $record['custom_engagement_type'];
-                    }
-                    echo facultyEngagementEscape($displayType);
-                ?></span><span class="engagement-meta-date"><?= facultyEngagementEscape(date('M j, Y', strtotime((string) $record['activity_date']))) ?></span><span class="engagement-meta-role"><?= facultyEngagementEscape($participationRoles[$record['participation_role']] ?? $record['participation_role']) ?></span><?php if ($record['organizer']): ?><span class="engagement-meta-organizer"><?= facultyEngagementEscape($record['organizer']) ?></span><?php endif; ?><?php if ($record['evidence_upload_id']): ?><a class="engagement-evidence-link" href="<?= facultyEngagementEscape(SITE_URL . 'pages/shared/download-research-document.php?type=engagement&id=' . (int) $record['engagement_id'] . '&mode=viewer') ?>"><?= facultyEngagementEscape($record['original_name'] ?: 'View evidence') ?></a><?php endif; ?></div>
-          <?php if ($record['description']): ?><p class="engagement-description"><?= facultyEngagementEscape($record['description']) ?></p><?php endif; ?>
-          <?php if ($record['review_comments']): ?><p class="engagement-review-comment"><strong>Reviewer comment:</strong> <?= facultyEngagementEscape($record['review_comments']) ?></p><?php endif; ?>
-        </article>
-      <?php endforeach; ?>
     </section>
   <?php endif; ?>
 </main>

@@ -235,13 +235,13 @@ $stmt->close();
 
 $registeredOutputs = 0;
 if ($hasCopyrights && $hasCopyrightContributors) {
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM copyright_applications c WHERE c.output_type IN ('software','research','instructional_material','module','other') AND c.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM copyright_contributors cc WHERE cc.copyright_id = c.copyright_id AND cc.user_id = ?) AND (c.external_status = 'registered' OR (c.external_status IS NULL AND c.status = 'registered' AND NULLIF(c.copyright_ref_no, '') IS NOT NULL))");
+    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM copyright_applications c WHERE c.output_type IN ('software','research','instructional_material','module','other','patent','utility_model','innovation','technology_transfer') AND c.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM copyright_contributors cc WHERE cc.copyright_id = c.copyright_id AND cc.user_id = ?) AND (c.external_status = 'registered' OR (c.external_status IS NULL AND c.status = 'registered' AND NULLIF(c.copyright_ref_no, '') IS NOT NULL))");
     $stmt->bind_param('i', $userId);
     $stmt->execute();
     $registeredOutputs = (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
     $stmt->close();
 
-    $stmt = $conn->prepare("SELECT c.copyright_id, c.output_title, c.output_type, c.copyright_ref_no, c.registered_at, c.external_status, c.archival_status FROM copyright_applications c WHERE c.output_type IN ('software','research','instructional_material','module','other') AND c.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM copyright_contributors cc WHERE cc.copyright_id = c.copyright_id AND cc.user_id = ?) AND (c.external_status = 'registered' OR (c.external_status IS NULL AND c.status = 'registered' AND NULLIF(c.copyright_ref_no, '') IS NOT NULL)) ORDER BY c.registered_at DESC, c.copyright_id DESC LIMIT 100");
+    $stmt = $conn->prepare("SELECT c.copyright_id, c.output_title, c.output_type, c.copyright_ref_no, c.registered_at, c.external_status, c.archival_status FROM copyright_applications c WHERE c.output_type IN ('software','research','instructional_material','module','other','patent','utility_model','innovation','technology_transfer') AND c.deactivated_at IS NULL AND EXISTS (SELECT 1 FROM copyright_contributors cc WHERE cc.copyright_id = c.copyright_id AND cc.user_id = ?) AND (c.external_status = 'registered' OR (c.external_status IS NULL AND c.status = 'registered' AND NULLIF(c.copyright_ref_no, '') IS NOT NULL)) ORDER BY c.registered_at DESC, c.copyright_id DESC LIMIT 100");
     $stmt->bind_param('i', $userId);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -283,7 +283,7 @@ $tabLinks = [
     ['key' => 'overview', 'label' => 'Profile overview'],
     ['key' => 'research', 'label' => 'Research interests & expertise'],
     ['key' => 'publications', 'label' => 'Publications & outputs'],
-    ['key' => 'achievements', 'label' => 'Research achievements'],
+    ['key' => 'achievements', 'label' => 'Registered IP'],
 ];
 
 renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic identity and linked research portfolio.', ['faculty-profile.css']);
@@ -321,7 +321,7 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
 
     <nav class="fp-tabs" aria-label="Faculty profile sections" role="tablist">
         <?php foreach ($tabLinks as $tabLink): ?>
-            <a class="fp-tab <?= $tab === $tabLink['key'] ? 'fp-tab--active' : '' ?>"
+                <a class="fp-tab <?= $tab === $tabLink['key'] ? 'fp-tab--active' : '' ?>"
                href="<?= facultyProfileEscape(SITE_URL . 'pages/faculty/faculty-profile.php?tab=' . $tabLink['key']) ?>"
                role="tab"
                <?= $tab === $tabLink['key'] ? ' aria-selected="true" aria-current="page"' : ' aria-selected="false"' ?>>
@@ -357,7 +357,7 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
                             <dt class="fp-meta__label">Research specialization</dt>
                             <dd class="fp-meta__value"><?= facultyProfileEscape($faculty['specialization'] ?: 'Not recorded') ?></dd>
                         </div>
-                        <div class="fp-meta__item">
+                        <div class="fp-meta__item fp-meta__item--wide">
                             <dt class="fp-meta__label">Research interests</dt>
                             <dd class="fp-meta__value fp-meta__value--rich"><?= nl2br(facultyProfileEscape($profile['research_interests'] ?: 'Not provided')) ?></dd>
                         </div>
@@ -531,35 +531,9 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
 
         <?php else: ?>
             <!-- ACHIEVEMENTS TAB -->
-            <section class="fp-panel" aria-labelledby="achievements-heading">
-                <header class="fp-panel__header">
-                    <div>
-                        <p class="fp-panel__label">Accomplishments</p>
-                        <h2 id="achievements-heading" class="fp-panel__title">Verified research contributions</h2>
-                    </div>
-                </header>
-                <div class="fp-stats" role="list" aria-label="Research achievement statistics">
-                    <div class="fp-stat" role="listitem">
-                        <span class="fp-stat__value"><?= $publishedCount ?></span>
-                        <span class="fp-stat__label">Published records</span>
-                    </div>
-                    <div class="fp-stat" role="listitem">
-                        <span class="fp-stat__value"><?= $verifiedEngagements ?></span>
-                        <span class="fp-stat__label">Verified engagements</span>
-                    </div>
-                    <div class="fp-stat" role="listitem">
-                        <span class="fp-stat__value"><?= $registeredOutputs ?></span>
-                        <span class="fp-stat__label">Registered IP outputs</span>
-                    </div>
-                    <div class="fp-stat" role="listitem">
-                        <span class="fp-stat__value"><?= $projectCount ?></span>
-                        <span class="fp-stat__label">Advising projects</span>
-                    </div>
-                </div>
-                <p class="fp-hint">These totals are calculated from linked RMS records; unverified engagement submissions are excluded.</p>
-
+            <section class="fp-panel" aria-labelledby="registered-ip-outputs">
+                <h2 id="registered-ip-outputs" class="fp-ip-title">Registered intellectual property and research outputs</h2>
                 <?php if ($hasCopyrights): ?>
-                    <h3 class="fp-subheading">Registered intellectual property and research outputs</h3>
                     <?php if (!$registeredIpOutputs): ?>
                         <p class="fp-empty">No registered intellectual property outputs are linked to your account.</p>
                     <?php else: ?>
@@ -579,6 +553,8 @@ renderFacultyShell($user, 'faculty-profile.php', 'Faculty Profile', 'Academic id
                             <?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
+                <?php else: ?>
+                    <p class="fp-empty">Registered intellectual property records are currently unavailable.</p>
                 <?php endif; ?>
             </section>
 

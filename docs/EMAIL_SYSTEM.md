@@ -13,7 +13,7 @@ The email notification system enables:
 
 1. **Student Auto-Approval** — Students get `status='active'` immediately upon registration
 2. **Faculty/Staff Manual Approval** — Faculty and staff remain `status='pending'` until admin approves
-3. **Email Verification** — Registration sends a verification email, but verification is not required to log in.
+3. **Email Verification** — Registration attempts to send a verification email, and non-admin accounts must verify before signing in.
 4. **Admin Notifications** — Registration attempts to notify admins when faculty/staff register.
 5. **Approval Notifications** — Account activation attempts to notify the user.
 6. **Research Status Notification Helper** — A status-change email helper and template exist, but there are no current application call sites; status emails are not automatically sent by the research workflow.
@@ -113,16 +113,20 @@ The system includes 4 professional email templates:
 
 1. Student registers via `public/login.php#register`.
 2. Account is created with `status='active'`.
-3. The application attempts to send a verification email.
-4. Student can log in without first verifying the email; email verification is not an access gate.
+3. The application attempts to send a verification email with a link that expires after 24 hours.
+4. The student verifies the address before signing in. If delivery fails or the message is missing, the public resend form can be used without logging in.
 
 ### **Faculty / Research Staff**
 
 1. Faculty/staff registers via `public/login.php#register`.
 2. Account is created with `status='pending'`.
-3. Application attempts to send a verification email and notify admins.
+3. Application attempts to send a verification email and notifies admins.
 4. Admin reviews and activates the account in `pages/admin/admin-users.php`.
-5. Application attempts to send an activation email; the user can log in once active.
+5. The user can sign in after both email verification and administrator approval are complete.
+
+All non-admin accounts are checked for `email_verified = 1` during login. `REQUIRE_EMAIL_VERIFICATION=0` only disables that gate when `APP_ENV=development` and `SITE_URL` uses localhost; non-local sites always require verification. A configured SMTP transport is recommended. The `mail()` fallback only works when the host has a mail transport configured.
+
+The public `public/resend-verification.php` form accepts an email without requiring a session. Its response is intentionally the same for unknown and known addresses. A successful request has a per-account ten-minute resend cooldown; failed delivery clears the unused token so the user can retry.
 
 ---
 

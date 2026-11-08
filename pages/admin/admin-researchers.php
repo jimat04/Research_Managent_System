@@ -46,6 +46,8 @@ $hasPublications = adminResearchersTableExists($conn, 'publications')
 $hasCopyrights = adminResearchersTableExists($conn, 'copyright_applications')
     && adminResearchersTableExists($conn, 'copyright_contributors');
 $hasFacultyProfiles = adminResearchersTableExists($conn, 'faculty_research_profiles');
+$hasFacultyProgramAssignments = adminResearchersTableExists($conn, 'faculty_program_assignments')
+    && adminResearchersTableExists($conn, 'programs');
 
 $researcherId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 $roleInput = trim((string) ($_GET['role'] ?? ''));
@@ -100,6 +102,7 @@ $publications = [];
 $copyrights = [];
 $researchProjects = [];
 $researchProfile = null;
+$profileProgram = '';
 $researchers = [];
 $capped = false;
 
@@ -108,6 +111,25 @@ if ($researcherId) {
     $stmt->bind_param('i', $researcherId);
     $profile = adminResearchersRun($stmt)->fetch_assoc() ?: null;
     $stmt->close();
+
+    if ($profile) {
+        $profileProgram = trim((string) ($profile['program'] ?? ''));
+        if ($profile['role'] === 'faculty' && $hasFacultyProgramAssignments) {
+            $stmt = $conn->prepare(
+                "SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(p.program_code), '') ORDER BY p.program_code SEPARATOR ', ') AS program_codes
+                   FROM faculty_program_assignments fpa
+                   INNER JOIN programs p ON p.program_id = fpa.program_id
+                  WHERE fpa.faculty_id = ?"
+            );
+            $stmt->bind_param('i', $researcherId);
+            $programCodes = adminResearchersRun($stmt)->fetch_assoc();
+            $stmt->close();
+            $assignedProgramCodes = trim((string) ($programCodes['program_codes'] ?? ''));
+            if ($assignedProgramCodes !== '') {
+                $profileProgram = $assignedProgramCodes;
+            }
+        }
+    }
 
     if ($profile && $profile['role'] === 'faculty' && $hasFacultyProfiles) {
         $stmt = $conn->prepare('SELECT highest_degree, research_interests, orcid_url, google_scholar_url, researchgate_url FROM faculty_research_profiles WHERE user_id = ? LIMIT 1');
@@ -316,7 +338,7 @@ renderAdminShell(
           <div class="profile-field" data-print-field="identity"><span>Academic rank</span><strong><?= adminResearchersEscape($profile['academic_rank'] ?: 'Not recorded') ?></strong></div>
         <?php endif; ?>
         <?php if ($profile['role'] === 'faculty'): ?><div class="profile-field" data-print-field="identity"><span>Department</span><strong><?= adminResearchersEscape($profile['department'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
-        <div class="profile-field" data-print-field="screen-only"><span>Program</span><strong><?= adminResearchersEscape($profile['program'] ?: 'Not recorded') ?></strong></div>
+        <div class="profile-field" data-print-field="screen-only"><span>Program</span><strong><?= adminResearchersEscape($profileProgram ?: 'Not recorded') ?></strong></div>
         <div class="profile-field" data-print-field="screen-only"><span>Account status</span><strong><?= adminResearchersEscape(ucfirst((string) $profile['status'])) ?></strong></div>
         <?php if ($profile['role'] === 'student'): ?><div class="profile-field"><span>Year level</span><strong><?= adminResearchersEscape($profile['year_level'] ?: 'Not recorded') ?></strong></div><?php endif; ?>
       </div>

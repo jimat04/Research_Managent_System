@@ -71,7 +71,18 @@ facultyRecordAssets();
       </div>
       <?php if ($recordDeleted): ?><div class="frr-alert">This record is deleted / recoverable. Restore it before saving answers or preparing another DOCX. Previous versions remain available below.</div><?php endif; ?>
     </header>
-    <?php if ($createdFound): ?><div class="frr-alert frr-alert--success" role="status">DOCX version saved. It is listed in this record’s history below.</div><?php endif; ?>
+    <?php if ($createdFound): ?>
+      <dialog class="frr-docx-saved" data-docx-saved-dialog aria-labelledby="frr-docx-saved-title" aria-describedby="frr-docx-saved-message">
+        <div class="frr-docx-saved__card">
+          <span class="frr-docx-saved__mark" aria-hidden="true">✓</span>
+          <p class="frr-docx-saved__eyebrow">Document ready</p>
+          <h2 id="frr-docx-saved-title">DOCX version saved</h2>
+          <p class="frr-docx-saved__message" id="frr-docx-saved-message">It is listed in this record’s history below.</p>
+          <button class="frr-btn frr-btn--primary" type="button" data-docx-saved-close>Done</button>
+        </div>
+      </dialog>
+      <noscript><div class="frr-alert frr-alert--success" role="status">DOCX version saved. It is listed in this record’s history below.</div></noscript>
+    <?php endif; ?>
     <?php if ($error !== ''): ?><div class="frr-alert frr-alert--error" role="alert"><?= facultyRecordEscape($error) ?></div><?php endif; ?>
 
     <section class="frr-panel" aria-labelledby="earist-document-types">

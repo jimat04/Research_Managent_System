@@ -12,8 +12,10 @@
   const keywordItems = [...form.querySelectorAll('.keyword-item')];
   const metadataFields = [...form.querySelectorAll('[data-metadata-field]')];
   const authors = document.getElementById('publication-authors');
+  const linkedAuthors = form.querySelector('.archive-authors');
   const courseFilter = document.getElementById('publication-account-course');
   const authorSelect = document.getElementById('publication-account-author');
+  const linkAuthorButton = document.getElementById('publication-link-author');
   let abstractLimitReached = false;
   let previousType = type.value;
   let previousSubtype = subtype.value;
@@ -188,6 +190,63 @@
     });
     document.getElementById('publication-add-author').disabled = rows.length >= 50;
   }
+  function renderLinkedAuthor(input, name, existingLabel = null, canRemove = true) {
+    const linkedAuthor = document.createElement('div');
+    linkedAuthor.className = 'publication-linked-author';
+    linkedAuthor.dataset.linkedAuthor = '';
+    linkedAuthor.dataset.userId = input.value;
+    input.type = 'hidden';
+
+    const identity = document.createElement('span');
+    identity.className = 'publication-linked-author__identity';
+    identity.textContent = name;
+
+    linkedAuthor.append(input, identity);
+    if (canRemove) {
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'archive-button secondary';
+      removeButton.dataset.unlinkAuthor = '';
+      removeButton.textContent = 'Remove';
+      removeButton.setAttribute('aria-label', 'Remove RMS author link for ' + name);
+      linkedAuthor.append(removeButton);
+    }
+    if (existingLabel) {
+      existingLabel.replaceWith(linkedAuthor);
+    } else {
+      const emptyState = linkedAuthors.querySelector('[data-linked-author-empty]');
+      linkedAuthors.insertBefore(linkedAuthor, emptyState);
+      if (emptyState) emptyState.hidden = true;
+    }
+  }
+  function updateLinkedAuthorEmptyState() {
+    const emptyState = linkedAuthors?.querySelector('[data-linked-author-empty]');
+    if (emptyState) emptyState.hidden = !!linkedAuthors.querySelector('[data-linked-author]');
+  }
+  if (linkedAuthors) {
+    [...linkedAuthors.querySelectorAll('label')].forEach(label => {
+      const checkbox = label.querySelector('input[type="checkbox"][name="contributor_ids[]"]');
+      if (!checkbox?.checked) {
+        label.remove();
+        return;
+      }
+      const option = authorSelect?.querySelector('option[value="' + checkbox.value + '"]');
+      const name = option?.dataset.name || label.textContent.trim();
+      const locked = checkbox.disabled;
+      let linkedInput = checkbox;
+      if (locked) {
+        linkedInput = label.querySelector('input[type="hidden"][name="contributor_ids[]"]') || checkbox;
+        if (linkedInput !== checkbox) checkbox.remove();
+      }
+      renderLinkedAuthor(linkedInput, name, label, !locked);
+    });
+    const emptyState = document.createElement('p');
+    emptyState.className = 'publication-linked-author-empty';
+    emptyState.dataset.linkedAuthorEmpty = '';
+    emptyState.textContent = 'No RMS accounts linked yet.';
+    linkedAuthors.append(emptyState);
+    updateLinkedAuthorEmptyState();
+  }
   function refreshLinkedAuthorFilter() {
     const filterValue = courseFilter ? courseFilter.value : '';
     if (authorSelect) {
@@ -199,21 +258,19 @@
           return;
         }
         const programIds = (option.dataset.programIds || '').split(',').filter(Boolean);
-        const visible = !filterValue || programIds.includes(filterValue);
+        const linkedInput = form.querySelector('input[name="contributor_ids[]"][value="' + option.value + '"]');
+        const visible = (!filterValue || programIds.includes(filterValue)) && !linkedInput;
         option.hidden = !visible;
         option.disabled = !visible;
         if (visible) hasVisibleOption = true;
       });
+      if (authorSelect.selectedOptions[0]?.hidden) authorSelect.value = '';
       if (filterValue && !hasVisibleOption) {
         authorSelect.value = '';
       }
+      if (linkAuthorButton) linkAuthorButton.disabled = authorSelect.value === '';
     }
 
-    form.querySelectorAll('input[name="contributor_ids[]"]').forEach(input => {
-      const programIds = (input.dataset.programIds || '').split(',').filter(Boolean);
-      const row = input.closest('label');
-      if (row) row.hidden = !!filterValue && !programIds.includes(filterValue);
-    });
   }
   document.querySelectorAll('.archive-error a[href^="#error-"]').forEach(link => {
     link.addEventListener('click', event => {
@@ -247,18 +304,32 @@
     renumber();
   });
   document.getElementById('publication-add-author').addEventListener('click', () => addAuthor());
+  if (authorSelect) authorSelect.value = '';
   courseFilter?.addEventListener('change', refreshLinkedAuthorFilter);
+  authorSelect?.addEventListener('change', refreshLinkedAuthorFilter);
+  linkedAuthors?.addEventListener('click', event => {
+    const removeButton = event.target.closest('[data-unlink-author]');
+    if (!removeButton) return;
+    removeButton.closest('[data-linked-author]')?.remove();
+    updateLinkedAuthorEmptyState();
+    refreshLinkedAuthorFilter();
+  });
   refreshLinkedAuthorFilter();
-  document.getElementById('publication-link-author').addEventListener('click', () => {
+  linkAuthorButton.addEventListener('click', () => {
     const select = authorSelect;
     const option = select.selectedOptions[0];
     if (!option?.value) return;
-    const input = form.querySelector('input[name="contributor_ids[]"][value="' + option.value + '"]');
-    if (input) input.checked = true;
-    if (![...authors.querySelectorAll('input')].some(input => input.value.trim() === option.dataset.name)) {
+    if (!linkedAuthors || form.querySelector('input[name="contributor_ids[]"][value="' + option.value + '"]')) return;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'contributor_ids[]';
+    input.value = option.value;
+    renderLinkedAuthor(input, option.dataset.name || '');
+    if (![...authors.querySelectorAll('input')].some(input => input.value.trim().replace(/\s+/g, ' ').toLocaleLowerCase() === (option.dataset.name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase())) {
       const empty = [...authors.querySelectorAll('input')].find(input => !input.value.trim());
       if (empty) empty.value = option.dataset.name; else addAuthor(option.dataset.name);
     }
+    refreshLinkedAuthorFilter();
   });
   type.addEventListener('change', async () => {
     if (previousType && previousType !== type.value) {

@@ -57,7 +57,7 @@ if ($role === 'research_staff' && $requestedActivityType === ''
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
-if ($role === 'research_staff' && !in_array($requestedActivityType, ['', 'seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
+if ($role === 'research_staff' && !in_array($requestedActivityType, ['', 'seminar_workshop', 'training', 'colloquium', 'conference_congress', 'other'], true)) {
     header('Location: ' . SITE_URL . 'public/403.php');
     exit;
 }
@@ -170,6 +170,11 @@ function activitiesStatusBadge(string $status): array
 }
 
 $activitiesAvailable = rmsActivityScheduleTableExists($conn, 'research_activities');
+$customActivityTypeAvailable = $activitiesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'custom_activity_type');
+$customActivityTypeSelect = $customActivityTypeAvailable
+    ? 'ra.custom_activity_type'
+    : 'NULL AS custom_activity_type';
 $participantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_participants');
 $scheduleTablesAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates');
 $scheduleParticipantsAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_participants');
@@ -248,13 +253,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $flash = $_SESSION['activities_flash'] ?? null;
 unset($_SESSION['activities_flash']);
 
-$typeOptions = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress'];
+$typeOptions = ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress', 'other' => 'Other'];
 $filterTypeOptions = $typeOptions;
 $statusOptions = ['upcoming' => 'Upcoming', 'ongoing' => 'Ongoing', 'conducted' => 'Conducted', 'cancelled' => 'Cancelled'];
 $query = trim((string) ($_GET['q'] ?? ''));
 $query = strlen($query) > 150 ? substr($query, 0, 150) : $query;
 $typeInput = normalizeActivityType(trim((string) ($_GET['type'] ?? '')));
-$type = in_array($typeInput, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true) ? $typeInput : '';
+$type = in_array($typeInput, ['seminar_workshop', 'training', 'colloquium', 'conference_congress', 'other'], true) ? $typeInput : '';
 $createPermissionPage = 'add_activity';
 if (!hasRole('admin') && !hasModulePermission($userId, 'research_capacity_building', 'manage', 'add_activity')) {
     $preferredAddPage = match ($statusPermissionPage) {
@@ -297,6 +302,7 @@ $typeLabels = [
     'training' => 'Trainings',
     'colloquium' => 'Colloquia',
     'conference_congress' => 'Conference / Congress',
+    'other' => 'Other',
 ];
 $typeSingularLabels = [
     'seminar_workshop' => 'Seminar / Workshop',
@@ -339,7 +345,8 @@ if ($activitiesAvailable) {
         $stmt = $conn->prepare("SELECT COUNT(CASE WHEN activity_type = 'seminar_workshop' THEN 1 END) AS seminar_workshop,
                                        COUNT(CASE WHEN activity_type = 'training' THEN 1 END) AS training,
                                        COUNT(CASE WHEN activity_type = 'colloquium' THEN 1 END) AS colloquium,
-                                       COUNT(CASE WHEN activity_type = 'conference_congress' THEN 1 END) AS conference_congress
+                                       COUNT(CASE WHEN activity_type = 'conference_congress' THEN 1 END) AS conference_congress,
+                                       COUNT(CASE WHEN activity_type = 'other' THEN 1 END) AS other
                                 FROM research_activities ra WHERE 1 = 1{$activityVisibilityCondition}");
         $row = activitiesRun($stmt)->fetch_assoc() ?: [];
         foreach ($typeLabels as $activityType => $label) {
@@ -503,14 +510,14 @@ if ($activitiesAvailable) {
     if ($scheduleTablesAvailable) {
         $sql = "SELECT ra.activity_id, ra.activity_date, ra.is_multi_day, ra.schedule_start_date,
                        ra.schedule_end_date, COUNT(d.schedule_id) AS scheduled_session_count,
-                       ra.title, ra.activity_type, ra.venue, ra.organizer, ra.status
+                       ra.title, ra.activity_type, ' . $customActivityTypeSelect . ', ra.venue, ra.organizer, ra.status
                 FROM research_activities ra
                 LEFT JOIN activity_schedule_dates d
                   ON d.activity_id = ra.activity_id AND d.status = 'scheduled'
                 ";
         $activityPrefix = 'ra.';
     } else {
-        $sql = 'SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.activity_type, ra.venue, ra.organizer, ra.status FROM research_activities ra';
+        $sql = 'SELECT ra.activity_id, ra.activity_date, ra.activity_time, ra.title, ra.activity_type, ' . $customActivityTypeSelect . ', ra.venue, ra.organizer, ra.status FROM research_activities ra';
         $activityPrefix = 'ra.';
     }
     $whereSql = ' WHERE 1 = 1';
@@ -567,7 +574,9 @@ if ($activitiesAvailable) {
     $activityOffset = ($activityPage - 1) * $activityPageSize;
     $sql .= $whereSql;
     if ($scheduleTablesAvailable) {
-        $sql .= ' GROUP BY ra.activity_id, ra.activity_date, ra.is_multi_day, ra.schedule_start_date, ra.schedule_end_date, ra.title, ra.activity_type, ra.venue, ra.organizer, ra.status';
+        $sql .= ' GROUP BY ra.activity_id, ra.activity_date, ra.is_multi_day, ra.schedule_start_date, ra.schedule_end_date, ra.title, ra.activity_type'
+            . ($customActivityTypeAvailable ? ', ra.custom_activity_type' : '')
+            . ', ra.venue, ra.organizer, ra.status';
         $sql .= ' ORDER BY ra.activity_date DESC, ra.activity_id DESC LIMIT ? OFFSET ?';
     } else {
         $sql .= ' ORDER BY activity_date DESC, activity_id DESC LIMIT ? OFFSET ?';
@@ -1117,18 +1126,18 @@ body.admin-body .admin-page-content .module-hub .hub-panel > .empty-state {
   outline-offset: 2px;
 }
 .hub-button.secondary.admin-activities-back {
-  border: 2px solid #f57c00;
-  background: #fff7ed;
-  color: #8a3c00;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
   font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 2px 6px rgba(124, 61, 2, .12);
+  font-weight: 750;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
 }
 .hub-button.secondary.admin-activities-back:hover {
-  border-color: #ea580c;
-  background: #ffedd5;
-  color: #7c2d12;
-  box-shadow: 0 4px 10px rgba(124, 61, 2, .16);
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, .2);
 }
 .hub-button.secondary.admin-activities-back:focus-visible { outline-color: rgba(245, 124, 0, .38); }
 .table-wrap { max-width: 100%; overflow-x: auto; }

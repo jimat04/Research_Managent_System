@@ -114,6 +114,66 @@ body.admin-body .admin-page-content .approval-search select {
 .approval-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px 24px; margin-top: 32px; }
 .approval-empty p { max-width: 65ch; margin: 8px 0 0; color: #475569; }
 .approval-list a:focus-visible, .approval-list button:focus-visible, .approval-list input:focus-visible, .approval-list select:focus-visible, .approval-documents > summary:focus-visible { outline: 3px solid var(--review-ink); outline-offset: 3px; }
+.research-calendar-filters { margin-bottom: 20px; }
+.research-calendar-filter-grid { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, .8fr)) auto auto; align-items: end; gap: 12px; }
+.research-calendar-filter-grid > .approval-button { min-height: 48px; white-space: nowrap; }
+.research-calendar-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 16px; }
+.research-calendar-toolbar .approval-results { margin: 0; }
+.research-calendar-view-toggle { display: flex; flex-wrap: wrap; gap: 8px; }
+.research-calendar-view-toggle .approval-button { min-height: 42px; padding-inline: 16px; }
+.research-calendar-projects { display: grid; gap: 20px; }
+.research-calendar-project { min-width: 0; padding: 24px; border: 1px solid #e5e7eb; border-top: 3px solid var(--review-accent); border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .045); }
+.research-calendar-project-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px 24px; margin: -1px 0 20px; padding: 0 0 18px; border-bottom: 1px solid #e5e7eb; }
+.research-calendar-project-header h2 { margin: 0; color: #111827; font-size: 18px; line-height: 1.45; overflow-wrap: anywhere; }
+.research-calendar-project-header p { margin: 5px 0 0; color: #64748b; font-size: 14px; }
+.research-calendar-overview { display: grid; width: min(100%, 275px); gap: 8px; }
+.research-calendar-progress-copy { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #64748b; font-size: 12px; }
+.research-calendar-progress-copy strong { color: #1f2937; font-size: 13px; font-variant-numeric: tabular-nums; }
+.research-calendar-progress-rail { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; height: 7px; }
+.research-calendar-progress-rail span { border-radius: 2px; background: #e2e8f0; }
+.research-calendar-progress-rail span.is-approved { background: #16a34a; }
+.research-calendar-current { display: inline-flex; align-items: center; max-width: 100%; min-height: 34px; padding: 6px 11px; border: 1px solid var(--review-border); border-radius: 999px; background: var(--review-tint); color: var(--review-ink); font-size: 13px; font-weight: 650; line-height: 1.35; }
+.research-calendar-scroll { overflow-x: auto; padding: 0 0 8px; scrollbar-color: #94a3b8 #f1f5f9; }
+.research-calendar-scroll:focus-visible { outline: 3px solid var(--review-ink); outline-offset: 3px; }
+.research-calendar-axis, .research-calendar-timeline-row { display: grid; grid-template-columns: minmax(220px, 270px) minmax(560px, 1fr); align-items: stretch; }
+.research-calendar-axis { border-bottom: 2px solid var(--review-accent); color: var(--review-ink); font-size: 12px; font-weight: 700; }
+.research-calendar-axis > span { display: flex; align-items: center; padding: 10px 12px 10px 0; letter-spacing: .02em; }
+.research-calendar-months { display: grid; min-height: 42px; }
+.research-calendar-months span { display: flex; align-items: center; justify-content: center; padding: 8px 4px; border-left: 1px solid #e2e8f0; background: #f8fafc; color: #334155; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+.research-calendar-timeline-row { min-height: 57px; border-bottom: 1px solid #f1f5f9; }
+.research-calendar-stage-label { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 9px 12px 9px 10px; border-left: 3px solid #cbd5e1; background: #f8fafc; }
+.research-calendar-timeline-row.is-approved .research-calendar-stage-label { border-left-color: #16a34a; }
+.research-calendar-timeline-row.is-submitted .research-calendar-stage-label { border-left-color: #2563eb; }
+.research-calendar-timeline-row.is-returned .research-calendar-stage-label { border-left-color: #ea580c; }
+.research-calendar-stage-label strong { color: #1f2937; font-size: 13px; }
+.research-calendar-stage-label > span { color: #475569; font-size: 11px; font-weight: 650; }
+.research-calendar-stage-label small { color: #64748b; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.research-calendar-track { position: relative; min-width: 560px; min-height: 56px; }
+.research-calendar-grid { position: absolute; inset: 0; display: grid; pointer-events: none; }
+.research-calendar-grid span { border-left: 1px solid #e2e8f0; }
+.research-calendar-grid span:last-child { border-right: 1px solid #e2e8f0; }
+.research-calendar-event { position: absolute; top: 24px; display: block; min-width: 10px; height: 9px; border-radius: 999px; background: #16a34a; box-shadow: 0 2px 8px rgba(22, 163, 74, .22); }
+.research-calendar-event.is-submitted { background: #2563eb; box-shadow: 0 2px 8px rgba(37, 99, 235, .22); }
+.research-calendar-event.is-returned { background: #ea580c; box-shadow: 0 2px 8px rgba(234, 88, 12, .22); }
+.research-calendar-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: -4px 0 12px; color: #475569; font-size: 12px; }
+.research-calendar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.research-calendar-legend span::before { width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; content: ""; }
+.research-calendar-legend .is-approved::before { background: #16a34a; }
+.research-calendar-legend .is-submitted::before { background: #2563eb; }
+.research-calendar-legend .is-returned::before { background: #ea580c; }
+.research-calendar-legend .is-not-started::before { background: #94a3b8; }
+.research-calendar-history { display: inline-flex; min-height: 44px; align-items: center; margin-top: 14px; color: var(--review-ink); font-size: 14px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.research-calendar-history:focus-visible { outline: 3px solid var(--review-ink); outline-offset: 3px; }
+.research-calendar-agenda { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.research-calendar-agenda-item { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; min-height: 72px; padding-bottom: 18px; }
+.research-calendar-agenda-item:not(:last-child)::before { position: absolute; top: 17px; bottom: -1px; left: 7px; width: 2px; background: #e2e8f0; content: ""; }
+.research-calendar-agenda-mark { z-index: 1; width: 16px; height: 16px; margin-top: 2px; border: 3px solid #94a3b8; border-radius: 50%; background: #fff; }
+.research-calendar-agenda-item.is-approved .research-calendar-agenda-mark { border-color: #16a34a; background: #dcfce7; }
+.research-calendar-agenda-item.is-submitted .research-calendar-agenda-mark { border-color: #2563eb; background: #dbeafe; }
+.research-calendar-agenda-item.is-returned .research-calendar-agenda-mark { border-color: #ea580c; background: #ffedd5; }
+.research-calendar-agenda-content h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0; color: #1f2937; font-size: 14px; }
+.research-calendar-agenda-content p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+.research-calendar-status { color: #64748b; font-size: 12px; font-weight: 500; }
 body.admin-body .admin-page-content .approval-search :is(input, select):focus {
     border-color: var(--review-ink);
     box-shadow: none;
@@ -126,12 +186,20 @@ body.admin-body .admin-page-content .approval-search :is(input, select):focus {
     .approval-documents > summary { position: static; width: 100%; max-width: none; margin-left: 0; text-align: center; }
     .approval-search-grid, .approval-search-grid.has-year-filter, .approval-search-grid.has-sort-filter { grid-template-columns: minmax(220px, 1fr) minmax(160px, .7fr); }
     .approval-search-grid .approval-button { justify-self: start; }
+    .research-calendar-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
     .approval-search { padding: 18px; }
     .approval-search-grid, .approval-search-grid.has-year-filter, .approval-search-grid.has-sort-filter { grid-template-columns: minmax(0, 1fr); gap: 12px; }
     .approval-search-grid .approval-button { width: 100%; }
+    .research-calendar-filter-grid { grid-template-columns: minmax(0, 1fr); }
+    .research-calendar-filter-grid .approval-button { width: 100%; }
+    .research-calendar-project { padding: 18px; }
+    .research-calendar-toolbar { align-items: stretch; }
+    .research-calendar-view-toggle { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .research-calendar-view-toggle .approval-button { width: 100%; }
+    .research-calendar-axis, .research-calendar-timeline-row { grid-template-columns: 205px minmax(560px, 1fr); }
     .approval-file { display: block; }
     .approval-file-actions { margin-top: 12px; }
     .approval-file-actions .approval-button { flex: 1 1 160px; }

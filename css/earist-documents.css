@@ -197,6 +197,12 @@
 .ed-import-confirm[data-confirm-kind="retention"] .ed-import-confirm__note{align-items:center;justify-content:center;text-align:center}
 .ed-import-confirm[data-confirm-kind="retention"] .ed-import-confirm__actions{justify-content:center}
 @media(max-width:520px){.ed-import-confirm[data-confirm-kind="retention"] .ed-import-confirm__actions{flex-direction:row;flex-wrap:wrap}.ed-import-confirm[data-confirm-kind="retention"] .ed-import-confirm__actions button{width:auto}}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__card{text-align:center}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__mark{margin-right:auto;margin-left:auto;background:#eff6ff;color:#1d4ed8}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__eyebrow,.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__message{text-align:center}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__message{max-width:42ch;margin-right:auto;margin-left:auto}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__note{align-items:center;justify-content:center;text-align:center}
+.ed-import-confirm[data-confirm-kind="disconnect"] .ed-import-confirm__actions{justify-content:center}
 
 .ed-retention-result{box-sizing:border-box;position:fixed;inset:0;width:min(500px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);margin:auto;padding:0;overflow:auto;border:1px solid #dbe5f4;border-radius:22px;background:#fff;color:#111827;box-shadow:0 28px 90px rgb(15 23 42 / 28%)}
 .ed-retention-result::backdrop{background:rgb(15 23 42 / 58%);backdrop-filter:blur(3px)}

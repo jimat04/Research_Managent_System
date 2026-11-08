@@ -455,3 +455,59 @@
     transform: none;
   }
 }
+
+.archive-history-card {
+  scroll-margin-top: 24px;
+}
+.archive-history-toggle > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.archive-history-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+.archive-history-toggle > summary::before {
+  content: "▸";
+  color: #64748b;
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 180ms ease;
+}
+.archive-history-toggle[open] > summary::before {
+  transform: rotate(90deg);
+}
+.archive-history-title {
+  color: #172033;
+  font-size: 21px;
+  font-weight: 700;
+}
+.archive-history-count {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.archive-history-toggle > :not(summary) {
+  margin-top: 16px;
+}
+.archive-history-toggle > details {
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.archive-history-toggle > details > summary {
+  cursor: pointer;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-history-toggle > summary::before {
+    transition: none;
+  }
+}

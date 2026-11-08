@@ -172,7 +172,20 @@ function sendVerificationEmail($userId, $email, $firstName, $preserveArchiveInte
 
     $subject = "Verify Your Email - " . rms_mail_config('SITE_NAME', 'RMS Research System');
 
-    return sendEmail($email, $subject, $body, $firstName);
+    $sent = sendEmail($email, $subject, $body, $firstName);
+    if (!$sent) {
+        // Let the user retry immediately when delivery fails. The conditional
+        // prevents clearing a newer token issued by a concurrent request.
+        $clearStmt = $conn->prepare("UPDATE users SET email_verification_token = NULL, email_verification_expires = NULL WHERE user_id = ? AND email_verification_token = ?");
+        if ($clearStmt) {
+            $clearStmt->bind_param('is', $userId, $token);
+            $clearStmt->execute();
+            $clearStmt->close();
+        }
+        return false;
+    }
+
+    return true;
 }
 
 /**

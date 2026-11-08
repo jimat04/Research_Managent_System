@@ -71,7 +71,7 @@ $canManageActivity = static function (string $activityType, string $permissionPa
     if ($role === 'admin') {
         return true;
     }
-    if (!in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
+    if (!in_array($activityType, ['seminar_workshop', 'training', 'colloquium', 'conference_congress', 'other'], true)) {
         return false;
     }
     $addPages = ['add_activity', 'add_upcoming_activity', 'add_conducted_activity'];
@@ -91,6 +91,8 @@ $activityDocumentsAvailable = $activitiesAvailable
 $activitySourceLinksAvailable = $activitiesAvailable
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_project_id')
     && rmsActivityScheduleColumnExists($conn, 'research_activities', 'source_publication_id');
+$customActivityTypeAvailable = $activitiesAvailable
+    && rmsActivityScheduleColumnExists($conn, 'research_activities', 'custom_activity_type');
 $canChooseArchivedResearchSource = $role === 'admin'
     || ($role === 'research_staff'
         && hasModulePermission($userId, 'research_implementation_outputs', 'view', 'completed_research'));
@@ -106,7 +108,7 @@ $budgetSchemaAvailable = rmsActivityBudgetSchemaAvailable($conn);
 
 $typeOptions = $role === 'admin'
     || hasModulePermission($userId, 'research_capacity_building', 'manage', $modulePage)
-        ? ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress']
+        ? ['seminar_workshop' => 'Seminars / Workshops', 'training' => 'Trainings', 'colloquium' => 'Colloquia', 'conference_congress' => 'Conference / Congress', 'other' => 'Other']
         : [];
 $editRequested = array_key_exists('id', $_GET);
 $requestedScheduleMode = (string) ($_GET['mode'] ?? '') === 'schedule';
@@ -128,6 +130,7 @@ $initialStatus = match ($modulePage) {
 };
 $values = [
     'activity_type' => isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions),
+    'custom_activity_type' => '',
     'title' => '', 'activity_date' => '', 'activity_time' => '',
     'venue' => '', 'speaker' => '', 'organizer' => '', 'description' => '',
     'source_project_id' => '', 'source_publication_id' => '', 'status' => $initialStatus,
@@ -137,6 +140,8 @@ if (!$activitiesAvailable) {
     $errors[] = 'The research activities module is not installed.';
 } elseif (!$activitySourceLinksAvailable) {
     $errors[] = 'Apply migration 071_activity_source_links.sql before editing or saving activities.';
+} elseif (!$customActivityTypeAvailable) {
+    $errors[] = 'Apply migration 076_custom_activity_type.sql before editing or saving activities.';
 }
 $eligibleUsers = [];
 $availableRecipientRoles = [];
@@ -155,9 +160,10 @@ $storedSchedule = [];
 if ($isEdit && $activitiesAvailable) {
     $activityDocumentColumn = $activityDocumentsAvailable ? ', document_upload_id' : '';
     $activitySourceColumns = $activitySourceLinksAvailable ? ', source_project_id, source_publication_id' : '';
+    $activityCustomTypeSelect = $customActivityTypeAvailable ? 'custom_activity_type' : 'NULL AS custom_activity_type';
     $activitySql = $scheduleTablesAvailable
-        ? 'SELECT activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1'
-        : 'SELECT activity_type, title, activity_date, activity_time, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1';
+        ? 'SELECT activity_type, ' . $activityCustomTypeSelect . ', title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1'
+        : 'SELECT activity_type, ' . $activityCustomTypeSelect . ', title, activity_date, activity_time, venue, speaker, organizer, description' . $activitySourceColumns . ', status' . $activityDocumentColumn . ' FROM research_activities WHERE activity_id = ? LIMIT 1';
     $stmt = $conn->prepare($activitySql);
     if (!$stmt) {
         $errors[] = 'Unable to load the activity.';
@@ -370,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (array_key_exists('id', $_GET) && !$postedId) {
         $errors[] = 'The activity edit form is incomplete. Reopen the activity schedule and try again.';
     }
-    foreach (['activity_type', 'title', 'activity_date', 'activity_time', 'venue', 'speaker', 'organizer', 'description'] as $field) {
+    foreach (['activity_type', 'custom_activity_type', 'title', 'activity_date', 'activity_time', 'venue', 'speaker', 'organizer', 'description'] as $field) {
         $postedValue = $_POST[$field] ?? '';
         if (!is_scalar($postedValue)) {
             $errors[] = 'Enter a valid value for ' . str_replace('_', ' ', $field) . '.';
@@ -408,8 +414,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'The activity you tried to edit was not found.';
     }
 
-    if (!in_array($values['activity_type'], ['seminar_workshop', 'training', 'colloquium', 'conference_congress'], true)) {
+    if (!in_array($values['activity_type'], ['seminar_workshop', 'training', 'colloquium', 'conference_congress', 'other'], true)) {
         $errors[] = 'Choose a valid activity type.';
+    }
+    if ($values['activity_type'] === 'other') {
+        if ($values['custom_activity_type'] === '' || strlen($values['custom_activity_type']) > 100) {
+            $errors[] = 'Enter a custom activity type no longer than 100 characters.';
+        }
+    } else {
+        $values['custom_activity_type'] = '';
     }
     if (!$canManageActivity((string) $values['activity_type'], $modulePage, $isEdit)) {
         header('Location: ' . SITE_URL . 'public/403.php');
@@ -502,6 +515,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $description = $values['description'] !== '' ? $values['description'] : null;
         $activityValues = [
             'activity_type' => $values['activity_type'],
+            'custom_activity_type' => $values['custom_activity_type'] !== '' ? $values['custom_activity_type'] : null,
             'title' => $values['title'],
             'venue' => $venue,
             'speaker' => $speaker,
@@ -676,6 +690,7 @@ $activityTypeLabels = [
     'training' => 'Training',
     'colloquium' => 'Colloquium',
     'conference_congress' => 'Conference / Congress',
+    'other' => $values['custom_activity_type'] !== '' ? $values['custom_activity_type'] : 'Other',
 ];
 $hasSpecificActivityType = $isEdit || isset($typeOptions[$requestedType]);
 $selectedActivityLabel = $hasSpecificActivityType
@@ -877,26 +892,26 @@ body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admi
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 2px solid #f57c00;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
   padding: 9px 15px;
-  background: #fff7ed;
-  color: #8a3c00;
+  background: #fff;
+  color: #334155;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
-  box-shadow: 0 2px 6px rgba(124, 61, 2, .12);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
   transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
 }
 body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link:hover {
-  border-color: #ea580c;
-  background: #ffedd5;
-  color: #7c2d12;
-  box-shadow: 0 4px 10px rgba(124, 61, 2, .16);
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, .2);
 }
 body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admin .back-link:focus-visible {
-  border-color: #f57c00;
-  outline: 3px solid rgba(245, 124, 0, .32);
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, .24);
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -916,6 +931,7 @@ body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admi
       <?php if ($isEdit && $activityId): ?><input type="hidden" name="activity_id" value="<?= (int) $activityId ?>"><?php endif; ?>
       <div class="form-grid">
         <div class="field" id="activity-type-field"><label for="activity-type">Type <span class="required">*</span></label><select id="activity-type" name="activity_type" required><?php foreach ($typeOptions as $value => $label): ?><option value="<?= activityFormEscape($value) ?>" <?= $values['activity_type'] === $value ? 'selected' : '' ?>><?= activityFormEscape($label) ?></option><?php endforeach; ?></select></div>
+        <div class="field" id="custom-activity-type-field" <?= $values['activity_type'] === 'other' ? '' : 'hidden' ?>><label for="custom-activity-type">Custom activity type <span class="required">*</span></label><input id="custom-activity-type" name="custom_activity_type" type="text" maxlength="100" value="<?= activityFormEscape($values['custom_activity_type']) ?>" <?= $values['activity_type'] === 'other' ? 'required' : '' ?>><small>Enter the activity category, such as “Research exhibit”.</small></div>
         <div class="field full" id="activity-title-field"><label for="activity-title">Title <span class="required">*</span></label><input id="activity-title" name="title" type="text" maxlength="255" value="<?= activityFormEscape($values['title']) ?>" required></div>
         <div class="field full" id="activity-schedule-section">
           <label>Schedule <span class="required">*</span></label>
@@ -1291,8 +1307,9 @@ body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admi
     content.replaceChildren();
     const type = document.getElementById('activity-type');
     const title = document.getElementById('activity-title');
+    const customType = document.getElementById('custom-activity-type');
     addSection('Activity', [
-      { label: 'Type', value: type ? controlValue(type) : '' },
+      { label: 'Type', value: type?.value === 'other' ? (customType?.value.trim() || 'Other') : (type ? controlValue(type) : '') },
       { label: 'Title', value: title?.value.trim() || '' },
       ...summarizeControls([
         document.getElementById('activity-venue'),
@@ -1313,24 +1330,25 @@ body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admi
         .filter(Boolean);
       if (selectedDates.length) scheduleEntries.push({ label: 'Session dates', value: selectedDates.join('\n') });
     }
-    document.querySelectorAll('.schedule-date-card').forEach((card) => {
-      const date = card.querySelector('h3')?.textContent.trim() || 'Session';
-      const controls = Array.from(card.querySelectorAll('input[name*="start_time"], input[name*="end_time"], input[name*="venue_override"], input[name*="speaker_override"], select.date-audience'));
-      controls.forEach((control) => {
-        const label = fieldLabel(control);
-        const value = controlValue(control);
-        if (label && value) scheduleEntries.push({ label: date + ' · ' + label, value });
+    if (document.getElementById('multi-day-toggle')?.checked) {
+      document.querySelectorAll('.schedule-date-card').forEach((card) => {
+        const date = card.querySelector('h3')?.textContent.trim() || 'Session';
+        const controls = Array.from(card.querySelectorAll('input[name*="start_time"], input[name*="end_time"], input[name*="venue_override"], input[name*="speaker_override"], select.date-audience'));
+        controls.forEach((control) => {
+          const label = fieldLabel(control);
+          const value = controlValue(control);
+          if (label && value) scheduleEntries.push({ label: date + ' · ' + label, value });
+        });
+        const selectedUsers = Array.from(card.querySelectorAll('.recipient-user-choice input:checked'))
+          .map((input) => input.closest('.recipient-user-choice')?.querySelector('span')?.textContent.trim())
+          .filter(Boolean);
+        if (selectedUsers.length) scheduleEntries.push({ label: date + ' · Selected participants', value: selectedUsers.join(', ') });
+        const selectedRoles = Array.from(card.querySelectorAll('[data-custom-roles] input:checked'))
+          .map((input) => input.closest('label')?.textContent.trim())
+          .filter(Boolean);
+        if (selectedRoles.length) scheduleEntries.push({ label: date + ' · Included roles', value: selectedRoles.join(', ') });
       });
-      const selectedUsers = Array.from(card.querySelectorAll('.recipient-user-choice input:checked'))
-        .map((input) => input.closest('.recipient-user-choice')?.querySelector('span')?.textContent.trim())
-        .filter(Boolean);
-      if (selectedUsers.length) scheduleEntries.push({ label: date + ' · Selected participants', value: selectedUsers.join(', ') });
-      const selectedRoles = Array.from(card.querySelectorAll('[data-custom-roles] input:checked'))
-        .map((input) => input.closest('label')?.textContent.trim())
-        .filter(Boolean);
-      if (selectedRoles.length) scheduleEntries.push({ label: date + ' · Included roles', value: selectedRoles.join(', ') });
-    });
-    if (!document.getElementById('multi-day-toggle')?.checked) {
+    } else {
       const singleControls = Array.from(form.querySelectorAll('[name^="single_schedule["]'))
         .filter((control) => /start_time|end_time|venue_override|speaker_override|recipient_scope/.test(control.name));
       singleControls.forEach((control) => {
@@ -2259,7 +2277,9 @@ updateScheduleWindowControls();
 (() => {
   const typeInput = document.getElementById('activity-type');
   const sourceFields = Array.from(document.querySelectorAll('[data-activity-source]'));
-  if (!typeInput || sourceFields.length === 0) return;
+  const customTypeField = document.getElementById('custom-activity-type-field');
+  const customTypeInput = document.getElementById('custom-activity-type');
+  if (!typeInput) return;
 
   function syncActivitySourceFields() {
     sourceFields.forEach((field) => {
@@ -2270,6 +2290,12 @@ updateScheduleWindowControls();
         if (select) select.value = '';
       }
     });
+    if (customTypeField && customTypeInput) {
+      const isOther = typeInput.value === 'other';
+      customTypeField.hidden = !isOther;
+      customTypeInput.required = isOther;
+      if (!isOther) customTypeInput.value = '';
+    }
   }
 
   typeInput.addEventListener('change', syncActivitySourceFields);

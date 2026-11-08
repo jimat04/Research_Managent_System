@@ -559,6 +559,7 @@ $is_logged_in = isLoggedIn();
     <link rel="stylesheet" href="assets/css/public-pages-v2.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-pages-v2.css'); ?>">
     <link rel="stylesheet" href="assets/css/public-header.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-header.css'); ?>">
     <link rel="stylesheet" href="assets/css/public-footer.css?v=<?php echo filemtime(__DIR__ . '/assets/css/public-footer.css'); ?>">
+  <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body class="public-v2">
     <?php $publicHeaderActivePage = 'archive'; require __DIR__ . '/../includes/public-header.php'; ?>

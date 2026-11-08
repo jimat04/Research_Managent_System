@@ -504,6 +504,13 @@ function rmsActivityScheduleLoadRosterPage(
     $rsvp = in_array($rsvp, ['pending', 'accepted', 'declined'], true) ? $rsvp : '';
     $attendance = in_array($attendance, ['attended', 'not_attended'], true) ? $attendance : '';
 
+    $attendeeAffiliation = $checkinDetailsAvailable
+        ? "COALESCE(NULLIF(sp.attendee_affiliation, ''), CASE u.role WHEN 'student' THEN 'student' WHEN 'faculty' THEN 'faculty' WHEN 'research_staff' THEN 'staff' END)"
+        : "CASE u.role WHEN 'student' THEN 'student' WHEN 'faculty' THEN 'faculty' WHEN 'research_staff' THEN 'staff' END";
+    $attendeeProgramDepartment = $checkinDetailsAvailable
+        ? "COALESCE(NULLIF(sp.attendee_program_department, ''), CASE WHEN u.role = 'student' THEN NULLIF(u.program, '') WHEN u.role IN ('faculty', 'research_staff') THEN COALESCE(NULLIF(u.department, ''), NULLIF(u.office, '')) END)"
+        : "CASE WHEN u.role = 'student' THEN NULLIF(u.program, '') WHEN u.role IN ('faculty', 'research_staff') THEN COALESCE(NULLIF(u.department, ''), NULLIF(u.office, '')) END";
+
     $globalStmt = rmsActivitySchedulePrepare($conn, 'SELECT COUNT(*) AS total_count, COALESCE(SUM(attended = 1), 0) AS attended_count, COALESCE(SUM(is_invited = 1), 0) AS invited_count, COALESCE(SUM(is_invited = 0), 0) AS other_count FROM activity_schedule_participants WHERE schedule_id = ?');
     $globalStmt->bind_param('i', $scheduleId);
     if (!$globalStmt->execute()) {
@@ -514,27 +521,25 @@ function rmsActivityScheduleLoadRosterPage(
     $globalStmt->close();
 
     $invitationResponseSelect = $invitationResponsesAvailable ? ', COALESCE(sp.invitation_response, \'pending\') AS invitation_response' : ', NULL AS invitation_response';
-    $checkinDetailsSelect = $checkinDetailsAvailable ? ', sp.attendee_affiliation, sp.attendee_program_department' : ', NULL AS attendee_affiliation, NULL AS attendee_program_department';
+    $checkinDetailsSelect = ', ' . $attendeeAffiliation . ' AS attendee_affiliation, ' . $attendeeProgramDepartment . ' AS attendee_program_department';
     $where = ['d.activity_id = ?', 'sp.schedule_id = ?'];
     $types = 'ii';
     $values = [$activityId, $scheduleId];
     if ($search !== '') {
-        $where[] = '(sp.participant_name LIKE ?' . ($checkinDetailsAvailable ? ' OR sp.attendee_affiliation LIKE ? OR sp.attendee_program_department LIKE ?' : '') . ')';
+        $where[] = '(sp.participant_name LIKE ? OR ' . $attendeeAffiliation . ' LIKE ? OR ' . $attendeeProgramDepartment . ' LIKE ?)';
         $pattern = '%' . $search . '%';
-        $types .= $checkinDetailsAvailable ? 'sss' : 's';
+        $types .= 'sss';
         $values[] = $pattern;
-        if ($checkinDetailsAvailable) {
-            $values[] = $pattern;
-            $values[] = $pattern;
-        }
+        $values[] = $pattern;
+        $values[] = $pattern;
     }
     if ($role !== '') {
         $where[] = 'sp.role = ?';
         $types .= 's';
         $values[] = $role;
     }
-    if ($affiliation !== '' && $checkinDetailsAvailable) {
-        $where[] = 'sp.attendee_affiliation = ?';
+    if ($affiliation !== '') {
+        $where[] = $attendeeAffiliation . ' = ?';
         $types .= 's';
         $values[] = $affiliation;
     }
@@ -549,7 +554,7 @@ function rmsActivityScheduleLoadRosterPage(
         $values[] = $attendance === 'attended' ? 1 : 0;
     }
     $whereSql = implode(' AND ', $where);
-    $countSql = 'SELECT COUNT(*) AS filtered_count, COALESCE(SUM(sp.is_invited = 1), 0) AS filtered_invited_count, COALESCE(SUM(sp.is_invited = 0), 0) AS filtered_other_count FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id WHERE ' . $whereSql;
+    $countSql = 'SELECT COUNT(*) AS filtered_count, COALESCE(SUM(sp.is_invited = 1), 0) AS filtered_invited_count, COALESCE(SUM(sp.is_invited = 0), 0) AS filtered_other_count FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id LEFT JOIN users u ON u.user_id = sp.user_id WHERE ' . $whereSql;
     $countStmt = rmsActivitySchedulePrepare($conn, $countSql);
     $countValues = $values;
     rmsActivityScheduleBindDynamic($countStmt, $types, $countValues);
@@ -564,7 +569,7 @@ function rmsActivityScheduleLoadRosterPage(
     $pageCount = max(1, (int) ceil($filteredCount / $pageSize));
     $page = min($page, $pageCount);
     $offset = ($page - 1) * $pageSize;
-    $rowSql = 'SELECT sp.schedule_id, sp.participant_id, sp.user_id, sp.participant_name, sp.role, sp.attended, sp.is_invited' . $invitationResponseSelect . $checkinDetailsSelect . ' FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id WHERE ' . $whereSql . ' ORDER BY sp.is_invited DESC, sp.participant_name ASC, sp.participant_id ASC LIMIT ? OFFSET ?';
+    $rowSql = 'SELECT sp.schedule_id, sp.participant_id, sp.user_id, sp.participant_name, sp.role, sp.attended, sp.is_invited' . $invitationResponseSelect . $checkinDetailsSelect . ' FROM activity_schedule_participants sp INNER JOIN activity_schedule_dates d ON d.schedule_id = sp.schedule_id LEFT JOIN users u ON u.user_id = sp.user_id WHERE ' . $whereSql . ' ORDER BY sp.is_invited DESC, sp.participant_name ASC, sp.participant_id ASC LIMIT ? OFFSET ?';
     $rowStmt = rmsActivitySchedulePrepare($conn, $rowSql);
     $rowValues = $values;
     $rowValues[] = $pageSize;
@@ -1139,15 +1144,16 @@ function rmsActivityScheduleSave(
 
             $stmt = rmsActivitySchedulePrepare(
                 $conn,
-                'UPDATE research_activities SET activity_type = ?, title = ?, activity_date = ?,
+                'UPDATE research_activities SET activity_type = ?, custom_activity_type = ?, title = ?, activity_date = ?,
                     activity_time = ?, is_multi_day = ?, schedule_start_date = ?, schedule_end_date = ?,
                     venue = ?, speaker = ?, organizer = ?, description = ?,
                     source_project_id = ?, source_publication_id = ?
                  WHERE activity_id = ?'
             );
             $stmt->bind_param(
-                'ssssissssssiii',
+                'sssssissssssiii',
                 $activity['activity_type'],
+                $activity['custom_activity_type'],
                 $activity['title'],
                 $legacyDate,
                 $legacyTime,
@@ -1171,13 +1177,14 @@ function rmsActivityScheduleSave(
             $stmt = rmsActivitySchedulePrepare(
                 $conn,
                 'INSERT INTO research_activities
-                    (activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date,
+                    (activity_type, custom_activity_type, title, activity_date, activity_time, is_multi_day, schedule_start_date, schedule_end_date,
                      venue, speaker, organizer, description, source_project_id, source_publication_id, status, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->bind_param(
-                'ssss' . 'i' . 'ssssss' . 'iis' . 'i',
+                'sssss' . 'i' . 'ssssss' . 'iis' . 'i',
                 $activity['activity_type'],
+                $activity['custom_activity_type'],
                 $activity['title'],
                 $legacyDate,
                 $legacyTime,
