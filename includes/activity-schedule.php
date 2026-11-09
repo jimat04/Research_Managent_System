@@ -255,7 +255,7 @@ function rmsActivityScheduleCanMarkConducted(mysqli $conn, int $activityId, bool
                 SELECT 1
                 FROM research_activities ra
                 WHERE ra.activity_id = ?
-                  AND ra.status IN ('upcoming', 'scheduled')
+                  AND ra.status IN ('upcoming', 'scheduled', 'ongoing')
                   AND EXISTS (
                       SELECT 1 FROM activity_schedule_dates d
                       WHERE d.activity_id = ra.activity_id AND d.status = 'scheduled'
@@ -295,7 +295,7 @@ function rmsActivityScheduleMarkConducted(mysqli $conn, int $activityId, bool $s
         "UPDATE research_activities
          SET status = 'conducted'
          WHERE activity_id = ?
-           AND status IN ('upcoming', 'scheduled')
+           AND status IN ('upcoming', 'scheduled', 'ongoing')
            AND EXISTS (
                SELECT 1 FROM activity_schedule_dates d
                WHERE d.activity_id = ? AND d.status = 'scheduled'

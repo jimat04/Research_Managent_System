@@ -173,6 +173,7 @@
     const status = roadmap.querySelector('#roadmap-selection-status');
     const stageList = roadmap.querySelector('.research-roadmap-stages');
     const stageProgress = roadmap.querySelector('#roadmap-progress');
+    const returnStageInputs = Array.from(roadmap.querySelectorAll('input[name="return_stage"]'));
     let selectedStage = 0;
 
     if (stages.length && stages.length === panels.length) {
@@ -189,6 +190,9 @@
         status.textContent = `${stageCount.textContent}: ${panels[selectedStage].querySelector('h3').textContent}`;
         previous.disabled = selectedStage === 0;
         next.disabled = selectedStage === stages.length - 1;
+        returnStageInputs.forEach((input) => {
+          input.value = String(selectedStage + 1);
+        });
         if (focus) stages[selectedStage].focus();
       };
       selectRoadmapFromHash = () => {

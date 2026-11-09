@@ -143,6 +143,7 @@ function personalDashboardRenderResearchBasicsStageProgress(
         echo csrfField();
         echo '<input type="hidden" name="update_research_basics_stage" value="1">';
         echo '<input type="hidden" name="stage_id" value="' . personalDashboardEscape($stageId) . '">';
+        echo '<input type="hidden" name="return_stage" value="1">';
         echo '<input type="hidden" name="stage_action" value="' . ($isComplete ? 'undo' : 'complete') . '">';
         echo '<button type="submit" aria-label="' . ($isComplete ? 'Undo completion of ' : 'Mark ') . personalDashboardEscape($stageName) . ($isComplete ? '' : ' complete') . '">' . ($isComplete ? 'Undo stage completion' : 'Mark stage complete') . '</button>';
         echo '</form>';
@@ -412,6 +413,10 @@ if ($role === 'student') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_research_basics_stage'])) {
         $stageId = is_string($_POST['stage_id'] ?? null) ? $_POST['stage_id'] : '';
         $stageAction = is_string($_POST['stage_action'] ?? null) ? $_POST['stage_action'] : '';
+        $returnStage = filter_var($_POST['return_stage'] ?? null, FILTER_VALIDATE_INT);
+        if ($returnStage === false || $returnStage < 1 || $returnStage > count($researchBasicsStages)) {
+            $returnStage = 1;
+        }
         if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
             $researchBasicsError = 'Your form has expired. Please refresh the page and try again.';
         } elseif (!array_key_exists($stageId, $researchBasicsStages) || !in_array($stageAction, ['complete', 'undo'], true)) {
@@ -468,7 +473,7 @@ if ($role === 'student') {
                 $stageUpdateStmt->close();
                 $stageUpdateStmt = null;
 
-                header('Location: ' . SITE_URL . 'pages/student/student-dashboard.php#roadmap');
+                header('Location: ' . SITE_URL . 'pages/student/student-dashboard.php#roadmap-stage-' . $returnStage);
                 exit;
             } catch (mysqli_sql_exception $exception) {
                 if ($accountStmt instanceof mysqli_stmt) $accountStmt->close();

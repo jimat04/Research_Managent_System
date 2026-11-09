@@ -258,7 +258,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
           $group_icon = $items[0][2] ?? 'dashboard';
         ?>
         <details class="faculty-nav-group"<?php echo $group_active ? ' open' : ''; ?>>
-          <summary class="faculty-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $group_id; ?>">
+          <summary class="faculty-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $group_id; ?>"<?php echo $group === 'Research Portfolio' ? ' data-notification-area-summary="my_research" data-notification-area-badge-class="faculty-nav-badge" data-notification-area-label="Research Portfolio"' : ''; ?>>
             <span class="faculty-nav-icon" aria-hidden="true"><?php echo facultyShellIcon($group_icon); ?></span>
             <span class="faculty-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
             <?php
@@ -268,7 +268,7 @@ function renderFacultyShell($user, $current_page, $page_title, $page_subtitle = 
                   : 0;
             ?>
             <?php if ($group_notification_count > 0): ?>
-              <span class="faculty-nav-badge" title="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $group_notification_count > 99 ? '99+' : $group_notification_count; ?></span>
+              <span class="faculty-nav-badge" data-notification-area-badge title="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $group_notification_count > 99 ? '99+' : $group_notification_count; ?></span>
             <?php endif; ?>
             <span class="faculty-nav-chevron" aria-hidden="true"></span>
           </summary>

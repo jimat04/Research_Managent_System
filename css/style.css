@@ -45,7 +45,8 @@ body {
 .rms-notification--admin { --rms-notification-accent: #f57c00; --rms-notification-tint: rgba(245, 124, 0, .08); }
 .rms-notification--staff { --rms-notification-accent: #0d9488; --rms-notification-tint: rgba(13, 148, 136, .08); }
 .rms-notification--faculty { --rms-notification-accent: #1d4ed8; --rms-notification-tint: rgba(29, 78, 216, .08); }
-.rms-notification-toggle { font: inherit; cursor: pointer; }
+.rms-notification-toggle { display: inline-grid; list-style: none; font: inherit; cursor: pointer; }
+.rms-notification-toggle::-webkit-details-marker { display: none; }
 .rms-notification-toggle:hover,
 .rms-notification-toggle[aria-expanded="true"] { color: var(--rms-notification-accent); }
 .rms-notification-toggle:focus-visible { outline: 3px solid var(--rms-notification-tint); outline-offset: 3px; }

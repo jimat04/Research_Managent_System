@@ -331,13 +331,22 @@ $userIsInvited = $activity && $role !== 'admin' && !$canManage
     && rmsActivityDocumentUserIsInvited($conn, (int) $activityId, $userId);
 $isConductedActivity = $activity && in_array((string) $activity['status'], ['conducted', 'completed'], true);
 $canRecordActivityAttendance = $activity && in_array((string) $activity['status'], ['ongoing', 'conducted', 'completed'], true);
-$canStartActivity = $role === 'admin'
+$autoStartSuppressed = false;
+if ($activityId && isset($_SESSION['activity_auto_start_suppressed'][(int) $activityId])) {
+    $lastAutoStartAttempt = (int) $_SESSION['activity_auto_start_suppressed'][(int) $activityId];
+    if ($lastAutoStartAttempt > time() - 300) {
+        $autoStartSuppressed = true;
+    } else {
+        unset($_SESSION['activity_auto_start_suppressed'][(int) $activityId]);
+    }
+}
+$canStartActivity = $canManage
     && $activity
     && in_array((string) $activity['status'], ['upcoming', 'scheduled'], true)
     && rmsActivityScheduleCanStartActivity($conn, (int) $activityId, $scheduleTablesAvailable);
-$canMarkConductedActivity = $role === 'admin'
+$canMarkConductedActivity = $canManage
     && $activity
-    && in_array((string) $activity['status'], ['upcoming', 'scheduled'], true)
+    && in_array((string) $activity['status'], ['upcoming', 'scheduled', 'ongoing'], true)
     && rmsActivityScheduleCanMarkConducted($conn, (int) $activityId, $scheduleTablesAvailable);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isCsrfTokenValid($_POST['csrf_token'] ?? null)) {
@@ -511,7 +520,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($action === 'start_activity') {
-        if ($role !== 'admin') {
+        if (!$canManage) {
             header('Location: ' . SITE_URL . 'public/403.php');
             exit;
         }
@@ -524,6 +533,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )) {
                 throw new RuntimeException('This activity can only be started during one of its scheduled session times.');
             }
+            unset($_SESSION['activity_auto_start_suppressed'][(int) $activityId]);
             logActivity("Marked research activity #{$activityId} as ongoing", 'research_activities');
             $_SESSION['activities_flash'] = [
                 'type' => 'success',
@@ -533,13 +543,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         } catch (Throwable $exception) {
             error_log('Activity start action failed: ' . $exception->getMessage());
+            $_SESSION['activity_auto_start_suppressed'][(int) $activityId] = time();
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
         }
         header('Location: ' . $activityDetailUrl);
         exit;
     }
     if ($action === 'mark_conducted') {
-        if ($role !== 'admin') {
+        if (!$canManage) {
             header('Location: ' . SITE_URL . 'public/403.php');
             exit;
         }
@@ -1230,7 +1241,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
 </style>
 
 <style>
-.contribution-response button[hidden]{display:none!important}.contribution-dialog{width:min(520px,calc(100% - 32px));max-height:min(88vh,720px);overflow:auto;padding:0;border:1px solid #d5e2df;border-radius:16px;background:#fff;color:#172033;box-shadow:0 24px 80px rgba(15,23,42,.24)}.contribution-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(2px)}.contribution-dialog-content{padding:24px}.contribution-dialog h2{margin:0;font-size:20px;line-height:1.25}.contribution-dialog p{margin:10px 0 0;color:#475569;font-size:13px;line-height:1.6}.contribution-dialog fieldset{display:grid;gap:9px;margin:20px 0 0;padding:0;border:0}.contribution-dialog legend{margin-bottom:8px;color:#334155;font-size:12px;font-weight:800}.contribution-dialog-option{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dbe5e2;border-radius:10px;background:#fbfefd;color:#334155;font-size:13px;line-height:1.45;cursor:pointer}.contribution-dialog-option input{flex:0 0 16px;width:16px;height:16px;margin:2px 0 0;accent-color:#0f766e}.contribution-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px;margin-top:20px}.contribution-dialog-actions .button{width:auto}.contribution-dialog :focus-visible{outline:3px solid rgba(15,118,110,.3);outline-offset:2px}@media(max-width:560px){.contribution-dialog-content{padding:20px}.contribution-dialog-actions,.contribution-dialog-actions .button{width:100%}}
+.contribution-response button[hidden]{display:none!important}.contribution-dialog{position:fixed;inset:auto;top:50%;left:50%;right:auto;bottom:auto;margin:0;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 32px));max-height:min(88vh,720px);max-height:min(88dvh,720px);overflow:auto;padding:0;border:1px solid #d5e2df;border-radius:16px;background:#fff;color:#172033;box-shadow:0 24px 80px rgba(15,23,42,.24)}.contribution-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(2px)}.contribution-dialog-content{padding:24px}.contribution-dialog h2{margin:0;font-size:20px;line-height:1.25}.contribution-dialog p{margin:10px 0 0;color:#475569;font-size:13px;line-height:1.6}.contribution-dialog fieldset{display:grid;gap:9px;margin:20px 0 0;padding:0;border:0}.contribution-dialog legend{margin-bottom:8px;color:#334155;font-size:12px;font-weight:800}.contribution-dialog-option{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dbe5e2;border-radius:10px;background:#fbfefd;color:#334155;font-size:13px;line-height:1.45;cursor:pointer}.contribution-dialog-option input{flex:0 0 16px;width:16px;height:16px;margin:2px 0 0;accent-color:#0f766e}.contribution-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px;margin-top:20px}.contribution-dialog-actions .button{width:auto}.contribution-dialog :focus-visible{outline:3px solid rgba(15,118,110,.3);outline-offset:2px}@media(max-width:560px){.contribution-dialog-content{padding:20px}.contribution-dialog-actions,.contribution-dialog-actions .button{width:100%}}
 .activity-document-panel .panel-head{padding:20px 24px;border-bottom:1px solid #edf1f5}
 .activity-document-panel .activity-document-row{display:flex;align-items:center;gap:16px;padding:24px}
 .activity-document-panel .activity-document-badge{display:grid;place-items:center;flex:0 0 44px;height:52px;border:1px solid #dce7e5;border-radius:8px;background:#f1f7f6;color:#0f766e;font-size:11px;font-weight:800;letter-spacing:.04em}
@@ -1319,7 +1330,7 @@ if ($activity && !empty($activity['is_multi_day'])) {
       </section>
     <?php endif; ?>
 
-    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage)) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" data-delete-activity-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Delete this activity and its participant records?');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav>
+    <?php if ($canManage): ?><nav class="action-bar" aria-label="Activity management"><a class="button secondary" href="<?= activityDetailEscape(SITE_URL . 'pages/shared/activity-form.php?id=' . $activityId . '&module_page=' . rawurlencode($modulePage)) ?>">Edit activity</a><?php if (!$scheduleTablesAvailable): ?><a class="button secondary" href="#add-participants">Add Participants</a><?php if (in_array($activity['status'], ['scheduled', 'completed'], true)): ?><a class="button secondary" href="#attendance">Mark Attendance</a><?php endif; ?><?php endif; ?><?php if ($canStartActivity): ?><form method="post"<?= $autoStartSuppressed ? '' : ' data-auto-start-activity' ?>><?= csrfField() ?><input type="hidden" name="action" value="start_activity"><button class="button" type="submit">Start activity</button><?php if (!$autoStartSuppressed): ?><span class="sr-only" role="status" aria-live="polite">Starting activity automatically during its scheduled session.</span><?php endif; ?></form><?php endif; ?><?php if ($canMarkConductedActivity): ?><form method="post"><?= csrfField() ?><input type="hidden" name="action" value="mark_conducted"><button class="button" type="submit">Mark conducted</button></form><?php endif; ?><?php if ($activity['status'] === 'ongoing'): ?><form method="post" onsubmit="return confirm('Cancel this activity?');"><?= csrfField() ?><input type="hidden" name="action" value="cancel"><button class="button danger" type="submit">Cancel</button></form><?php endif; ?><form method="post" data-delete-activity-form onsubmit="return this.dataset.confirmed === 'true' || this.dataset.nativeConfirm !== 'false' && confirm('Delete this activity and its participant records?');"><?= csrfField() ?><input type="hidden" name="action" value="delete_activity"><button class="button danger" type="submit">Delete</button></form></nav>
       <dialog class="activity-delete-dialog" data-delete-activity-dialog aria-labelledby="delete-activity-title" aria-describedby="delete-activity-description"><div class="activity-delete-dialog-content"><h2 id="delete-activity-title">Delete this activity?</h2><p id="delete-activity-description">This permanently deletes the activity and its participant records. This action cannot be undone.</p><div class="activity-delete-dialog-actions"><button class="button danger" type="button" data-confirm-delete-activity>Delete activity</button><button class="button secondary" type="button" data-cancel-delete-activity>Cancel</button></div></div></dialog>
       <dialog class="activity-delete-dialog" data-revoke-checkin-dialog aria-labelledby="revoke-checkin-title" aria-describedby="revoke-checkin-description"><div class="activity-delete-dialog-content"><h2 id="revoke-checkin-title">Revoke QR check-in code?</h2><p id="revoke-checkin-description">This makes the current QR code unusable. Generate a new code if attendees still need to check in.</p><div class="activity-delete-dialog-actions"><button class="button danger" type="button" data-confirm-revoke-checkin>Revoke QR code</button><button class="button secondary" type="button" data-cancel-revoke-checkin autofocus>Keep QR code</button></div></div></dialog>
     <?php endif; ?>
@@ -1879,6 +1890,16 @@ if ($activity && !empty($activity['is_multi_day'])) {
 </div>
 
 <script>
+document.querySelectorAll('[data-auto-start-activity]').forEach((form) => {
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = 'Starting activity…';
+  }
+  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+  else form.submit();
+});
+
 document.querySelectorAll('[data-dismiss-activity-save-toast]').forEach((button) => {
   button.addEventListener('click', () => button.closest('[data-activity-save-toast]')?.remove());
 });

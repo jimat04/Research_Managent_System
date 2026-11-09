@@ -50,22 +50,23 @@ if (!function_exists('renderNotificationPopover')) {
             ? 'Notifications, ' . $unread_count . ' unread'
             : 'Notifications';
         ?>
-        <div class="rms-notification rms-notification--<?php echo $role; ?>" data-notification-popover>
-          <button type="button"
-                  class="<?php echo $role === 'admin' ? 'admin-topbar-icon-link ' : ''; ?><?php echo $role; ?>-topbar-notification rms-notification-toggle"
-                  data-notification-toggle
-                  aria-label="<?php echo $escape($button_label); ?>"
-                  title="<?php echo $escape($button_label); ?>"
-                  aria-haspopup="dialog"
-                  aria-expanded="false"
-                  aria-controls="rms-notification-panel">
+        <details class="rms-notification rms-notification--<?php echo $role; ?>"
+             data-notification-popover
+             data-notification-status-url="<?php echo $escape(SITE_URL . 'pages/shared/notification-status.php'); ?>">
+          <summary class="<?php echo $role === 'admin' ? 'admin-topbar-icon-link ' : ''; ?><?php echo $role; ?>-topbar-notification rms-notification-toggle"
+                   data-notification-toggle
+                   data-notification-badge-class="<?php echo $escape($role === 'admin' ? 'admin-topbar-badge' : $role . '-topbar-notification-badge'); ?>"
+                   aria-label="<?php echo $escape($button_label); ?>"
+                   title="<?php echo $escape($button_label); ?>"
+                   aria-haspopup="dialog"
+                   aria-controls="rms-notification-panel">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
             <?php if ($unread_count > 0): ?>
-              <span class="<?php echo $role === 'admin' ? 'admin-topbar-badge' : $role . '-topbar-notification-badge'; ?>" aria-hidden="true"><?php echo $unread_count > 99 ? '99+' : $unread_count; ?></span>
+              <span class="<?php echo $role === 'admin' ? 'admin-topbar-badge' : $role . '-topbar-notification-badge'; ?>" data-notification-count-badge aria-hidden="true"><?php echo $unread_count > 99 ? '99+' : $unread_count; ?></span>
             <?php endif; ?>
-          </button>
+          </summary>
 
-          <section class="rms-notification-panel" id="rms-notification-panel" data-notification-panel role="dialog" aria-labelledby="rms-notification-title" hidden>
+          <section class="rms-notification-panel" id="rms-notification-panel" data-notification-panel role="dialog" aria-labelledby="rms-notification-title">
             <header class="rms-notification-header">
               <h2 id="rms-notification-title">Notifications</h2>
               <form method="post" action="<?php echo $escape($notifications_url); ?>" class="rms-notification-menu-form">
@@ -77,7 +78,7 @@ if (!function_exists('renderNotificationPopover')) {
 
             <div class="rms-notification-filters" role="group" aria-label="Filter notifications">
               <button type="button" class="is-active" data-notification-filter="all" aria-pressed="true">All</button>
-              <button type="button" data-notification-filter="unread" aria-pressed="false">Unread<?php if ($unread_count > 0): ?> <span><?php echo $unread_count > 99 ? '99+' : $unread_count; ?></span><?php endif; ?></button>
+              <button type="button" data-notification-filter="unread" aria-pressed="false">Unread <span data-notification-unread-count<?php echo $unread_count > 0 ? '' : ' hidden'; ?>><?php if ($unread_count > 0) echo $unread_count > 99 ? '99+' : $unread_count; ?></span></button>
             </div>
 
             <div class="rms-notification-section-heading">
@@ -130,7 +131,7 @@ if (!function_exists('renderNotificationPopover')) {
               <?php if (!$unread_rows): ?><li class="rms-notification-empty" data-notification-no-unread hidden>No unread notifications.</li><?php endif; ?>
             </ul>
           </section>
-        </div>
+        </details>
         <?php
     }
 }

@@ -35,14 +35,14 @@ if (!defined('SITE_URL')) {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+            background: radial-gradient(ellipse at top, #21134b 0%, #0a0833 58%, #050520 100%);
             padding: 20px;
         }
 
         .error-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #15132f;
+            border: 1px solid #514878;
+            border-top: 4px solid #f59e0b;
             border-radius: 24px;
             padding: 60px 40px;
             max-width: 600px;
@@ -50,6 +50,12 @@ if (!defined('SITE_URL')) {
             text-align: center;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
         }
+
+        .error-title { color: #fff; }
+        .error-message { color: #d6d5e4; }
+        .error-details { border-top-color: #514878; }
+        .error-details p { color: #b9b6cc; }
+        .error-btn-secondary { background: #252344; color: #fff; border-color: #777195; }
 
         .error-icon {
             width: 120px;

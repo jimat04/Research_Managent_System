@@ -360,6 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             if (!rms_chapter_sequence_allows_submission($chapter_number, $prior_status)) {
                 throw new Exception('The previous chapter must be approved before proceeding.');
             }
+            $was_resubmission = false;
             if (!$chapter) {
                 $insert_stmt = $conn->prepare("INSERT INTO chapters
                     (project_id, chapter_number, chapter_title, status, version, created_at, updated_at)
@@ -397,6 +398,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                 if (!$locked_chapter || !in_array((string) $locked_chapter['status'], ['draft', 'revision_required'], true)) {
                     throw new Exception('This submitted chapter version is locked.');
                 }
+                $was_resubmission = (string) $locked_chapter['status'] === 'revision_required';
             }
 
             if ($file_valid) {
@@ -473,6 +475,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
                     throw new Exception('Unable to update the chapter version number.');
                 }
                 $chapter_version->close();
+            }
+
+            if ($is_submit) {
+                $admin_stmt = $conn->prepare(
+                    "SELECT user_id FROM users
+                     WHERE role = 'admin' AND status = 'active' AND deleted_at IS NULL"
+                );
+                if (!$admin_stmt || !$admin_stmt->execute()) {
+                    throw new Exception('Unable to load active administrators for chapter notification.');
+                }
+                $admin_result = $admin_stmt->get_result();
+                $submitter_name = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+                if ($submitter_name === '') {
+                    $submitter_name = 'A researcher';
+                }
+                $notification_title = $was_resubmission
+                    ? 'Chapter resubmitted for review'
+                    : 'New chapter submitted for review';
+                $notification_message = $submitter_name . ' submitted Chapter ' . $chapter_number
+                    . ' (' . $chapter_titles[$chapter_number] . ') for "' . (string) ($project['title'] ?? 'research project') . '".';
+                $notification_link = SITE_URL . 'pages/shared/research-submission-review.php?module_page=research_review';
+                while ($admin = $admin_result->fetch_assoc()) {
+                    if (!createNotification(
+                        (int) $admin['user_id'],
+                        $notification_title,
+                        $notification_message,
+                        'info',
+                        $notification_link
+                    )) {
+                        $admin_stmt->close();
+                        throw new Exception('Unable to notify administrators about the chapter submission.');
+                    }
+                }
+                $admin_stmt->close();
             }
 
             logActivity($is_submit ? 'Chapter submitted' : 'Chapter saved as draft', 'chapters');

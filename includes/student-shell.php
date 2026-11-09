@@ -204,7 +204,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
           $groupIcon = $items[0][2] ?? 'repository';
         ?>
         <details class="student-nav-group"<?php echo $groupActive ? ' open' : ''; ?>>
-          <summary class="student-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>">
+          <summary class="student-nav-group-summary" title="<?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-controls="<?php echo $groupId; ?>"<?php echo $group === 'My Research' ? ' data-notification-area-summary="my_research" data-notification-area-badge-class="student-nav-badge" data-notification-area-label="My Research"' : ($group === 'Research Modules' ? ' data-notification-area-summary="research_modules" data-notification-area-badge-class="student-nav-badge" data-notification-area-label="Research Modules"' : ''); ?>>
             <span class="student-nav-icon"><?php echo rmsShellIcon($groupIcon); ?></span>
             <span class="student-nav-label"><?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?></span>
             <?php
@@ -213,7 +213,7 @@ function renderStudentShell($user, $current_page, $page_title, $page_subtitle = 
                   : ($group === 'Research Modules' ? $unread_area_counts['research_modules'] : 0);
             ?>
             <?php if ($group_notification_count > 0): ?>
-              <span class="student-nav-badge" title="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $group_notification_count > 99 ? '99+' : $group_notification_count; ?></span>
+              <span class="student-nav-badge" data-notification-area-badge title="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?php echo $group_notification_count; ?> unread notifications in <?php echo htmlspecialchars($group, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $group_notification_count > 99 ? '99+' : $group_notification_count; ?></span>
             <?php endif; ?>
             <span class="student-nav-chevron" aria-hidden="true"></span>
           </summary>
