@@ -371,32 +371,6 @@ function renderFacultyShellClose() {
 <script src="<?php echo htmlspecialchars(SITE_URL . 'js/public-motion.js?v=' . filemtime(__DIR__ . '/../js/public-motion.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(SITE_URL . 'js/role-shell-controls.js?v=' . filemtime(__DIR__ . '/../js/role-shell-controls.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(SITE_URL . 'js/faculty-dashboard.js?v=' . filemtime(__DIR__ . '/../js/faculty-dashboard.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
-<script>
-(() => {
-  const shell = document.querySelector('.faculty-dashboard');
-  const button = document.querySelector('.faculty-mobile-menu-btn');
-  const sidebar = document.querySelector('.faculty-sidebar');
-  const scrim = document.querySelector('.faculty-sidebar-scrim');
-  if (!button || !sidebar) return;
-  const closeMenu = () => {
-    sidebar.classList.remove('is-open');
-    if (shell) shell.classList.remove('drawer-open');
-    button.setAttribute('aria-expanded', 'false');
-  };
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = !sidebar.classList.contains('is-open');
-    sidebar.classList.toggle('is-open', open);
-    if (shell) shell.classList.toggle('drawer-open', open);
-    button.setAttribute('aria-expanded', String(open));
-  });
-  if (scrim) scrim.addEventListener('click', closeMenu);
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeMenu();
-  });
-  window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
-})();
-</script>
 </body>
 </html>
     <?php

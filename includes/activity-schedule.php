@@ -914,9 +914,15 @@ function rmsActivityScheduleCancelActivity(mysqli $conn, int $activityId): bool
         }
         $statusStmt->close();
 
+        $checkinTokenResetSql = rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_hash')
+            ? ', checkin_token_hash = NULL'
+                . (rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_encrypted')
+                    ? ', checkin_token_encrypted = NULL'
+                    : '')
+            : '';
         $dateStmt = rmsActivitySchedulePrepare(
             $conn,
-            "UPDATE activity_schedule_dates SET status = 'cancelled' WHERE activity_id = ? AND status = 'scheduled'"
+            "UPDATE activity_schedule_dates SET status = 'cancelled'{$checkinTokenResetSql} WHERE activity_id = ? AND status = 'scheduled'"
         );
         $dateStmt->bind_param('i', $activityId);
         if (!$dateStmt->execute()) {
@@ -985,8 +991,13 @@ function rmsActivityScheduleSave(
     $legacyTime = $firstDate['start_time'];
     $checkinTokenColumnAvailable = rmsActivityScheduleTableExists($conn, 'activity_schedule_dates')
         && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_hash');
+    $checkinTokenEncryptedColumnAvailable = $checkinTokenColumnAvailable
+        && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_encrypted');
     $checkinTokenResetSql = $checkinTokenColumnAvailable
         ? "checkin_token_hash = IF(status = 'cancelled', NULL, checkin_token_hash), "
+            . ($checkinTokenEncryptedColumnAvailable
+                ? "checkin_token_encrypted = IF(status = 'cancelled', NULL, checkin_token_encrypted), "
+                : '')
         : '';
     $oldDates = [];
     $oldDefaults = ['venue' => null, 'speaker' => null];
@@ -1354,9 +1365,12 @@ function rmsActivityScheduleSave(
                 continue;
             }
             $scheduleId = (int) $oldDate['schedule_id'];
+            $clearCheckinTokensSql = $checkinTokenColumnAvailable
+                ? ', checkin_token_hash = NULL' . ($checkinTokenEncryptedColumnAvailable ? ', checkin_token_encrypted = NULL' : '')
+                : '';
             $cancelStmt = rmsActivitySchedulePrepare(
                 $conn,
-                "UPDATE activity_schedule_dates SET status = 'cancelled' WHERE schedule_id = ? AND activity_id = ?"
+                "UPDATE activity_schedule_dates SET status = 'cancelled'{$clearCheckinTokensSql} WHERE schedule_id = ? AND activity_id = ?"
             );
             $cancelStmt->bind_param('ii', $scheduleId, $activityId);
             if (!$cancelStmt->execute()) {

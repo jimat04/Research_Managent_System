@@ -222,7 +222,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
         $email = isset($_POST['email']) ? trim($_POST['email']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
         $password_confirm = isset($_POST['password_confirm']) ? $_POST['password_confirm'] : '';
-        $student_id = isset($_POST['student_id']) ? sanitize($_POST['student_id']) : '';
+        $studentIdInput = $_POST['student_id'] ?? '';
+        $student_id = is_string($studentIdInput) ? trim($studentIdInput) : '';
+        if ($student_id === '') {
+            $student_id = null;
+        }
         $contact = isset($_POST['contact']) ? sanitize($_POST['contact']) : '';
         $role = isset($_POST['role']) ? sanitize($_POST['role']) : 'student';
 
@@ -272,38 +276,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isCsrfTokenValid($_POST['csrf_toke
             if ($checkRes && $checkRes->num_rows > 0) {
                 $error = 'Email already registered';
             } else {
-                $password_hash = hashPassword($password);
-
-                // Students get auto-approved, faculty/staff need admin approval
-                $status = ($role === 'student') ? 'active' : 'pending';
-
-                $insertStmt = $conn->prepare("INSERT INTO users (first_name, last_name, email, password, student_id, contact, role, department, program, year_level, specialization, academic_rank, is_reviewer, office, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
-                $insertStmt->bind_param('sssssssssssssss', $first_name, $last_name, $email, $password_hash, $student_id, $contact, $role, $department, $program, $year_level, $specialization, $academic_rank, $is_reviewer, $office, $status);
-
-                if ($insertStmt->execute()) {
-                    $userId = $conn->insert_id;
-
-                    // Send email verification
-                    require_once __DIR__ . '/../includes/email.php';
-                    $preserveArchiveIntent = $role === 'student' && rmsHasResearchArchiveReturnIntent();
-                    $verificationEmailSent = sendVerificationEmail($userId, $email, $first_name, $preserveArchiveIntent);
-
-                    if ($role === 'student') {
-                        $success = $verificationEmailSent
-                            ? 'Registration successful! Please verify your email before signing in.'
-                            : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again.';
+                $duplicateStudentId = false;
+                $studentIdCheckFailed = false;
+                if ($student_id !== null) {
+                    $studentIdStmt = $conn->prepare('SELECT user_id FROM users WHERE student_id = ? LIMIT 1');
+                    if (!$studentIdStmt) {
+                        $studentIdCheckFailed = true;
                     } else {
-                        // Notify admins about pending approval
-                        sendPendingApprovalNotification($first_name, $last_name, $email, $role);
-                        $success = $verificationEmailSent
-                            ? 'Registration successful! Please verify your email. An administrator will also review and approve your account.'
-                            : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again. An administrator will review and approve your account.';
-                        rmsClearResearchArchiveReturnIntent();
+                        $studentIdStmt->bind_param('s', $student_id);
+                        $studentIdCheckFailed = !$studentIdStmt->execute();
+                        if (!$studentIdCheckFailed) {
+                            $duplicateStudentId = $studentIdStmt->get_result()->num_rows > 0;
+                        }
+                        $studentIdStmt->close();
                     }
+                }
 
-                    $_POST = [];
+                if ($studentIdCheckFailed) {
+                    $error = 'Could not validate the Student/Employee ID. Please try again.';
+                } elseif ($duplicateStudentId) {
+                    $error = 'Student/Employee ID already registered.';
                 } else {
-                    $error = 'Registration failed. Please try again.';
+                    $password_hash = hashPassword($password);
+
+                    // Students get auto-approved, faculty/staff need admin approval
+                    $status = ($role === 'student') ? 'active' : 'pending';
+
+                    $insertStmt = $conn->prepare("INSERT INTO users (first_name, last_name, email, password, student_id, contact, role, department, program, year_level, specialization, academic_rank, is_reviewer, office, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+                    $insertStmt->bind_param('sssssssssssssss', $first_name, $last_name, $email, $password_hash, $student_id, $contact, $role, $department, $program, $year_level, $specialization, $academic_rank, $is_reviewer, $office, $status);
+
+                    if ($insertStmt->execute()) {
+                        $userId = $conn->insert_id;
+
+                        // Send email verification
+                        require_once __DIR__ . '/../includes/email.php';
+                        $preserveArchiveIntent = $role === 'student' && rmsHasResearchArchiveReturnIntent();
+                        $verificationEmailSent = sendVerificationEmail($userId, $email, $first_name, $preserveArchiveIntent);
+
+                        if ($role === 'student') {
+                            $success = $verificationEmailSent
+                                ? 'Registration successful! Please verify your email before signing in.'
+                                : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again.';
+                        } else {
+                            // Notify admins about pending approval
+                            sendPendingApprovalNotification($first_name, $last_name, $email, $role);
+                            $success = $verificationEmailSent
+                                ? 'Registration successful! Please verify your email. An administrator will also review and approve your account.'
+                                : 'Registration successful, but we could not send the verification email. Use the resend verification link below to try again. An administrator will review and approve your account.';
+                            rmsClearResearchArchiveReturnIntent();
+                        }
+
+                        $_POST = [];
+                    } else {
+                        $error = 'Registration failed. Please try again.';
+                    }
                 }
             }
         }

@@ -107,6 +107,9 @@ $activityCheckinSchemaAvailable = $scheduleTablesAvailable
     && rmsActivityScheduleTableExists($conn, 'activity_schedule_checkins')
     && $activityCheckinDetailsAvailable;
 $activityCheckinAvailable = $activityCheckinSchemaAvailable && $activityCheckinKeyConfigured;
+$activityCheckinTokenStorageAvailable = $activityCheckinSchemaAvailable
+    && rmsActivityScheduleColumnExists($conn, 'activity_schedule_dates', 'checkin_token_encrypted');
+$activityCheckinSharingAvailable = $activityCheckinAvailable && $activityCheckinTokenStorageAvailable;
 $invitationResponseSchemaAvailable = $scheduleTablesAvailable
     && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'invitation_response')
     && rmsActivityScheduleColumnExists($conn, 'activity_schedule_participants', 'invitation_responded_at');
@@ -245,9 +248,14 @@ if ($activity && $canManage && $scheduleTablesAvailable) {
     }
 }
 $checkinTokenHashes = [];
+$activityCheckinToday = '';
 if ($activity && $activityCheckinSchemaAvailable) {
     try {
-        $tokenStmt = $conn->prepare('SELECT schedule_id, checkin_token_hash FROM activity_schedule_dates WHERE activity_id = ?');
+        $encryptedTokenSelect = $activityCheckinTokenStorageAvailable ? ', checkin_token_encrypted' : '';
+        $tokenStmt = $conn->prepare(
+            'SELECT schedule_id, checkin_token_hash' . $encryptedTokenSelect
+                . ' FROM activity_schedule_dates WHERE activity_id = ?'
+        );
         if (!$tokenStmt) {
             throw new RuntimeException('Unable to prepare activity check-in tokens.');
         }
@@ -257,9 +265,20 @@ if ($activity && $activityCheckinSchemaAvailable) {
         }
         $tokenResult = $tokenStmt->get_result();
         while ($tokenRow = $tokenResult->fetch_assoc()) {
-            $checkinTokenHashes[(int) $tokenRow['schedule_id']] = (string) ($tokenRow['checkin_token_hash'] ?? '');
+            $scheduleId = (int) $tokenRow['schedule_id'];
+            $checkinTokenHashes[$scheduleId] = [
+                'hash' => (string) ($tokenRow['checkin_token_hash'] ?? ''),
+                'encrypted' => (string) ($tokenRow['checkin_token_encrypted'] ?? ''),
+            ];
         }
         $tokenStmt->close();
+        if ($activityCheckinSharingAvailable) {
+            $todayResult = $conn->query('SELECT CURRENT_DATE() AS today');
+            if ($todayResult instanceof mysqli_result) {
+                $activityCheckinToday = (string) ($todayResult->fetch_assoc()['today'] ?? '');
+                $todayResult->free();
+            }
+        }
     } catch (Throwable $exception) {
         error_log('Activity check-in token load failed: ' . $exception->getMessage());
         $activityCheckinAvailable = false;
@@ -362,11 +381,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'generate_checkin_qr') {
                 $checkinToken = bin2hex(random_bytes(16));
                 $tokenHash = hash('sha256', $checkinToken);
-                $updateStmt = $conn->prepare('UPDATE activity_schedule_dates SET checkin_token_hash = ? WHERE schedule_id = ? AND activity_id = ?');
+                $encryptedToken = $activityCheckinTokenStorageAvailable
+                    ? rmsActivityQrEncryptToken($checkinToken, $scheduleId)
+                    : null;
+                $tokenUpdateSql = $activityCheckinTokenStorageAvailable
+                    ? 'UPDATE activity_schedule_dates SET checkin_token_hash = ?, checkin_token_encrypted = ? WHERE schedule_id = ? AND activity_id = ?'
+                    : 'UPDATE activity_schedule_dates SET checkin_token_hash = ? WHERE schedule_id = ? AND activity_id = ?';
+                $updateStmt = $conn->prepare($tokenUpdateSql);
                 if (!$updateStmt) {
                     throw new RuntimeException('Unable to prepare the check-in QR update.');
                 }
-                $updateStmt->bind_param('sii', $tokenHash, $scheduleId, $activityId);
+                if ($activityCheckinTokenStorageAvailable) {
+                    $updateStmt->bind_param('ssii', $tokenHash, $encryptedToken, $scheduleId, $activityId);
+                } else {
+                    $updateStmt->bind_param('sii', $tokenHash, $scheduleId, $activityId);
+                }
                 if (!$updateStmt->execute() || $updateStmt->affected_rows !== 1) {
                     $updateStmt->close();
                     throw new RuntimeException('Unable to generate the activity check-in QR.');
@@ -376,7 +405,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['activities_flash'] = ['type' => 'success', 'message' => 'A new check-in QR code is ready. Any previous code for this date has been revoked.'];
                 logActivity("Generated attendance QR for activity #{$activityId}, date #{$scheduleId}", 'research_activities');
             } else {
-                $updateStmt = $conn->prepare('UPDATE activity_schedule_dates SET checkin_token_hash = NULL WHERE schedule_id = ? AND activity_id = ?');
+                $tokenClearSql = $activityCheckinTokenStorageAvailable
+                    ? 'UPDATE activity_schedule_dates SET checkin_token_hash = NULL, checkin_token_encrypted = NULL WHERE schedule_id = ? AND activity_id = ?'
+                    : 'UPDATE activity_schedule_dates SET checkin_token_hash = NULL WHERE schedule_id = ? AND activity_id = ?';
+                $updateStmt = $conn->prepare($tokenClearSql);
                 if (!$updateStmt) {
                     throw new RuntimeException('Unable to prepare the check-in QR revocation.');
                 }
@@ -484,11 +516,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         try {
-            if (!rmsActivityScheduleStartActivity($conn, (int) $activityId, $scheduleTablesAvailable)) {
+            if (!rmsActivityQrStartActivity(
+                $conn,
+                (int) $activityId,
+                $scheduleTablesAvailable,
+                $activityCheckinSharingAvailable
+            )) {
                 throw new RuntimeException('This activity can only be started during one of its scheduled session times.');
             }
             logActivity("Marked research activity #{$activityId} as ongoing", 'research_activities');
-            $_SESSION['activities_flash'] = ['type' => 'success', 'message' => 'Activity marked ongoing.'];
+            $_SESSION['activities_flash'] = [
+                'type' => 'success',
+                'message' => $activityCheckinSharingAvailable
+                    ? 'Activity marked ongoing. Current check-in QR codes are ready for invited users on their scheduled dates.'
+                    : 'Activity marked ongoing. QR sharing is unavailable until its migration and check-in key are configured.',
+            ];
         } catch (Throwable $exception) {
             error_log('Activity start action failed: ' . $exception->getMessage());
             $_SESSION['activities_flash'] = ['type' => 'error', 'message' => $exception->getMessage()];
@@ -1301,18 +1343,48 @@ if ($activity && !empty($activity['is_multi_day'])) {
             $scheduleActive = (string) $scheduleRow['status'] === 'scheduled';
             $scheduleIdForQr = (int) $scheduleRow['schedule_id'];
             $checkinSessionToken = (string) ($_SESSION['activity_checkin_tokens'][$scheduleIdForQr] ?? '');
-            $storedCheckinHash = $checkinTokenHashes[$scheduleIdForQr] ?? '';
+            $checkinTokenRecord = $checkinTokenHashes[$scheduleIdForQr] ?? ['hash' => '', 'encrypted' => ''];
+            $storedCheckinHash = (string) ($checkinTokenRecord['hash'] ?? '');
+            $storedEncryptedCheckinToken = (string) ($checkinTokenRecord['encrypted'] ?? '');
+            $checkinToken = $checkinSessionToken;
+            if ($storedCheckinHash === '' || $checkinToken === ''
+                || !hash_equals($storedCheckinHash, hash('sha256', $checkinToken))) {
+                $checkinToken = '';
+                if ($activityCheckinSharingAvailable && $storedEncryptedCheckinToken !== '') {
+                    try {
+                        $decryptedToken = rmsActivityQrDecryptToken($storedEncryptedCheckinToken, $scheduleIdForQr);
+                        if ($decryptedToken !== null && $storedCheckinHash !== ''
+                            && hash_equals($storedCheckinHash, hash('sha256', $decryptedToken))) {
+                            $checkinToken = $decryptedToken;
+                        }
+                    } catch (Throwable $exception) {
+                        error_log('Activity check-in token decrypt failed: ' . $exception->getMessage());
+                    }
+                }
+            }
             $checkinQrMarkup = '';
             $checkinLink = '';
             $checkinQrError = false;
             $checkinQrUsesLocalhost = false;
-            $hasCurrentCheckinQr = $checkinSessionToken !== ''
+            $hasCurrentCheckinQr = $checkinToken !== ''
                 && $storedCheckinHash !== ''
-                && hash_equals($storedCheckinHash, hash('sha256', $checkinSessionToken));
-            if ($canManage && $activityCheckinAvailable && $scheduleActive && $hasCurrentCheckinQr) {
+                && hash_equals($storedCheckinHash, hash('sha256', $checkinToken));
+            $currentInviteParticipant = null;
+            foreach ($scheduleParticipants as $scheduleParticipant) {
+                if ((int) ($scheduleParticipant['user_id'] ?? 0) === $userId
+                    && (int) $scheduleParticipant['is_invited'] === 1) {
+                    $currentInviteParticipant = $scheduleParticipant;
+                    break;
+                }
+            }
+            $inviteeCheckinWindowOpen = $currentInviteParticipant !== null
+                && (string) ($activity['status'] ?? '') === 'ongoing'
+                && (string) $scheduleDate === $activityCheckinToday;
+            $canDisplayCheckinQr = $canManage || $inviteeCheckinWindowOpen;
+            if ($canDisplayCheckinQr && $activityCheckinAvailable && $scheduleActive && $hasCurrentCheckinQr) {
                 try {
                     $checkinBaseUrl = rmsActivityCheckinBaseUrl();
-                    $checkinLink = $checkinBaseUrl . 'public/activity-check-in.php?code=' . rawurlencode($checkinSessionToken);
+                    $checkinLink = $checkinBaseUrl . 'public/activity-check-in.php?code=' . rawurlencode($checkinToken);
                     $checkinQrHost = strtolower((string) parse_url($checkinBaseUrl, PHP_URL_HOST));
                     $checkinQrUsesLocalhost = in_array($checkinQrHost, ['localhost', '127.0.0.1', '::1'], true);
                     $checkinQrMarkup = rmsActivityQrSvg(
@@ -1320,14 +1392,6 @@ if ($activity && !empty($activity['is_multi_day'])) {
                     );
                 } catch (Throwable $exception) {
                     $checkinQrError = true;
-                }
-            }
-            $currentInviteParticipant = null;
-            foreach ($scheduleParticipants as $scheduleParticipant) {
-                if ((int) ($scheduleParticipant['user_id'] ?? 0) === $userId
-                    && (int) $scheduleParticipant['is_invited'] === 1) {
-                    $currentInviteParticipant = $scheduleParticipant;
-                    break;
                 }
             }
             $invitationResponseOpen = $scheduleActive
@@ -1548,6 +1612,24 @@ if ($activity && !empty($activity['is_multi_day'])) {
                     <?php elseif ($storedCheckinHash !== ''): ?>
                       <p>The current QR code was generated in another or expired session. Regenerate it here to display a new code; this revokes the previous one.</p>
                     <?php endif; ?>
+                  <?php endif; ?>
+                </section>
+              <?php elseif ($currentInviteParticipant && $inviteeCheckinWindowOpen): ?>
+                <section class="checkin-qr-tools" aria-label="Attendance QR check-in">
+                  <h4>QR attendance check-in</h4>
+                  <?php if (!$activityCheckinSchemaAvailable): ?>
+                    <p>QR check-in is unavailable until its database migration is applied.</p>
+                  <?php elseif (!$activityCheckinKeyConfigured): ?>
+                    <p>QR check-in is temporarily unavailable. Please ask the activity organizer for help.</p>
+                  <?php elseif (!$activityCheckinTokenStorageAvailable): ?>
+                    <p>QR check-in is temporarily unavailable until the latest QR sharing migration is applied.</p>
+                  <?php elseif (!$hasCurrentCheckinQr): ?>
+                    <p>The current check-in QR is not available. Please ask the activity organizer to generate a new code.</p>
+                  <?php elseif ($checkinQrError): ?>
+                    <p class="checkin-qr-error">The current check-in QR could not be displayed. Please ask the activity organizer for help.</p>
+                  <?php else: ?>
+                    <p>Scan this code to record your attendance for today’s session.</p>
+                    <div class="checkin-qr-preview"><div><?= $checkinQrMarkup ?></div><span>Attendance check-in</span><a href="<?= activityDetailEscape($checkinLink) ?>">Open check-in form</a></div>
                   <?php endif; ?>
                 </section>
               <?php endif; ?>

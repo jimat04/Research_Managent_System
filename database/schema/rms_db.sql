@@ -659,7 +659,7 @@ CREATE TABLE `users` (
   KEY `idx_role` (`role`),
   KEY `idx_status` (`status`),
   KEY `idx_verification_token` (`email_verification_token`),
-  KEY `idx_users_student_id` (`student_id`),
+  UNIQUE KEY `uq_users_student_id` (`student_id`),
   KEY `idx_users_deleted_at` (`deleted_at`),
   KEY `idx_users_role_status` (`role`,`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -941,6 +941,7 @@ CREATE TABLE IF NOT EXISTS `activity_schedule_dates` (
   `audience_user_ids` JSON DEFAULT NULL,
   `status` enum('scheduled','cancelled') NOT NULL DEFAULT 'scheduled',
   `checkin_token_hash` char(64) DEFAULT NULL,
+  `checkin_token_encrypted` varchar(128) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`schedule_id`),

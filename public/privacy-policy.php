@@ -12,7 +12,7 @@ $publicBase = rtrim(SITE_URL, '/') . '/public/';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Privacy Policy Draft | <?= $siteName ?></title>
+    <title>Privacy Policy | <?= $siteName ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@ $publicBase = rtrim(SITE_URL, '/') . '/public/';
   <link rel="icon" type="image/png" href="../photos/rms-logo.png">
 </head>
 <body class="public-v2 policy-page">
-    <?php $publicHeaderStickyInner = true; require __DIR__ . '/../includes/public-header.php'; ?>
+    <?php require __DIR__ . '/../includes/public-header.php'; ?>
 
     <main class="policy-main" id="main-content">
         <article class="policy-document" aria-labelledby="policy-title">
@@ -33,11 +33,6 @@ $publicBase = rtrim(SITE_URL, '/') . '/public/';
                 <h1 id="policy-title">Privacy Policy</h1>
                 <p class="policy-intro">This page describes the types of information the RMS application can process and how its features use that information.</p>
             </header>
-
-            <aside class="policy-review-notice" aria-label="Review status">
-                <strong>Review draft — not the approved institutional policy.</strong>
-                <span>EARIST’s authorized office must confirm this text, the responsible office and contact details, service providers, retention periods, and request procedures before this page is treated as final or used for production OAuth verification.</span>
-            </aside>
 
             <nav class="policy-toc" aria-label="On this page">
                 <strong>On this page</strong>
@@ -86,7 +81,7 @@ $publicBase = rtrim(SITE_URL, '/') . '/public/';
             </section>
 
             <footer class="policy-page-links">
-                <a href="<?= htmlspecialchars($publicBase . 'terms-of-service.php', ENT_QUOTES, 'UTF-8') ?>">Read the Terms of Service draft</a>
+                <a href="<?= htmlspecialchars($publicBase . 'terms-of-service.php', ENT_QUOTES, 'UTF-8') ?>">Read the Terms of Service</a>
                 <a href="<?= htmlspecialchars($publicBase . 'index.php', ENT_QUOTES, 'UTF-8') ?>">Return to the RMS homepage</a>
             </footer>
         </article>

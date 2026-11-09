@@ -69,6 +69,172 @@ function rmsActivityCheckinBaseUrl(): string
     return rtrim($baseUrl, '/') . '/';
 }
 
+function rmsActivityQrEncryptionKey(): string
+{
+    if (preg_match('/^[a-f0-9]{64}$/i', ACTIVITY_CHECKIN_HASH_KEY) !== 1) {
+        throw new RuntimeException('The activity check-in encryption key is unavailable.');
+    }
+
+    $hashKey = hex2bin(ACTIVITY_CHECKIN_HASH_KEY);
+    if ($hashKey === false) {
+        throw new RuntimeException('The activity check-in encryption key is invalid.');
+    }
+
+    return hash_hkdf('sha256', $hashKey, 32, 'rms-activity-checkin-token-encryption');
+}
+
+function rmsActivityQrEncryptToken(string $token, int $scheduleId): string
+{
+    if (preg_match('/^[a-f0-9]{32}$/D', $token) !== 1 || $scheduleId <= 0) {
+        throw new RuntimeException('The activity check-in token is invalid.');
+    }
+
+    $iv = random_bytes(12);
+    $tag = '';
+    $ciphertext = openssl_encrypt(
+        $token,
+        'aes-256-gcm',
+        rmsActivityQrEncryptionKey(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'rms-activity-checkin:' . $scheduleId,
+        16
+    );
+    if ($ciphertext === false || strlen($tag) !== 16) {
+        throw new RuntimeException('The activity check-in token could not be encrypted.');
+    }
+
+    return base64_encode($iv . $tag . $ciphertext);
+}
+
+function rmsActivityQrDecryptToken(string $encryptedToken, int $scheduleId): ?string
+{
+    if ($scheduleId <= 0 || $encryptedToken === '') {
+        return null;
+    }
+
+    $payload = base64_decode($encryptedToken, true);
+    if ($payload === false || strlen($payload) !== 60) {
+        return null;
+    }
+
+    $iv = substr($payload, 0, 12);
+    $tag = substr($payload, 12, 16);
+    $ciphertext = substr($payload, 28);
+    $token = openssl_decrypt(
+        $ciphertext,
+        'aes-256-gcm',
+        rmsActivityQrEncryptionKey(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'rms-activity-checkin:' . $scheduleId
+    );
+
+    return is_string($token) && preg_match('/^[a-f0-9]{32}$/D', $token) === 1 ? $token : null;
+}
+
+function rmsActivityQrStartActivity(
+    mysqli $conn,
+    int $activityId,
+    bool $scheduleDatesAvailable,
+    bool $tokenStorageAvailable
+): bool {
+    if ($activityId <= 0 || !$scheduleDatesAvailable) {
+        return false;
+    }
+
+    $conn->begin_transaction();
+    try {
+        $startStmt = $conn->prepare(
+            "UPDATE research_activities
+                SET status = 'ongoing'
+              WHERE activity_id = ?
+                AND status IN ('upcoming', 'scheduled')
+                AND EXISTS (
+                    SELECT 1 FROM activity_schedule_dates d
+                     WHERE d.activity_id = ?
+                       AND d.status = 'scheduled'
+                       AND d.schedule_date = CURRENT_DATE()
+                       AND d.start_time IS NOT NULL
+                       AND d.start_time <= CURRENT_TIME()
+                       AND (d.end_time IS NULL OR d.end_time >= CURRENT_TIME())
+                )"
+        );
+        if (!$startStmt) {
+            throw new RuntimeException('Unable to prepare the activity start update.');
+        }
+        $startStmt->bind_param('ii', $activityId, $activityId);
+        if (!$startStmt->execute()) {
+            $startStmt->close();
+            throw new RuntimeException('Unable to start the activity.');
+        }
+        $started = $startStmt->affected_rows === 1;
+        $startStmt->close();
+        if (!$started) {
+            $conn->rollback();
+            return false;
+        }
+
+        if ($tokenStorageAvailable && preg_match('/^[a-f0-9]{64}$/i', ACTIVITY_CHECKIN_HASH_KEY) === 1) {
+            $scheduleStmt = $conn->prepare(
+                "SELECT schedule_id, checkin_token_hash, checkin_token_encrypted
+                   FROM activity_schedule_dates
+                  WHERE activity_id = ? AND status = 'scheduled'
+                  ORDER BY schedule_date, schedule_id"
+            );
+            if (!$scheduleStmt) {
+                throw new RuntimeException('Unable to prepare activity check-in token generation.');
+            }
+            $scheduleStmt->bind_param('i', $activityId);
+            if (!$scheduleStmt->execute()) {
+                $scheduleStmt->close();
+                throw new RuntimeException('Unable to load scheduled dates for check-in token generation.');
+            }
+            $schedules = $scheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $scheduleStmt->close();
+
+            $updateStmt = $conn->prepare(
+                'UPDATE activity_schedule_dates
+                    SET checkin_token_hash = ?, checkin_token_encrypted = ?
+                  WHERE schedule_id = ? AND activity_id = ? AND status = \'scheduled\''
+            );
+            if (!$updateStmt) {
+                throw new RuntimeException('Unable to prepare scheduled check-in token storage.');
+            }
+            foreach ($schedules as $schedule) {
+                $scheduleId = (int) $schedule['schedule_id'];
+                $storedHash = (string) ($schedule['checkin_token_hash'] ?? '');
+                $storedEncryptedToken = (string) ($schedule['checkin_token_encrypted'] ?? '');
+                $currentToken = $storedEncryptedToken !== ''
+                    ? rmsActivityQrDecryptToken($storedEncryptedToken, $scheduleId)
+                    : null;
+                if ($currentToken !== null && $storedHash !== ''
+                    && hash_equals($storedHash, hash('sha256', $currentToken))) {
+                    continue;
+                }
+
+                $token = bin2hex(random_bytes(16));
+                $tokenHash = hash('sha256', $token);
+                $encryptedToken = rmsActivityQrEncryptToken($token, $scheduleId);
+                $updateStmt->bind_param('ssii', $tokenHash, $encryptedToken, $scheduleId, $activityId);
+                if (!$updateStmt->execute() || $updateStmt->affected_rows !== 1) {
+                    $updateStmt->close();
+                    throw new RuntimeException('Unable to save a scheduled activity check-in token.');
+                }
+            }
+            $updateStmt->close();
+        }
+
+        $conn->commit();
+        return true;
+    } catch (Throwable $exception) {
+        $conn->rollback();
+        throw $exception;
+    }
+}
+
 function rmsActivityQrSvg(string $text): string
 {
     $bytes = array_values(unpack('C*', $text) ?: []);

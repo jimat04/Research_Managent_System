@@ -128,6 +128,7 @@ $initialStatus = match ($modulePage) {
         ? ($requestedInitialStatus === 'incoming' ? 'upcoming' : $requestedInitialStatus)
         : 'upcoming',
 };
+$isConductedActivityCreation = !$isEdit && $initialStatus === 'conducted';
 $values = [
     'activity_type' => isset($typeOptions[$requestedType]) ? $requestedType : (string) array_key_first($typeOptions),
     'custom_activity_type' => '',
@@ -264,7 +265,7 @@ $budgetData = null;
 $budgetValues = [
     'activity_format' => 'on_site',
     'funding_source' => 'organizational',
-    'budget_status' => 'pending',
+    'budget_status' => $isConductedActivityCreation ? 'confirmed' : 'pending',
     'contribution_prompt' => 0,
 ];
 $budgetExpenses = [];
@@ -489,6 +490,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $isEdit ? (string) ($activity['status'] ?? $values['status']) : $initialStatus,
             array_values($inviteeRecipientIds)
         );
+        if ($isConductedActivityCreation) {
+            $budgetValidation['header']['budget_status'] = 'confirmed';
+        }
         if (!$refreshingWindow) {
             $errors = array_merge($errors, $budgetValidation['errors']);
         }
@@ -1172,7 +1176,7 @@ body.admin-body .admin-dashboard .admin-page-content .activity-form-page.is-admi
             <div class="budget-grid">
               <div class="field"><label for="activity-format">Activity format</label><select id="activity-format" name="activity_format"><option value="on_site" <?= $budgetValues['activity_format'] === 'on_site' ? 'selected' : '' ?>>On-site</option><option value="online" <?= $budgetValues['activity_format'] === 'online' ? 'selected' : '' ?>>Online</option><option value="hybrid" <?= $budgetValues['activity_format'] === 'hybrid' ? 'selected' : '' ?>>Hybrid</option></select></div>
               <div class="field"><label for="funding-source">Funding arrangement</label><select id="funding-source" name="funding_source"><?php if ($budgetValues['funding_source'] === 'combined'): ?><option value="combined" selected hidden>Institutional and participant funding (existing)</option><?php endif; ?><option value="organizational" <?= $budgetValues['funding_source'] === 'organizational' ? 'selected' : '' ?>>Institutional budget</option><option value="participants" <?= $budgetValues['funding_source'] === 'participants' ? 'selected' : '' ?>>Participant-funded</option><option value="free" <?= $budgetValues['funding_source'] === 'free' ? 'selected' : '' ?>>Free of charge</option></select></div>
-              <div class="field" id="budget-status-field" <?= in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><label for="budget-status">Budget status</label><select id="budget-status" name="budget_status"><option value="pending" <?= $budgetValues['budget_status'] === 'pending' ? 'selected' : '' ?>>Pending — details may change</option><option value="confirmed" <?= $budgetValues['budget_status'] === 'confirmed' ? 'selected' : '' ?>>Confirmed — details verified</option></select></div>
+              <?php if (!$isConductedActivityCreation): ?><div class="field" id="budget-status-field" <?= in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><label for="budget-status">Budget status</label><select id="budget-status" name="budget_status"><option value="pending" <?= $budgetValues['budget_status'] === 'pending' ? 'selected' : '' ?>>Pending — details may change</option><option value="confirmed" <?= $budgetValues['budget_status'] === 'confirmed' ? 'selected' : '' ?>>Confirmed — details verified</option></select></div><?php endif; ?>
               <div class="field" id="organizational-allocation-field" <?= in_array($budgetValues['funding_source'], ['free', 'participants'], true) ? 'hidden' : '' ?>><label for="organizational-allocation">Institutional budget</label><input id="organizational-allocation" name="organizational_allocation" type="number" min="0" step="0.01" value="<?= activityFormEscape((string) ($budgetValues['organizational_allocation'] ?? '')) ?>"><small>Actual organizational expenses are itemized separately below.</small></div>
             </div>
             <div class="field full budget-expenses-wrap">

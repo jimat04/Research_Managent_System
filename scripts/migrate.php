@@ -132,6 +132,16 @@ function migration_index_exists(mysqli $conn, string $table, string $index): boo
     return $exists;
 }
 
+function migration_index_is_unique(mysqli $conn, string $table, string $index): bool
+{
+    $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? AND NON_UNIQUE = 0');
+    $stmt->bind_param('ss', $table, $index);
+    $stmt->execute();
+    $isUnique = (int) $stmt->get_result()->fetch_row()[0] > 0;
+    $stmt->close();
+    return $isUnique;
+}
+
 function migration_constraint_exists(mysqli $conn, string $table, string $constraint): bool
 {
     $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?');
@@ -803,6 +813,13 @@ function verify_public_research_releases(mysqli $conn): ?bool
 function verify_migration(mysqli $conn, string $filename): ?bool
 {
     return match ($filename) {
+        '078_activity_qr_token_encryption.sql' =>
+            migration_column_exists($conn, 'activity_schedule_dates', 'checkin_token_encrypted')
+            && strtolower(migration_column_type($conn, 'activity_schedule_dates', 'checkin_token_encrypted')) === 'varchar(128)'
+            && migration_column_nullable($conn, 'activity_schedule_dates', 'checkin_token_encrypted'),
+        '077_unique_user_student_ids.sql' =>
+            migration_index_is_unique($conn, 'users', 'uq_users_student_id')
+            && !migration_index_exists($conn, 'users', 'idx_users_student_id'),
         '066_public_research_releases.sql' => verify_public_research_releases($conn),
         '064_upload_soft_deletes.sql' =>
             !migration_table_exists($conn, 'uploads') ? null

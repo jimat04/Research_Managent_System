@@ -183,6 +183,12 @@ if (!defined('RMS_E2E_IDENTITY_ONLY') || RMS_E2E_IDENTITY_ONLY !== true) {
         }
 
         $conn->set_charset("utf8mb4");
+        // Activity dates and schedule-window checks use MySQL's current date/time.
+        // Keep each application connection on the institution's UTC+08 timezone,
+        // even when the hosting server itself runs in another timezone.
+        if (!$conn->query("SET time_zone = '+08:00'")) {
+            throw new RuntimeException('Unable to set the application database timezone.');
+        }
         if (RMS_E2E_MODE) {
             rmsE2eVerifyDatabase($conn);
         }

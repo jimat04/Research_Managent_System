@@ -182,7 +182,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $last_name = trim($_POST['last_name'] ?? '');
             $email = trim($_POST['email'] ?? '');
             $password = $_POST['password'] ?? '';
-            $student_id = trim($_POST['student_id'] ?? '');
+            $studentIdInput = $_POST['student_id'] ?? '';
+            $student_id = is_string($studentIdInput) ? trim($studentIdInput) : '';
+            if ($student_id === '') {
+                $student_id = null;
+            }
             $contact = trim($_POST['contact'] ?? '');
             $department = trim($_POST['department'] ?? '');
             $specialization = trim($_POST['specialization'] ?? '');
@@ -207,43 +211,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                 $error = $passwordPolicyError;
             } else {
                 $academic_rank = $academic_rank === '' ? null : $academic_rank;
-                // Check if email exists
-                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL");
-                $check_stmt->bind_param('s', $email);
-                $check_stmt->execute();
-                if ($check_stmt->get_result()->num_rows > 0) {
-                    $error = 'Email already exists.';
-                } else {
-                    $password_hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
-                    $status = 'active'; // Admin-created accounts are auto-approved
-
-                    $insert_stmt = $conn->prepare("INSERT INTO users (role, first_name, last_name, email, password, student_id, contact, department, specialization, academic_rank, designation, office, status, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
-                    if (!$insert_stmt) {
-                        $error = 'Could not prepare the account creation. Please try again.';
+                $duplicateStudentId = false;
+                $studentIdCheckFailed = false;
+                if ($student_id !== null) {
+                    $studentIdCheck = $conn->prepare('SELECT user_id FROM users WHERE student_id = ? LIMIT 1');
+                    if (!$studentIdCheck) {
+                        $studentIdCheckFailed = true;
                     } else {
-                        $insert_stmt->bind_param('sssssssssssss', $role, $first_name, $last_name, $email, $password_hash, $student_id, $contact, $department, $specialization, $academic_rank, $designation, $office, $status);
-                        $transactionStarted = !$academic_affiliation_enabled || $conn->begin_transaction();
-                        if (!$transactionStarted) {
-                            $error = 'Could not begin the account update. Please try again.';
-                        } elseif ($insert_stmt->execute()) {
-                            $newUserId = (int) $conn->insert_id;
-                            $affiliationsSaved = !$academic_affiliation_enabled || rmsAcademicAffiliationSave($conn, $newUserId, $affiliations, $role === 'faculty');
-                            $committed = $affiliationsSaved && (!$academic_affiliation_enabled || $conn->commit());
-                            if ($committed) {
-                                if ($role === 'research_staff') {
-                                seedDefaultStaffPermissions($newUserId, true);
+                        $studentIdCheck->bind_param('s', $student_id);
+                        $studentIdCheckFailed = !$studentIdCheck->execute();
+                        if (!$studentIdCheckFailed) {
+                            $duplicateStudentId = $studentIdCheck->get_result()->num_rows > 0;
+                        }
+                        $studentIdCheck->close();
+                    }
+                }
+
+                if ($studentIdCheckFailed) {
+                    $error = 'Could not validate the Student/Employee ID. Please try again.';
+                } elseif ($duplicateStudentId) {
+                    $error = 'Student/Employee ID already used by another user.';
+                } else {
+                    // Check if email exists
+                    $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL");
+                    $check_stmt->bind_param('s', $email);
+                    $check_stmt->execute();
+                    if ($check_stmt->get_result()->num_rows > 0) {
+                        $error = 'Email already exists.';
+                    } else {
+                        $password_hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+                        $status = 'active'; // Admin-created accounts are auto-approved
+
+                        $insert_stmt = $conn->prepare("INSERT INTO users (role, first_name, last_name, email, password, student_id, contact, department, specialization, academic_rank, designation, office, status, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
+                        if (!$insert_stmt) {
+                            $error = 'Could not prepare the account creation. Please try again.';
+                        } else {
+                            $insert_stmt->bind_param('sssssssssssss', $role, $first_name, $last_name, $email, $password_hash, $student_id, $contact, $department, $specialization, $academic_rank, $designation, $office, $status);
+                            $transactionStarted = !$academic_affiliation_enabled || $conn->begin_transaction();
+                            if (!$transactionStarted) {
+                                $error = 'Could not begin the account update. Please try again.';
+                            } elseif ($insert_stmt->execute()) {
+                                $newUserId = (int) $conn->insert_id;
+                                $affiliationsSaved = !$academic_affiliation_enabled || rmsAcademicAffiliationSave($conn, $newUserId, $affiliations, $role === 'faculty');
+                                $committed = $affiliationsSaved && (!$academic_affiliation_enabled || $conn->commit());
+                                if ($committed) {
+                                    if ($role === 'research_staff') {
+                                        seedDefaultStaffPermissions($newUserId, true);
+                                    }
+                                    logActivity("Created user account: {$first_name} {$last_name} ({$email})", 'user_management');
+                                    $success = "User {$first_name} {$last_name} created successfully.";
+                                } else {
+                                    if ($academic_affiliation_enabled) $conn->rollback();
+                                    $error = 'Could not save academic affiliation selections.';
                                 }
-                                logActivity("Created user account: {$first_name} {$last_name} ({$email})", 'user_management');
-                                $success = "User {$first_name} {$last_name} created successfully.";
                             } else {
                                 if ($academic_affiliation_enabled) $conn->rollback();
-                                $error = 'Could not save academic affiliation selections.';
+                                $error = 'Failed to create user account.';
                             }
-                        } else {
-                            if ($academic_affiliation_enabled) $conn->rollback();
-                            $error = 'Failed to create user account.';
+                            $insert_stmt->close();
                         }
-                        $insert_stmt->close();
                     }
                 }
             }
@@ -255,7 +281,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
             $first_name = trim($_POST['first_name'] ?? '');
             $last_name = trim($_POST['last_name'] ?? '');
             $email = trim($_POST['email'] ?? '');
-            $student_id = trim($_POST['student_id'] ?? '');
+            $studentIdInput = $_POST['student_id'] ?? '';
+            $student_id = is_string($studentIdInput) ? trim($studentIdInput) : '';
+            if ($student_id === '') {
+                $student_id = null;
+            }
             $contact = trim($_POST['contact'] ?? '');
             $department = trim($_POST['department'] ?? '');
             $program = trim($_POST['program'] ?? '');
@@ -299,31 +329,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                 $error = 'Name and email are required.';
             } else {
                 $academic_rank = $academic_rank === '' ? null : $academic_rank;
-                // Check if email exists for another user
-                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id != ? AND deleted_at IS NULL");
-                $check_stmt->bind_param('si', $email, $user_id);
-                $check_stmt->execute();
-                if ($check_stmt->get_result()->num_rows > 0) {
-                    $error = 'Email already used by another user.';
-                } else {
-                    $update_stmt = $conn->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ?, student_id = ?, contact = ?, department = ?, program = ?, year_level = ?, specialization = ?, academic_rank = ?, designation = ?, office = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
-                    if (!$update_stmt) {
-                        $error = 'Could not prepare the account update. Please try again.';
-                    } elseif (!$conn->begin_transaction()) {
-                        $update_stmt->close();
-                        $error = 'Could not begin the account update. Please try again.';
+                $duplicateStudentId = false;
+                $studentIdCheckFailed = false;
+                if ($student_id !== null) {
+                    $studentIdCheck = $conn->prepare('SELECT user_id FROM users WHERE student_id = ? AND user_id != ? LIMIT 1');
+                    if (!$studentIdCheck) {
+                        $studentIdCheckFailed = true;
                     } else {
-                        $update_stmt->bind_param('ssssssssssssi', $first_name, $last_name, $email, $student_id, $contact, $department, $program, $year_level, $specialization, $academic_rank, $designation, $office, $user_id);
-                        $updated = $update_stmt->execute();
-                        $update_stmt->close();
-                        $affiliationsSaved = $updated && (!$isAffiliationRole || !$academic_affiliation_enabled
-                            || rmsAcademicAffiliationSave($conn, $user_id, $affiliations, $role === 'faculty'));
-                        if ($affiliationsSaved && $conn->commit()) {
-                            logActivity("Updated user account: {$first_name} {$last_name} (ID: {$user_id})", 'user_management');
-                            $success = "User {$first_name} {$last_name} updated successfully.";
+                        $studentIdCheck->bind_param('si', $student_id, $user_id);
+                        $studentIdCheckFailed = !$studentIdCheck->execute();
+                        if (!$studentIdCheckFailed) {
+                            $duplicateStudentId = $studentIdCheck->get_result()->num_rows > 0;
+                        }
+                        $studentIdCheck->close();
+                    }
+                }
+
+                if ($studentIdCheckFailed) {
+                    $error = 'Could not validate the Student/Employee ID. Please try again.';
+                } elseif ($duplicateStudentId) {
+                    $error = 'Student/Employee ID already used by another user.';
+                } else {
+                    // Check if email exists for another user
+                    $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id != ? AND deleted_at IS NULL");
+                    $check_stmt->bind_param('si', $email, $user_id);
+                    $check_stmt->execute();
+                    if ($check_stmt->get_result()->num_rows > 0) {
+                        $error = 'Email already used by another user.';
+                    } else {
+                        $update_stmt = $conn->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ?, student_id = ?, contact = ?, department = ?, program = ?, year_level = ?, specialization = ?, academic_rank = ?, designation = ?, office = ?, updated_at = NOW() WHERE user_id = ? AND deleted_at IS NULL");
+                        if (!$update_stmt) {
+                            $error = 'Could not prepare the account update. Please try again.';
+                        } elseif (!$conn->begin_transaction()) {
+                            $update_stmt->close();
+                            $error = 'Could not begin the account update. Please try again.';
                         } else {
-                            $conn->rollback();
-                            $error = $updated ? 'Could not save academic affiliation selections.' : 'Failed to update user account.';
+                            $update_stmt->bind_param('ssssssssssssi', $first_name, $last_name, $email, $student_id, $contact, $department, $program, $year_level, $specialization, $academic_rank, $designation, $office, $user_id);
+                            $updated = $update_stmt->execute();
+                            $update_stmt->close();
+                            $affiliationsSaved = $updated && (!$isAffiliationRole || !$academic_affiliation_enabled
+                                || rmsAcademicAffiliationSave($conn, $user_id, $affiliations, $role === 'faculty'));
+                            if ($affiliationsSaved && $conn->commit()) {
+                                logActivity("Updated user account: {$first_name} {$last_name} (ID: {$user_id})", 'user_management');
+                                $success = "User {$first_name} {$last_name} updated successfully.";
+                            } else {
+                                $conn->rollback();
+                                $error = $updated ? 'Could not save academic affiliation selections.' : 'Failed to update user account.';
+                            }
                         }
                     }
                 }
